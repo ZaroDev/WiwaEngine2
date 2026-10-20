@@ -16,7 +16,7 @@ project "wiwa_editor"
 	includedirs
 	{
 		"%{IncludeDirs.SPDLOG}",
-		"%{IncludeDirs.ImGui}",
+		--"%{IncludeDirs.ImGui}",
 		"%{IncludeDirs.GLM}",
 		"%{IncludeDirs.Wiwa}",
 		-- "%{IncludeDirs.Optick}",
@@ -32,15 +32,14 @@ project "wiwa_editor"
 	links
 	{
 		"wiwa",
-		"ImGui",
+		--"ImGui",
 		-- "Optick",
 		-- "ImGuizmo"
 	}
 
-	debugdir "%{wks.location}/Editor"
+	debugdir "%{wks.location}/editor"
 
 	filter "system:windows"
-		cppdialect "C++latest"
 		staticruntime "Off"
 		systemversion "latest"
 

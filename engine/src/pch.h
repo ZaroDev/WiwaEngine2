@@ -5,7 +5,9 @@
 #include <map>
 #include <unordered_map>
 #include <filesystem>
+#include <span>
 
 
 #include <core/common.h>
 #include <core/log.h>
+#include <math/math.h>

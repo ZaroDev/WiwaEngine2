@@ -1,5 +1,6 @@
 #pragma once
 #include <core/module.h>
+#include "device.h"
 
 namespace wiwa
 {
@@ -26,6 +27,11 @@ namespace wiwa
 		virtual int get_priority() const { return 0; }
 
 	private:
+		bool add_pass(Ref<IRenderPass> pass);
 
+
+		Ref<IDevice> m_Device;
+		nvrhi::CommandListHandle m_CommandList;
+		std::vector<Ref<IRenderPass>> m_Passes;
 	};
 }

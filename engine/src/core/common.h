@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 
 #define BIT(x) (1 << x)
 
@@ -50,3 +51,30 @@
 #define WI_BUILD_CONFIGURATION "Shipping"
 #endif
 
+
+template<typename T>
+using Scope = std::unique_ptr<T>;
+template<typename T, typename ... Args>
+constexpr Scope<T> CreateScope(Args&& ... args)
+{
+    return std::make_unique<T>(std::forward<Args>(args)...);
+}
+template<typename T>
+using Ref = std::shared_ptr<T>;
+template<typename T, typename ... Args>
+constexpr Ref<T> CreateRef(Args&& ... args)
+{
+    return std::make_shared<T>(std::forward<Args>(args)...);
+}
+
+template<typename C, typename P>
+constexpr Ref<C> DynCast(Ref<P> ref)
+{
+    return std::dynamic_pointer_cast<C>(ref);
+}
+
+template<typename C, typename P>
+constexpr Ref<C> Cast(Ref<P> ref)
+{
+    return std::static_pointer_cast<C>(ref);
+}

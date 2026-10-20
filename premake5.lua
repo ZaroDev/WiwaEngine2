@@ -15,11 +15,15 @@ workspace "Wiwa2"
 
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
+VULKAN_SDK = os.getenv("VULKAN_SDK")
+
 IncludeDirs = {}
+IncludeDirs["VulkanSDK"] = "%{VULKAN_SDK}/Include"
 IncludeDirs["Wiwa"] = "%{wks.location}/engine/src"
 IncludeDirs["GLFW"] = "%{wks.location}/engine/vendor/GLFW/include"
 IncludeDirs["filewatch"] = "%{wks.location}/engine/vendor/filewatch"
-IncludeDirs["glad"] = "%{wks.location}/engine/vendor/glad/include"
+IncludeDirs["nvrhi"] = "%{wks.location}/engine/vendor/nvrhi/include"
+IncludeDirs["vkbootstrap"] = "%{wks.location}/engine/vendor/vk-bootstrap/src"
 IncludeDirs["ImGui"] = "%{wks.location}/engine/vendor/imgui"
 IncludeDirs["GLM"] = "%{wks.location}/engine/vendor/glm"
 IncludeDirs["PCG"] = "%{wks.location}/engine/vendor/PCG/include"
@@ -40,6 +44,7 @@ IncludeDirs["recastnavigation"] = "%{wks.location}/Wiwa/vendor/recastnavigation/
 IncludeDirs["OpenCV"] = "%{wks.location}/Wiwa/vendor/opencv-4.7.0/include"
 
 LibraryDirs = {}
+LibraryDirs["VulkanSDK"] = "%{VULKAN_SDK}/Lib"
 LibraryDirs["Wwise"] = "%{wks.location}/engine/vendor/Wwise/lib/x64_vc170/Debug(StaticCRT)/lib/"
 LibraryDirs["bullet"] = "%{wks.location}/engine/vendor/bullet/lib/"
 LibraryDirs["recastnavigation"] = "%{wks.location}/engine/vendor/recastnavigation/lib"
@@ -109,7 +114,8 @@ Library["opencv_ts470_debug"] = "%{LibraryDirs.OpenCV}/opencv_ts470d.lib"
 
 group "Dependencies"
 	include "engine/vendor/GLFW"
-	include "engine/vendor/glad"
+	include "engine/vendor/nvrhi"
+	include "engine/vendor/vk-bootstrap"
 	include "engine/vendor/imgui"
 	-- include "Wiwa/vendor/Optick"
 	-- include "Wiwa/vendor/imguizmo"

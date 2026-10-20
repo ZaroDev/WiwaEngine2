@@ -1,7 +1,7 @@
 project "ImGui"
 	kind "StaticLib"
 	language "C++"
-    staticruntime "Off"
+    staticruntime "off"
 
 	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
 	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
@@ -19,9 +19,10 @@ project "ImGui"
 		"imstb_textedit.h",
 		"imstb_truetype.h",
 		"imgui_demo.cpp",
-        "misc/cpp/**.cpp",
-        "misc/cpp/**.h"
+        "misc/cpp/imgui_stdlib.h",
+        "misc/cpp/imgui_stdlib.cpp"
 	}
+    includedirs{ "./" }
 
 	filter "system:windows"
 		systemversion "latest"
@@ -34,15 +35,13 @@ project "ImGui"
 
 	filter "configurations:Debug"
 		runtime "Debug"
-		symbols "On"
-		optimize "Off"
+		symbols "on"
 
 	filter "configurations:Release"
 		runtime "Release"
-		optimize "On"
-		symbols "Off"
+		optimize "on"
 
     filter "configurations:Dist"
 		runtime "Release"
-		optimize "On"
-        symbols "Off"
+		optimize "on"
+        symbols "off"

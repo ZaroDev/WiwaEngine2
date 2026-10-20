@@ -22,6 +22,8 @@ namespace wiwa
 		virtual int get_priority() const { return INT_MAX; }
 
 		void set_title(const std::string& newTitle);
+
+		GLFWwindow* get_window() const { return m_Window; }
 	private:
 		GLFWwindow* m_Window = nullptr;
 	};

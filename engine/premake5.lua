@@ -24,51 +24,35 @@ project "wiwa"
 	includedirs
 	{
 		"src",
+		"%{IncludeDirs.GLM}",
 		"%{IncludeDirs.SPDLOG}",
 		"%{IncludeDirs.GLFW}",
-		-- "%{IncludeDirs.filewatch}",
-		-- "%{IncludeDirs.ImGui}",
-		"%{IncludeDirs.GLM}",
-		"%{IncludeDirs.glad}",
-		-- "%{IncludeDirs.PCG}",
-		-- "%{IncludeDirs.JSON}",
-		-- "%{IncludeDirs.NJSON}",
-		-- "%{IncludeDirs.XML}",
-		-- "%{IncludeDirs.Optick}",
-		-- "%{IncludeDirs.assimp}",
-		-- "%{IncludeDirs.ImGuizmo}",
-		-- "%{IncludeDirs.Wwise}",
-		-- "%{IncludeDirs.IconFontCppHeaders}",
-		-- "%{IncludeDirs.bullet}",
-		-- "%{IncludeDirs.ozz}",
-		-- "%{IncludeDirs.recastnavigation}",
-		-- "%{IncludeDirs.OpenCV}"
+		"%{IncludeDirs.nvrhi}",
+		"%{IncludeDirs.VulkanSDK}",
+		"%{IncludeDirs.vkbootstrap}",
+		"%{IncludeDirs.ImGui}"
 	}
 
 	links
 	{
 		"GLFW",
-		"glad"
-		-- "ImGui",
-		-- "opengl32.lib",
-		-- "%{wks.location}/Wiwa/vendor/Glew/lib/glew32.lib",
+		"nvrhi",
+		"%{LibraryDirs.VulkanSDK}/vulkan-1.lib",
+		"vk-bootstrap",
+		"ImGui",
 		-- "Optick",
 		-- "ImGuizmo",
-		-- "ozz",
-		-- "%{wks.location}/Wiwa/vendor/assimp/lib/x64/release/assimp-vc143-mt.lib",
-		-- "%{Library.Wwise_SE}",
-		-- "%{Library.Wwise_MMgr}",
-		-- "%{Library.Wwise_SMgr}",
-		-- "%{Library.Wwise_ME}",
-		-- "%{Library.Wwise_SA}",
-		-- "%{Library.Wwise_CC}"
+	}
+
+	defines
+	{
+		"VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1"
 	}
 
 	filter "files:vendor/imguizmo/**.cpp"
 		flags {"NoPCH"}
 
 	filter "system:windows"
-		cppdialect "C++17"
 		staticruntime "Off"
 		systemversion "latest"
 		defines
@@ -96,23 +80,7 @@ project "wiwa"
 		}
 		runtime "Debug"
 		symbols "On"
-		links
-		{
-			-- "%{Library.bullet_dynamics_debug}",
-			-- "%{Library.bullet_collision_debug}",
-			-- "%{Library.bullet_linear_math_debug}",
-			-- "%{Library.DebugUtils_debug}",
-			-- "%{Library.Detour_debug}",
-			-- "%{Library.DetourCrowd_debug}",
-			-- "%{Library.DetourTileCache_debug}",
-			-- "%{Library.Recast_debug}",
-			-- "%{Library.opencv_core_debug}",
-			-- "%{Library.opencv_video_debug}",
-			-- "%{Library.opencv_videoio_debug}",
-			-- "%{Library.opencv_highgui_debug}",
-			-- "%{Library.opencv_imgproc_debug}",
-			-- "%{Library.opencv_imgcodecs_debug}"
-		}
+		
 
 
 	filter "configurations:Release"
@@ -120,44 +88,11 @@ project "wiwa"
 		runtime "Release"
 		optimize "On"
 		symbols "On"
-		links
-		{
-			-- "%{Library.bullet_dynamics_release}",
-			-- "%{Library.bullet_collision_release}",
-			-- "%{Library.bullet_linear_math_release}",
-			-- "%{Library.DebugUtils_release}",
-			-- "%{Library.Detour_release}",
-			-- "%{Library.DetourCrowd_release}",
-			-- "%{Library.DetourTileCache_release}",
-			-- "%{Library.Recast_release}",
-			-- "%{Library.opencv_core}",
-			-- "%{Library.opencv_video}",
-			-- "%{Library.opencv_videoio}",
-			-- "%{Library.opencv_highgui}",
-			-- "%{Library.opencv_imgproc}",
-			-- "%{Library.opencv_imgcodecs}"
-		}
+		
 
 	filter "configurations:Shipping"
 		defines "WI_SHIPPING"
 		runtime "Release"
 		optimize "On"
 		symbols "Off"
-		links
-		{
-			-- "%{Library.bullet_dynamics_release}",
-			-- "%{Library.bullet_collision_release}",
-			-- "%{Library.bullet_linear_math_release}",
-			-- "%{Library.DebugUtils_release}",
-			-- "%{Library.Detour_release}",
-			-- "%{Library.DetourCrowd_release}",
-			-- "%{Library.DetourTileCache_release}",
-			-- "%{Library.Recast_release}",
-			-- "%{Library.opencv_core}",
-			-- "%{Library.opencv_video}",
-			-- "%{Library.opencv_videoio}",
-			-- "%{Library.opencv_highgui}",
-			-- "%{Library.opencv_imgproc}",
-			-- "%{Library.opencv_imgcodecs}"
-			
-		}
+		

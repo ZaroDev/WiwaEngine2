@@ -1,7 +1,6 @@
 #include <pch.h>
 #include "window.h"
 
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 #include <iostream>
@@ -25,19 +24,11 @@ namespace wiwa
 #ifndef WI_DIST
 		glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 #endif
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
 		std::string windowTitle = fmt::format("Wiwa 2 <{0}>", WI_BUILD_CONFIGURATION);
 		m_Window = glfwCreateWindow(1280, 720, windowTitle.c_str(), nullptr, nullptr);
-
-
-		glfwMakeContextCurrent(m_Window);
-		if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
-		{
-			return;
-		}
-		glfwSwapInterval(false);
+	
 
 		glfwSetWindowCloseCallback(m_Window, [](GLFWwindow* window)
 			{
@@ -54,7 +45,6 @@ namespace wiwa
 	void Window::post_render_update(float deltaTime)
 	{
 		glfwPollEvents();
-		glfwSwapBuffers(m_Window);
 	}
 	void Window::set_title(const std::string& newTitle)
 	{
