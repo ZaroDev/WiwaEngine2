@@ -44,11 +44,25 @@ namespace wiwa
 		
 		add_pass(CreateRef<ImGuiPass>(ui_description));
 
+		m_Window = Engine::get().get_module<Window>();
+
 		WI_RENDER_LOG(Info, "Initializing renderer");
 	}
 	void Renderer::shutdown()
 	{
+		if (nvrhi::IDevice* device = m_Device->get_device())
+		{
+			device->waitForIdle();
+		}
+
+		m_Passes.clear();
+		m_CommandList = nullptr;
+		m_FramesInFlight.clear();
+		m_QueryPool.clear();
+
 		m_Device->shutdown();
+		m_Device.reset();
+	
 
 		WI_RENDER_LOG(Info, "Shutdown");
 	}
@@ -63,29 +77,66 @@ namespace wiwa
 	}
 	void Renderer::pre_render_update(float deltaTime)
 	{
-		m_Device->begin_frame(deltaTime);
+		
 	}
 	void Renderer::render_update(float deltaTime)
 	{
+		int width, height;
+		m_Window->get_size(width, height);
+
+		if (width != m_Device->get_width() || height != m_Device->get_height())
+		{
+			resize_device(width, height);
+			return;
+		}
+
+		wait_for_frame_slot();
+
+		nvrhi::IFramebuffer* backbuffer = nullptr;
+		FrameStatus status = m_Device->adquire_frame(backbuffer);
+
+		for (auto& pass : m_Passes)
+		{
+			pass->update(m_Device->get_device(), m_Device->get_current_framebuffer());
+		}
+		
+		if (status == FrameStatus::RESIZE_NEEDED)
+		{
+			resize_device(width, height);
+			return;
+		}
+
+		if (status == FrameStatus::FAILED)
+		{
+			return;
+		}
+
 		m_CommandList->open();
-		nvrhi::utils::ClearColorAttachment(m_CommandList, m_Device->get_current_framebuffer(), 0, nvrhi::Color(1.0f, 0.02f, 0.05f, 1.0f));
+
+		m_CommandList->clearState();
 
 		FrameDescription frame;
-		frame.Backbuffer = m_Device->get_current_framebuffer();
-		frame.Width = 1280;
-		frame.Height = 720;
-
+		frame.Backbuffer = backbuffer;
+		frame.Width = m_Device->get_width();
+		frame.Height = m_Device->get_height();
+		
 		for (auto& pass : m_Passes)
 		{
 			pass->render(m_CommandList, frame);
 		}
+
 		m_CommandList->close();
 
-		m_Device->get_device()->executeCommandList(m_CommandList);
+		status = m_Device->submit_and_present(m_CommandList);
+
+		if (status != FrameStatus::FAILED)
+		{
+			mark_frame_submitted();
+		}
 	}
 	void Renderer::post_render_update(float deltaTime)
 	{
-		m_Device->end_frame(deltaTime);
+	
 	}
 	bool Renderer::add_pass(Ref<IRenderPass> pass)
 	{
@@ -96,6 +147,52 @@ namespace wiwa
 		}
 
 		m_Passes.push_back(std::move(pass));
+		return true;
+	}
+	void Renderer::wait_for_frame_slot()
+	{
+		nvrhi::IDevice* device = m_Device->get_device();
+
+		while (m_FramesInFlight.size() >= m_Device->get_description().FramesInFlight)
+		{
+			nvrhi::EventQueryHandle query = m_FramesInFlight.front();
+			m_FramesInFlight.pop_front();
+
+			device->waitEventQuery(query);
+			m_QueryPool.push_back(query);
+		}
+	}
+	void Renderer::mark_frame_submitted()
+	{
+		nvrhi::IDevice* device = m_Device->get_device();
+
+		nvrhi::EventQueryHandle query;
+		if (!m_QueryPool.empty())
+		{
+			query = m_QueryPool.back();
+			m_QueryPool.pop_back();
+		}
+		else
+		{
+			query = device->createEventQuery();
+		}
+
+		device->resetEventQuery(query);
+		device->setEventQuery(query, nvrhi::CommandQueue::Graphics);
+		m_FramesInFlight.push_back(query);
+	}
+	bool Renderer::resize_device(u32 width, u32 height)
+	{
+		if (!m_Device->update_swapchain(width, height))
+		{
+			return false;
+		}
+
+		for (auto& pass : m_Passes)
+		{
+			pass->on_resize(m_Device->get_device(), m_Device->get_width(), m_Device->get_height());
+		}
+
 		return true;
 	}
 }

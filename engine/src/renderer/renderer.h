@@ -2,6 +2,8 @@
 #include <core/module.h>
 #include "device.h"
 
+#include <deque>
+
 namespace wiwa
 {
 	class Renderer : public IModule
@@ -29,9 +31,20 @@ namespace wiwa
 	private:
 		bool add_pass(Ref<IRenderPass> pass);
 
+		void wait_for_frame_slot();
+		void mark_frame_submitted();
+
+		bool resize_device(u32 width, u32 height);
+
+		u64 m_FrameIndex = 0;
 
 		Ref<IDevice> m_Device;
 		nvrhi::CommandListHandle m_CommandList;
 		std::vector<Ref<IRenderPass>> m_Passes;
+
+		std::deque<nvrhi::EventQueryHandle> m_FramesInFlight;
+		std::vector<nvrhi::EventQueryHandle> m_QueryPool;
+
+		class Window* m_Window;
 	};
 }

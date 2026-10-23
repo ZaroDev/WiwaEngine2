@@ -19,13 +19,18 @@ namespace wiwa
 
 		virtual bool initialize() override;
 		virtual void shutdown() override;
+
 		virtual nvrhi::IDevice* get_device() const override { return m_DeviceHandle; }
+		virtual const DeviceDescription& get_description() const override { return m_DeviceDesc; }
+
 		virtual bool update_swapchain(u32 width, u32 height) override;
+		virtual u32 get_width() const override { return m_VkSwapchain.extent.width; }
+		virtual u32 get_height() const override { return m_VkSwapchain.extent.height; }
 
-		virtual void begin_frame(float deltaTime) override;
-		virtual void end_frame(float deltaTime) override;
+		virtual nvrhi::FramebufferHandle get_current_framebuffer() const override;
 
-		virtual nvrhi::FramebufferHandle get_current_framebuffer() const override { return m_Framebuffers[m_CurrentImageIndex]; }
+		virtual FrameStatus submit_and_present(nvrhi::ICommandList* commandList) override;
+		virtual FrameStatus adquire_frame(nvrhi::IFramebuffer*& backbuffer) override;
 
 	private:
 		bool create_vulkan_objects();
@@ -47,6 +52,9 @@ namespace wiwa
 		VkQueue m_PresentQueue = VK_NULL_HANDLE;
 		u32 m_GraphicsQueueIndex = 0;
 
+		std::vector<const char*> m_InstanceExtensions;
+		std::vector<const char*> m_DeviceExtensions;
+
 		nvrhi::vulkan::DeviceHandle m_DeviceHandle;
 		nvrhi::DeviceHandle m_ValidationLayer;
 		nvrhi::Format m_SwapchainFormat = nvrhi::Format::SRGBA8_UNORM;
@@ -54,12 +62,12 @@ namespace wiwa
 		std::vector<nvrhi::TextureHandle> m_SwapchainTextures;
 		std::vector<nvrhi::FramebufferHandle> m_Framebuffers;
 
-		VkSemaphore m_AdquireSemaphore = VK_NULL_HANDLE;
+		std::vector<VkSemaphore> m_AdquireSemaphores;
 		std::vector<VkSemaphore> m_PresentSemaphores;
 
-		std::vector<const char*> m_InstanceExtensions;
-		std::vector<const char*> m_DeviceExtensions;
+
 
 		u32 m_CurrentImageIndex = 0;
+		u32 m_AdquireIndex = 0;
 	};
 }

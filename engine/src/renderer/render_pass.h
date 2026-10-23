@@ -22,7 +22,10 @@ namespace wiwa
 		virtual ~IRenderPass() = default;
 
 		virtual bool initialize(nvrhi::IDevice* device, nvrhi::IFramebuffer* framebuffer) = 0;
+
 		virtual void on_resize(nvrhi::IDevice* device, uint32_t width, uint32_t height) {}
+		virtual void update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer) {}
+
 		virtual void render(nvrhi::ICommandList* command_list, const FrameDescription& frame) = 0;
 	};
 }

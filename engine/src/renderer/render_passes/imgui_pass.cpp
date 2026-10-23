@@ -227,6 +227,51 @@ namespace wiwa
 			index_offset += static_cast<uint32_t>(draw_list->IdxBuffer.Size);
 		}
 	}
+	void ImGuiPass::update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer)
+	{
+		if (m_Pipeline)
+		{
+			return;
+		}
+
+		nvrhi::VertexAttributeDesc attributes[3];
+		attributes[0].name = "POSITION";
+		attributes[0].format = nvrhi::Format::RG32_FLOAT;
+		attributes[0].offset = offsetof(ImDrawVert, pos);
+		attributes[0].elementStride = sizeof(ImDrawVert);
+		attributes[1].name = "TEXCOORD";
+		attributes[1].format = nvrhi::Format::RG32_FLOAT;
+		attributes[1].offset = offsetof(ImDrawVert, uv);
+		attributes[1].elementStride = sizeof(ImDrawVert);
+		attributes[2].name = "COLOR";
+		attributes[2].format = nvrhi::Format::RGBA8_UNORM;
+		attributes[2].offset = offsetof(ImDrawVert, col);
+		attributes[2].elementStride = sizeof(ImDrawVert);
+		m_InputLayout = device->createInputLayout(attributes, 3, m_VertexShader);
+
+		nvrhi::GraphicsPipelineDesc pipeline_description;
+		pipeline_description.primType = nvrhi::PrimitiveType::TriangleList;
+		pipeline_description.inputLayout = m_InputLayout;
+		pipeline_description.VS = m_VertexShader;
+		pipeline_description.PS = m_PixelShader;
+		pipeline_description.addBindingLayout(m_BindingLayout);
+		pipeline_description.renderState.depthStencilState.depthTestEnable = false;
+		pipeline_description.renderState.depthStencilState.depthWriteEnable = false;
+		pipeline_description.renderState.depthStencilState.stencilEnable = false;
+		pipeline_description.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None;
+		pipeline_description.renderState.rasterState.scissorEnable = true;
+
+		nvrhi::BlendState::RenderTarget& blend = pipeline_description.renderState.blendState.targets[0];
+		blend.blendEnable = true;
+		blend.srcBlend = nvrhi::BlendFactor::SrcAlpha;
+		blend.destBlend = nvrhi::BlendFactor::InvSrcAlpha;
+		blend.blendOp = nvrhi::BlendOp::Add;
+		blend.srcBlendAlpha = nvrhi::BlendFactor::InvSrcAlpha;
+		blend.destBlendAlpha = nvrhi::BlendFactor::Zero;
+		blend.blendOpAlpha = nvrhi::BlendOp::Add;
+
+		m_Pipeline = device->createGraphicsPipeline(pipeline_description, backbuffer);
+	}
 	bool ImGuiPass::create_font_texture(nvrhi::IDevice* device)
 	{
 		ImGuiIO& io = ImGui::GetIO();

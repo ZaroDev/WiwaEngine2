@@ -23,7 +23,7 @@ namespace wiwa
 
 		virtual bool initialize(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer) override;
 		virtual void render(nvrhi::ICommandList* command_list, const FrameDescription& frame) override;
-
+		virtual void update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer) override;
 	private:
 		struct PushConstants
 		{

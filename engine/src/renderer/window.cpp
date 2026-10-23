@@ -50,4 +50,8 @@ namespace wiwa
 	{
 		glfwSetWindowTitle(m_Window, newTitle.c_str());
 	}
+	void Window::get_size(int& width, int& height)
+	{
+		glfwGetFramebufferSize(m_Window, &width, &height);
+	}
 }

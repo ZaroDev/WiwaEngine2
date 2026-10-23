@@ -99,11 +99,11 @@ namespace wiwa
 			vkDeviceWaitIdle(m_VkDevice.device);
 
 			destroy_present_semaphores();
-			if (m_AdquireSemaphore != VK_NULL_HANDLE)
+			for (auto& semaphore : m_AdquireSemaphores)
 			{
-				vkDestroySemaphore(m_VkDevice.device, m_AdquireSemaphore, nullptr);
-				m_AdquireSemaphore = VK_NULL_HANDLE;
+				vkDestroySemaphore(m_VkDevice.device, semaphore, nullptr);
 			}
+			m_AdquireSemaphores.clear();
 
 			if (m_VkSwapchain.swapchain != VK_NULL_HANDLE)
 			{
@@ -140,56 +140,61 @@ namespace wiwa
 	
 		return true;
 	}
-	void VulkanDevice::begin_frame(float deltaTime)
+	nvrhi::FramebufferHandle VulkanDevice::get_current_framebuffer() const
 	{
-		int width = 0;
-		int height = 0;
-		GLFWwindow* window = Engine::get().get_module<Window>()->get_window();
-		glfwGetFramebufferSize(window, &width, &height);
-		if (width == 0 || height == 0)
-		{
-			return;
-		}
-
-		if (static_cast<uint32_t>(width) != m_VkSwapchain.extent.width ||
-			static_cast<uint32_t>(height) != m_VkSwapchain.extent.height)
-		{
-			update_swapchain(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
-		}
-
-		
+		return m_Framebuffers.empty() ? nullptr : static_cast<nvrhi::IFramebuffer*>(m_Framebuffers[m_CurrentImageIndex]);
 	}
-	void VulkanDevice::end_frame(float deltaTime)
+	FrameStatus VulkanDevice::submit_and_present(nvrhi::ICommandList* commandList)
 	{
-		
-		VkResult result = vkAcquireNextImageKHR(m_VkDevice.device, m_VkSwapchain.swapchain, UINT64_MAX,
-			m_AdquireSemaphore, VK_NULL_HANDLE, &m_CurrentImageIndex);
-
-		nvrhi::IFramebuffer* framebuffer = m_Framebuffers[m_CurrentImageIndex];
-
-		// The graphics queue must wait for the image to be acquired before it
-		// touches it, and must signal when rendering is done so we can present.
-		m_DeviceHandle->queueWaitForSemaphore(nvrhi::CommandQueue::Graphics, m_AdquireSemaphore, 0);
 		m_DeviceHandle->queueSignalSemaphore(nvrhi::CommandQueue::Graphics, m_PresentSemaphores[m_CurrentImageIndex], 0);
-		//m_device->executeCommandList(m_command_list);
+		m_DeviceHandle->executeCommandList(commandList);
 
-		VkPresentInfoKHR present_info{};
-		present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-		present_info.waitSemaphoreCount = 1;
-		present_info.pWaitSemaphores = &m_PresentSemaphores[m_CurrentImageIndex];
-		present_info.swapchainCount = 1;
-		present_info.pSwapchains = &m_VkSwapchain.swapchain;
-		present_info.pImageIndices = &m_CurrentImageIndex;
+		VkPresentInfoKHR presentInfo{};
+		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = &m_PresentSemaphores[m_CurrentImageIndex];
+		presentInfo.swapchainCount = 1;
+		presentInfo.pSwapchains = &m_VkSwapchain.swapchain;
+		presentInfo.pImageIndices = &m_CurrentImageIndex;
 
-		result = vkQueuePresentKHR(m_PresentQueue, &present_info);
-		
+		VkResult result = vkQueuePresentKHR(m_PresentQueue, &presentInfo);
+		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+		{
+			return FrameStatus::RESIZE_NEEDED;
+		}
+		if (result != VK_SUCCESS)
+		{
+			WI_LOG_VULKAN(Error, "vkQueuePresentKHR failed ({0})", result);
+			return FrameStatus::FAILED;
+		}
 
-		// Simple and safe: one frame in flight. Replace with per-frame fences or
-		// timeline semaphores when you want CPU/GPU overlap.
-		m_DeviceHandle->waitForIdle();
+		// No waiting here: the renderer limits how far the CPU runs ahead (frames in flight).
 		m_DeviceHandle->runGarbageCollection();
 
+		return FrameStatus::OK;
 	}
+	FrameStatus VulkanDevice::adquire_frame(nvrhi::IFramebuffer*& backbuffer)
+	{
+		VkSemaphore adquireSemaphore = m_AdquireSemaphores[m_AdquireIndex % m_AdquireSemaphores.size()];
+		VkResult result = vkAcquireNextImageKHR(m_VkDevice.device, m_VkSwapchain.swapchain, UINT64_MAX, adquireSemaphore, VK_NULL_HANDLE, &m_CurrentImageIndex);
+
+		if (result == VK_ERROR_OUT_OF_DATE_KHR)
+		{
+			return FrameStatus::RESIZE_NEEDED;
+		}
+		if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+		{
+			WI_LOG_VULKAN(Error, "vkAdquireNextImageKHR failed ({0})", result);
+			return FrameStatus::FAILED;
+		}
+
+		m_AdquireIndex++;
+		m_DeviceHandle->queueWaitForSemaphore(nvrhi::CommandQueue::Graphics, adquireSemaphore, 0);
+
+		backbuffer = m_Framebuffers[m_CurrentImageIndex];
+		return FrameStatus::OK;
+	}
+	
 	bool VulkanDevice::create_vulkan_objects()
 	{
 		vkb::InstanceBuilder instanceBuilder;
@@ -381,7 +386,18 @@ namespace wiwa
 	{
 		VkSemaphoreCreateInfo semaphore_info{};
 		semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		return vkCreateSemaphore(m_VkDevice.device, &semaphore_info, nullptr, &m_AdquireSemaphore) == VK_SUCCESS;
+
+		const uint32_t count = m_DeviceDesc.FramesInFlight > 0 ? m_DeviceDesc.FramesInFlight : 1;
+		for (uint32_t i = 0; i < count; i++)
+		{
+			VkSemaphore semaphore = VK_NULL_HANDLE;
+			if (vkCreateSemaphore(m_VkDevice.device, &semaphore_info, nullptr, &semaphore) != VK_SUCCESS)
+			{
+				return false;
+			}
+			m_AdquireSemaphores.push_back(semaphore);
+		}
+		return true;
 	}
 
 	void VulkanDevice::destroy_swapchain_resources()
