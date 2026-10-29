@@ -51,6 +51,8 @@ namespace wiwa
 	void register_blend_checks();
 	// Scale, cross-backend, hot reload, resize, minimize and queue checks (scale_checks.cpp).
 	void register_scale_checks();
+	// The IBL math checks (ibl_checks.cpp).
+	void register_ibl_checks();
 
 	// `--render-test`: runs every check once on the render thread. True when all passed.
 	bool run_render_checks(RenderWorld& world);
