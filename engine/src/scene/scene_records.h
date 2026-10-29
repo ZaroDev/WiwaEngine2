@@ -24,8 +24,9 @@ namespace wiwa
 	// top level with a warning). entt::null, with a warning, if the guid is invalid or already in the scene.
 	entt::entity apply_record(Scene& scene, const EntityRecord& record, ApplyReport* report = nullptr);
 
-	// Every entity, parents before children, siblings in order.
-	SceneData data_from_scene(Scene& scene, std::string name);
+	// Every entity, parents before children, siblings in order. With skipGenerated, the entities a prefab instance made (PrefabChild) are
+	// left out: the instance's record holds what they need (its overrides), and they are made again when the scene loads.
+	SceneData data_from_scene(Scene& scene, std::string name, bool skipGenerated = false);
 	ApplyReport apply_scene_data(Scene& scene, const SceneData& data);
 
 	// Every asset the scene refers to, once each (the prefab of an instance, meshes, materials, and the ones inside overrides).

@@ -3,6 +3,9 @@
 #include <core/module.h>
 
 #include "renderer_panel.h"
+#include "scene/hierarchy_panel.h"
+#include "scene/inspector_panel.h"
+#include "scene/scene_editor.h"
 
 class EditorModule : public wiwa::IModule
 {
@@ -31,4 +34,7 @@ public:
 
 private:
 	RendererPanel m_RendererPanel{};
+	Scope<wiwa::SceneEditor> m_SceneEditor{};
+	Scope<HierarchyPanel> m_HierarchyPanel{};
+	Scope<InspectorPanel> m_InspectorPanel{};
 };

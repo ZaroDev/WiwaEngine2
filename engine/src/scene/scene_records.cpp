@@ -221,7 +221,7 @@ namespace wiwa
 		return entity;
 	}
 
-	SceneData data_from_scene(Scene& scene, std::string name)
+	SceneData data_from_scene(Scene& scene, std::string name, bool skipGenerated)
 	{
 		entt::registry& registry = scene.registry();
 
@@ -230,18 +230,17 @@ namespace wiwa
 
 		std::vector<entt::entity> order;
 		std::vector<entt::entity> stack;
-		for (const entt::entity root : registry.view<Hierarchy>())
+		for (const entt::entity root : scene.roots())
 		{
-			if (registry.get<Hierarchy>(root).Parent != entt::null)
-			{
-				continue;
-			}
-
 			stack.push_back(root);
 			while (!stack.empty())
 			{
 				const entt::entity entity = stack.back();
 				stack.pop_back();
+				if (skipGenerated && registry.all_of<PrefabChild>(entity))
+				{
+					continue; // and everything below it is generated too
+				}
 				order.push_back(entity);
 
 				// children are pushed in reverse so that they come out in sibling order

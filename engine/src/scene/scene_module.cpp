@@ -114,6 +114,17 @@ namespace wiwa
 		return m_Active;
 	}
 
+	void SceneModule::set_active(Ref<Scene> scene)
+	{
+		Ref<Scene> old;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			old = std::move(m_Active);
+			m_Active = std::move(scene);
+		}
+		retire(std::move(old));
+	}
+
 	bool SceneModule::is_loading() const
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);

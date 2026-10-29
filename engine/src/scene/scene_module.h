@@ -45,6 +45,10 @@ namespace wiwa
 		virtual std::string get_name() const override { return "SceneModule"; }
 		virtual int get_priority() const override { return -80; }
 
+		// Makes this scene the active one at once (a new empty scene in the editor). Main thread only; the old one is taken down over
+		// the next updates.
+		void set_active(Ref<Scene> scene);
+
 		// The scene in use. Never null (an empty scene to start with). A Replace load swaps it for another object in one step;
 		// the old one lives on while someone holds it.
 		Ref<Scene> get_active() const;

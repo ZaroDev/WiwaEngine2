@@ -16,6 +16,7 @@
 #include <scene/scene_module.h>
 #include <scene/scene_records.h>
 
+#include "scene_editor.h"
 #include "scene_json.h"
 
 #define WI_SCENE_LOG(level, ...) WI_LOG(level, "Scene", __VA_ARGS__)
@@ -88,6 +89,17 @@ namespace wiwa
 			scene.destroy(other);
 			check(!scene.registry().valid(other) && !scene.registry().valid(child), "destroying an entity destroys its subtree");
 			check(scene.find(rootId) == root, "destroying another subtree leaves the rest alone");
+
+			// the order of the top-level entities is the order they were made in, whatever is destroyed in between
+			Scene ordered;
+			const entt::entity first = ordered.create("First");
+			const entt::entity second = ordered.create("Second");
+			const entt::entity third = ordered.create("Third");
+			ordered.destroy(first);
+			check(ordered.roots() == std::vector<entt::entity>({ second, third }), "destroying a top-level entity keeps the order of the others");
+			const entt::entity fourth = ordered.create("Fourth");
+			check(ordered.set_parent(second, fourth) && ordered.roots() == std::vector<entt::entity>({ third, fourth }), "moving a top-level entity under another takes it out of the roots");
+			check(ordered.set_parent(second, entt::null) && ordered.roots() == std::vector<entt::entity>({ third, fourth, second }), "moving an entity to the top level puts it last");
 		}
 
 		void check_reflection(Check& check)
@@ -1038,6 +1050,143 @@ namespace wiwa
 			}
 			module.set_commit_budget_ms(2.0f);
 		}
+
+		void check_scene_editor(Check& check, AssetPipelineModule& pipeline)
+		{
+			register_scene_components();
+			SmokeAssets assets(pipeline);
+			AssetDatabase& database = pipeline.get_database();
+			AssetManager& manager = *Engine::get().get_module<AssetManager>();
+			SceneModule& module = *Engine::get().get_module<SceneModule>();
+
+			const std::optional<AssetRef> prefabRef = database.ensure_imported(assets.write("editor_model.gltf", test_model_gltf()));
+			check(prefabRef.has_value(), "the model for the editor checks imports");
+			if (!prefabRef)
+			{
+				return;
+			}
+
+			SceneEditor editor(manager, module);
+			editor.set_scene(CreateRef<Scene>(), {});
+			Scene& scene = editor.scene();
+			entt::registry& registry = scene.registry();
+			auto pump = [&](SceneEditor& target)
+			{
+				for (u32 i = 0; i < 2000 && (target.has_pending() || target.is_opening()); i++)
+				{
+					target.update();
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+			};
+
+			// structure
+			check(!editor.dirty(), "a scene that was just set is not dirty");
+			const entt::entity a = editor.create_entity(entt::null);
+			const entt::entity b = editor.create_entity(a);
+			const entt::entity c = editor.create_entity(b);
+			check(editor.dirty() && registry.get<Hierarchy>(c).Parent == b && registry.get<Hierarchy>(b).Parent == a, "entities can be created under each other, and that makes the scene dirty");
+			check(!editor.reparent(a, c) && registry.get<Hierarchy>(b).Parent == a && registry.get<Hierarchy>(a).Parent == entt::null, "a reparent that would make a loop is refused and changes nothing");
+			check(editor.reparent(c, a) && registry.get<Hierarchy>(c).Parent == a, "an entity can move to another parent");
+			check(editor.delete_entity(b) && !registry.valid(b) && registry.valid(c), "deleting an entity leaves its siblings");
+
+			// a prefab instance
+			const entt::entity instance = editor.add_prefab(*prefabRef, entt::null);
+			check(instance != entt::null && registry.all_of<PrefabInstance>(instance), "a prefab can be added");
+			pump(editor);
+			check(registry.view<PrefabChild>().size() == 4, "the nodes of the prefab appear once it has loaded (found " + std::to_string(registry.view<PrefabChild>().size()) + ")");
+
+			auto find_child = [&](const std::string& name)
+			{
+				for (const entt::entity entity : registry.view<PrefabChild>())
+				{
+					if (registry.get<Name>(entity).Value == name)
+					{
+						return entity;
+					}
+				}
+				return entt::entity{ entt::null };
+			};
+
+			const entt::entity door = find_child("Door");
+			check(door != entt::null, "the door is there");
+			if (door == entt::null)
+			{
+				return;
+			}
+
+			const u64 doorNode = registry.get<PrefabChild>(door).NodeId;
+			check(editor.set_field(door, "Transform", "Position", FieldValue(glm::vec3(4, 5, 6))), "a field of a prefab node can be set");
+			const std::vector<PrefabOverride>& overrides = registry.get<PrefabInstance>(instance).Overrides;
+			check(overrides.size() == 1 && overrides[0].Kind == OverrideKind::SetField && overrides[0].NodeId == doorNode && overrides[0].Component == "Transform" && overrides[0].Field == "Position", "that is recorded as one override on the instance");
+			check(registry.get<Transform>(door).Position == glm::vec3(4, 5, 6) && editor.is_overridden(door, "Transform", "Position") && !editor.is_overridden(door, "Transform", "Scale"), "the node shows the new value and is marked");
+			check(!editor.set_field(door, "Transform", "Position", FieldValue(1.0f)) && editor.set_field(door, "Transform", "Position", FieldValue(glm::vec3(7, 7, 7))) && registry.get<PrefabInstance>(instance).Overrides.size() == 1, "a wrong value is refused, and setting the same field again changes the one override");
+
+			const SceneData saved = editor.to_scene_data();
+			bool savesGenerated = false;
+			for (const EntityRecord& record : saved.Entities)
+			{
+				savesGenerated = savesGenerated || record.Id == registry.get<Id>(door).Guid;
+			}
+			check(saved.Entities.size() == 3 && !savesGenerated, "the entities of an instance are not saved, the instance is");
+
+			check(editor.revert_field(door, "Transform", "Position") && registry.get<PrefabInstance>(instance).Overrides.empty() && registry.get<Transform>(door).Position == glm::vec3(0, 0, 0) && !editor.is_overridden(door, "Transform", "Position"), "reverting a field removes the override and brings the prefab's value back");
+
+			check(editor.set_field(door, "Transform", "Scale", FieldValue(glm::vec3(2, 2, 2))), "set a field to keep an override for the save below");
+
+			const entt::entity wheel = find_child("Wheel");
+			check(wheel != entt::null && editor.delete_entity(wheel) && !registry.valid(wheel) && registry.view<PrefabChild>().size() == 3, "deleting a prefab node removes it");
+			const std::vector<PrefabOverride>& afterDelete = registry.get<PrefabInstance>(instance).Overrides;
+			check(afterDelete.size() == 2 && afterDelete[1].Kind == OverrideKind::RemoveNode, "that is recorded as a RemoveNode override");
+
+			const entt::entity bolt = editor.create_entity(door);
+			check(bolt != entt::null && registry.all_of<PrefabChild>(bolt) && registry.get<PrefabChild>(bolt).NodeId == ADDED_CHILD_NODE && registry.get<PrefabInstance>(instance).Overrides.back().Kind == OverrideKind::AddChild, "an entity created under a prefab node is an AddChild override");
+			check(bolt != entt::null && editor.set_field(bolt, "Name", "Value", FieldValue(std::string("Bolt"))), "an added child can be renamed");
+			check(!editor.reparent(bolt, entt::null) && !editor.reparent(a, door), "entities of an instance cannot be moved out, and nothing can be moved into one");
+
+			// save, open
+			const std::string relativePath = "Assets/_scene_smoke/edited.wscene";
+			check(editor.save_as(relativePath) && !editor.dirty(), "the scene saves, and is clean afterwards");
+			const std::optional<AssetRef> editedRef = database.ensure_imported(assets.folder() / "edited.wscene");
+			check(editedRef.has_value(), "the saved file imports");
+			if (!editedRef)
+			{
+				return;
+			}
+
+			SceneEditor reopened(manager, module);
+			reopened.open(relativePath);
+			check(reopened.is_opening(), "opening starts a load");
+			pump(reopened);
+			check(!reopened.is_opening() && reopened.get_scene() != nullptr, "the scene opens");
+			if (reopened.get_scene() == nullptr)
+			{
+				return;
+			}
+
+			check(guids_of(reopened.scene()) == guids_of(scene), "the opened scene has the same entities, ids included");
+			const bool sameSave = serialize(reopened.to_scene_data()) == serialize(editor.to_scene_data());
+			check(sameSave, "saving what was opened gives the file again");
+			if (!sameSave)
+			{
+				WI_SCENE_LOG(Error, "edited:   {0}", scene_to_json(editor.to_scene_data()).dump());
+				WI_SCENE_LOG(Error, "reopened: {0}", scene_to_json(reopened.to_scene_data()).dump());
+			}
+			check(!reopened.dirty() && reopened.path() == relativePath, "an opened scene is clean and knows its file");
+			const entt::entity reopenedDoor = reopened.scene().find(registry.get<Id>(door).Guid);
+			check(reopenedDoor != entt::null && reopened.scene().registry().get<Transform>(reopenedDoor).Position == glm::vec3(0, 0, 0) && reopened.scene().registry().get<Transform>(reopenedDoor).Scale == glm::vec3(2, 2, 2), "the overrides are applied in the opened scene");
+			check(reopenedDoor != entt::null && reopened.set_field(reopenedDoor, "Transform", "Position", FieldValue(glm::vec3(1, 1, 1))) && reopened.dirty(), "editing an opened scene makes it dirty");
+
+			// unpack
+			entt::entity reopenedInstance = entt::null;
+			for (const entt::entity entity : reopened.scene().registry().view<PrefabInstance>())
+			{
+				reopenedInstance = entity;
+			}
+			const size_t entityCount = entity_count(reopened.get_scene());
+			check(reopenedInstance != entt::null && reopened.unpack(reopenedInstance), "an instance can be unpacked");
+			check(reopenedInstance != entt::null && !reopened.scene().registry().all_of<PrefabInstance>(reopenedInstance) && reopened.scene().registry().view<PrefabChild>().empty() && entity_count(reopened.get_scene()) == entityCount, "unpacking leaves plain entities and no link to the prefab");
+			check(reopened.to_scene_data().Entities.size() == entityCount, "after unpacking, every entity is saved");
+		}
 	}
 
 	bool run_scene_smoke_test(AssetPipelineModule& pipeline)
@@ -1052,6 +1201,7 @@ namespace wiwa
 		check_prefab(check);
 		check_scene_json(check, pipeline);
 		check_scene_loading(check, pipeline);
+		check_scene_editor(check, pipeline);
 
 		if (check.Failures == 0)
 		{

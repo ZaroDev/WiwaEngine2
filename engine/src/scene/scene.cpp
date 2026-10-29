@@ -22,6 +22,10 @@ namespace wiwa
 		{
 			set_parent(entity, parent);
 		}
+		else
+		{
+			m_Roots.push_back(entity);
+		}
 		return entity;
 	}
 
@@ -75,6 +79,11 @@ namespace wiwa
 			}
 		}
 
+		else
+		{
+			std::erase(m_Roots, child);
+		}
+
 		link.Parent = entt::null;
 		link.NextSibling = entt::null;
 	}
@@ -97,6 +106,7 @@ namespace wiwa
 		unlink(child);
 		if (parent == entt::null)
 		{
+			m_Roots.push_back(child);
 			return true;
 		}
 
@@ -127,13 +137,8 @@ namespace wiwa
 	void Scene::update_world_transforms()
 	{
 		std::vector<entt::entity> stack;
-		for (const entt::entity root : m_Registry.view<Hierarchy>())
+		for (const entt::entity root : m_Roots)
 		{
-			if (m_Registry.get<Hierarchy>(root).Parent != entt::null)
-			{
-				continue;
-			}
-
 			stack.push_back(root);
 			while (!stack.empty())
 			{
@@ -171,6 +176,7 @@ namespace wiwa
 		}
 
 		m_Registry.destroy(doomed.begin(), doomed.end());
+		m_Roots.clear(); // the scene is being thrown away: its hierarchy is not kept consistent
 		return m_Registry.view<Id>().size();
 	}
 

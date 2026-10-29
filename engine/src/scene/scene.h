@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "components.h"
 
@@ -37,6 +38,9 @@ namespace wiwa
 		// away). Returns how many entities are left. For taking a big scene down over several frames.
 		size_t destroy_some(size_t maxEntities);
 
+		// The top-level entities in the order they were made (or last moved to the top level), whatever was destroyed since.
+		const std::vector<entt::entity>& roots() const { return m_Roots; }
+
 		entt::registry& registry() { return m_Registry; }
 		const entt::registry& registry() const { return m_Registry; }
 
@@ -46,5 +50,6 @@ namespace wiwa
 
 		entt::registry m_Registry{};
 		std::unordered_map<EntityGuid, entt::entity> m_ByGuid{};
+		std::vector<entt::entity> m_Roots{};
 	};
 }

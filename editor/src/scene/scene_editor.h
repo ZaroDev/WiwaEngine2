@@ -1,0 +1,127 @@
+#pragma once
+
+#include <filesystem>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include <assets/asset_manager.h>
+#include <scene/prefab_expander.h>
+#include <scene/scene_module.h>
+#include <scene/scene_records.h>
+
+namespace wiwa
+{
+	// The scene being edited and everything that changes it: what the Hierarchy and Inspector panels call, without any ImGui in
+	// here. It edits a Scene (the active one of the SceneModule, in the editor) and keeps track of the file it came from, whether
+	// it changed, and the selection. Main thread.
+	//
+	// Entities of a linked prefab instance are not edited directly: a change to one is recorded as an override on the instance root
+	// (the instance's record is what the file holds) and applied to the live entity as well, so nothing has to be expanded again.
+	class SceneEditor
+	{
+	public:
+		// What an entity is, as far as editing goes.
+		enum class Kind
+		{
+			Authored,   // written in the scene file
+			PrefabNode, // generated from a prefab node; edits become SetField/AddComponent/RemoveComponent/RemoveNode overrides
+			AddedChild, // made by an AddChild override
+		};
+
+		SceneEditor(AssetManager& assets, SceneModule& scenes);
+
+		// ---- the document ----
+		// Adopts a scene (clears the selection and the dirty flag).
+		void set_scene(Ref<Scene> scene, std::filesystem::path path = {});
+		Ref<Scene> get_scene() const { return m_Scene; }
+		Scene& scene() { return *m_Scene; }
+		const std::filesystem::path& path() const { return m_Path; }
+		bool dirty() const { return m_Dirty; }
+
+		// When on, the editor adopts whatever scene the SceneModule makes active (a scene loaded with --scene, for instance).
+		void set_follow_module(bool follow) { m_Follow = follow; }
+
+		// Every frame: finishes an open, expands the prefab instances whose prefab has loaded.
+		void update();
+		bool has_pending() const { return !m_Pending.empty(); }
+
+		void new_scene();
+		// Loads the scene by the path of its source file in the asset catalog ("Assets/scenes/level.wscene") without stalling; update()
+		// adopts it once it is there.
+		void open(const std::string& sourcePath);
+		bool is_opening() const { return m_Opening != nullptr; }
+		Ref<JobProgress> get_open_progress() const { return m_Opening; }
+
+		// Writes the .wscene (JSON) next to the temp file and renames it over the target. The file watcher imports it.
+		bool save();
+		bool save_as(const std::filesystem::path& file);
+		// What save() writes: the authored entities, without the ones a prefab instance generates.
+		SceneData to_scene_data();
+
+		// ---- selection ----
+		entt::entity selected() const { return m_Selected; }
+		void select(entt::entity entity);
+
+		// ---- structure ----
+		Kind kind_of(entt::entity entity) const;
+
+		// A new entity under parent (entt::null for the top level). Under a prefab node it is an AddChild override; under an added
+		// child, null (not supported).
+		entt::entity create_entity(entt::entity parent);
+		bool delete_entity(entt::entity entity);
+		// Only between authored entities; false if it would make a loop.
+		bool reparent(entt::entity child, entt::entity parent);
+
+		// The instance root comes back at once; its children appear in update() when the prefab has loaded.
+		entt::entity add_prefab(AssetRef prefab, entt::entity parent);
+		// Turns the instance and everything it generated into ordinary entities.
+		bool unpack(entt::entity instance);
+		// Drops all overrides and generates the instance again from the prefab.
+		bool revert_instance(entt::entity instance);
+
+		// ---- components ----
+		// false if the entity lacks the component, the field does not exist or the value is not valid for it
+		bool set_field(entt::entity entity, const std::string& component, const std::string& field, const FieldValue& value);
+		bool add_component(entt::entity entity, const std::string& component);
+		bool remove_component(entt::entity entity, const std::string& component);
+		// Whether an override of the instance changes this field of this prefab node.
+		bool is_overridden(entt::entity entity, const std::string& component, const std::string& field) const;
+		// Takes the override off and puts the prefab's value back.
+		bool revert_field(entt::entity entity, const std::string& component, const std::string& field);
+
+	private:
+		struct Generated
+		{
+			entt::entity Root{ entt::null };
+			u64 NodeId = 0;
+		};
+
+		struct PendingInstance
+		{
+			EntityGuid Root{};
+			Handle<PrefabData> Prefab{};
+		};
+
+		std::optional<Generated> generated_of(entt::entity entity) const;
+		PrefabOverride* find_added_override(PrefabInstance& instance, EntityGuid rootId, EntityGuid childId);
+		Handle<PrefabData> prefab_handle(const AssetRef& prefab);
+		const PrefabData* prefab_of(entt::entity root);
+		void expand_instance(entt::entity root, const PrefabData& prefab);
+		void queue_expansion(entt::entity root);
+		void mark_dirty() { m_Dirty = true; }
+
+		AssetManager& m_Assets;
+		SceneModule& m_Scenes;
+		Ref<Scene> m_Scene{};
+		std::filesystem::path m_Path{};
+		bool m_Dirty = false;
+		bool m_Follow = false;
+		entt::entity m_Selected{ entt::null };
+
+		Ref<JobProgress> m_Opening{};
+		std::string m_OpenPath{};
+		std::vector<PendingInstance> m_Pending{};
+		std::unordered_map<AssetGuid, Handle<PrefabData>> m_Prefabs{};
+	};
+}
