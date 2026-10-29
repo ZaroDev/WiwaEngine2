@@ -89,6 +89,8 @@ namespace wiwa
 		}
 
 		m_Passes.clear();
+		m_Textures = TextureRegistry{};
+		m_Viewport.destroy();
 		m_Cache.reset();
 		m_Uploads.shutdown();
 		m_Shaders.reset();
@@ -176,6 +178,8 @@ namespace wiwa
 		m_Cache->update();
 		m_Uploads.submit();
 
+		update_viewport();
+
 		m_CommandList->open();
 
 		// Forces the next state to be applied from scratch. D3D11's flip-model swapchain
@@ -184,6 +188,12 @@ namespace wiwa
 
 		// The passes draw over this; until they are ready (or when there are none) it is what the window shows.
 		nvrhi::utils::ClearColorAttachment(m_CommandList, backbuffer, 0, nvrhi::Color(0.02f, 0.02f, 0.05f, 1.0f));
+
+		// Until the scene passes exist (and the resolve pass writes this target), the viewport shows a plain color.
+		if (m_Viewport.valid())
+		{
+			nvrhi::utils::ClearColorAttachment(m_CommandList, m_Viewport.ldr_framebuffer(), 0, nvrhi::Color(0.1f, 0.2f, 0.3f, 1.0f));
+		}
 
 		if (allPassesReady && !m_Passes.empty())
 		{
@@ -233,12 +243,13 @@ namespace wiwa
 		return status == FrameStatus::Ok;
 	}
 
-	PassInitializationDescription Renderer::make_pass_description() const
+	PassInitializationDescription Renderer::make_pass_description()
 	{
 		PassInitializationDescription description;
 		description.Device = m_Backend->get_device();
 		description.Backbuffer = m_Backend->get_reference_framebuffer();
 		description.Shaders = m_Shaders.get();
+		description.Textures = &m_Textures;
 		return description;
 	}
 
@@ -252,6 +263,45 @@ namespace wiwa
 		frame.FrameIndex = m_FrameIndex;
 		frame.ImGui = &batch.ImGui;
 		return frame;
+	}
+
+	void Renderer::set_viewport_size(u32 width, u32 height)
+	{
+		if (width == 0 || height == 0)
+		{
+			return;
+		}
+		if (width != m_RequestedViewportWidth || height != m_RequestedViewportHeight)
+		{
+			m_ViewportFailed = false;
+		}
+		m_RequestedViewportWidth = width;
+		m_RequestedViewportHeight = height;
+	}
+
+	void Renderer::update_viewport()
+	{
+		if (m_RequestedViewportWidth == 0 || m_ViewportFailed)
+		{
+			return;
+		}
+
+		const u32 width = ViewportTarget::clamp_dimension(m_RequestedViewportWidth);
+		const u32 height = ViewportTarget::clamp_dimension(m_RequestedViewportHeight);
+		if (m_Viewport.valid() && m_Viewport.width() == width && m_Viewport.height() == height)
+		{
+			return;
+		}
+
+		if (m_Viewport.create(m_Backend->get_device(), width, height))
+		{
+			m_Textures.set(VIEWPORT_TEXTURE_ID, m_Viewport.ldr());
+		}
+		else
+		{
+			m_ViewportFailed = true;
+			m_Textures.set(VIEWPORT_TEXTURE_ID, nullptr);
+		}
 	}
 
 	bool Renderer::apply_vsync(u32 width, u32 height)

@@ -15,6 +15,7 @@ namespace wiwa
 		u32 ElementCount = 0;
 		u32 IndexOffset = 0;
 		u32 VertexOffset = 0;
+		u32 TextureId = 0; // a TextureRegistry id
 	};
 
 	// A copy of one frame of ImGui draw data that the render thread can draw while the main thread builds the next frame.

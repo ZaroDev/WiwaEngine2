@@ -37,6 +37,8 @@ namespace wiwa
 	void register_scene_checks();
 	// The GPU resource cache checks (cache_checks.cpp).
 	void register_cache_checks();
+	// The viewport target, texture registry and UI pass checks (viewport_checks.cpp).
+	void register_viewport_checks();
 
 	// `--render-test`: runs every check once on the render thread. True when all passed.
 	bool run_render_checks(RenderWorld& world);

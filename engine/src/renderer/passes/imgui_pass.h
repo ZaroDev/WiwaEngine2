@@ -1,9 +1,11 @@
 #pragma once
 
+#include <unordered_map>
 #include <vector>
 
 #include "../render_pass.h"
 #include "../shader_library.h"
+#include "../texture_registry.h"
 
 namespace wiwa
 {
@@ -16,7 +18,7 @@ namespace wiwa
 
 		virtual bool initialize(const PassInitializationDescription& description) override;
 		virtual void update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer) override;
-		virtual bool is_ready() const override { return m_Pipeline != nullptr && m_BindingSet != nullptr; }
+		virtual bool is_ready() const override { return m_Pipeline != nullptr && m_FontTexture != nullptr; }
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
 
@@ -31,7 +33,7 @@ namespace wiwa
 		};
 
 		void ensure_buffer_capacity(u32 vertexCount, u32 indexCount);
-		void create_binding_set();
+		nvrhi::IBindingSet* binding_set_for(nvrhi::ITexture* texture);
 
 		nvrhi::IDevice* m_Device = nullptr;
 		ShaderLibrary* m_Shaders = nullptr;
@@ -39,7 +41,8 @@ namespace wiwa
 
 		nvrhi::InputLayoutHandle m_InputLayout{};
 		nvrhi::BindingLayoutHandle m_BindingLayout{};
-		nvrhi::BindingSetHandle m_BindingSet{};
+		TextureRegistry* m_Textures = nullptr;
+		std::unordered_map<nvrhi::ITexture*, nvrhi::BindingSetHandle> m_BindingSets{}; // one per texture the UI draws
 		nvrhi::GraphicsPipelineHandle m_Pipeline{};
 		nvrhi::SamplerHandle m_Sampler{};
 		nvrhi::TextureHandle m_FontTexture{};

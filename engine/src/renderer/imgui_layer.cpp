@@ -2,14 +2,12 @@
 #include "imgui_layer.h"
 
 #include "platform/imgui/imgui_impl_glfw.h"
+#include "texture_registry.h"
 
 #define WI_IMGUI_LOG(level, ...) WI_LOG(level, "ImGui", __VA_ARGS__)
 
 namespace wiwa
 {
-	// The only texture the renderer draws for now is the font atlas; its id is just a non-null marker.
-	constexpr ImTextureID FONT_TEXTURE_ID = static_cast<ImTextureID>(1);
-
 	void copy_draw_data(const ImDrawData* source, OwnedDrawData& target)
 	{
 		target.Valid = false;
@@ -55,6 +53,7 @@ namespace wiwa
 				copy.ElementCount = command.ElemCount;
 				copy.IndexOffset = indexBase + command.IdxOffset;
 				copy.VertexOffset = vertexBase + command.VtxOffset;
+				copy.TextureId = static_cast<u32>(command.GetTexID());
 				target.Commands.push_back(copy);
 			}
 		}
@@ -90,7 +89,7 @@ namespace wiwa
 		m_FontWidth = static_cast<u32>(width);
 		m_FontHeight = static_cast<u32>(height);
 		m_FontPixels.assign(pixels, pixels + static_cast<size_t>(width) * height * 4);
-		io.Fonts->SetTexID(FONT_TEXTURE_ID);
+		io.Fonts->SetTexID(static_cast<ImTextureID>(FONT_TEXTURE_ID));
 		m_FontPending = true;
 
 		m_Initialized = true;

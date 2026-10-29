@@ -26,9 +26,10 @@ namespace wiwa
 	{
 		m_Device = description.Device;
 		m_Shaders = description.Shaders;
-		if (m_Shaders == nullptr)
+		m_Textures = description.Textures;
+		if (m_Shaders == nullptr || m_Textures == nullptr)
 		{
-			WI_IMGUI_LOG(Error, "The ImGui pass needs the shader library");
+			WI_IMGUI_LOG(Error, "The ImGui pass needs the shader library and the texture registry");
 			return false;
 		}
 
@@ -75,16 +76,24 @@ namespace wiwa
 		uploadList->close();
 		m_Device->executeCommandList(uploadList);
 
-		create_binding_set();
+		m_Textures->set(FONT_TEXTURE_ID, m_FontTexture);
 	}
 
-	void ImGuiRenderPass::create_binding_set()
+	nvrhi::IBindingSet* ImGuiRenderPass::binding_set_for(nvrhi::ITexture* texture)
 	{
+		const auto found = m_BindingSets.find(texture);
+		if (found != m_BindingSets.end())
+		{
+			return found->second;
+		}
+
 		nvrhi::BindingSetDesc setDescription;
-		setDescription.addItem(nvrhi::BindingSetItem::Texture_SRV(0, m_FontTexture));
+		setDescription.addItem(nvrhi::BindingSetItem::Texture_SRV(0, texture));
 		setDescription.addItem(nvrhi::BindingSetItem::Sampler(1, m_Sampler));
 		setDescription.addItem(nvrhi::BindingSetItem::PushConstants(2, sizeof(PushConstants)));
-		m_BindingSet = m_Device->createBindingSet(setDescription, m_BindingLayout);
+		nvrhi::BindingSetHandle set = m_Device->createBindingSet(setDescription, m_BindingLayout);
+		m_BindingSets[texture] = set;
+		return set;
 	}
 
 	void ImGuiRenderPass::update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer)
@@ -190,7 +199,7 @@ namespace wiwa
 	void ImGuiRenderPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
 	{
 		const OwnedDrawData* drawData = frame.ImGui;
-		if (drawData == nullptr || !drawData->Valid || m_Pipeline == nullptr || m_BindingSet == nullptr)
+		if (drawData == nullptr || !drawData->Valid || m_Pipeline == nullptr || m_FontTexture == nullptr)
 		{
 			return;
 		}
@@ -225,12 +234,19 @@ namespace wiwa
 		state.indexBuffer.buffer = m_IndexBuffer;
 		state.indexBuffer.format = (sizeof(ImDrawIdx) == 2) ? nvrhi::Format::R16_UINT : nvrhi::Format::R32_UINT;
 		state.indexBuffer.offset = 0;
-		state.addBindingSet(m_BindingSet);
+		state.addBindingSet(binding_set_for(m_FontTexture));
+
+		// Sets of textures that are gone (a resized viewport) are let go.
+		for (auto it = m_BindingSets.begin(); it != m_BindingSets.end();)
+		{
+			it = m_Textures->contains(it->first) ? std::next(it) : m_BindingSets.erase(it);
+		}
 		state.viewport.addViewport(nvrhi::Viewport(framebufferWidth, framebufferHeight));
 		state.viewport.addScissorRect(nvrhi::Rect(0, 0, 0, 0));
 
 		// The state only changes with the scissor rectangle: commands that share one share the state.
 		bool stateSet = false;
+		nvrhi::ITexture* boundTexture = nullptr;
 		for (const OwnedDrawCommand& command : drawData->Commands)
 		{
 			const float clipMinX = std::max((command.ClipRect[0] - drawData->DisplayPos[0]) * drawData->FramebufferScale[0], 0.0f);
@@ -245,9 +261,17 @@ namespace wiwa
 			const nvrhi::Rect scissor(
 				static_cast<int>(clipMinX), static_cast<int>(clipMaxX),
 				static_cast<int>(clipMinY), static_cast<int>(clipMaxY));
-			if (!stateSet || scissor != state.viewport.scissorRects[0])
+			nvrhi::ITexture* texture = m_Textures->get(command.TextureId);
+			if (texture == nullptr)
+			{
+				continue; // an id nobody registered (any more): nothing to draw it with
+			}
+
+			if (!stateSet || scissor != state.viewport.scissorRects[0] || texture != boundTexture)
 			{
 				state.viewport.scissorRects[0] = scissor;
+				state.bindings[0] = binding_set_for(texture);
+				boundTexture = texture;
 				commandList->setGraphicsState(state);
 				commandList->setPushConstants(&constants, sizeof(constants));
 				stateSet = true;

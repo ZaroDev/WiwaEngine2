@@ -9,6 +9,7 @@
 namespace wiwa
 {
 	class ShaderLibrary;
+	class TextureRegistry;
 
 	// Everything a pass needs to know about the current frame.
 	struct FrameDescription
@@ -26,6 +27,7 @@ namespace wiwa
 		nvrhi::IDevice* Device = nullptr;
 		nvrhi::IFramebuffer* Backbuffer = nullptr; // a backbuffer framebuffer: pipelines are built against it
 		ShaderLibrary* Shaders = nullptr;          // cooked shaders, loaded through the asset system
+		TextureRegistry* Textures = nullptr;       // the textures the UI can draw by id
 	};
 
 	// A render pass records its commands into the command list that the renderer

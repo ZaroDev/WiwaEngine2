@@ -50,6 +50,11 @@ namespace wiwa
 		// Turns vertical sync on or off; it takes effect on the render thread a frame or two later.
 		void set_vsync(bool enabled);
 
+		// The size the scene is rendered at, in pixels; the Viewport panel asks for the size of its content region every frame. The render
+		// thread makes (or remakes) the viewport target a frame or two later. The result is drawn by ImGui as the texture id below.
+		void set_viewport_size(u32 width, u32 height);
+		static constexpr u32 get_viewport_texture_id() { return VIEWPORT_TEXTURE_ID; }
+
 		GraphicsApi get_api() const { return m_Description.Api; }
 		// False if the renderer could not start or has failed since.
 		bool is_ready() const { return m_Started && !m_Failed; }
@@ -74,6 +79,8 @@ namespace wiwa
 		std::mutex m_ReloadMutex{};
 		std::vector<AssetGuid> m_ReloadedAssets{};
 		u32 m_ReloadListenerId = 0;
+		u32 m_RequestedViewportWidth = 0; // main thread: what was last sent
+		u32 m_RequestedViewportHeight = 0;
 		u64 m_FrameIndex = 0;
 		u64 m_SmokeFrames = 0; // --render-smoke: quit after this many frames, with exit code 1 if the GPU layers reported an error
 		bool m_RenderTest = false;                // --render-test: run the render checks once the passes are ready, then quit

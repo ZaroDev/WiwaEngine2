@@ -6,6 +6,7 @@
 #include "scene/hierarchy_panel.h"
 #include "scene/inspector_panel.h"
 #include "scene/scene_editor.h"
+#include "viewport/viewport_panel.h"
 
 class EditorModule : public wiwa::IModule
 {
@@ -34,6 +35,7 @@ public:
 
 private:
 	RendererPanel m_RendererPanel{};
+	ViewportPanel m_ViewportPanel{};
 	Scope<wiwa::SceneEditor> m_SceneEditor{};
 	Scope<HierarchyPanel> m_HierarchyPanel{};
 	Scope<InspectorPanel> m_InspectorPanel{};

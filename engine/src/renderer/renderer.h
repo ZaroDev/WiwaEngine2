@@ -13,7 +13,9 @@
 #include "render_queue.h"
 #include "resources/gpu_resource_cache.h"
 #include "scene/render_scene.h"
+#include "texture_registry.h"
 #include "upload_queue.h"
+#include "viewport_target.h"
 
 namespace wiwa
 {
@@ -45,6 +47,13 @@ namespace wiwa
 		RenderScene& get_scene() { return m_Scene; }
 		GpuResourceCache& get_cache() { return *m_Cache; }
 		AssetManager* get_assets() const { return m_Description.Assets; }
+		TextureRegistry& get_textures() { return m_Textures; }
+		ViewportTarget& get_viewport() { return m_Viewport; }
+		nvrhi::IFramebuffer* get_reference_framebuffer() const { return m_Backend ? m_Backend->get_reference_framebuffer() : nullptr; }
+
+		// The size the scene is rendered at (the Viewport panel's size). The target is made, or made again, at the start of the next
+		// frame. 0 in either dimension changes nothing (a hidden panel keeps its target).
+		void set_viewport_size(u32 width, u32 height);
 		GraphicsApi get_api() const { return m_Description.Api; }
 		std::string get_adapter_name() const { return m_Backend ? m_Backend->get_adapter_name() : std::string{}; }
 		u32 get_width() const { return m_Backend ? m_Backend->get_width() : 0; }
@@ -64,8 +73,9 @@ namespace wiwa
 
 	private:
 		bool apply_vsync(u32 width, u32 height);
+		void update_viewport();
 		bool resize_backend(u32 width, u32 height);
-		PassInitializationDescription make_pass_description() const;
+		PassInitializationDescription make_pass_description();
 		FrameDescription make_frame_description(nvrhi::IFramebuffer* backbuffer, const RenderBatch& batch);
 
 		// Frames in flight: block until fewer than MaxFramesInFlight frames are still running on the GPU.
@@ -85,6 +95,11 @@ namespace wiwa
 		UploadQueue m_Uploads{};
 		RenderScene m_Scene{};
 		Scope<GpuResourceCache> m_Cache{};
+		TextureRegistry m_Textures{};
+		ViewportTarget m_Viewport{};
+		u32 m_RequestedViewportWidth = 0;
+		u32 m_RequestedViewportHeight = 0;
+		bool m_ViewportFailed = false; // creating the target at the requested size failed: not tried again until the size changes
 		nvrhi::CommandListHandle m_CommandList{};
 		std::vector<Scope<IRenderPass>> m_Passes{};
 		PassProfiler m_Profiler{};

@@ -100,6 +100,7 @@ namespace wiwa
 		{
 			register_scene_checks();
 			register_cache_checks();
+			register_viewport_checks();
 
 			register_render_check("copy_queue_roundtrip", [](RenderCheckContext& context)
 				{

@@ -32,6 +32,7 @@ void EditorModule::pre_update(float deltaTime)
 void EditorModule::update(float deltaTime)
 {
 	m_RendererPanel.draw();
+	m_ViewportPanel.draw();
 	m_SceneEditor->update();
 	m_HierarchyPanel->draw();
 	m_InspectorPanel->draw();

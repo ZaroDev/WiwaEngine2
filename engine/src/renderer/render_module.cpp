@@ -160,6 +160,20 @@ namespace wiwa
 			});
 	}
 
+	void RenderModule::set_viewport_size(u32 width, u32 height)
+	{
+		if (width == m_RequestedViewportWidth && height == m_RequestedViewportHeight)
+		{
+			return; // the render thread already knows
+		}
+		m_RequestedViewportWidth = width;
+		m_RequestedViewportHeight = height;
+		submit([width, height](RenderWorld& world)
+			{
+				world.get_renderer().set_viewport_size(width, height);
+			});
+	}
+
 	// Render thread: what the UI shows about the renderer.
 	void RenderModule::publish_snapshot()
 	{
