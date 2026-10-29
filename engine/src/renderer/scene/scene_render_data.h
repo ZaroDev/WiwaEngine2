@@ -141,6 +141,7 @@ namespace wiwa
 
 		// What the project decides about shadows (the Renderer sets it; checks change it).
 		RenderQuality& quality() { return m_Quality; }
+		const RenderQuality& quality() const { return m_Quality; }
 		const FrameConstants& constants() const { return m_Constants; }
 
 		const std::vector<DrawItem>& opaque() const { return m_Opaque; }   // sorted by cull mode, page and material

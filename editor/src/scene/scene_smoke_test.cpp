@@ -787,7 +787,7 @@ namespace wiwa
 			s.ExposureEv = 1.5f;
 			s.Exposure.Auto = true;
 			s.Exposure.MaxEv = 6.0f;
-			s.Bloom.Enabled = false;
+			s.Bloom.Enabled = true;
 			s.Bloom.Intensity = 0.1f;
 			s.Tonemap.Operator = TonemapOperator::Reinhard;
 			s.Tonemap.Vignette = 0.5f;

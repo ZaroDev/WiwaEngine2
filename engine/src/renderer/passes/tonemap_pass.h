@@ -29,6 +29,8 @@ namespace wiwa
 			float Tint = 0.0f;
 			float Vignette = 0.0f;
 			float AutoExposure = 0.0f; // 1: the exposure comes from the viewport's exposure buffer
+			float BloomIntensity = 0.0f; // 0: the bloom is not read
+			float Padding[3]{};
 		};
 
 		nvrhi::IDevice* m_Device = nullptr;
@@ -36,6 +38,7 @@ namespace wiwa
 		bool m_Failed = false;
 
 		nvrhi::SamplerHandle m_Sampler{};
+		nvrhi::SamplerHandle m_LinearSampler{}; // the bloom is a smaller image
 		nvrhi::BindingLayoutHandle m_BindingLayout{};
 		nvrhi::BindingSetHandle m_BindingSet{};
 		nvrhi::GraphicsPipelineHandle m_Pipeline{};

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include <nvrhi/nvrhi.h>
 
 #include <math/math.h>
@@ -12,6 +14,7 @@ namespace wiwa
 	{
 	public:
 		static constexpr u32 MAX_SIZE = 16384;
+		static constexpr u32 MAX_BLOOM_MIPS = 6;
 
 		// The size a request is turned into: at least 1, at most MAX_SIZE.
 		static u32 clamp_dimension(u32 size);
@@ -31,6 +34,13 @@ namespace wiwa
 		// luminance histogram it is measured from.
 		nvrhi::IBuffer* exposure_buffer() const { return m_Exposure; }
 		nvrhi::IBuffer* histogram_buffer() const { return m_Histogram; }
+		// The bloom chain: down(i) is half the size of the level before it (the first is half the viewport), up(i) is the spread-back
+		// level i. up(0) is the finished bloom. Level sizes are at least 1x1. RGBA16F, written by compute shaders.
+		nvrhi::ITexture* bloom_down(u32 level) const { return m_BloomDown[level]; }
+		nvrhi::ITexture* bloom_up(u32 level) const { return level + 1 < MAX_BLOOM_MIPS ? m_BloomUp[level].Get() : nullptr; }
+		nvrhi::ITexture* bloom() const { return m_BloomUp[0]; }
+		u32 bloom_width(u32 level) const { return std::max(1u, m_Width >> (level + 1)); }
+		u32 bloom_height(u32 level) const { return std::max(1u, m_Height >> (level + 1)); }
 		nvrhi::IFramebuffer* hdr_framebuffer() const { return m_HdrFramebuffer; }     // HDR + depth
 		nvrhi::IFramebuffer* depth_framebuffer() const { return m_DepthFramebuffer; } // depth only
 		nvrhi::IFramebuffer* ldr_framebuffer() const { return m_LdrFramebuffer; }
@@ -42,6 +52,8 @@ namespace wiwa
 		nvrhi::TextureHandle m_Hdr{};
 		nvrhi::TextureHandle m_Depth{};
 		nvrhi::TextureHandle m_Ldr{};
+		nvrhi::TextureHandle m_BloomDown[MAX_BLOOM_MIPS]{};
+		nvrhi::TextureHandle m_BloomUp[MAX_BLOOM_MIPS - 1]{};
 		nvrhi::BufferHandle m_Exposure{};
 		nvrhi::BufferHandle m_Histogram{};
 		nvrhi::FramebufferHandle m_HdrFramebuffer{};

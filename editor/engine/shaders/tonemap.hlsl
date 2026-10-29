@@ -12,6 +12,8 @@ struct TonemapConstantsData
 	float Tint;
 	float Vignette;
 	float AutoExposure; // 1: the exposure is in uExposure[0]
+	float BloomIntensity; // 0: the bloom is not read
+	float3 Padding;
 };
 
 PUSH_CONSTANTS(TonemapConstantsData, Constants, b2);
@@ -19,6 +21,8 @@ PUSH_CONSTANTS(TonemapConstantsData, Constants, b2);
 Texture2D uHdr : register(t0);
 SamplerState uSampler : register(s1);
 StructuredBuffer<float> uExposure : register(t3); // written by the exposure pass
+Texture2D uBloom : register(t4);
+SamplerState uLinearSampler : register(s5);
 
 struct VertexOutput
 {
@@ -103,7 +107,12 @@ float4 PSMain(VertexOutput input) : SV_Target0
 			exposure = measured;
 		}
 	}
-	float3 hdr = uHdr.SampleLevel(uSampler, input.Uv, 0).rgb * exposure;
+	float3 hdr = uHdr.SampleLevel(uSampler, input.Uv, 0).rgb;
+	if (Constants.BloomIntensity > 0.0) // a uniform branch: nothing is read when it is off
+	{
+		hdr += uBloom.SampleLevel(uLinearSampler, input.Uv, 0).rgb * Constants.BloomIntensity;
+	}
+	hdr *= exposure;
 	float3 mapped = ApplyOperator(Grade(hdr), Constants.Operator);
 	float2 fromCenter = input.Uv - 0.5;
 	mapped *= 1.0 - Constants.Vignette * smoothstep(0.25, 0.75, length(fromCenter));

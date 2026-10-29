@@ -39,9 +39,9 @@ namespace wiwa
 			s.BackgroundColor = glm::vec3(0.9f, 0.8f, 0.7f);
 			s.ExposureEv = -1.5f;
 			s.Exposure = { true, 0.5f, 0.4f, -3.0f, 5.0f, 2.0f, 0.2f, 0.8f };
-			s.Bloom = { false, 2.0f, 0.25f, 0.1f };
+			s.Bloom = { true, 2.0f, 0.25f, 0.1f };
 			s.Tonemap = { TonemapOperator::Neutral, 1.2f, 0.8f, 0.3f, -0.3f, 0.5f };
-			s.Ao = { false, 2.5f, 3.0f };
+			s.Ao = { true, 2.5f, 3.0f };
 			return s;
 		}
 	}

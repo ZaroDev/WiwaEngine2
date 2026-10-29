@@ -1,4 +1,5 @@
 #include <pch.h>
+#include "../passes/bloom_math.h"
 #include "scene_tester.h"
 
 // Checks of the post-processing chain: tone mapping and grading, exposure, bloom, FXAA, ambient occlusion.
@@ -203,6 +204,74 @@ namespace wiwa
 				const float dark = read_exposure(context, test);
 				WI_LOG(Info, "RenderTest", "exposure_scene_swap_resets {0} -> {1}", bright, dark);
 				context.check(dark > bright * 4.0f, "another scene starts from its own measurement, not the old exposure");
+			});
+
+		register_render_check("bloom_spreads", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(test.add_mesh(make_test_cube(test.add_material(emissive_material(glm::vec3(30.0f))))), glm::scale(glm::mat4(1.0f), glm::vec3(0.3f)));
+				SceneSettings off = dark();
+				off.Bloom.Enabled = false;
+				test.scene().set_settings(off);
+				context.check(test.render(), "render without bloom");
+				int right = 32;
+				while (right < 63 && SceneTester::luma(test.pixel(right + 1, 32)) > 0)
+				{
+					right++;
+				}
+				const int probe = std::min(right + 4, 63);
+				const int without = SceneTester::luma(test.pixel(probe, 32));
+
+				SceneSettings on = dark();
+				on.Bloom.Enabled = true;
+				on.Bloom.Intensity = 0.3f;
+				test.scene().set_settings(on);
+				context.check(test.render(), "render with bloom");
+				const int with = SceneTester::luma(test.pixel(probe, 32));
+				WI_LOG(Info, "RenderTest", "bloom_spreads probe {0} (edge {1}): {2} -> {3}", probe, right, without, with);
+				context.check(right < 60 && without == 0, "the pixel next to the source is dark without bloom");
+				context.check(with > without + 3, "the glow reaches it with bloom");
+			});
+
+		register_render_check("bloom_threshold", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(test.add_mesh(make_test_cube(test.add_material(emissive_material(glm::vec3(0.4f))))), glm::scale(glm::mat4(1.0f), glm::vec3(0.3f)));
+				SceneSettings off = dark();
+				off.Bloom.Enabled = false;
+				test.scene().set_settings(off);
+				context.check(test.render(), "render without bloom");
+				const std::vector<u8> plain = test.pixels();
+
+				SceneSettings on = dark();
+				on.Bloom.Enabled = true;
+				on.Bloom.Intensity = 0.3f;
+				test.scene().set_settings(on);
+				context.check(test.render(), "render with bloom");
+				context.check(SceneTester::max_difference(plain, test.pixels()) == 0, "a scene below the threshold is the same with bloom on");
+			});
+
+		register_render_check("bloom_tiny_viewport", [](RenderCheckContext& context)
+			{
+				for (u32 size : { 1u, 3u, 5u })
+				{
+					SceneTester test(context, size);
+					test.add_instance(test.add_mesh(make_test_cube(test.add_material(emissive_material(glm::vec3(30.0f))))), glm::mat4(1.0f));
+					SceneSettings on = dark();
+					on.Bloom.Enabled = true;
+					on.Bloom.Intensity = 0.3f;
+					test.scene().set_settings(on);
+					context.check(test.render(), "render a " + std::to_string(size) + " pixel viewport with bloom");
+				}
+			});
+
+		register_render_check("bloom_math", [](RenderCheckContext& context)
+			{
+				context.check(bloom_soft_knee_weight(0.4f, 1.0f, 0.5f) == 0.0f, "nothing below threshold - knee");
+				context.check(std::abs(bloom_soft_knee_weight(3.0f, 1.0f, 0.5f) - 2.0f / 3.0f) < 1e-4f, "above the knee the part over the threshold counts");
+				const float inside = bloom_soft_knee_weight(1.0f, 1.0f, 0.5f);
+				context.check(inside > 0.0f && inside < 0.5f, "inside the knee it blends in");
+				context.check(bloom_mip_count(6, 1920, 1080) == 6 && bloom_mip_count(6, 1, 1) == 2 && bloom_mip_count(99, 64, 64) == 5 && bloom_mip_count(1, 1920, 1080) == 2, "the mip count follows the request and the size");
 			});
 	}
 }

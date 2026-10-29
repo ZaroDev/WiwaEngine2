@@ -62,9 +62,10 @@ namespace wiwa
 		bool operator==(const ExposureSettings&) const = default;
 	};
 
+	// Off by default, like the other effects: a scene looks as it did until the effect is turned on.
 	struct BloomSettings
 	{
-		bool Enabled = true;
+		bool Enabled = false;
 		float Threshold = 1.0f; // luminance above which a pixel starts to glow
 		float Knee = 0.5f;      // width of the soft transition below the threshold
 		float Intensity = 0.04f;
@@ -87,7 +88,7 @@ namespace wiwa
 
 	struct AoSettings
 	{
-		bool Enabled = true;
+		bool Enabled = false;
 		float Radius = 1.0f; // world units: occluders farther than this do not darken a point
 		float Power = 1.5f;  // the final contrast: occlusion is raised to this power
 

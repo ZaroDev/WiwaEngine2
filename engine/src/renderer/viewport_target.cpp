@@ -67,10 +67,31 @@ namespace wiwa
 		m_Exposure = make_buffer(1, "Viewport exposure");
 		m_Histogram = make_buffer(256, "Viewport luminance histogram");
 
+		bool bloomOk = true;
+		for (u32 level = 0; level < MAX_BLOOM_MIPS; level++)
+		{
+			nvrhi::TextureDesc description;
+			description.width = std::max(1u, width >> (level + 1));
+			description.height = std::max(1u, height >> (level + 1));
+			description.format = nvrhi::Format::RGBA16_FLOAT;
+			description.isUAV = true; // written by compute shaders
+			description.initialState = nvrhi::ResourceStates::ShaderResource;
+			description.keepInitialState = true;
+			description.debugName = "Bloom down " + std::to_string(level);
+			m_BloomDown[level] = device->createTexture(description);
+			bloomOk = bloomOk && m_BloomDown[level] != nullptr;
+			if (level + 1 < MAX_BLOOM_MIPS)
+			{
+				description.debugName = "Bloom up " + std::to_string(level);
+				m_BloomUp[level] = device->createTexture(description);
+				bloomOk = bloomOk && m_BloomUp[level] != nullptr;
+			}
+		}
+
 		m_Hdr = device->createTexture(hdr);
 		m_Depth = device->createTexture(depth);
 		m_Ldr = device->createTexture(ldr);
-		if (!m_Hdr || !m_Depth || !m_Ldr || !m_Exposure || !m_Histogram)
+		if (!m_Hdr || !m_Depth || !m_Ldr || !m_Exposure || !m_Histogram || !bloomOk)
 		{
 			WI_LOG(Error, "Renderer", "could not create the {0}x{1} viewport targets", width, height);
 			destroy();
@@ -108,6 +129,14 @@ namespace wiwa
 		m_HdrFramebuffer = nullptr;
 		m_DepthFramebuffer = nullptr;
 		m_LdrFramebuffer = nullptr;
+		for (nvrhi::TextureHandle& texture : m_BloomDown)
+		{
+			texture = nullptr;
+		}
+		for (nvrhi::TextureHandle& texture : m_BloomUp)
+		{
+			texture = nullptr;
+		}
 		m_Exposure = nullptr;
 		m_Histogram = nullptr;
 		m_Hdr = nullptr;

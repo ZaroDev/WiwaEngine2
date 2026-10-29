@@ -15,5 +15,7 @@ namespace wiwa::engine_assets
 	inline constexpr const char* SKY_ATMOSPHERE_SHADER = "engine/shaders/sky_atmosphere.hlsl";
 	inline constexpr const char* EXPOSURE_HISTOGRAM_SHADER = "engine/shaders/exposure_histogram.hlsl";
 	inline constexpr const char* EXPOSURE_RESOLVE_SHADER = "engine/shaders/exposure_resolve.hlsl";
+	inline constexpr const char* BLOOM_DOWN_SHADER = "engine/shaders/bloom_down.hlsl";
+	inline constexpr const char* BLOOM_UP_SHADER = "engine/shaders/bloom_up.hlsl";
 	inline constexpr const char* TONEMAP_SHADER = "engine/shaders/tonemap.hlsl";
 }
