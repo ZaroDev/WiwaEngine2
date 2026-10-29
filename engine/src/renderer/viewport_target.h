@@ -29,7 +29,7 @@ namespace wiwa
 		u32 height() const { return m_Height; }
 
 		nvrhi::ITexture* hdr() const { return m_Hdr; }     // RGBA16F
-		nvrhi::ITexture* depth() const { return m_Depth; } // D32
+		nvrhi::ITexture* depth() const { return m_Depth; } // D32S8
 		nvrhi::ITexture* ldr() const { return m_Ldr; }     // RGBA8, sRGB encoded by the resolve shader
 		// Automatic exposure: one float (the current exposure multiplier, 0 until the exposure pass has written it) and the 256-bin
 		// luminance histogram it is measured from.
@@ -54,6 +54,10 @@ namespace wiwa
 		nvrhi::ITexture* normal() const { return m_Normal; }
 		nvrhi::IFramebuffer* prepass_framebuffer() const { return m_PrepassFramebuffer; } // normal + depth
 		nvrhi::IFramebuffer* ldr_framebuffer() const { return m_LdrFramebuffer; }
+		// ldr() and the depth/stencil target together: the selection outline's stencil mask and the debug draw pass use it.
+		nvrhi::IFramebuffer* ldr_depth_framebuffer() const { return m_LdrDepthFramebuffer; }
+		// The format to bind depth() with to sample its stencil plane (the depth plane is the default view).
+		static constexpr nvrhi::Format STENCIL_VIEW_FORMAT = nvrhi::Format::X32G8_UINT;
 		// Where the tonemap pass draws when FXAA runs: the image FXAA reads and writes to ldr(). Same format as ldr().
 		nvrhi::ITexture* pre_fxaa() const { return m_PreFxaa; }
 		nvrhi::IFramebuffer* pre_fxaa_framebuffer() const { return m_PreFxaaFramebuffer; }
@@ -76,6 +80,7 @@ namespace wiwa
 		nvrhi::FramebufferHandle m_HdrFramebuffer{};
 		nvrhi::FramebufferHandle m_DepthFramebuffer{};
 		nvrhi::FramebufferHandle m_LdrFramebuffer{};
+		nvrhi::FramebufferHandle m_LdrDepthFramebuffer{};
 		nvrhi::TextureHandle m_Normal{};
 		nvrhi::FramebufferHandle m_PrepassFramebuffer{};
 		nvrhi::TextureHandle m_PreFxaa{};

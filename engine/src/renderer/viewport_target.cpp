@@ -31,10 +31,10 @@ namespace wiwa
 		nvrhi::TextureDesc depth;
 		depth.width = width;
 		depth.height = height;
-		depth.format = nvrhi::Format::D32;
+		depth.format = nvrhi::Format::D32S8;
 		depth.isRenderTarget = true;
 		depth.isShaderResource = true;
-		depth.isTypeless = true; // D3D11 cannot sample a D32_FLOAT texture: NVRHI makes it R32_TYPELESS with depth and shader views
+		depth.isTypeless = true; // D3D11 cannot sample a D32_FLOAT_S8X24 texture: NVRHI makes it R32G8X24_TYPELESS with depth, depth-read and stencil-read views
 		depth.initialState = nvrhi::ResourceStates::DepthWrite;
 		depth.keepInitialState = true;
 		depth.useClearValue = true;
@@ -149,6 +149,11 @@ namespace wiwa
 		ldrFramebuffer.addColorAttachment(m_Ldr);
 		m_LdrFramebuffer = device->createFramebuffer(ldrFramebuffer);
 
+		nvrhi::FramebufferDesc ldrDepthFramebuffer;
+		ldrDepthFramebuffer.addColorAttachment(m_Ldr);
+		ldrDepthFramebuffer.setDepthAttachment(m_Depth);
+		m_LdrDepthFramebuffer = device->createFramebuffer(ldrDepthFramebuffer);
+
 		nvrhi::FramebufferDesc prepassFramebuffer;
 		prepassFramebuffer.addColorAttachment(m_Normal);
 		prepassFramebuffer.setDepthAttachment(m_Depth);
@@ -158,7 +163,7 @@ namespace wiwa
 		preFxaaFramebuffer.addColorAttachment(m_PreFxaa);
 		m_PreFxaaFramebuffer = device->createFramebuffer(preFxaaFramebuffer);
 
-		if (!m_HdrFramebuffer || !m_DepthFramebuffer || !m_LdrFramebuffer || !m_PreFxaaFramebuffer || !m_PrepassFramebuffer)
+		if (!m_HdrFramebuffer || !m_DepthFramebuffer || !m_LdrFramebuffer || !m_LdrDepthFramebuffer || !m_PreFxaaFramebuffer || !m_PrepassFramebuffer)
 		{
 			WI_LOG(Error, "Renderer", "could not create the viewport framebuffers");
 			destroy();
@@ -176,6 +181,7 @@ namespace wiwa
 		m_HdrFramebuffer = nullptr;
 		m_DepthFramebuffer = nullptr;
 		m_LdrFramebuffer = nullptr;
+		m_LdrDepthFramebuffer = nullptr;
 		m_PreFxaaFramebuffer = nullptr;
 		m_PrepassFramebuffer = nullptr;
 		m_Normal = nullptr;

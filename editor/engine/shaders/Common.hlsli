@@ -39,6 +39,16 @@
 	#define IMAGE_FORMAT(format)
 #endif
 
+// The stencil plane of a D32S8 depth texture, read through an X32G8_UINT view: D3D returns it in the second component of a uint2, Vulkan
+// (a stencil-aspect view) as a single uint.
+#ifdef VULKAN
+	#define STENCIL_TEXTURE Texture2D<uint>
+	#define STENCIL_LOAD(tex, pixel) tex.Load(int3(pixel, 0))
+#else
+	#define STENCIL_TEXTURE Texture2D<uint2>
+	#define STENCIL_LOAD(tex, pixel) tex.Load(int3(pixel, 0)).y
+#endif
+
 // Octahedral normal encoding: a unit vector <-> two components in [-1, 1].
 // Halves the size of the normal G-buffer target compared to storing xyz.
 float2 OctahedralEncode(float3 n)
