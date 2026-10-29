@@ -26,8 +26,8 @@ void ViewportPanel::draw()
 
 	render->set_scene_in_viewport(true); // the scene goes to this panel, not over the window
 
-	ImGui::SetNextWindowPos(ImVec2(384.0f, 12.0f), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(800.0f, 540.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImVec2(376.0f, 12.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(600.0f, 540.0f), ImGuiCond_FirstUseEver);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 	const bool open = ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 	ImGui::PopStyleVar();

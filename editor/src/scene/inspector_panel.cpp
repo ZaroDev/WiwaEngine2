@@ -27,8 +27,8 @@ namespace
 
 void InspectorPanel::draw()
 {
-	ImGui::SetNextWindowPos(ImVec2(380.0f, 12.0f), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(380.0f, 520.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImVec2(984.0f, 12.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(284.0f, 520.0f), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin("Inspector") && m_Editor.get_scene() != nullptr)
 	{
 		const entt::entity entity = m_Editor.selected();
