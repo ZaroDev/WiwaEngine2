@@ -110,6 +110,27 @@ namespace wiwa
 		}
 	}
 
+	void AssetManager::add_reload_listener(std::function<void(AssetGuid)> listener)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		m_ReloadListeners.push_back(std::move(listener));
+	}
+
+	void AssetManager::notify_reimported(AssetGuid resolvedGuid)
+	{
+		std::vector<std::function<void(AssetGuid)>> listeners;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			m_Cache.erase(resolvedGuid);
+			listeners = m_ReloadListeners;
+		}
+
+		for (auto& listener : listeners)
+		{
+			listener(resolvedGuid);
+		}
+	}
+
 	void AssetManager::wait_idle() const
 	{
 		while (m_Pending.load() > 0)

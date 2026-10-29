@@ -45,6 +45,12 @@ namespace wiwa
 		// Drops every cached asset that no handle refers to.
 		void unload_unused();
 
+		// Called when the editor re-cooked an asset: forgets the cached copy so the next load() reads the new file (handles that
+		// already exist keep the old data) and tells the listeners, which can load it again. May be called from any thread;
+		// the listeners run on the calling thread.
+		void notify_reimported(AssetGuid resolvedGuid);
+		void add_reload_listener(std::function<void(AssetGuid)> listener);
+
 		// Blocks until no load is pending. For tools and tests; the game polls the handles.
 		void wait_idle() const;
 
@@ -60,5 +66,6 @@ namespace wiwa
 		mutable std::mutex m_Mutex{};
 		std::unordered_map<AssetGuid, Ref<AssetSlot>> m_Cache{};
 		std::atomic<u32> m_Pending{ 0 };
+		std::vector<std::function<void(AssetGuid)>> m_ReloadListeners{};
 	};
 }

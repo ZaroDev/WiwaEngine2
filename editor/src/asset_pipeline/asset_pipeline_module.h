@@ -3,6 +3,7 @@
 #include <core/module.h>
 
 #include "asset_database.h"
+#include "file_watcher.h"
 
 namespace wiwa
 {
@@ -25,5 +26,6 @@ namespace wiwa
 
 	private:
 		Scope<AssetDatabase> m_Database{};
+		Scope<FileWatcher> m_Watcher{};
 	};
 }
