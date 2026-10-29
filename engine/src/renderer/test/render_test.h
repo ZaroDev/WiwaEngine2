@@ -57,6 +57,8 @@ namespace wiwa
 	void register_settings_checks();
 	// The environment cache checks (environment_checks.cpp).
 	void register_environment_checks();
+	// The sky pass checks (sky_checks.cpp).
+	void register_sky_checks();
 
 	// `--render-test`: runs every check once on the render thread. True when all passed.
 	bool run_render_checks(RenderWorld& world);

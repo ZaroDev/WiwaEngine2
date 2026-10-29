@@ -208,7 +208,7 @@ namespace wiwa
 				m_Environments->brdf_lut() != nullptr ? 1.0f : 0.0f);
 		}
 		const float rotation = glm::radians(m_Settings.RotationDegrees);
-		constants.EnvRotation = glm::vec4(std::cos(rotation), std::sin(rotation), 0.0f, 0.0f);
+		constants.EnvRotation = glm::vec4(std::cos(rotation), std::sin(rotation), m_Settings.Brightness, 0.0f);
 
 		// The sun is the first directional light; the point and spot lights go to the cluster grid.
 		bool haveSun = false;

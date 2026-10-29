@@ -14,6 +14,7 @@
 #include "passes/light_cull_pass.h"
 #include "passes/resolve_pass.h"
 #include "passes/shadow_pass.h"
+#include "passes/sky_pass.h"
 #include "shader_library.h"
 #include "render_world.h"
 #include "test/render_test.h"
@@ -72,7 +73,9 @@ namespace wiwa
 				return m_Renderer->add_pass(CreateScope<ShadowPass>())
 					&& m_Renderer->add_pass(CreateScope<DepthPrepass>())
 					&& m_Renderer->add_pass(CreateScope<LightCullPass>())
-					&& m_Renderer->add_pass(CreateScope<ForwardPass>())
+					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Opaque))
+					&& m_Renderer->add_pass(CreateScope<SkyPass>())
+					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Blended))
 					&& m_Renderer->add_pass(CreateScope<ResolvePass>())
 					&& m_Renderer->add_pass(CreateScope<BlitPass>())
 					&& m_Renderer->add_pass(std::move(imguiPass));

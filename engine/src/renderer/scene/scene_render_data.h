@@ -90,7 +90,7 @@ namespace wiwa
 		glm::vec4 SpotShadowInfo[4]{};    // x = tan(half the cone angle)
 		glm::vec4 EnvSH[9]{};             // the environment's diffuse light (rgb in xyz)
 		glm::vec4 EnvParams{ 0.0f };      // x = 1 when an environment lights the scene, y = highest mip, z = brightness * ambient intensity, w = 1 when the BRDF table exists
-		glm::vec4 EnvRotation{ 1.0f, 0.0f, 0.0f, 0.0f }; // cos, sin of the rotation about +Y
+		glm::vec4 EnvRotation{ 1.0f, 0.0f, 1.0f, 0.0f }; // cos, sin of the rotation about +Y, the brightness of the sky seen
 		glm::mat4 InverseViewProjection{ 1.0f };
 	};
 	static_assert(sizeof(FrameConstants) % 16 == 0);
@@ -122,6 +122,8 @@ namespace wiwa
 		// There is a viewport target to draw into (the passes draw the background even when there is nothing else).
 		bool active() const { return m_Active; }
 		bool has_camera() const { return m_HasCamera; }
+		// An environment (a file's, ready) lights the scene this frame.
+		bool has_environment() const { return m_FrameEnvironment != nullptr; }
 		ViewportTarget* viewport() const { return m_Viewport; }
 		GpuResourceCache* cache() const { return m_Cache; }
 		const RenderScene* scene() const { return m_Scene; }

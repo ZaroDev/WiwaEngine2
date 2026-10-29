@@ -76,10 +76,14 @@ namespace wiwa
 		}
 
 		const SceneRenderData& data = *frame.Scene;
-		const glm::vec3& background = data.settings().BackgroundColor;
-		commandList->clearTextureFloat(data.viewport()->hdr(), nvrhi::AllSubresources, nvrhi::Color(background.r, background.g, background.b, 1.0f));
+		if (m_Stage == Stage::Opaque)
+		{
+			const glm::vec3& background = data.settings().BackgroundColor;
+			commandList->clearTextureFloat(data.viewport()->hdr(), nvrhi::AllSubresources, nvrhi::Color(background.r, background.g, background.b, 1.0f));
+		}
 
-		if (!data.has_camera() || (data.opaque().empty() && data.masked().empty() && data.blended().empty()))
+		const bool nothing = m_Stage == Stage::Opaque ? (data.opaque().empty() && data.masked().empty()) : data.blended().empty();
+		if (!data.has_camera() || nothing)
 		{
 			return;
 		}
@@ -92,8 +96,14 @@ namespace wiwa
 
 		nvrhi::IFramebuffer* framebuffer = data.viewport()->hdr_framebuffer();
 		const nvrhi::Viewport viewport(static_cast<float>(data.viewport()->width()), static_cast<float>(data.viewport()->height()));
-		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Pipelines[0], m_Pipelines[1], true);
-		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Pipelines[0], m_Pipelines[1], true);
-		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.blended(), m_BlendPipelines[0], m_BlendPipelines[1], true);
+		if (m_Stage == Stage::Opaque)
+		{
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Pipelines[0], m_Pipelines[1], true);
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Pipelines[0], m_Pipelines[1], true);
+		}
+		else
+		{
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.blended(), m_BlendPipelines[0], m_BlendPipelines[1], true);
+		}
 	}
 }

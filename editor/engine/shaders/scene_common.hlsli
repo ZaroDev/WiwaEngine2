@@ -50,7 +50,7 @@ cbuffer FrameBuffer : register(b0)
 	float4 SpotShadowInfo[4];  // x = tan(half the cone angle)
 	float4 EnvSH[9];        // the environment's diffuse light as spherical harmonics (rgb in xyz)
 	float4 EnvParams;       // x = 1 when an environment lights the scene, y = highest mip of the cube, z = brightness * ambient intensity, w = 1 when the BRDF table exists
-	float4 EnvRotation;     // x = cos, y = sin of the rotation of the environment about +Y
+	float4 EnvRotation;     // x = cos, y = sin of the rotation of the environment about +Y, z = the brightness of the sky seen
 	float4x4 InverseViewProjection;
 };
 
@@ -123,6 +123,12 @@ SamplerComparisonState uShadowSampler : register(s10);
 TextureCube<float4> uEnvironment : register(t8);
 Texture2D<float2> uBrdfLut : register(t9);
 SamplerState uEnvironmentSampler : register(s11);
+
+// The environment is turned about +Y: what is looked up in it is the direction turned the other way.
+float3 RotateEnvironment(float3 v)
+{
+	return float3(EnvRotation.x * v.x - EnvRotation.y * v.z, v.y, EnvRotation.y * v.x + EnvRotation.x * v.z);
+}
 
 // The cluster of a pixel: its screen tile and the depth slice of its view-space distance.
 uint ClusterIndexOf(float2 pixel, float viewDepth)

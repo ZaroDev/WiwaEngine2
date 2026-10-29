@@ -12,7 +12,17 @@ namespace wiwa
 	class ForwardPass : public IRenderPass
 	{
 	public:
-		virtual const char* get_name() const override { return "Forward"; }
+		// Opaque: clears the HDR target and draws opaque and alpha-masked geometry. Blended: draws the blended geometry over it (the
+		// sky sits between the two).
+		enum class Stage
+		{
+			Opaque,
+			Blended,
+		};
+
+		explicit ForwardPass(Stage stage = Stage::Opaque) : m_Stage(stage) {}
+
+		virtual const char* get_name() const override { return m_Stage == Stage::Opaque ? "Forward" : "Forward (blended)"; }
 
 		virtual bool initialize(const PassInitializationDescription& description) override;
 		virtual void update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer) override;
@@ -23,6 +33,7 @@ namespace wiwa
 	private:
 		void build_pipelines(const FrameDescription& frame);
 
+		Stage m_Stage;
 		nvrhi::IDevice* m_Device = nullptr;
 		ShaderLibrary* m_Shaders = nullptr;
 		bool m_Failed = false;

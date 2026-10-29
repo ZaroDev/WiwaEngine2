@@ -253,12 +253,6 @@ float3 ClusteredLights(SurfaceData surface, float2 pixel)
 	return result;
 }
 
-// The environment is turned about +Y: what is looked up in it is the direction turned the other way.
-float3 RotateEnvironment(float3 v)
-{
-	return float3(EnvRotation.x * v.x - EnvRotation.y * v.z, v.y, EnvRotation.y * v.x + EnvRotation.x * v.z);
-}
-
 // The diffuse light (E / pi) from the SH, with the constants and the order of project_sh9 in ibl_math.cpp.
 float3 EvaluateSh(float3 n)
 {

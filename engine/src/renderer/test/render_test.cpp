@@ -110,6 +110,7 @@ namespace wiwa
 			register_ibl_checks();
 			register_settings_checks();
 			register_environment_checks();
+			register_sky_checks();
 
 			register_render_check("copy_queue_roundtrip", [](RenderCheckContext& context)
 				{
