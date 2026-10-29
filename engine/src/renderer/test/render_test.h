@@ -33,6 +33,8 @@ namespace wiwa
 	using RenderCheck = std::function<void(RenderCheckContext&)>;
 
 	void register_render_check(std::string name, RenderCheck check);
+	// The scene to render-thread checks (scene_checks.cpp).
+	void register_scene_checks();
 
 	// `--render-test`: runs every check once on the render thread. True when all passed.
 	bool run_render_checks(RenderWorld& world);

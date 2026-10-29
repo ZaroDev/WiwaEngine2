@@ -1,0 +1,202 @@
+#include <pch.h>
+#include "scene_extractor.h"
+
+#include <cstring>
+
+namespace wiwa
+{
+	namespace
+	{
+		bool same_matrix(const glm::mat4& a, const glm::mat4& b)
+		{
+			return std::memcmp(&a, &b, sizeof(glm::mat4)) == 0;
+		}
+
+		bool same_camera_component(const Camera& a, const Camera& b)
+		{
+			return a.Projection == b.Projection && a.FovY == b.FovY && a.Near == b.Near && a.Far == b.Far && a.OrthoSize == b.OrthoSize;
+		}
+
+		// The entity's forward axis (-Z of its world matrix).
+		glm::vec3 forward_of(const glm::mat4& world)
+		{
+			const glm::vec3 axis = -glm::vec3(world[2]);
+			const float length = glm::length(axis);
+			return length > 1e-6f ? axis / length : glm::vec3(0.0f, 0.0f, -1.0f);
+		}
+
+		RenderLight make_light(const Light& light, const glm::mat4& world)
+		{
+			RenderLight result;
+			result.Kind = light.Kind;
+			result.Position = glm::vec3(world[3]);
+			result.Direction = forward_of(world);
+			result.Color = glm::vec3(light.Color);
+			result.Intensity = light.Intensity;
+			result.Range = light.Range;
+			result.InnerAngle = light.InnerAngle;
+			result.OuterAngle = light.OuterAngle;
+			result.CastsShadows = light.CastsShadows;
+			return result;
+		}
+
+		bool same_light(const RenderLight& a, const RenderLight& b)
+		{
+			return a.Kind == b.Kind && a.Position == b.Position && a.Direction == b.Direction && a.Color == b.Color && a.Intensity == b.Intensity
+				&& a.Range == b.Range && a.InnerAngle == b.InnerAngle && a.OuterAngle == b.OuterAngle && a.CastsShadows == b.CastsShadows;
+		}
+	}
+
+	RenderCamera make_render_camera(const Camera& camera, const glm::mat4& world, float aspect)
+	{
+		RenderCamera result;
+		result.View = glm::inverse(world);
+		result.Position = glm::vec3(world[3]);
+		result.Near = camera.Near;
+		result.Far = camera.Far;
+		if (camera.Projection == ProjectionKind::Orthographic)
+		{
+			const float halfHeight = camera.OrthoSize;
+			const float halfWidth = halfHeight * aspect;
+			result.Projection = glm::orthoRH_ZO(-halfWidth, halfWidth, -halfHeight, halfHeight, camera.Near, camera.Far);
+		}
+		else
+		{
+			result.Projection = glm::perspectiveRH_ZO(glm::radians(camera.FovY), aspect, camera.Near, camera.Far);
+		}
+		return result;
+	}
+
+	SceneDelta SceneExtractor::extract(const Ref<Scene>& scene, float aspect)
+	{
+		SceneDelta delta;
+		if (scene == nullptr)
+		{
+			return delta;
+		}
+
+		if (m_Scene.lock() != scene)
+		{
+			delta.Reset = true;
+			m_Scene = scene;
+			m_Instances.clear();
+			m_Lights.clear();
+			m_HasCamera = false;
+		}
+
+		const u64 pass = ++m_Pass;
+		entt::registry& registry = scene->registry();
+
+		size_t instancesSeen = 0;
+		for (const auto [entity, id, renderer, world] : registry.view<Id, MeshRenderer, WorldTransform>().each())
+		{
+			if (!renderer.Mesh.valid())
+			{
+				continue; // not drawable (yet); a previously sent instance is removed below
+			}
+
+			instancesSeen++;
+			auto found = m_Instances.find(id.Guid);
+			const bool known = found != m_Instances.end();
+			if (known && same_matrix(found->second.World, world.Matrix) && found->second.Mesh == renderer.Mesh && found->second.Materials == renderer.Materials)
+			{
+				found->second.Seen = pass;
+				continue;
+			}
+
+			SentInstance& sent = known ? found->second : m_Instances[id.Guid];
+			sent.World = world.Matrix;
+			sent.Mesh = renderer.Mesh;
+			sent.Materials = renderer.Materials;
+			sent.Seen = pass;
+
+			RenderInstance instance;
+			instance.World = world.Matrix;
+			instance.Mesh = renderer.Mesh;
+			instance.Materials = renderer.Materials;
+			delta.InstanceUpserts.emplace_back(id.Guid, std::move(instance));
+		}
+
+		if (m_Instances.size() != instancesSeen)
+		{
+			for (auto it = m_Instances.begin(); it != m_Instances.end();)
+			{
+				if (it->second.Seen != pass)
+				{
+					delta.InstanceRemovals.push_back(it->first);
+					it = m_Instances.erase(it);
+				}
+				else
+				{
+					++it;
+				}
+			}
+		}
+
+		size_t lightsSeen = 0;
+		for (const auto [entity, id, light, world] : registry.view<Id, Light, WorldTransform>().each())
+		{
+			lightsSeen++;
+			RenderLight current = make_light(light, world.Matrix);
+			auto found = m_Lights.find(id.Guid);
+			if (found != m_Lights.end() && same_light(found->second.Light, current))
+			{
+				found->second.Seen = pass;
+				continue;
+			}
+
+			SentLight& sent = m_Lights[id.Guid];
+			sent.Light = current;
+			sent.Seen = pass;
+			delta.LightUpserts.emplace_back(id.Guid, std::move(current));
+		}
+
+		if (m_Lights.size() != lightsSeen)
+		{
+			for (auto it = m_Lights.begin(); it != m_Lights.end();)
+			{
+				if (it->second.Seen != pass)
+				{
+					delta.LightRemovals.push_back(it->first);
+					it = m_Lights.erase(it);
+				}
+				else
+				{
+					++it;
+				}
+			}
+		}
+
+		// The first camera marked Primary.
+		bool found = false;
+		for (const auto [entity, id, camera, world] : registry.view<Id, Camera, WorldTransform>().each())
+		{
+			if (!camera.Primary)
+			{
+				continue;
+			}
+
+			found = true;
+			const RenderCamera current = make_render_camera(camera, world.Matrix, aspect);
+			if (!m_HasCamera || m_CameraId != id.Guid || m_CameraAspect != aspect || !same_matrix(m_Camera.View, current.View)
+				|| !same_camera_component(m_CameraComponent, camera))
+			{
+				m_HasCamera = true;
+				m_CameraId = id.Guid;
+				m_CameraAspect = aspect;
+				m_CameraComponent = camera;
+				m_Camera = current;
+				delta.Camera = current;
+			}
+			break;
+		}
+
+		if (!found && m_HasCamera)
+		{
+			m_HasCamera = false;
+			delta.CameraRemoved = true;
+		}
+
+		return delta;
+	}
+}

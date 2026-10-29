@@ -12,6 +12,7 @@
 #include "renderer.h"
 #include "render_snapshot.h"
 #include "render_thread.h"
+#include "scene/scene_extractor.h"
 
 namespace wiwa
 {
@@ -67,6 +68,7 @@ namespace wiwa
 		Scope<Renderer> m_Renderer{}; // created, used and destroyed on the render thread
 		ImGuiRenderPass* m_ImGuiPass = nullptr; // owned by the renderer; set on the render thread during start
 		std::vector<RenderCommand> m_PendingCommands{};
+		SceneExtractor m_Extractor{}; // main thread: what the active scene changed since the last batch
 
 		// Assets the editor cooked again, noted by whichever thread reports it and taken by the render thread each frame.
 		std::mutex m_ReloadMutex{};

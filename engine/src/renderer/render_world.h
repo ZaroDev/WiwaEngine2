@@ -1,8 +1,9 @@
 #pragma once
 
+#include "renderer.h"
+
 namespace wiwa
 {
-	class Renderer;
 
 	// What a RenderCommand gets to work on, on the render thread: the render-side state. Only the renderer for now; the
 	// scene mirror and the GPU resource cache are reached from here as they are added.
@@ -12,6 +13,7 @@ namespace wiwa
 		explicit RenderWorld(Renderer& renderer) : m_Renderer(renderer) {}
 
 		Renderer& get_renderer() { return m_Renderer; }
+		RenderScene& get_scene() { return m_Renderer.get_scene(); }
 
 	private:
 		Renderer& m_Renderer;

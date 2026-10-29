@@ -98,6 +98,8 @@ namespace wiwa
 
 		void register_all_checks()
 		{
+			register_scene_checks();
+
 			register_render_check("copy_queue_roundtrip", [](RenderCheckContext& context)
 				{
 					WI_LOG(Info, "RenderTest", "copy queue available: {0}", context.HasCopyQueue ? "yes" : "no");

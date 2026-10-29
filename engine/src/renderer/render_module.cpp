@@ -5,6 +5,7 @@
 
 #include <assets/asset_manager.h>
 #include <core/engine.h>
+#include <scene/scene_module.h>
 
 #include "passes/imgui_pass.h"
 #include "shader_library.h"
@@ -238,6 +239,21 @@ namespace wiwa
 		batch.Minimized = width == 0 || height == 0 || glfwGetWindowAttrib(window->get_window(), GLFW_ICONIFIED) != 0;
 		batch.Commands = std::move(m_PendingCommands);
 		m_PendingCommands.clear();
+
+		// What the active scene changed, for the render thread's scene mirror.
+		if (SceneModule* scenes = Engine::get().get_module<SceneModule>())
+		{
+			const float aspect = batch.Height > 0 ? static_cast<float>(batch.Width) / static_cast<float>(batch.Height) : 1.0f;
+			SceneDelta delta = m_Extractor.extract(scenes->get_active(), aspect);
+			if (!delta.empty())
+			{
+				auto shared = std::make_shared<SceneDelta>(std::move(delta));
+				batch.Commands.push_back([shared](RenderWorld& world)
+					{
+						world.get_scene().apply(std::move(*shared));
+					});
+			}
+		}
 
 		// The UI the modules built this frame, copied for the render thread.
 		m_ImGui.end_frame(batch);
