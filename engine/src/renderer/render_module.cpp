@@ -305,6 +305,11 @@ namespace wiwa
 		snapshot.Vsync = m_Renderer->is_vsync_enabled();
 		snapshot.ErrorCount = get_error_message_count();
 		snapshot.HasCamera = m_Renderer->get_scene().effective_camera().has_value();
+		{
+			const SceneSettings& look = m_Renderer->get_scene().settings();
+			snapshot.EnvironmentStatus = look.Source == EnvironmentSource::File ? m_Renderer->get_environments().status(look.EnvironmentAsset)
+				: (look.Source == EnvironmentSource::Atmosphere ? "atmosphere" : "none");
+		}
 		snapshot.SceneInstances = static_cast<u32>(m_Renderer->get_scene().instance_count());
 		snapshot.SceneLights = static_cast<u32>(m_Renderer->get_scene().light_count());
 		const SceneRenderData& sceneData = m_Renderer->get_scene_data();

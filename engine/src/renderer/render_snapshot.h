@@ -21,6 +21,7 @@ namespace wiwa
 		bool Vsync = true;
 		u32 ErrorCount = 0;
 		bool HasCamera = false; // the scene has a camera to draw with (the editor's camera counts)
+		std::string EnvironmentStatus{}; // of the scene's environment: none, loading, ready, failed: <why>
 		u32 SceneInstances = 0;     // in the render-side scene
 		u32 SceneLights = 0;
 		u32 VisibleInstances = 0;   // inside the camera's view last frame

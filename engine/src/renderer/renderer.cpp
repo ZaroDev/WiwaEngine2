@@ -63,6 +63,7 @@ namespace wiwa
 		m_Cache = CreateScope<GpuResourceCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads);
 		m_Jobs = CreateScope<JobSystem>(2);
 		m_Environments = CreateScope<EnvironmentCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads, m_Jobs.get());
+		m_SceneData.set_environments(m_Environments.get());
 		if (!m_SceneData.initialize(m_Backend->get_device()))
 		{
 			WI_RENDER_LOG(Error, "Could not create the scene render data");

@@ -253,8 +253,41 @@ float3 ClusteredLights(SurfaceData surface, float2 pixel)
 	return result;
 }
 
+// The environment is turned about +Y: what is looked up in it is the direction turned the other way.
+float3 RotateEnvironment(float3 v)
+{
+	return float3(EnvRotation.x * v.x - EnvRotation.y * v.z, v.y, EnvRotation.y * v.x + EnvRotation.x * v.z);
+}
+
+// The diffuse light (E / pi) from the SH, with the constants and the order of project_sh9 in ibl_math.cpp.
+float3 EvaluateSh(float3 n)
+{
+	float3 sum = EnvSH[0].rgb * 0.282095
+		+ EnvSH[1].rgb * (0.488603 * n.y) + EnvSH[2].rgb * (0.488603 * n.z) + EnvSH[3].rgb * (0.488603 * n.x)
+		+ EnvSH[4].rgb * (1.092548 * n.x * n.y) + EnvSH[5].rgb * (1.092548 * n.y * n.z)
+		+ EnvSH[6].rgb * (0.315392 * (3.0 * n.z * n.z - 1.0)) + EnvSH[7].rgb * (1.092548 * n.x * n.z)
+		+ EnvSH[8].rgb * (0.546274 * (n.x * n.x - n.y * n.y));
+	return max(sum, 0.0);
+}
+
 float3 AmbientLight(SurfaceData surface)
 {
+	if (EnvParams.x > 0.5)
+	{
+		// Diffuse from the SH, specular from the prefiltered cube (the mip follows the roughness) and the BRDF table.
+		float3 diffuse = EvaluateSh(RotateEnvironment(surface.Normal)) * surface.Diffuse;
+		float3 specular = float3(0.0, 0.0, 0.0);
+		if (EnvParams.w > 0.5)
+		{
+			float nDotV = saturate(dot(surface.Normal, surface.View));
+			float2 scaleBias = uBrdfLut.SampleLevel(uEnvironmentSampler, float2(nDotV, surface.Roughness), 0);
+			float3 reflection = RotateEnvironment(reflect(-surface.View, surface.Normal));
+			float3 prefiltered = uEnvironment.SampleLevel(uEnvironmentSampler, reflection, surface.Roughness * EnvParams.y).rgb;
+			specular = prefiltered * (surface.F0 * scaleBias.x + scaleBias.y);
+		}
+		return (diffuse + specular) * (EnvParams.z * surface.Occlusion);
+	}
+
 	float3 hemisphere = lerp(GroundColor.rgb, SkyColor.rgb, surface.Normal.y * 0.5 + 0.5);
 	return hemisphere * (surface.Diffuse + surface.F0 * (1.0 - surface.Roughness) * 0.5) * surface.Occlusion;
 }

@@ -124,15 +124,26 @@ namespace wiwa
 		// Renders the given number of frames (at least enough for what was added to load), then reads the image. False when a frame failed.
 		bool render(u32 frames = 6)
 		{
-			for (u32 i = 0; i < 80; i++)
+			for (u32 i = 0; i < 3000; i++)
 			{
 				if (!frame())
 				{
 					return false;
 				}
-				if (i + 1 >= frames && cache().get_stats().Pending == 0)
+				// An environment, and the BRDF table that comes with it, load on other threads: wait for them (a few ms per frame).
+				bool environmentBusy = false;
+				if (scene().settings().Source == EnvironmentSource::File)
+				{
+					const EnvironmentCache::Stats stats = m_Renderer.get_environments().get_stats();
+					environmentBusy = (stats.Pending > 0 || !stats.BrdfReady) && stats.Failed == 0;
+				}
+				if (i + 1 >= frames && cache().get_stats().Pending == 0 && !environmentBusy)
 				{
 					break;
+				}
+				if (environmentBusy)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
 				}
 			}
 			return read();

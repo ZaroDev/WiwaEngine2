@@ -30,10 +30,10 @@ namespace wiwa
 	static_assert(sizeof(GpuMaterialRecord) == 64, "GpuMaterialRecord is read as a structured buffer element of 64 bytes");
 
 	// Where the material textures sit in the shaders: descriptor set 1 on Vulkan (the frame data is set 0), and registers
-	// t8..t11 / s12 on D3D (shader model 5.0 has no register spaces, so the registers are unique across layouts).
-	constexpr u32 MATERIAL_BINDING_BASE_COLOR = 8;
-	constexpr u32 MATERIAL_BINDING_NORMAL = 9;
-	constexpr u32 MATERIAL_BINDING_ORM = 10;
-	constexpr u32 MATERIAL_BINDING_EMISSIVE = 11;
-	constexpr u32 MATERIAL_BINDING_SAMPLER = 12;
+	// t10..t13 / s14 on D3D (above every register of set 0: NVRHI refuses layouts whose register intervals overlap) (shader model 5.0 has no register spaces, so the registers are unique across layouts).
+	constexpr u32 MATERIAL_BINDING_BASE_COLOR = 10;
+	constexpr u32 MATERIAL_BINDING_NORMAL = 11;
+	constexpr u32 MATERIAL_BINDING_ORM = 12;
+	constexpr u32 MATERIAL_BINDING_EMISSIVE = 13;
+	constexpr u32 MATERIAL_BINDING_SAMPLER = 14;
 }

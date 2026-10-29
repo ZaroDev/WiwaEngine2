@@ -76,7 +76,10 @@ namespace wiwa
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(5));
 		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(6));
 		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(7));
-		layout.addItem(nvrhi::BindingLayoutItem::Sampler(14));
+		layout.addItem(nvrhi::BindingLayoutItem::Sampler(10));
+		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(8));
+		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(9));
+		layout.addItem(nvrhi::BindingLayoutItem::Sampler(11));
 		layout.addItem(nvrhi::BindingLayoutItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
 		m_FrameLayout = device->createBindingLayout(layout);
 
@@ -113,7 +116,30 @@ namespace wiwa
 		m_DummyCascadeMap = make_shadow_texture(1, 1, MAX_CASCADES, "Cascade stand-in");
 		m_DummySpotAtlas = make_shadow_texture(1, 1, 1, "Spot atlas stand-in");
 
-		return m_FrameLayout && m_ConstantBuffer && m_LightBuffer && m_ClusterCounts && m_ClusterIndices && m_ShadowSampler && m_DummyCascadeMap && m_DummySpotAtlas;
+		// The environment: a trilinear sampler, and stand-ins (written with zeros before their first use) for when there is none.
+		m_EnvironmentSampler = device->createSampler(nvrhi::SamplerDesc().setAllFilters(true).setAllAddressModes(nvrhi::SamplerAddressMode::Clamp));
+		nvrhi::TextureDesc dummyCube;
+		dummyCube.width = 1;
+		dummyCube.height = 1;
+		dummyCube.arraySize = 6;
+		dummyCube.dimension = nvrhi::TextureDimension::TextureCube;
+		dummyCube.format = nvrhi::Format::RGBA16_FLOAT;
+		dummyCube.isShaderResource = true;
+		dummyCube.initialState = nvrhi::ResourceStates::ShaderResource;
+		dummyCube.keepInitialState = true;
+		dummyCube.debugName = "Environment stand-in";
+		m_DummyCube = device->createTexture(dummyCube);
+		nvrhi::TextureDesc dummyBrdf;
+		dummyBrdf.width = 1;
+		dummyBrdf.height = 1;
+		dummyBrdf.format = nvrhi::Format::RG16_FLOAT;
+		dummyBrdf.isShaderResource = true;
+		dummyBrdf.initialState = nvrhi::ResourceStates::ShaderResource;
+		dummyBrdf.keepInitialState = true;
+		dummyBrdf.debugName = "BRDF table stand-in";
+		m_DummyBrdf = device->createTexture(dummyBrdf);
+
+		return m_FrameLayout && m_ConstantBuffer && m_LightBuffer && m_ClusterCounts && m_ClusterIndices && m_ShadowSampler && m_EnvironmentSampler && m_DummyCube && m_DummyBrdf && m_DummyCascadeMap && m_DummySpotAtlas;
 	}
 
 	void SceneRenderData::shutdown()
@@ -124,6 +150,10 @@ namespace wiwa
 		m_DummyCascadeMap = nullptr;
 		m_DummySpotAtlas = nullptr;
 		m_ShadowSampler = nullptr;
+		m_EnvironmentSampler = nullptr;
+		m_DummyCube = nullptr;
+		m_DummyBrdf = nullptr;
+		m_FrameEnvironment = nullptr;
 		m_LightBuffer = nullptr;
 		m_ClusterCounts = nullptr;
 		m_ClusterIndices = nullptr;
@@ -161,6 +191,24 @@ namespace wiwa
 		const float width = static_cast<float>(viewport.width());
 		const float height = static_cast<float>(viewport.height());
 		constants.ViewportSize = glm::vec4(width, height, 1.0f / width, 1.0f / height);
+
+		// The environment of the scene, when it is ready; until then (and without one) the hemisphere ambient lights the scene.
+		m_FrameEnvironment = nullptr;
+		if (m_Environments != nullptr && m_Settings.Source == EnvironmentSource::File)
+		{
+			m_FrameEnvironment = m_Environments->get(m_Settings.EnvironmentAsset);
+		}
+		if (m_FrameEnvironment != nullptr)
+		{
+			for (int i = 0; i < 9; i++)
+			{
+				constants.EnvSH[i] = m_FrameEnvironment->SH[i];
+			}
+			constants.EnvParams = glm::vec4(1.0f, static_cast<float>(m_FrameEnvironment->MipCount - 1), m_Settings.Brightness * m_Settings.AmbientIntensity,
+				m_Environments->brdf_lut() != nullptr ? 1.0f : 0.0f);
+		}
+		const float rotation = glm::radians(m_Settings.RotationDegrees);
+		constants.EnvRotation = glm::vec4(std::cos(rotation), std::sin(rotation), 0.0f, 0.0f);
 
 		// The sun is the first directional light; the point and spot lights go to the cluster grid.
 		bool haveSun = false;
@@ -233,6 +281,7 @@ namespace wiwa
 			constants.View = camera->View;
 			constants.Projection = camera->Projection;
 			constants.ViewProjection = camera->Projection * camera->View;
+			constants.InverseViewProjection = glm::inverse(constants.ViewProjection);
 			constants.CameraPosition = glm::vec4(camera->Position, camera->Near);
 			constants.CameraParams = glm::vec4(camera->Far, 0.0f, 0.0f, 0.0f);
 
@@ -477,6 +526,17 @@ namespace wiwa
 			m_DummiesCleared = true;
 		}
 
+		if (!m_EnvironmentDummiesWritten)
+		{
+			const u16 zeros[8] = {};
+			for (u32 face = 0; face < 6; face++)
+			{
+				commandList->writeTexture(m_DummyCube, face, 0, zeros, 8);
+			}
+			commandList->writeTexture(m_DummyBrdf, 0, 0, zeros, 4);
+			m_EnvironmentDummiesWritten = true;
+		}
+
 		commandList->writeBuffer(m_ConstantBuffer, &m_Constants, sizeof(m_Constants));
 		if (!m_Lights.empty())
 		{
@@ -487,8 +547,10 @@ namespace wiwa
 		nvrhi::IBuffer* materials = cache.material_buffer();
 		nvrhi::ITexture* cascades = m_CascadeMap ? m_CascadeMap.Get() : m_DummyCascadeMap.Get();
 		nvrhi::ITexture* atlas = m_SpotAtlas ? m_SpotAtlas.Get() : m_DummySpotAtlas.Get();
+		nvrhi::ITexture* cube = m_FrameEnvironment != nullptr ? m_FrameEnvironment->Cube.Get() : m_DummyCube.Get();
+		nvrhi::ITexture* brdf = (m_Environments != nullptr && m_Environments->brdf_lut() != nullptr) ? m_Environments->brdf_lut() : m_DummyBrdf.Get();
 		if (m_FrameBindings == nullptr || m_BoundInstanceBuffer != m_InstanceBuffer.Get() || m_BoundMaterialBuffer != materials
-			|| m_BoundCascades != cascades || m_BoundAtlas != atlas)
+			|| m_BoundCascades != cascades || m_BoundAtlas != atlas || m_BoundCube != cube || m_BoundBrdf != brdf)
 		{
 			nvrhi::BindingSetDesc set;
 			set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
@@ -499,13 +561,18 @@ namespace wiwa
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(5, m_ClusterIndices));
 			set.addItem(nvrhi::BindingSetItem::Texture_SRV(6, cascades));
 			set.addItem(nvrhi::BindingSetItem::Texture_SRV(7, atlas));
-			set.addItem(nvrhi::BindingSetItem::Sampler(14, m_ShadowSampler));
+			set.addItem(nvrhi::BindingSetItem::Sampler(10, m_ShadowSampler));
+			set.addItem(nvrhi::BindingSetItem::Texture_SRV(8, cube));
+			set.addItem(nvrhi::BindingSetItem::Texture_SRV(9, brdf));
+			set.addItem(nvrhi::BindingSetItem::Sampler(11, m_EnvironmentSampler));
 			set.addItem(nvrhi::BindingSetItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
 			m_FrameBindings = m_Device->createBindingSet(set, m_FrameLayout);
 			m_BoundInstanceBuffer = m_InstanceBuffer;
 			m_BoundMaterialBuffer = materials;
 			m_BoundCascades = cascades;
 			m_BoundAtlas = atlas;
+			m_BoundCube = cube;
+			m_BoundBrdf = brdf;
 		}
 	}
 }

@@ -11,8 +11,10 @@
 //   t3  uLights          the point and spot lights
 //   t4  uClusterCounts   per cluster: how many lights reach it      (written by light_cull.hlsl as u6)
 //   t5  uClusterIndices  per cluster: MAX_LIGHTS_PER_CLUSTER light indices (written by light_cull.hlsl as u7)
-//   t6  uShadowCascades  the sun's shadow maps (a depth array)      s14 uShadowSampler (comparison)
+//   t6  uShadowCascades  the sun's shadow maps (a depth array)      s10 uShadowSampler (comparison)
 //   t7  uSpotAtlas       the spot lights' shadow maps (one atlas)
+//   t8  uEnvironment     the environment cube (mip 0 = the sky, higher mips = rougher reflections)
+//   t9  uBrdfLut         the split-sum BRDF table (n.v, roughness)     s11 uEnvironmentSampler
 // Materials' textures are in set 1 (see material_common.hlsli). Mirrors FrameConstants / GpuInstance / GpuMaterialRecord in C++.
 
 static const float PI = 3.14159265359;
@@ -46,6 +48,10 @@ cbuffer FrameBuffer : register(b0)
 	float4 ShadowParams2;   // x = spot light depth bias
 	float4 SpotShadowRects[4]; // the light's tile in the atlas: offset xy, scale zw
 	float4 SpotShadowInfo[4];  // x = tan(half the cone angle)
+	float4 EnvSH[9];        // the environment's diffuse light as spherical harmonics (rgb in xyz)
+	float4 EnvParams;       // x = 1 when an environment lights the scene, y = highest mip of the cube, z = brightness * ambient intensity, w = 1 when the BRDF table exists
+	float4 EnvRotation;     // x = cos, y = sin of the rotation of the environment about +Y
+	float4x4 InverseViewProjection;
 };
 
 // The cluster grid the lights are sorted into: screen tiles times exponential depth slices. Mirrors the constants in C++.
@@ -113,7 +119,10 @@ StructuredBuffer<uint> uClusterCounts : register(t4);
 StructuredBuffer<uint> uClusterIndices : register(t5);
 Texture2DArray<float> uShadowCascades : register(t6);
 Texture2D<float> uSpotAtlas : register(t7);
-SamplerComparisonState uShadowSampler : register(s14);
+SamplerComparisonState uShadowSampler : register(s10);
+TextureCube<float4> uEnvironment : register(t8);
+Texture2D<float2> uBrdfLut : register(t9);
+SamplerState uEnvironmentSampler : register(s11);
 
 // The cluster of a pixel: its screen tile and the depth slice of its view-space distance.
 uint ClusterIndexOf(float2 pixel, float viewDepth)

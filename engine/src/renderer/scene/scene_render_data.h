@@ -8,6 +8,7 @@
 #include <math/math.h>
 
 #include "../resources/gpu_resource_cache.h"
+#include "../environment/environment_cache.h"
 #include "../render_quality.h"
 #include "../viewport_target.h"
 #include "render_scene.h"
@@ -87,6 +88,10 @@ namespace wiwa
 		glm::vec4 ShadowParams2{ 0.0f };  // x = spot depth bias
 		glm::vec4 SpotShadowRects[4]{};   // atlas tile of each shadowed spot light: offset xy, scale zw
 		glm::vec4 SpotShadowInfo[4]{};    // x = tan(half the cone angle)
+		glm::vec4 EnvSH[9]{};             // the environment's diffuse light (rgb in xyz)
+		glm::vec4 EnvParams{ 0.0f };      // x = 1 when an environment lights the scene, y = highest mip, z = brightness * ambient intensity, w = 1 when the BRDF table exists
+		glm::vec4 EnvRotation{ 1.0f, 0.0f, 0.0f, 0.0f }; // cos, sin of the rotation about +Y
+		glm::mat4 InverseViewProjection{ 1.0f };
 	};
 	static_assert(sizeof(FrameConstants) % 16 == 0);
 
@@ -121,6 +126,9 @@ namespace wiwa
 		GpuResourceCache* cache() const { return m_Cache; }
 		const RenderScene* scene() const { return m_Scene; }
 		const SceneSettings& settings() const { return m_Settings; }
+		// Where the environments of the settings come from; without one the scene is lit by the hemisphere ambient.
+		void set_environments(EnvironmentCache* environments) { m_Environments = environments; }
+
 		// What the project decides about shadows (the Renderer sets it; checks change it).
 		RenderQuality& quality() { return m_Quality; }
 		const FrameConstants& constants() const { return m_Constants; }
@@ -188,6 +196,14 @@ namespace wiwa
 		nvrhi::TextureHandle m_DummyCascadeMap{};
 		nvrhi::TextureHandle m_DummySpotAtlas{};
 		nvrhi::SamplerHandle m_ShadowSampler{};
+		nvrhi::SamplerHandle m_EnvironmentSampler{};
+		nvrhi::TextureHandle m_DummyCube{};
+		nvrhi::TextureHandle m_DummyBrdf{};
+		EnvironmentCache* m_Environments = nullptr;
+		const GpuEnvironment* m_FrameEnvironment = nullptr; // what build() chose for this frame (null: the hemisphere)
+		bool m_EnvironmentDummiesWritten = false;
+		const nvrhi::ITexture* m_BoundCube = nullptr;
+		const nvrhi::ITexture* m_BoundBrdf = nullptr;
 		bool m_DummiesCleared = false;
 		u32 m_ShadowGeneration = 0;
 		const nvrhi::ITexture* m_BoundCascades = nullptr;

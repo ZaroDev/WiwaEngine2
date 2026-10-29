@@ -7,6 +7,7 @@
 #include "../ibl/environment_pack.h"
 #include "../render_world.h"
 #include "../renderer.h"
+#include "scene_tester.h"
 
 // Checks of the environment cache: uploading, the BRDF table, failures, reloads. Each check builds its own queue and cache.
 namespace wiwa
@@ -87,6 +88,117 @@ namespace wiwa
 
 	void register_environment_checks()
 	{
+
+		// Image-based lighting in the forward shader, through the whole renderer.
+		auto light_by = [](SceneTester& test, EnvironmentData environment, float rotationDegrees = 0.0f, float brightness = 1.0f)
+		{
+			SceneSettings settings;
+			settings.Source = EnvironmentSource::File;
+			settings.EnvironmentAsset = test.renderer().get_environments().add_inline_environment(std::move(environment));
+			settings.AmbientIntensity = 1.0f;
+			settings.RotationDegrees = rotationDegrees;
+			settings.Brightness = brightness;
+			test.scene().set_settings(settings);
+		};
+		auto uniform_environment = [](float value)
+		{
+			return pack_environment(build_environment(make_cube(64, [value](const glm::vec3&) { return glm::vec3(value); }), 1, 8));
+		};
+		auto white_cube = [](SceneTester& test, float roughness, float metallic)
+		{
+			test.add_instance(test.add_mesh(make_test_cube(test.add_material(test.color_material(glm::vec3(1.0f), roughness, metallic)))), glm::mat4(1.0f));
+		};
+
+		register_render_check("ibl_uniform_diffuse", [=](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.set_camera(glm::vec3(3.0f, 2.0f, 5.0f), glm::vec3(0.0f));
+				white_cube(test, 1.0f, 0.0f);
+				context.check(test.render(), "render with the hemisphere");
+				const int hemisphere = SceneTester::luma(test.pixel(test.to_pixel(glm::vec3(0.0f, 0.0f, 1.0f))));
+
+				light_by(test, uniform_environment(0.5f));
+				context.check(test.render(), "render with a uniform environment");
+				const int front = SceneTester::luma(test.pixel(test.to_pixel(glm::vec3(0.0f, 0.0f, 1.0f))));
+				const int side = SceneTester::luma(test.pixel(test.to_pixel(glm::vec3(1.0f, 0.0f, 0.0f))));
+				const int top = SceneTester::luma(test.pixel(test.to_pixel(glm::vec3(0.0f, 1.0f, 0.0f))));
+				WI_LOG(Info, "RenderTest", "ibl_uniform_diffuse hemisphere {0} faces {1} {2} {3}", hemisphere, front, side, top);
+				context.check(std::abs(front - side) <= 4 && std::abs(front - top) <= 4, "three faces seen at different angles are equally lit");
+				context.check(front > 60 && std::abs(front - hemisphere) > 10, "and the image is not the one of the hemisphere ambient");
+			});
+
+		register_render_check("ibl_rotation", [=](RenderCheckContext& context)
+			{
+				const CubeMap half = make_cube(64, [](const glm::vec3& d) { return d.x > 0.0f ? glm::vec3(3.0f) : glm::vec3(0.02f); });
+				auto side_luma = [&](float rotation)
+				{
+					SceneTester test(context);
+					test.set_camera(glm::vec3(3.0f, 2.0f, 5.0f), glm::vec3(0.0f));
+					white_cube(test, 1.0f, 0.0f);
+					light_by(test, pack_environment(build_environment(half, 1, 8)), rotation);
+					test.render();
+					return SceneTester::luma(test.pixel(test.to_pixel(glm::vec3(1.0f, 0.0f, 0.0f))));
+				};
+				const int straight = side_luma(0.0f);
+				const int turned = side_luma(180.0f);
+				WI_LOG(Info, "RenderTest", "ibl_rotation +X face: rotation 0 -> {0}, 180 -> {1}", straight, turned);
+				context.check(straight > 2 * turned, "the face toward the bright half is brighter, and the rotation turns the light away");
+			});
+
+		register_render_check("ibl_specular_reflection", [=](RenderCheckContext& context)
+			{
+				const CubeMap red_front = make_cube(64, [](const glm::vec3& d) { return (d.z > std::abs(d.x) && d.z > std::abs(d.y)) ? glm::vec3(4.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 0.0f, 0.3f); });
+				auto saturation = [&](float roughness)
+				{
+					SceneTester test(context);
+					test.set_camera(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f));
+					white_cube(test, roughness, 1.0f);
+					light_by(test, pack_environment(build_environment(red_front, 1, 8)));
+					test.render();
+					const glm::ivec3 pixel = test.pixel(32, 32);
+					return static_cast<float>(pixel.r) / static_cast<float>(std::max(pixel.r + pixel.g + pixel.b, 1));
+				};
+				const float mirror = saturation(0.1f);
+				const float rough = saturation(1.0f);
+				WI_LOG(Info, "RenderTest", "ibl_specular_reflection red share: smooth {0:.2f}, rough {1:.2f}", mirror, rough);
+				context.check(mirror > 0.8f, "a smooth metal facing the red part of the sky reflects it");
+				context.check(rough < mirror - 0.1f, "a rough one blurs the reflection with the rest of the sky");
+			});
+
+		register_render_check("ibl_brightness", [=](RenderCheckContext& context)
+			{
+				auto luma = [&](float brightness)
+				{
+					SceneTester test(context);
+					test.set_camera(glm::vec3(3.0f, 2.0f, 5.0f), glm::vec3(0.0f));
+					white_cube(test, 1.0f, 0.0f);
+					light_by(test, uniform_environment(0.2f), 0.0f, brightness);
+					test.render();
+					return SceneTester::luma(test.pixel(test.to_pixel(glm::vec3(0.0f, 0.0f, 1.0f))));
+				};
+				context.check(luma(2.0f) > luma(1.0f) + 10, "doubling the brightness brightens the lit pixel");
+			});
+
+		register_render_check("ibl_missing_falls_back", [=](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.set_camera(glm::vec3(3.0f, 2.0f, 5.0f), glm::vec3(0.0f));
+				white_cube(test, 0.5f, 0.0f);
+				context.check(test.render(), "render with no environment");
+				const std::vector<u8> none = test.pixels();
+
+				SceneSettings settings;
+				settings.Source = EnvironmentSource::File;
+				settings.EnvironmentAsset.Guid = AssetGuid::generate();
+				test.scene().set_settings(settings);
+				for (int i = 0; i < 3000 && test.renderer().get_environments().get_stats().Failed == 0; i++)
+				{
+					test.frame();
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
+				context.check(test.renderer().get_environments().status(settings.EnvironmentAsset).rfind("failed", 0) == 0, "the failure is reported");
+				context.check(test.render() && SceneTester::max_difference(test.pixels(), none) == 0, "the scene is lit as if it had no environment");
+			});
 		register_render_check("environment_upload", [](RenderCheckContext& context)
 			{
 				EnvironmentFixture fixture(context, 8 * 1024 * 1024);
