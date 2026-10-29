@@ -76,3 +76,6 @@ Editor/game_assembly/build
 Library/
 *.wpak
 .superpowers/
+
+# ImGui window layout (per user)
+imgui.ini

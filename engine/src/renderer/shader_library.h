@@ -25,6 +25,8 @@ namespace wiwa
 
 		// Null until the shader is ready (and for a shader that failed).
 		nvrhi::IShader* get(AssetRef shader, ShaderStage stage) const;
+		// True when this shader has no object and none is coming (a version in use that a reload could not replace is not a failure).
+		bool has_failed(AssetRef shader, ShaderStage stage) const;
 
 		// Creates the shader objects of assets that finished loading. Call once per frame.
 		void update();

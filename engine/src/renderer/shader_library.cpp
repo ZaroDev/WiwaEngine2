@@ -71,6 +71,12 @@ namespace wiwa
 		return entry ? entry->Shader.Get() : nullptr;
 	}
 
+	bool ShaderLibrary::has_failed(AssetRef shader, ShaderStage stage) const
+	{
+		const Entry* entry = find(shader, stage);
+		return entry != nullptr && entry->Failed;
+	}
+
 	void ShaderLibrary::invalidate(AssetGuid resolvedGuid)
 	{
 		for (Entry& entry : m_Entries)

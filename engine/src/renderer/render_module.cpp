@@ -6,6 +6,7 @@
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 
+#include "passes/imgui_pass.h"
 #include "render_world.h"
 #include "window.h"
 
@@ -36,7 +37,15 @@ namespace wiwa
 		const bool started = m_Thread.start(
 			[this]()
 			{
-				return m_Renderer->initialize(m_Description);
+				if (!m_Renderer->initialize(m_Description))
+				{
+					return false;
+				}
+
+				// The UI goes over everything else, so its pass is the last one.
+				Scope<ImGuiRenderPass> imguiPass = CreateScope<ImGuiRenderPass>();
+				m_ImGuiPass = imguiPass.get();
+				return m_Renderer->add_pass(std::move(imguiPass));
 			},
 			[this](RenderBatch& batch)
 			{
@@ -68,6 +77,11 @@ namespace wiwa
 		}
 
 		m_Started = true;
+
+		if (!m_ImGui.init(m_Description.Window))
+		{
+			fail_and_quit("Could not start the UI");
+		}
 	}
 
 	void RenderModule::shutdown()
@@ -76,8 +90,18 @@ namespace wiwa
 		// finish its frame, wait for the GPU and destroy everything before the window goes away.
 		m_Thread.stop();
 		m_Renderer.reset();
+		m_ImGuiPass = nullptr;
+		m_ImGui.shutdown();
 		m_Started = false;
 		WI_RENDER_LOG(Info, "Shutdown");
+	}
+
+	void RenderModule::pre_update(float deltaTime)
+	{
+		if (m_Started && !m_Failed)
+		{
+			m_ImGui.begin_frame();
+		}
 	}
 
 	void RenderModule::render_update(float deltaTime)
@@ -106,6 +130,23 @@ namespace wiwa
 		batch.Minimized = width == 0 || height == 0 || glfwGetWindowAttrib(window->get_window(), GLFW_ICONIFIED) != 0;
 		batch.Commands = std::move(m_PendingCommands);
 		m_PendingCommands.clear();
+
+		// The UI the modules built this frame, copied for the render thread.
+		m_ImGui.end_frame(batch);
+
+		// The font atlas is created on the render thread before the first frame that draws with it.
+		u32 fontWidth = 0;
+		u32 fontHeight = 0;
+		std::vector<u8> fontPixels;
+		if (m_ImGui.take_font_atlas(fontWidth, fontHeight, fontPixels))
+		{
+			auto pixels = std::make_shared<std::vector<u8>>(std::move(fontPixels));
+			ImGuiRenderPass* pass = m_ImGuiPass;
+			batch.Commands.insert(batch.Commands.begin(), [pass, fontWidth, fontHeight, pixels](RenderWorld&)
+				{
+					pass->set_font_atlas(fontWidth, fontHeight, pixels->data());
+				});
+		}
 
 		// Blocks while the render thread is two frames behind.
 		if (!m_Thread.submit(std::move(batch)))

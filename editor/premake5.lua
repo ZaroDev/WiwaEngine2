@@ -16,6 +16,7 @@ project "wiwa_editor"
 	includedirs
 	{
 		"src",
+		"%{IncludeDirs.ImGui}",
 		"%{IncludeDirs.NJSON}",
 		"%{IncludeDirs.STB}",
 		"%{IncludeDirs.CGLTF}",
@@ -39,6 +40,7 @@ project "wiwa_editor"
 	links
 	{
 		"wiwa",
+		"ImGui",
 		"LZ4",
 		"ufbx",
 		"d3dcompiler",

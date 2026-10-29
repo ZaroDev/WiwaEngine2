@@ -5,12 +5,15 @@
 
 #include <core/module.h>
 
+#include "imgui_layer.h"
 #include "renderer.h"
 #include "render_snapshot.h"
 #include "render_thread.h"
 
 namespace wiwa
 {
+	class ImGuiRenderPass;
+
 	// The main-thread face of the renderer: the only thing the rest of the engine talks to. It owns the render thread and
 	// hands it one batch per frame; the Renderer, the backend and every GPU object live on that thread.
 	//
@@ -25,6 +28,8 @@ namespace wiwa
 		virtual void init() override;
 		virtual void shutdown() override;
 
+		// Opens the ImGui frame, so that every module's update() can build UI.
+		virtual void pre_update(float deltaTime) override;
 		virtual void render_update(float deltaTime) override;
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE | UpdateFlags::UPDATE_RENDERER; }
@@ -46,9 +51,11 @@ namespace wiwa
 		void fail_and_quit(const char* reason);
 
 		RendererDescription m_Description{};
+		ImGuiLayer m_ImGui{};
 		RenderThread m_Thread{};
 		SnapshotChannel m_Snapshot{};
 		Scope<Renderer> m_Renderer{}; // created, used and destroyed on the render thread
+		ImGuiRenderPass* m_ImGuiPass = nullptr; // owned by the renderer; set on the render thread during start
 		std::vector<RenderCommand> m_PendingCommands{};
 		u64 m_FrameIndex = 0;
 		bool m_Started = false;
