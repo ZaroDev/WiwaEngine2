@@ -3,7 +3,6 @@
 
 #include <algorithm>
 
-#include <GLFW/glfw3.h>
 #include <nvrhi/utils.h>
 
 #define WI_RENDER_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
@@ -36,10 +35,7 @@ namespace wiwa
 			return false;
 		}
 
-		int width = 0;
-		int height = 0;
-		glfwGetFramebufferSize(m_Description.Window, &width, &height);
-		if (!m_Backend->initialize(m_Description, static_cast<u32>(std::max(width, 1)), static_cast<u32>(std::max(height, 1))))
+		if (!m_Backend->initialize(m_Description, std::max(m_Description.Width, 1u), std::max(m_Description.Height, 1u)))
 		{
 			m_Backend.reset();
 			return false;

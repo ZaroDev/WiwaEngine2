@@ -19,6 +19,7 @@ namespace wiwa
 		{
 			T* module = new T(std::forward<Args>(args)...);
 			m_Modules[typeid(T)] = module;
+			m_CreationOrder.push_back(module);
 			module->init();
 			return module;
 		}
@@ -48,6 +49,8 @@ namespace wiwa
 
 	private:
 		std::unordered_map<std::type_index, IModule*> m_Modules{};
+		// Modules are shut down and deleted in the reverse order they were added: a module may use the ones added before it.
+		std::vector<IModule*> m_CreationOrder{};
 		std::vector<IModule*> m_UpdateModules{};
 	};
 }

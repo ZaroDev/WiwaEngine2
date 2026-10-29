@@ -33,6 +33,9 @@ namespace wiwa {
 		}
 
 		Time& get_time() { return m_Time; }
+
+		// The command-line arguments after the program name.
+		const std::vector<std::string>& get_arguments() const { return m_Arguments; }
 	protected:
 		virtual void on_init() {};
 		virtual void on_update(float deltaTime) {};
@@ -42,6 +45,7 @@ namespace wiwa {
 		
 		Time m_Time{};
 		ModuleManager m_ModuleManager{};
+		std::vector<std::string> m_Arguments{};
 		bool m_Running = true;
 		int m_ExitCode = 0;
 	};

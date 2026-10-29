@@ -12,16 +12,18 @@ namespace wiwa
 
 	void ModuleManager::clean()
 	{
-		for (auto [_, module] : m_Modules)
+		for (auto it = m_CreationOrder.rbegin(); it != m_CreationOrder.rend(); ++it)
 		{
-			module->shutdown();
+			(*it)->shutdown();
 		}
 
-		for (auto [_, module] : m_Modules)
+		for (auto it = m_CreationOrder.rbegin(); it != m_CreationOrder.rend(); ++it)
 		{
-			delete module;
+			delete *it;
 		}
 
+		m_CreationOrder.clear();
+		m_UpdateModules.clear();
 		m_Modules.clear();
 	}
 

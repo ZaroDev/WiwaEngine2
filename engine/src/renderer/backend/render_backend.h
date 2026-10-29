@@ -28,6 +28,8 @@ namespace wiwa
 	struct RendererDescription
 	{
 		GLFWwindow* Window = nullptr;
+		u32 Width = 1280;  // the framebuffer size at start; read on the main thread, GLFW's window queries are main-thread only
+		u32 Height = 720;
 		std::string ApplicationName = "Wiwa";
 		bool EnableValidation = false;
 		bool EnableVsync = false;

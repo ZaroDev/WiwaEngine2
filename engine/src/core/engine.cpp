@@ -4,6 +4,7 @@
 #include "memory.h"
 
 #include <assets/asset_manager.h>
+#include <renderer/render_module.h>
 #include <renderer/window.h>
 
 #include <iostream>
@@ -14,6 +15,10 @@ namespace wiwa
 {
 	Engine::Engine(int argc, char** argv) 
 	{
+		for (int i = 1; i < argc; i++)
+		{
+			m_Arguments.emplace_back(argv[i]);
+		}
 	}
 
 	Engine::~Engine()
@@ -34,6 +39,7 @@ namespace wiwa
 		
 		m_ModuleManager.add_module<AssetManager>();
 		m_ModuleManager.add_module<Window>();
+		m_ModuleManager.add_module<RenderModule>();
 
 		on_init();
 	}
