@@ -12,7 +12,7 @@
 #include "passes/forward_pass.h"
 #include "passes/imgui_pass.h"
 #include "passes/light_cull_pass.h"
-#include "passes/resolve_pass.h"
+#include "passes/tonemap_pass.h"
 #include "passes/shadow_pass.h"
 #include "passes/sky_pass.h"
 #include "shader_library.h"
@@ -76,7 +76,7 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Opaque))
 					&& m_Renderer->add_pass(CreateScope<SkyPass>())
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Blended))
-					&& m_Renderer->add_pass(CreateScope<ResolvePass>())
+					&& m_Renderer->add_pass(CreateScope<TonemapPass>())
 					&& m_Renderer->add_pass(CreateScope<BlitPass>())
 					&& m_Renderer->add_pass(std::move(imguiPass));
 			},

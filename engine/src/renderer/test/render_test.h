@@ -61,6 +61,8 @@ namespace wiwa
 	void register_sky_checks();
 	// The atmosphere checks (atmosphere_checks.cpp).
 	void register_atmosphere_checks();
+	// Tone mapping, exposure, bloom, FXAA and ambient occlusion (post_checks.cpp).
+	void register_post_checks();
 	// Whole scenes with an environment (environment_scene_checks.cpp).
 	void register_environment_scene_checks();
 

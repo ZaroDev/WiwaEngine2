@@ -5,12 +5,12 @@
 
 namespace wiwa
 {
-	// Turns the viewport's HDR color into its 8-bit image: exposure from the scene settings, the ACES filmic curve and the sRGB
-	// encoding, drawn as one fullscreen triangle. A plain stand-in for the post-processing chain that comes later.
-	class ResolvePass : public IRenderPass
+	// Turns the viewport's HDR color into its 8-bit image: exposure from the scene settings, the tone mapping operator, color grading
+	// and the sRGB encoding, drawn as one fullscreen triangle.
+	class TonemapPass : public IRenderPass
 	{
 	public:
-		virtual const char* get_name() const override { return "Resolve"; }
+		virtual const char* get_name() const override { return "Tonemap"; }
 
 		virtual bool initialize(const PassInitializationDescription& description) override;
 		virtual void update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer) override;
@@ -22,7 +22,13 @@ namespace wiwa
 		struct PushConstants
 		{
 			float Exposure = 1.0f;
-			float Padding[3]{};
+			u32 Operator = 0;
+			float Contrast = 1.0f;
+			float Saturation = 1.0f;
+			float Temperature = 0.0f;
+			float Tint = 0.0f;
+			float Vignette = 0.0f;
+			float Padding = 0.0f;
 		};
 
 		nvrhi::IDevice* m_Device = nullptr;

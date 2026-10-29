@@ -1,30 +1,30 @@
 #include <pch.h>
-#include "resolve_pass.h"
+#include "tonemap_pass.h"
 
 #include "../engine_assets.h"
 #include "../scene/scene_render_data.h"
 
-#define WI_RESOLVE_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
+#define WI_TONEMAP_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
 
 namespace wiwa
 {
-	bool ResolvePass::initialize(const PassInitializationDescription& description)
+	bool TonemapPass::initialize(const PassInitializationDescription& description)
 	{
 		m_Device = description.Device;
 		m_Shaders = description.Shaders;
 		if (m_Shaders == nullptr)
 		{
-			WI_RESOLVE_LOG(Error, "The resolve pass needs the shader library");
+			WI_TONEMAP_LOG(Error, "The tonemap pass needs the shader library");
 			return false;
 		}
 
-		m_Shaders->request(engine_assets::RESOLVE_SHADER, ShaderStage::Vertex);
-		m_Shaders->request(engine_assets::RESOLVE_SHADER, ShaderStage::Pixel);
+		m_Shaders->request(engine_assets::TONEMAP_SHADER, ShaderStage::Vertex);
+		m_Shaders->request(engine_assets::TONEMAP_SHADER, ShaderStage::Pixel);
 
 		const nvrhi::SamplerDesc samplerDescription = nvrhi::SamplerDesc().setAllFilters(false).setAllAddressModes(nvrhi::SamplerAddressMode::Clamp);
 		m_Sampler = m_Device->createSampler(samplerDescription);
 
-		// Slots match engine/shaders/resolve.hlsl: SRV 0, sampler 1, push constants 2.
+		// Slots match engine/shaders/tonemap.hlsl: SRV 0, sampler 1, push constants 2.
 		nvrhi::VulkanBindingOffsets offsets;
 		offsets.shaderResource = 0;
 		offsets.sampler = 0;
@@ -40,20 +40,20 @@ namespace wiwa
 		return m_Sampler && m_BindingLayout;
 	}
 
-	bool ResolvePass::is_ready() const
+	bool TonemapPass::is_ready() const
 	{
-		return m_Shaders->get(engine_assets::RESOLVE_SHADER, ShaderStage::Vertex) != nullptr && m_Shaders->get(engine_assets::RESOLVE_SHADER, ShaderStage::Pixel) != nullptr;
+		return m_Shaders->get(engine_assets::TONEMAP_SHADER, ShaderStage::Vertex) != nullptr && m_Shaders->get(engine_assets::TONEMAP_SHADER, ShaderStage::Pixel) != nullptr;
 	}
 
-	void ResolvePass::update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer)
+	void TonemapPass::update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer)
 	{
-		if (m_Shaders->has_failed(engine_assets::RESOLVE_SHADER, ShaderStage::Vertex) || m_Shaders->has_failed(engine_assets::RESOLVE_SHADER, ShaderStage::Pixel))
+		if (m_Shaders->has_failed(engine_assets::TONEMAP_SHADER, ShaderStage::Vertex) || m_Shaders->has_failed(engine_assets::TONEMAP_SHADER, ShaderStage::Pixel))
 		{
 			m_Failed = true;
 		}
 	}
 
-	void ResolvePass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
+	void TonemapPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
 	{
 		if (frame.Scene == nullptr || !frame.Scene->active() || m_Failed)
 		{
@@ -69,8 +69,8 @@ namespace wiwa
 
 			nvrhi::GraphicsPipelineDesc description;
 			description.primType = nvrhi::PrimitiveType::TriangleList;
-			description.VS = m_Shaders->get(engine_assets::RESOLVE_SHADER, ShaderStage::Vertex);
-			description.PS = m_Shaders->get(engine_assets::RESOLVE_SHADER, ShaderStage::Pixel);
+			description.VS = m_Shaders->get(engine_assets::TONEMAP_SHADER, ShaderStage::Vertex);
+			description.PS = m_Shaders->get(engine_assets::TONEMAP_SHADER, ShaderStage::Pixel);
 			description.addBindingLayout(m_BindingLayout);
 			description.renderState.depthStencilState.depthTestEnable = false;
 			description.renderState.depthStencilState.depthWriteEnable = false;
@@ -85,7 +85,7 @@ namespace wiwa
 
 			if (m_Pipeline == nullptr || m_BindingSet == nullptr)
 			{
-				WI_RESOLVE_LOG(Error, "Could not create the resolve pipeline");
+				WI_TONEMAP_LOG(Error, "Could not create the tonemap pipeline");
 				m_Failed = true;
 				return;
 			}
@@ -99,7 +99,14 @@ namespace wiwa
 		commandList->setGraphicsState(state);
 
 		PushConstants constants;
-		constants.Exposure = std::exp2(frame.Scene->settings().ExposureEv);
+		const SceneSettings& settings = frame.Scene->settings();
+		constants.Exposure = std::exp2(settings.ExposureEv);
+		constants.Operator = static_cast<u32>(settings.Tonemap.Operator);
+		constants.Contrast = settings.Tonemap.Contrast;
+		constants.Saturation = settings.Tonemap.Saturation;
+		constants.Temperature = settings.Tonemap.Temperature;
+		constants.Tint = settings.Tonemap.Tint;
+		constants.Vignette = settings.Tonemap.Vignette;
 		commandList->setPushConstants(&constants, sizeof(constants));
 
 		nvrhi::DrawArguments arguments;

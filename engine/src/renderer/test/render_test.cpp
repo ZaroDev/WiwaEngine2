@@ -109,6 +109,7 @@ namespace wiwa
 			register_scale_checks();
 			register_ibl_checks();
 			register_settings_checks();
+			register_post_checks();
 			register_environment_checks();
 			register_sky_checks();
 			register_atmosphere_checks();

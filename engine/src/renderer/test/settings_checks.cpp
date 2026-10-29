@@ -158,6 +158,10 @@ namespace wiwa
 				changed.ShadowDistance = 6.0f;
 				renderer.set_quality(changed);
 				context.check(renderer.get_scene_data().quality().ShadowDistance == 6.0f && renderer.get_quality().ShadowDistance == 6.0f, "the shadow reach reaches the scene data");
+				changed.BloomMips = 3;
+				changed.Fxaa = false;
+				renderer.set_quality(changed);
+				context.check(renderer.get_scene_data().quality().BloomMips == 3 && !renderer.get_scene_data().quality().Fxaa, "the post quality reaches the scene data");
 				changed.ShadowCascades = 99;
 				renderer.set_quality(changed);
 				context.check(renderer.get_quality().ShadowCascades == 4, "a value out of range is clamped on the way in");
