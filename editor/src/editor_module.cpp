@@ -28,7 +28,7 @@ void EditorModule::init()
 	m_Panels.push_back(CreateRef<BloomPanel>(*m_SceneEditor));
 	m_Panels.push_back(CreateRef<TonemapPanel>(*m_SceneEditor));
 	m_Panels.push_back(CreateRef<AoPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<ViewportPanel>());
+	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor));
 	m_Panels.push_back(CreateRef<RendererPanel>());
 	m_Panels.push_back(CreateRef<QualityPanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
