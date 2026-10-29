@@ -163,6 +163,7 @@ namespace wiwa
 		std::vector<DrawItem> m_Blended{};
 		u32 m_VisibleInstances = 0;
 		void collect_casters(const glm::mat4& viewProjection, u32 matrixIndex, std::vector<DrawItem>& items);
+		std::vector<const GpuMesh*> m_Meshes{}; // per instance slot, looked up once per frame
 		std::vector<GpuLight> m_Lights{};
 		u32 m_DroppedLights = 0;
 		std::chrono::steady_clock::time_point m_LastLightWarning{};

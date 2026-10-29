@@ -21,6 +21,17 @@ namespace wiwa
 		bool Vsync = true;
 		u32 ErrorCount = 0;
 		bool HasCamera = false; // the scene has a camera to draw with (the editor's camera counts)
+		u32 SceneInstances = 0;     // in the render-side scene
+		u32 SceneLights = 0;
+		u32 VisibleInstances = 0;   // inside the camera's view last frame
+		u32 DrawCalls = 0;          // opaque + masked + blended primitives drawn by the forward pass
+		u32 ShadowViews = 0;
+		u32 CacheMeshes = 0;
+		u32 CacheMaterials = 0;
+		u32 CacheTextures = 0;
+		u64 CacheBytes = 0;
+		u32 CachePending = 0;
+		u32 CacheFailed = 0;
 		std::string UploadQueueName{}; // "copy queue" or "graphics queue"
 		u64 UploadBytesTotal = 0;
 		double UploadMs = 0.0; // the CPU time of the latest frame that uploaded something

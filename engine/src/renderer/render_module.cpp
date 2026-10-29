@@ -136,7 +136,9 @@ namespace wiwa
 			const u32 errors = get_error_message_count();
 			if (errors == 0 && !m_Failed)
 			{
-				WI_RENDER_LOG(Info, "Render smoke test passed ({0} frames on {1})", m_FrameIndex, graphics_api_name(m_Description.Api));
+				const RenderSnapshot last = m_Snapshot.read();
+				WI_RENDER_LOG(Info, "Render smoke test passed ({0} frames on {1}; {2} instances, {3} draws, {4} failed assets)", m_SmokeCounted, graphics_api_name(m_Description.Api),
+					last.SceneInstances, last.DrawCalls, last.CacheFailed);
 			}
 			else
 			{
@@ -184,6 +186,35 @@ namespace wiwa
 			{
 				world.get_renderer().set_viewport_size(width, height);
 			});
+	}
+
+	// --render-smoke starts counting frames when there is something to render: at once without --scene, else once the scene has loaded
+	// (a failed load is a failed run) and its assets are on the GPU (or a generous wait is over).
+	bool RenderModule::smoke_ready()
+	{
+		if (!m_SmokeHasScene)
+		{
+			return true;
+		}
+
+		SceneModule* scenes = Engine::get().get_module<SceneModule>();
+		const Ref<JobProgress> load = scenes != nullptr ? scenes->get_startup_load() : nullptr;
+		if (load == nullptr || !load->finished())
+		{
+			return false;
+		}
+		if (!load->succeeded())
+		{
+			fail_and_quit("The scene given with --scene could not be loaded");
+			return false;
+		}
+
+		constexpr u64 MAX_ASSET_WAIT_FRAMES = 900;
+		if (m_Snapshot.read().CachePending > 0 && ++m_SmokeAssetWait < MAX_ASSET_WAIT_FRAMES)
+		{
+			return false;
+		}
+		return true;
 	}
 
 	void RenderModule::set_scene_in_viewport(bool inViewport)
@@ -250,6 +281,19 @@ namespace wiwa
 		snapshot.Vsync = m_Renderer->is_vsync_enabled();
 		snapshot.ErrorCount = get_error_message_count();
 		snapshot.HasCamera = m_Renderer->get_scene().effective_camera().has_value();
+		snapshot.SceneInstances = static_cast<u32>(m_Renderer->get_scene().instance_count());
+		snapshot.SceneLights = static_cast<u32>(m_Renderer->get_scene().light_count());
+		const SceneRenderData& sceneData = m_Renderer->get_scene_data();
+		snapshot.VisibleInstances = sceneData.visible_instances();
+		snapshot.DrawCalls = static_cast<u32>(sceneData.opaque().size() + sceneData.masked().size() + sceneData.blended().size());
+		snapshot.ShadowViews = static_cast<u32>(sceneData.shadow_views().size());
+		const GpuResourceCache::Stats cacheStats = m_Renderer->get_cache().get_stats();
+		snapshot.CacheMeshes = cacheStats.Meshes;
+		snapshot.CacheMaterials = cacheStats.Materials;
+		snapshot.CacheTextures = cacheStats.Textures;
+		snapshot.CacheBytes = cacheStats.Bytes;
+		snapshot.CachePending = cacheStats.Pending;
+		snapshot.CacheFailed = cacheStats.Failed;
 		const UploadQueue& uploads = m_Renderer->get_upload_queue();
 		snapshot.UploadQueueName = uploads.is_using_copy_queue() ? "copy queue" : "graphics queue";
 		snapshot.UploadBytesTotal = uploads.bytes_total();
@@ -339,9 +383,12 @@ namespace wiwa
 				});
 		}
 
-		if (m_SmokeFrames > 0 && m_FrameIndex >= m_SmokeFrames)
+		if (m_SmokeFrames > 0 && smoke_ready())
 		{
-			Engine::get().request_quit();
+			if (++m_SmokeCounted >= m_SmokeFrames)
+			{
+				Engine::get().request_quit();
+			}
 		}
 
 		if (m_RenderTestResult != 0)
@@ -387,6 +434,11 @@ namespace wiwa
 			{
 				m_Description.EnableCopyQueue = false;
 			}
+		}
+
+		for (const std::string& argument : Engine::get().get_arguments())
+		{
+			m_SmokeHasScene = m_SmokeHasScene || argument == "--scene";
 		}
 
 		// --render-smoke <frames>

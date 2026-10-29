@@ -215,6 +215,16 @@ namespace wiwa
 		}
 		constants.LightInfo = glm::uvec4(static_cast<u32>(m_Lights.size()), 0, 0, 0);
 
+		const std::vector<RenderInstance>& allInstances = scene.instances();
+		m_Meshes.assign(allInstances.size(), nullptr);
+		for (size_t slot = 0; slot < allInstances.size(); slot++)
+		{
+			if (allInstances[slot].Alive)
+			{
+				m_Meshes[slot] = cache.get_mesh(allInstances[slot].Mesh);
+			}
+		}
+
 		const std::optional<RenderCamera>& camera = scene.effective_camera();
 		m_HasCamera = camera.has_value();
 		if (camera)
@@ -240,8 +250,14 @@ namespace wiwa
 					continue;
 				}
 
-				const GpuMesh* mesh = cache.get_mesh(instance.Mesh);
-				if (mesh == nullptr || !frustum.intersects(instance.World, mesh->BoundsMin, mesh->BoundsMax))
+				const GpuMesh* mesh = m_Meshes[slot];
+				if (mesh == nullptr)
+				{
+					continue;
+				}
+				// One primitive: its box is the mesh's box, tested once.
+				const bool single = mesh->Primitives.size() == 1;
+				if (!single && !frustum.intersects(instance.World, mesh->BoundsMin, mesh->BoundsMax))
 				{
 					continue;
 				}
@@ -364,8 +380,8 @@ namespace wiwa
 				continue;
 			}
 
-			const GpuMesh* mesh = m_Cache->get_mesh(instance.Mesh);
-			if (mesh == nullptr || !frustum.intersects(instance.World, mesh->BoundsMin, mesh->BoundsMax))
+			const GpuMesh* mesh = m_Meshes[slot];
+			if (mesh == nullptr || (mesh->Primitives.size() != 1 && !frustum.intersects(instance.World, mesh->BoundsMin, mesh->BoundsMax)))
 			{
 				continue;
 			}

@@ -814,6 +814,16 @@ namespace wiwa
 		m_InlineTextures[texture.resolved()] = std::make_shared<const TextureData>(std::move(data));
 	}
 
+	void GpuResourceCache::set_inline_mesh(const AssetRef& mesh, MeshData data)
+	{
+		m_InlineMeshes[mesh.resolved()] = std::make_shared<const MeshData>(std::move(data));
+	}
+
+	void GpuResourceCache::set_inline_material(const AssetRef& material, MaterialData data)
+	{
+		m_InlineMaterials[material.resolved()] = std::make_shared<const MaterialData>(std::move(data));
+	}
+
 	GpuResourceCache::Stats GpuResourceCache::get_stats() const
 	{
 		Stats stats;

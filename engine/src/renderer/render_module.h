@@ -76,6 +76,7 @@ namespace wiwa
 		void publish_snapshot();
 		void fail_and_quit(const char* reason);
 		void run_render_test(RenderWorld& world);
+		bool smoke_ready();
 
 		RendererDescription m_Description{};
 		ImGuiLayer m_ImGui{};
@@ -95,6 +96,9 @@ namespace wiwa
 		bool m_SentSceneInViewport = false;
 		std::optional<RenderCamera> m_SentCameraOverride{};
 		u64 m_FrameIndex = 0;
+		u64 m_SmokeCounted = 0;        // frames counted so far (they start once the scene of --scene has loaded)
+		u64 m_SmokeAssetWait = 0;      // frames waited for the scene's assets to reach the GPU
+		bool m_SmokeHasScene = false;  // --scene was given along with --render-smoke
 		u64 m_SmokeFrames = 0; // --render-smoke: quit after this many frames, with exit code 1 if the GPU layers reported an error
 		bool m_RenderTest = false;                // --render-test: run the render checks once the passes are ready, then quit
 		u32 m_RenderTestWaitFrames = 0;           // render thread: frames waited for the passes

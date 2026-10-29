@@ -32,6 +32,12 @@ namespace wiwa
 		GpuResourceCache& cache() { return m_Renderer.get_cache(); }
 		Renderer& renderer() { return m_Renderer; }
 		u32 size() const { return m_Size; }
+		// A new viewport size (square); the next frame makes the target again.
+		void set_size(u32 size)
+		{
+			m_Size = size;
+			m_Renderer.set_viewport_size(size, size);
+		}
 
 		AssetRef add_mesh(MeshData mesh) { return cache().add_inline_mesh(std::move(mesh)); }
 		AssetRef add_material(MaterialData material) { return cache().add_inline_material(std::move(material)); }

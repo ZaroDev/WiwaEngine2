@@ -70,6 +70,8 @@ namespace wiwa
 		AssetRef add_inline_texture(TextureData texture);
 		// Replaces the data of an inline asset; invalidate() the reference's guid for the change to show.
 		void set_inline_texture(const AssetRef& texture, TextureData data);
+		void set_inline_mesh(const AssetRef& mesh, MeshData data);
+		void set_inline_material(const AssetRef& material, MaterialData data);
 
 		struct Stats
 		{

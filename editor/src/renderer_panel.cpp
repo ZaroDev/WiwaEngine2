@@ -31,6 +31,16 @@ void RendererPanel::draw()
 		ImGui::Text("Uploads: %s, %.2f MiB total, last %.2f ms", snapshot.UploadQueueName.c_str(),
 			static_cast<double>(snapshot.UploadBytesTotal) / (1024.0 * 1024.0), snapshot.UploadMs);
 
+		ImGui::Text("Scene: %u instances (%u visible, %u draws), %u lights, %u shadow maps", snapshot.SceneInstances, snapshot.VisibleInstances, snapshot.DrawCalls,
+			snapshot.SceneLights, snapshot.ShadowViews);
+		ImGui::Text("GPU assets: %u meshes, %u materials, %u textures, %.1f MiB", snapshot.CacheMeshes, snapshot.CacheMaterials, snapshot.CacheTextures,
+			static_cast<double>(snapshot.CacheBytes) / (1024.0 * 1024.0));
+		if (snapshot.CachePending > 0 || snapshot.CacheFailed > 0)
+		{
+			ImGui::TextColored(snapshot.CacheFailed > 0 ? ImVec4(1.0f, 0.35f, 0.35f, 1.0f) : ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "%u loading, %u failed", snapshot.CachePending,
+				snapshot.CacheFailed);
+		}
+
 		if (snapshot.ErrorCount > 0)
 		{
 			ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "GPU errors: %u (see the log)", snapshot.ErrorCount);
