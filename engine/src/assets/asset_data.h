@@ -1,0 +1,197 @@
+#pragma once
+
+#include <string>
+#include <vector>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+
+#include <math/math.h>
+#include "asset_guid.h"
+
+// CPU-side data of every asset type. Nothing here knows about the GPU: the renderer builds its own resources
+// from these on its thread.
+namespace wiwa
+{
+	constexpr u32 MAX_MESH_LODS = 4;
+
+	// How the pixels of a texture are treated, which decides its GPU format and how its mips were made.
+	enum class TextureKind : u32
+	{
+		Color,             // sRGB color data (albedo)
+		Data,              // linear numbers (roughness, occlusion...)
+		Normal,            // tangent-space normals
+		MetallicRoughness, // glTF metallic-roughness map
+	};
+
+	enum class AlphaMode : u32
+	{
+		Opaque,
+		Mask,
+		Blend,
+	};
+
+	struct TextureData
+	{
+		u32 Width = 0;
+		u32 Height = 0;
+		TextureKind Kind = TextureKind::Color;
+		std::vector<std::vector<u8>> Mips{}; // RGBA8, [0] is full size, each next one half the size (min 1x1)
+	};
+
+	// A Radiance .hdr file: linear float RGB, equirectangular.
+	struct EnvironmentData
+	{
+		u32 Width = 0;
+		u32 Height = 0;
+		std::vector<float> Pixels{}; // Width * Height * 3
+	};
+
+	// A .cube color grading table.
+	struct LutData
+	{
+		std::string Title{};
+		u32 Size = 0;
+		std::vector<float> Table{}; // Size^3 * 3, red fastest
+	};
+
+	struct ShaderData
+	{
+		std::string Name{};
+		std::string Source{};
+	};
+
+	struct MeshVertex
+	{
+		float Position[3]{};
+		float Normal[3]{};
+		float Uv[2]{};
+	};
+
+	struct MeshLod
+	{
+		u32 FirstIndex = 0;
+		u32 IndexCount = 0;
+		float Error = 0.0f;
+	};
+
+	struct MeshSkinVertex
+	{
+		u32 Joints[4]{};
+		float Weights[4]{};
+	};
+
+	// A run of triangles that share one material. Indices are relative to BaseVertex.
+	struct MeshPrimitive
+	{
+		u32 IndexCount = 0;
+		u32 FirstIndex = 0;
+		i32 BaseVertex = 0;
+		AssetRef Material{};
+		glm::vec3 BoundsMin{ 0.0f };
+		glm::vec3 BoundsMax{ 0.0f };
+		u32 LodCount = 1;
+		MeshLod Lods[MAX_MESH_LODS]{};
+		u32 VertexCount = 0;
+		bool Skinned = false;
+		u32 MorphTargetCount = 0;
+		u32 MorphOffset = 0; // into MeshData::MorphPositions / MorphNormals: target * VertexCount + vertex
+		float MaxMorphDelta = 0.0f;
+	};
+
+	struct MeshData
+	{
+		std::string Name{};
+		std::vector<MeshVertex> Vertices{};
+		std::vector<u32> Indices{};
+		std::vector<MeshPrimitive> Primitives{};
+		std::vector<MeshSkinVertex> SkinVertices{}; // parallel to Vertices, or empty
+		std::vector<glm::vec4> MorphPositions{};
+		std::vector<glm::vec4> MorphNormals{};
+		glm::vec3 BoundsMin{ 0.0f };
+		glm::vec3 BoundsMax{ 0.0f };
+	};
+
+	struct MaterialData
+	{
+		std::string Name{};
+		glm::vec4 BaseColorFactor{ 1.0f };
+		AlphaMode Alpha = AlphaMode::Opaque;
+		float AlphaCutoff = 0.5f;
+		bool DoubleSided = false;
+		float MetallicFactor = 0.0f;
+		float RoughnessFactor = 0.8f;
+		glm::vec3 EmissiveFactor{ 0.0f };
+		float Clearcoat = 0.0f;
+		float ClearcoatRoughness = 0.0f;
+		float SheenIntensity = 0.0f;
+		float SheenRoughness = 0.0f;
+		float Transmission = 0.0f;
+		AssetRef BaseColorTexture{};
+		AssetRef NormalTexture{};
+		AssetRef OrmTexture{};
+		AssetRef EmissiveTexture{};
+	};
+
+	// One skin of a model: the joints (node indices of the Prefab) and the matrices that bring a vertex into each joint's space.
+	struct SkeletonData
+	{
+		std::string Name{};
+		std::vector<u32> Joints{};
+		std::vector<glm::mat4> InverseBind{};
+	};
+
+	enum class AnimationPath : u32
+	{
+		Translation,
+		Rotation,
+		Scale,
+		Weights,
+	};
+
+	enum class AnimationInterpolation : u32
+	{
+		Step,
+		Linear,
+		CubicSpline,
+	};
+
+	struct AnimationChannel
+	{
+		u32 Node = 0; // node index in the Prefab
+		AnimationPath Path = AnimationPath::Translation;
+		AnimationInterpolation Interpolation = AnimationInterpolation::Linear;
+		u32 Components = 0;
+		std::vector<float> Times{};
+		std::vector<float> Values{};
+	};
+
+	struct AnimationClipData
+	{
+		std::string Name{};
+		float Duration = 0.0f;
+		std::vector<AnimationChannel> Channels{};
+	};
+
+	struct PrefabNode
+	{
+		std::string Name{};
+		i32 Parent = -1;
+		glm::vec3 Translation{ 0.0f };
+		glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+		glm::vec3 Scale{ 1.0f };
+		std::vector<float> MorphWeights{};
+		AssetRef Mesh{};     // invalid when the node holds no mesh
+		AssetRef Skeleton{}; // invalid when the node is not skinned
+	};
+
+	// The hierarchy of an imported model; it points to the meshes, skeletons and clips by reference.
+	struct PrefabData
+	{
+		std::string Name{};
+		std::vector<PrefabNode> Nodes{};
+		std::vector<AssetRef> Animations{};
+		glm::vec3 BoundsMin{ 0.0f };
+		glm::vec3 BoundsMax{ 0.0f };
+	};
+}
