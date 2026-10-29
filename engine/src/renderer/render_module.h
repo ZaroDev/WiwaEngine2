@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <vector>
 
 #include <core/module.h>
@@ -42,12 +43,16 @@ namespace wiwa
 		// The latest stats the render thread published.
 		RenderSnapshot get_snapshot() const { return m_Snapshot.read(); }
 
+		// Turns vertical sync on or off; it takes effect on the render thread a frame or two later.
+		void set_vsync(bool enabled);
+
 		GraphicsApi get_api() const { return m_Description.Api; }
 		// False if the renderer could not start or has failed since.
 		bool is_ready() const { return m_Started && !m_Failed; }
 
 	private:
 		bool read_arguments();
+		void publish_snapshot();
 		void fail_and_quit(const char* reason);
 
 		RendererDescription m_Description{};
@@ -58,6 +63,13 @@ namespace wiwa
 		ImGuiRenderPass* m_ImGuiPass = nullptr; // owned by the renderer; set on the render thread during start
 		std::vector<RenderCommand> m_PendingCommands{};
 		u64 m_FrameIndex = 0;
+
+		// Render thread only: the frame rate, averaged over a window.
+		std::chrono::steady_clock::time_point m_StatsLast{};
+		std::chrono::steady_clock::time_point m_StatsWindowStart{};
+		u32 m_StatsFrames = 0;
+		double m_Fps = 0.0;
+		double m_FrameMs = 0.0;
 		bool m_Started = false;
 		std::atomic<bool> m_Failed{ false };
 	};

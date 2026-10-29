@@ -7,6 +7,7 @@
 #include <core/engine.h>
 
 #include "passes/imgui_pass.h"
+#include "shader_library.h"
 #include "render_world.h"
 #include "window.h"
 
@@ -60,6 +61,8 @@ namespace wiwa
 				{
 					m_Failed = true;
 				}
+
+				publish_snapshot();
 			},
 			[this]()
 			{
@@ -94,6 +97,52 @@ namespace wiwa
 		m_ImGui.shutdown();
 		m_Started = false;
 		WI_RENDER_LOG(Info, "Shutdown");
+	}
+
+	void RenderModule::set_vsync(bool enabled)
+	{
+		submit([enabled](RenderWorld& world)
+			{
+				world.get_renderer().set_vsync(enabled);
+			});
+	}
+
+	// Render thread: what the UI shows about the renderer.
+	void RenderModule::publish_snapshot()
+	{
+		const auto now = std::chrono::steady_clock::now();
+		if (m_StatsWindowStart == std::chrono::steady_clock::time_point{})
+		{
+			m_StatsWindowStart = now;
+		}
+
+		m_StatsFrames++;
+		const double windowSeconds = std::chrono::duration<double>(now - m_StatsWindowStart).count();
+		if (windowSeconds >= 0.5)
+		{
+			m_Fps = m_StatsFrames / windowSeconds;
+			m_FrameMs = 1000.0 / m_Fps;
+			m_StatsFrames = 0;
+			m_StatsWindowStart = now;
+		}
+
+		RenderSnapshot snapshot;
+		snapshot.Fps = m_Fps;
+		snapshot.FrameMs = m_FrameMs;
+		snapshot.Api = std::string(graphics_api_name(m_Renderer->get_api()));
+		snapshot.Adapter = m_Renderer->get_adapter_name();
+		snapshot.ShaderStatus = m_Renderer->get_shader_library()->get_status();
+		snapshot.Vsync = m_Renderer->is_vsync_enabled();
+		snapshot.ErrorCount = get_error_message_count();
+
+		const bool gpu = m_Renderer->are_gpu_timings_available();
+		for (const PassTiming& timing : m_Renderer->get_pass_timings())
+		{
+			const std::optional<float>& milliseconds = gpu ? timing.GpuMs : timing.CpuMs;
+			snapshot.PassMs.emplace_back(timing.Name, milliseconds ? static_cast<double>(*milliseconds) : 0.0);
+		}
+
+		m_Snapshot.publish(std::move(snapshot));
 	}
 
 	void RenderModule::pre_update(float deltaTime)

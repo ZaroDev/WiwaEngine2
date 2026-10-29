@@ -19,6 +19,7 @@ void EditorModule::pre_update(float deltaTime)
 
 void EditorModule::update(float deltaTime)
 {
+	m_RendererPanel.draw();
 }
 
 void EditorModule::post_update(float deltaTime)

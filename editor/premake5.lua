@@ -17,6 +17,7 @@ project "wiwa_editor"
 	{
 		"src",
 		"%{IncludeDirs.ImGui}",
+		"%{IncludeDirs.nvrhi}", -- render_module.h exposes NVRHI types
 		"%{IncludeDirs.NJSON}",
 		"%{IncludeDirs.STB}",
 		"%{IncludeDirs.CGLTF}",

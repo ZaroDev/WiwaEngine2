@@ -13,11 +13,12 @@ namespace wiwa
 	struct RenderSnapshot
 	{
 		double FrameMs = 0.0;
-		double Fps = 0.0;
+		double Fps = 0.0; // of the render thread, averaged over half a second
 		std::string Api{};
 		std::string Adapter{};
 		std::string ShaderStatus{};
 		std::vector<std::pair<std::string, double>> PassMs{};
+		bool Vsync = true;
 		u32 ErrorCount = 0;
 	};
 

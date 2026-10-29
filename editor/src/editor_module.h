@@ -2,6 +2,8 @@
 
 #include <core/module.h>
 
+#include "renderer_panel.h"
+
 class EditorModule : public wiwa::IModule
 {
 public:
@@ -26,4 +28,7 @@ public:
 	virtual std::string get_name() const { return "Editor"; };
 
 	virtual int get_priority() const { return 0; }
+
+private:
+	RendererPanel m_RendererPanel{};
 };
