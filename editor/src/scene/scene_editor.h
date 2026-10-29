@@ -114,7 +114,15 @@ namespace wiwa
 		const PrefabData* prefab_of(entt::entity root);
 		void expand_instance(entt::entity root, const PrefabData& prefab);
 		void queue_expansion(entt::entity root);
-		void mark_dirty() { m_Dirty = true; }
+		// Every edit ends here, so the WorldTransforms the renderer and the gizmos read never go stale.
+		void mark_dirty()
+		{
+			m_Dirty = true;
+			if (m_Scene != nullptr)
+			{
+				m_Scene->update_world_transforms();
+			}
+		}
 
 		AssetManager& m_Assets;
 		SceneModule& m_Scenes;

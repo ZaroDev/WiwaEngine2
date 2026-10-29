@@ -1,5 +1,6 @@
 #pragma once
 #include "ao_panel.h"
+#include "asset_browser_panel.h"
 #include "bloom_panel.h"
 #include "exposure_panel.h"
 #include "lighting_panel.h"

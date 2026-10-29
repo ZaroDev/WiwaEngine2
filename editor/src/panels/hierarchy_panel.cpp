@@ -152,7 +152,7 @@ void HierarchyPanel::draw_popups()
 
 	if (ImGui::BeginPopup("Save scene as"))
 	{
-		ImGui::TextUnformatted("File to write (a .wscene in Assets/):");
+		ImGui::TextUnformatted("File to write (a .wscene in assets/):");
 		ImGui::InputText("##save_path", m_SavePath, sizeof(m_SavePath));
 		if (ImGui::Button("Save"))
 		{

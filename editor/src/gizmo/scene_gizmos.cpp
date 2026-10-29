@@ -22,8 +22,27 @@ namespace wiwa
 		const glm::vec4 CAMERA_COLOR(0.6f, 0.85f, 1.0f, 1.0f);
 		const glm::vec4 BOUNDS_COLOR(0.5f, 1.0f, 0.5f, 1.0f);
 		const glm::vec4 GRID_COLOR(0.6f, 0.6f, 0.6f, 0.6f);
-		constexpr float GRID_CELL = 1.0f;
-		constexpr u32 GRID_HALF_COUNT = 10;
+		constexpr i32 GRID_HALF_COUNT = 50;     // lines on each side of the camera, per level
+
+		// One level of the ground grid, centered under the camera and snapped to its own cells so it never swims; lines fade out toward the edge.
+		void ground_grid(DebugDraw& draw, const glm::vec3& camera, float cell, float level)
+		{
+			if (level <= 0.0f)
+			{
+				return;
+			}
+			const float cx = std::round(camera.x / cell) * cell;
+			const float cz = std::round(camera.z / cell) * cell;
+			const float extent = cell * static_cast<float>(GRID_HALF_COUNT);
+			for (i32 i = -GRID_HALF_COUNT; i <= GRID_HALF_COUNT; i++)
+			{
+				const float t = 1.0f - static_cast<float>(std::abs(i)) / static_cast<float>(GRID_HALF_COUNT + 1);
+				const glm::vec4 color(GRID_COLOR.x, GRID_COLOR.y, GRID_COLOR.z, GRID_COLOR.w * level * t * t);
+				const float offset = cell * static_cast<float>(i);
+				draw.line(glm::vec3(cx + offset, 0.0f, cz - extent), glm::vec3(cx + offset, 0.0f, cz + extent), color, DebugDepth::Faded, 1.0f);
+				draw.line(glm::vec3(cx - extent, 0.0f, cz + offset), glm::vec3(cx + extent, 0.0f, cz + offset), color, DebugDepth::Faded, 1.0f);
+			}
+		}
 
 		bool finite(const glm::vec3& v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
 
@@ -82,7 +101,15 @@ namespace wiwa
 
 		if (settings.Grid)
 		{
-			draw.grid(glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f), GRID_CELL, GRID_HALF_COUNT, GRID_COLOR, DebugDepth::Faded, 1.0f);
+			// Infinite in appearance: the cell grows by a power of ten with the camera's height, the finer level fading out as the coarser one takes over.
+			const glm::vec3 camera(glm::inverse(view.View)[3]);
+			if (finite(camera))
+			{
+				const float decade = std::log10(std::max(std::abs(camera.y), 1.0f));
+				const float cell = std::pow(10.0f, std::floor(decade));
+				ground_grid(draw, camera, cell, 1.0f - (decade - std::floor(decade)));
+				ground_grid(draw, camera, cell * 10.0f, 1.0f);
+			}
 		}
 
 		if (settings.Axes)

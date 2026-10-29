@@ -24,7 +24,7 @@ private:
 	wiwa::SceneEditor& m_Editor;
 	std::function<void()> m_Deferred{}; // a change to the tree, done after the tree has been drawn
 	std::string m_Status{};             // the last thing that did not work
-	char m_OpenPath[260] = "Assets/scenes/";
-	char m_SavePath[260] = "Assets/scenes/untitled.wscene";
-	char m_PrefabPath[260] = "Assets/models/";
+	char m_OpenPath[260] = "assets/scenes/";
+	char m_SavePath[260] = "assets/scenes/untitled.wscene";
+	char m_PrefabPath[260] = "assets/models/";
 };

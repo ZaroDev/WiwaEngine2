@@ -31,7 +31,7 @@ namespace wiwa
 	{
 		Log::init();
 		WI_ENGINE_LOG(Info, "Initializing engine");
-		WI_ENGINE_LOG(Info, "Allocated {0} bytes with {1} allocations", s_AllocatedBytesSize, s_AllocationCount);
+		WI_ENGINE_LOG(Info, "Allocated {0} bytes with {1} allocations", s_AllocatedBytesSize.load(), s_AllocationCount.load());
 
 		s_Engine = this;
 
@@ -91,11 +91,10 @@ namespace wiwa
 	void Engine::shutdown()
 	{
 		m_ModuleManager.clean();
-
 		on_shutdown();
 
 		WI_ENGINE_LOG(Info, "Shutdown");
-		WI_ENGINE_LOG(Info, "Allocated {0} bytes with {1} allocations", s_AllocatedBytesSize, s_AllocationCount);
+		WI_ENGINE_LOG(Info, "Allocated {0} bytes with {1} allocations", s_AllocatedBytesSize.load(), s_AllocationCount.load());
 	}
 
 	void Engine::request_quit()
