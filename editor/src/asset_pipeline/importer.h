@@ -68,6 +68,9 @@ namespace wiwa
 		// The folders of source assets (Assets/, engine/); shader includes are looked up in <root>/shaders.
 		std::vector<std::filesystem::path> get_source_roots() const;
 
+		// Whether the database knows the asset's source file (a reference may name an asset that was deleted).
+		bool asset_exists(const AssetRef& ref) const;
+
 		void warn(const std::string& message);
 
 		std::vector<EmittedAsset>& emitted() { return m_Emitted; }

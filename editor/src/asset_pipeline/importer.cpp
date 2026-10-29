@@ -31,6 +31,11 @@ namespace wiwa
 		return m_Database.ensure_imported(path.lexically_normal(), defaultSettings);
 	}
 
+	bool ImportContext::asset_exists(const AssetRef& ref) const
+	{
+		return ref.valid() && m_Database.path_of(ref.Guid).has_value();
+	}
+
 	std::vector<std::filesystem::path> ImportContext::get_source_roots() const
 	{
 		std::vector<std::filesystem::path> roots;

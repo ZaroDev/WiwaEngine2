@@ -14,6 +14,8 @@
 #include <scene/scene_components.h>
 #include <scene/scene_records.h>
 
+#include "scene_json.h"
+
 #define WI_SCENE_LOG(level, ...) WI_LOG(level, "Scene", __VA_ARGS__)
 
 namespace wiwa
@@ -671,6 +673,150 @@ namespace wiwa
 			check(unpacked.size() == plain.Entities.size() && !find_component(unpacked[0], "PrefabInstance") && unpacked[0].Overrides.empty(), "unpack flattens the instance into plain entities");
 			check(position_of(find_entity(unpacked, doorId)) == glm::vec3(9, 8, 7), "unpack keeps the overridden values");
 		}
+
+		// A scene with every kind of value, an unknown component, an unknown field and every kind of override.
+		SceneData build_json_sample()
+		{
+			SceneData data;
+			data.Name = "json sample";
+
+			EntityRecord a;
+			a.Id = EntityGuid::generate();
+			a.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Root \"quoted\"")) } } });
+			a.Components.push_back(ComponentRecord{ "Transform", {
+				FieldRecord{ "Position", FieldValue(glm::vec3(1.5f, -2.0f, 0.1f)) },
+				FieldRecord{ "Rotation", FieldValue(glm::quat(0.5f, 0.5f, 0.5f, 0.5f)) },
+				FieldRecord{ "Scale", FieldValue(glm::vec3(1.0f)) },
+				FieldRecord{ "wobble", FieldValue(0.25f) } } });
+			a.Components.push_back(ComponentRecord{ "Camera", {
+				FieldRecord{ "Projection", FieldValue(i32(1)) },
+				FieldRecord{ "FovY", FieldValue(45.0f) },
+				FieldRecord{ "Primary", FieldValue(true) } } });
+			a.Components.push_back(ComponentRecord{ "Light", {
+				FieldRecord{ "Kind", FieldValue(i32(2)) },
+				FieldRecord{ "Color", FieldValue(glm::vec4(0.1f, 0.2f, 0.3f, 1.0f)) },
+				FieldRecord{ "CastsShadows", FieldValue(true) } } });
+			a.Components.push_back(ComponentRecord{ "Spin", {
+				FieldRecord{ "rate", FieldValue(2.5f) },
+				FieldRecord{ "count", FieldValue(i32(-3)) },
+				FieldRecord{ "on", FieldValue(false) },
+				FieldRecord{ "label", FieldValue(std::string("0123456789abcdef0123456789abcdef")) },
+				FieldRecord{ "axis", FieldValue(glm::vec3(0, 1, 0)) },
+				FieldRecord{ "tint", FieldValue(glm::vec4(1, 0, 0, 1)) },
+				FieldRecord{ "turn", FieldValue(glm::quat(1, 0, 0, 0)) },
+				FieldRecord{ "uv", FieldValue(glm::vec2(0.5f, 2.0f)) },
+				FieldRecord{ "ref", FieldValue(AssetRef{ AssetGuid::generate(), 7 }) },
+				FieldRecord{ "refs", FieldValue(std::vector<AssetRef>{ AssetRef{ AssetGuid::generate(), 0 }, AssetRef{} }) },
+				FieldRecord{ "target", FieldValue(EntityGuid::generate()) } } });
+			data.Entities.push_back(a);
+
+			EntityRecord b;
+			b.Id = EntityGuid::generate();
+			b.Parent = a.Id;
+			b.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Child")) } } });
+			b.Components.push_back(ComponentRecord{ "MeshRenderer", {
+				FieldRecord{ "Mesh", FieldValue(AssetRef{ AssetGuid::generate(), 3 }) },
+				FieldRecord{ "Materials", FieldValue(std::vector<AssetRef>{ AssetRef{ AssetGuid::generate(), 0 }, AssetRef{ AssetGuid::generate(), 9 } }) } } });
+			b.Components.push_back(ComponentRecord{ "PrefabInstance", { FieldRecord{ "Prefab", FieldValue(AssetRef{ AssetGuid::generate(), 0 }) } } });
+
+			const u64 node = 0x1122334455667788ull;
+			b.Overrides.push_back(set_field_override(node, "Transform", "Position", FieldValue(glm::vec3(9, 8, 7))));
+			b.Overrides.push_back(set_field_override(node, "Spin", "rate", FieldValue(4.0f)));
+			PrefabOverride addComponent;
+			addComponent.Kind = OverrideKind::AddComponent;
+			addComponent.NodeId = node;
+			addComponent.Added = ComponentRecord{ "Light", { FieldRecord{ "Intensity", FieldValue(3.0f) } } };
+			b.Overrides.push_back(addComponent);
+			PrefabOverride removeComponent;
+			removeComponent.Kind = OverrideKind::RemoveComponent;
+			removeComponent.NodeId = node;
+			removeComponent.Component = "MeshRenderer";
+			b.Overrides.push_back(removeComponent);
+			PrefabOverride addChild;
+			addChild.Kind = OverrideKind::AddChild;
+			addChild.NodeId = node;
+			addChild.Child.Id = EntityGuid::generate();
+			addChild.Child.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Bolt")) } } });
+			b.Overrides.push_back(addChild);
+			PrefabOverride removeNode;
+			removeNode.Kind = OverrideKind::RemoveNode;
+			removeNode.NodeId = 42;
+			b.Overrides.push_back(removeNode);
+			data.Entities.push_back(b);
+			return data;
+		}
+
+		void check_scene_json(Check& check, AssetPipelineModule& pipeline)
+		{
+			register_scene_components();
+			const SceneData sample = build_json_sample();
+			const std::vector<std::byte> sampleBytes = serialize(sample);
+
+			const SceneJson doc = scene_to_json(sample);
+			const SceneJsonResult parsed = scene_from_json(doc);
+			check(parsed.Scene.has_value(), "the JSON of a scene reads back (" + parsed.Error + ")");
+			check(parsed.Scene && serialize(*parsed.Scene) == sampleBytes, "scene to JSON to scene gives the same scene");
+
+			const SceneJsonResult fromText = scene_from_json(SceneJson::parse(doc.dump(2)));
+			check(fromText.Scene && serialize(*fromText.Scene) == sampleBytes, "the same through the text of the file");
+
+			// known values are plain JSON, easy to edit by hand
+			check(doc["entities"][0]["components"]["Camera"]["Projection"] == "Orthographic", "an enum is written by name");
+			check(doc["entities"][0]["components"]["Transform"]["Position"].is_array(), "a vector is written as an array");
+
+			auto error_of = [&](const std::function<void(SceneJson&)>& edit)
+			{
+				SceneJson edited = doc;
+				edit(edited);
+				const SceneJsonResult result = scene_from_json(edited);
+				return result.Scene.has_value() ? std::string() : result.Error;
+			};
+			auto contains = [](const std::string& text, const char* part) { return text.find(part) != std::string::npos; };
+
+			std::string error = error_of([](SceneJson& j) { j["entities"][1]["id"] = j["entities"][0]["id"]; });
+			check(contains(error, "entities[1].id") && contains(error, "duplicate"), "a duplicate entity id is rejected with its path (" + error + ")");
+			error = error_of([](SceneJson& j) { j["entities"][1]["parent"] = EntityGuid::generate().to_string(); });
+			check(contains(error, "entities[1].parent"), "a parent that is not in the file is rejected with its path (" + error + ")");
+			error = error_of([](SceneJson& j) { j["entities"][0]["parent"] = j["entities"][1]["id"]; });
+			check(contains(error, "parent loop"), "a parent cycle is rejected (" + error + ")");
+			error = error_of([](SceneJson& j) { j["entities"][1]["id"] = "xyz"; });
+			check(contains(error, "entities[1].id"), "an id that is not a guid is rejected (" + error + ")");
+			error = error_of([](SceneJson& j) { j["entities"][1]["components"]["MeshRenderer"]["Mesh"] = 5; });
+			check(contains(error, "entities[1].MeshRenderer.Mesh") && contains(error, "not an AssetRef"), "a field of the wrong type is rejected with its path (" + error + ")");
+			error = error_of([](SceneJson& j) { j["entities"][0]["components"]["Camera"]["Projection"] = "Sideways"; });
+			check(contains(error, "entities[0].Camera.Projection"), "an enum name that does not exist is rejected (" + error + ")");
+			error = error_of([](SceneJson& j) { j["entities"][1]["overrides"][0]["kind"] = "Explode"; });
+			check(contains(error, "overrides[0].kind"), "an unknown override kind is rejected (" + error + ")");
+			error = error_of([](SceneJson& j) { j.erase("entities"); });
+			check(contains(error, "entities"), "a file without entities is rejected (" + error + ")");
+
+			// through the importer
+			SmokeAssets assets(pipeline);
+			AssetDatabase& database = pipeline.get_database();
+			AssetManager& manager = *Engine::get().get_module<AssetManager>();
+			const std::filesystem::path path = assets.write("level.wscene", doc.dump(2));
+			const std::optional<AssetRef> ref = database.ensure_imported(path);
+			check(ref.has_value(), "a .wscene imports (its references to assets that do not exist are fine)");
+			if (!ref)
+			{
+				return;
+			}
+
+			auto load_bytes = [&]() -> std::vector<std::byte>
+			{
+				Handle<SceneData> handle = manager.load<SceneData>(*ref);
+				manager.wait_idle();
+				return handle.get() ? serialize(*handle.get()) : std::vector<std::byte>{};
+			};
+			check(load_bytes() == sampleBytes, "the cooked scene loads back as the scene that was written");
+
+			// a broken edit fails the import and the last good cooked scene stays
+			WI_SCENE_LOG(Info, "Smoke test: the next import error is expected");
+			manager.unload_unused();
+			assets.write("level.wscene", "{ \"entities\": [ { \"id\": \"nope\" } ] }");
+			database.reimport(path);
+			check(load_bytes() == sampleBytes, "after a failed re-import the previous cooked scene is still the one in use");
+		}
 	}
 
 	bool run_scene_smoke_test(AssetPipelineModule& pipeline)
@@ -683,6 +829,7 @@ namespace wiwa
 		check_scene_data(check);
 		check_node_ids(check, pipeline);
 		check_prefab(check);
+		check_scene_json(check, pipeline);
 
 		if (check.Failures == 0)
 		{
