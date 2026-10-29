@@ -3,6 +3,8 @@
 
 #include <fstream>
 
+#include "asset_catalog.h"
+
 namespace wiwa
 {
 	std::filesystem::path LibrarySource::path_of(AssetGuid guid) const
@@ -33,9 +35,19 @@ namespace wiwa
 		return std::filesystem::is_regular_file(locate(guid), error);
 	}
 
+	std::optional<std::vector<std::byte>> LibrarySource::read_catalog()
+	{
+		return read_file(m_Root / CATALOG_FILE_NAME);
+	}
+
 	std::optional<std::vector<std::byte>> LibrarySource::read(AssetGuid guid)
 	{
-		std::ifstream file(locate(guid), std::ios::binary | std::ios::ate);
+		return read_file(locate(guid));
+	}
+
+	std::optional<std::vector<std::byte>> LibrarySource::read_file(const std::filesystem::path& path)
+	{
+		std::ifstream file(path, std::ios::binary | std::ios::ate);
 		if (!file)
 		{
 			return std::nullopt;

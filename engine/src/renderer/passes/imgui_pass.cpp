@@ -32,8 +32,8 @@ namespace wiwa
 			return false;
 		}
 
-		m_Shaders->request(engine_assets::imgui_shader(), ShaderStage::Vertex);
-		m_Shaders->request(engine_assets::imgui_shader(), ShaderStage::Pixel);
+		m_Shaders->request(engine_assets::IMGUI_SHADER, ShaderStage::Vertex);
+		m_Shaders->request(engine_assets::IMGUI_SHADER, ShaderStage::Pixel);
 
 		const nvrhi::SamplerDesc samplerDescription = nvrhi::SamplerDesc()
 			.setAllFilters(true)
@@ -94,7 +94,7 @@ namespace wiwa
 			return;
 		}
 
-		const AssetRef shader = engine_assets::imgui_shader();
+		const std::string shader = engine_assets::IMGUI_SHADER;
 		if (m_Shaders->has_failed(shader, ShaderStage::Vertex) || m_Shaders->has_failed(shader, ShaderStage::Pixel))
 		{
 			m_Failed = true;

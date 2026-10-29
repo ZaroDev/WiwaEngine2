@@ -153,6 +153,26 @@ namespace wiwa
 			check(!truncatedAccepted, "a truncated shader payload is rejected");
 		}
 
+		// The catalog survives a round trip, and no truncated copy of it is accepted.
+		{
+			AssetCatalog catalog;
+			const AssetGuid guid = AssetGuid::generate();
+			catalog.Entries.push_back({ "engine/shaders/x.hlsl", guid });
+			catalog.Entries.push_back({ "Assets/models/y.glb", AssetGuid::generate() });
+
+			const std::vector<std::byte> bytes = serialize(catalog);
+			std::optional<AssetCatalog> back = deserialize<AssetCatalog>(bytes);
+			check(back && back->find("engine\\shaders\\x.hlsl") && back->find("engine/shaders/x.hlsl")->Guid == guid, "the catalog round-trips and finds a path");
+			check(back && !back->find("engine/shaders/missing.hlsl"), "the catalog does not find an unknown path");
+
+			bool truncatedAccepted = false;
+			for (size_t length = 0; length < bytes.size(); length++)
+			{
+				truncatedAccepted = truncatedAccepted || deserialize<AssetCatalog>(std::span<const std::byte>(bytes.data(), length)).has_value();
+			}
+			check(!truncatedAccepted, "a truncated catalog is rejected");
+		}
+
 		// 0. an import reports its progress and ends with every item done
 		{
 			Ref<JobProgress> scan = pipeline.scan_async();
@@ -170,7 +190,8 @@ namespace wiwa
 		// 2. the pack holds exactly the Library's bytes
 		PakSource pak(temp / "assets.wpak");
 		check(pak.valid(), "the pack opens");
-		check(pak.get_index().size() == cooked.size(), "the pack has one entry per cooked asset");
+		check(pak.get_index().size() == cooked.size() + 1, "the pack has one entry per cooked asset, and the catalog"); // + the catalog
+		check(pak.contains(CATALOG_GUID), "the pack holds the asset catalog");
 		for (const CookedFile& file : cooked)
 		{
 			std::optional<std::vector<std::byte>> fromPak = pak.read(file.Guid);
@@ -184,6 +205,12 @@ namespace wiwa
 		// 3. every asset loads through the AssetManager reading the pack
 		manager.set_source(CreateScope<PakSource>(temp / "assets.wpak"));
 		{
+			// the engine's own assets are found by path through the packed catalog, no guid involved
+			std::optional<AssetRef> imgui = manager.find_asset("engine/shaders/imgui.hlsl");
+			check(imgui.has_value(), "engine/shaders/imgui.hlsl is found by path in the packed catalog");
+			check(!manager.find_asset("engine/shaders/does_not_exist.hlsl").has_value(), "a path that is not in the catalog is not found");
+			check(manager.find_asset(".\\engine\\shaders\\imgui.hlsl").has_value(), "paths are accepted with backslashes and a leading ./");
+
 			std::vector<std::function<LoadState()>> handles;
 			for (const CookedFile& file : cooked)
 			{

@@ -21,6 +21,7 @@ namespace wiwa
 
 		virtual std::optional<std::vector<std::byte>> read(AssetGuid guid) override;
 		virtual bool contains(AssetGuid guid) const override { return m_Index.contains(guid); }
+		virtual std::optional<std::vector<std::byte>> read_catalog() override;
 
 		const std::unordered_map<AssetGuid, PakEntry>& get_index() const { return m_Index; }
 

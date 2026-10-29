@@ -90,6 +90,49 @@ namespace wiwa
 	void AssetManager::set_source(Scope<IAssetSource> source)
 	{
 		m_Source = std::move(source);
+
+		std::lock_guard<std::mutex> lock(m_CatalogMutex);
+		m_CatalogLoaded = false; // the new source has its own catalog
+	}
+
+	std::optional<AssetRef> AssetManager::find_asset(std::string_view path)
+	{
+		std::lock_guard<std::mutex> lock(m_CatalogMutex);
+
+		if (m_CatalogLoaded)
+		{
+			if (std::optional<AssetRef> found = m_Catalog.find(path))
+			{
+				return found;
+			}
+		}
+
+		// Not known (yet): the catalog is read again, but not more often than every 250 ms.
+		const auto now = std::chrono::steady_clock::now();
+		if (m_CatalogLoaded && now - m_CatalogLoadedAt < std::chrono::milliseconds(250))
+		{
+			return std::nullopt;
+		}
+
+		m_CatalogLoadedAt = now;
+		m_CatalogLoaded = true;
+		m_Catalog = AssetCatalog{};
+		if (m_Source)
+		{
+			if (std::optional<std::vector<std::byte>> bytes = m_Source->read_catalog())
+			{
+				if (std::optional<AssetCatalog> catalog = deserialize<AssetCatalog>(*bytes))
+				{
+					m_Catalog = std::move(*catalog);
+				}
+				else
+				{
+					WI_ASSET_LOG(Error, "The asset catalog is damaged");
+				}
+			}
+		}
+
+		return m_Catalog.find(path);
 	}
 
 	LoadState AssetManager::get_state(AssetGuid resolvedGuid) const

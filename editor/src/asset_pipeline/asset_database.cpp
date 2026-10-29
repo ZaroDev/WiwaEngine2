@@ -3,6 +3,7 @@
 
 #include <fstream>
 
+#include "assets/asset_catalog.h"
 #include "assets/library_source.h"
 #include "assets/pak_format.h"
 
@@ -257,11 +258,69 @@ namespace wiwa
 			}
 		}
 
+		write_catalog();
+
 		const u32 imported = m_Imported.exchange(0);
 		const u32 upToDate = m_UpToDate.exchange(0);
 		const u32 failed = m_Failed.exchange(0);
 		WI_ASSET_LOG(Info, "Asset scan: {0} imported, {1} up to date, {2} failed{3}", imported, upToDate, failed, progress.cancel_requested() ? " (cancelled)" : "");
 		progress.finish(failed == 0 && !progress.cancel_requested());
+	}
+
+	// Library/catalog.wcat: which source path names which asset, so that code can say "engine/shaders/imgui.hlsl" instead of a
+	// guid. The paths start with the name of the source root, as the root was given ("Assets", "engine").
+	void AssetDatabase::write_catalog()
+	{
+		AssetCatalog catalog;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			for (auto& [guidText, entry] : m_ImportCache.items())
+			{
+				const std::optional<AssetGuid> guid = AssetGuid::from_string(guidText);
+				const std::string source = entry.value("source", std::string{});
+				std::error_code error;
+				if (!guid || source.empty() || !std::filesystem::exists(source, error))
+				{
+					continue;
+				}
+
+				for (const SourceRoot& root : m_Roots)
+				{
+					const std::string prefix = key_of(root.Source) + "/";
+					if (source.starts_with(prefix))
+					{
+						std::string name = root.Source.generic_string();
+						while (name.ends_with("/"))
+						{
+							name.pop_back();
+						}
+						catalog.Entries.push_back({ name + "/" + source.substr(prefix.size()), *guid });
+						break;
+					}
+				}
+			}
+		}
+
+		std::sort(catalog.Entries.begin(), catalog.Entries.end(), [](const auto& a, const auto& b) { return a.Path < b.Path; });
+		const std::vector<std::byte> bytes = serialize(catalog);
+
+		// Only written when it changed, so nothing downstream sees a new file for nothing.
+		const std::filesystem::path path = m_LibraryRoot / CATALOG_FILE_NAME;
+		std::vector<std::byte> existing;
+		if (read_file(path, existing) && existing == bytes)
+		{
+			return;
+		}
+
+		std::error_code error;
+		std::filesystem::create_directories(m_LibraryRoot, error);
+		std::filesystem::path temp = path;
+		temp += ".tmp";
+		{
+			std::ofstream file(temp, std::ios::binary | std::ios::trunc);
+			file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+		}
+		std::filesystem::rename(temp, path, error);
 	}
 
 	// The sources whose last import read this file besides their own content.
@@ -370,6 +429,7 @@ namespace wiwa
 		}
 
 		import_source(source, true, force, nullptr);
+		write_catalog(); // a file that is new has a path now
 
 		// Whatever was cooked with this file as an input (a shader that includes it) is checked again; its record holds the
 		// hash of this file, so it is cooked again only if the content really changed.

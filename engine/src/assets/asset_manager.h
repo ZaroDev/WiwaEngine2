@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -8,6 +9,7 @@
 #include <core/job_progress.h>
 #include <core/module.h>
 
+#include "asset_catalog.h"
 #include "asset_source.h"
 #include "handle.h"
 #include "job_system.h"
@@ -42,6 +44,12 @@ namespace wiwa
 		// finishes when every one has either loaded or failed (Succeeded only if none failed). The total grows as dependencies
 		// are found. The assets stay cached until unload_unused(); load<T>() them afterwards to get at the data.
 		Ref<JobProgress> preload(std::span<const AssetRef> refs);
+
+		// The asset a source path names ("engine/shaders/imgui.hlsl", "Assets/models/torus_knot.glb"), from the catalog of the
+		// current source. nullopt if there is no such asset (yet: the editor writes the catalog when its import has finished,
+		// so a caller that needs an asset early asks again later; a miss reads the catalog again at most every 250 ms).
+		// Thread-safe.
+		std::optional<AssetRef> find_asset(std::string_view path);
 
 		LoadState get_state(AssetGuid resolvedGuid) const;
 
@@ -89,6 +97,10 @@ namespace wiwa
 		void fail(const Ref<AssetSlot>& slot, const char* why);
 
 		Scope<IAssetSource> m_Source{};
+		AssetCatalog m_Catalog{};
+		std::mutex m_CatalogMutex{};
+		std::chrono::steady_clock::time_point m_CatalogLoadedAt{};
+		bool m_CatalogLoaded = false;
 		Scope<JobSystem> m_Jobs{};
 
 		mutable std::mutex m_Mutex{};

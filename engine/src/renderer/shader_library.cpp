@@ -26,6 +26,9 @@ namespace wiwa
 			default: return "pixel";
 			}
 		}
+
+		// A path that is still not in the catalog after this long is probably a typo: say so once.
+		constexpr auto UNKNOWN_PATH_WARNING_DELAY = std::chrono::seconds(10);
 	}
 
 	ShaderLibrary::ShaderLibrary(nvrhi::IDevice* device, GraphicsApi api, AssetManager* assets)
@@ -33,12 +36,12 @@ namespace wiwa
 	{
 	}
 
-	ShaderLibrary::Entry* ShaderLibrary::find(AssetRef shader, ShaderStage stage)
+	ShaderLibrary::Entry* ShaderLibrary::find(const std::string& path, ShaderStage stage)
 	{
-		const AssetGuid guid = shader.resolved();
+		const std::string normalized = AssetCatalog::normalize(path);
 		for (Entry& entry : m_Entries)
 		{
-			if (entry.Stage == stage && entry.Ref.resolved() == guid)
+			if (entry.Stage == stage && entry.Path == normalized)
 			{
 				return &entry;
 			}
@@ -46,34 +49,34 @@ namespace wiwa
 		return nullptr;
 	}
 
-	const ShaderLibrary::Entry* ShaderLibrary::find(AssetRef shader, ShaderStage stage) const
+	const ShaderLibrary::Entry* ShaderLibrary::find(const std::string& path, ShaderStage stage) const
 	{
-		return const_cast<ShaderLibrary*>(this)->find(shader, stage);
+		return const_cast<ShaderLibrary*>(this)->find(path, stage);
 	}
 
-	void ShaderLibrary::request(AssetRef shader, ShaderStage stage)
+	void ShaderLibrary::request(const std::string& path, ShaderStage stage)
 	{
-		if (find(shader, stage) != nullptr)
+		if (find(path, stage) != nullptr)
 		{
 			return;
 		}
 
 		Entry entry;
-		entry.Ref = shader;
+		entry.Path = AssetCatalog::normalize(path);
 		entry.Stage = stage;
-		entry.Pending = m_Assets->load<ShaderData>(shader);
-		m_Entries.push_back(std::move(entry));
+		entry.Requested = std::chrono::steady_clock::now();
+		m_Entries.push_back(std::move(entry)); // resolved and loaded by update()
 	}
 
-	nvrhi::IShader* ShaderLibrary::get(AssetRef shader, ShaderStage stage) const
+	nvrhi::IShader* ShaderLibrary::get(const std::string& path, ShaderStage stage) const
 	{
-		const Entry* entry = find(shader, stage);
+		const Entry* entry = find(path, stage);
 		return entry ? entry->Shader.Get() : nullptr;
 	}
 
-	bool ShaderLibrary::has_failed(AssetRef shader, ShaderStage stage) const
+	bool ShaderLibrary::has_failed(const std::string& path, ShaderStage stage) const
 	{
-		const Entry* entry = find(shader, stage);
+		const Entry* entry = find(path, stage);
 		return entry != nullptr && entry->Failed;
 	}
 
@@ -81,7 +84,7 @@ namespace wiwa
 	{
 		for (Entry& entry : m_Entries)
 		{
-			if (entry.Ref.resolved() == resolvedGuid)
+			if (entry.Ref.valid() && entry.Ref.resolved() == resolvedGuid)
 			{
 				entry.Pending = m_Assets->load<ShaderData>(entry.Ref);
 			}
@@ -92,6 +95,20 @@ namespace wiwa
 	{
 		for (Entry& entry : m_Entries)
 		{
+			if (!entry.Ref.valid())
+			{
+				if (std::optional<AssetRef> ref = m_Assets->find_asset(entry.Path))
+				{
+					entry.Ref = *ref;
+					entry.Pending = m_Assets->load<ShaderData>(entry.Ref);
+				}
+				else if (!entry.WarnedUnknown && std::chrono::steady_clock::now() - entry.Requested > UNKNOWN_PATH_WARNING_DELAY)
+				{
+					entry.WarnedUnknown = true;
+					WI_SHADER_LOG(Error, "{0} is not in the asset catalog (is the path right, and was the shader imported?)", entry.Path);
+				}
+			}
+
 			if (!entry.Pending)
 			{
 				continue;
@@ -102,7 +119,7 @@ namespace wiwa
 			case LoadState::Loading:
 				break;
 			case LoadState::Failed:
-				WI_SHADER_LOG(Error, "Shader {0} could not be loaded{1}", entry.Ref.Guid.to_string(), entry.Shader ? ", keeping the previous version" : "");
+				WI_SHADER_LOG(Error, "Shader {0} could not be loaded{1}", entry.Path, entry.Shader ? ", keeping the previous version" : "");
 				entry.Failed = entry.Shader == nullptr;
 				entry.Pending = {};
 				break;

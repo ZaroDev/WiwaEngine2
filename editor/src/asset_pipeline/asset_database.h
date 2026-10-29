@@ -65,7 +65,8 @@ namespace wiwa
 
 		void scan_impl(JobProgress& progress);
 		std::vector<std::string> find_dependents(const std::string& sourceKey) const;
-		u32 remove_orphans(); // returns how many sources/files were cleaned up
+		u32 remove_orphans();
+		void write_catalog(); // returns how many sources/files were cleaned up
 		IImporter* find_importer(const std::filesystem::path& source) const;
 		std::optional<AssetRef> import_source(const std::filesystem::path& source, bool recheck, bool force, const nlohmann::json* defaultSettings);
 		std::optional<AssetRef> do_import(const std::filesystem::path& source, const std::string& key, bool force, const nlohmann::json* defaultSettings, bool& failed);

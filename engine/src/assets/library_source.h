@@ -14,6 +14,7 @@ namespace wiwa
 
 		virtual std::optional<std::vector<std::byte>> read(AssetGuid guid) override;
 		virtual bool contains(AssetGuid guid) const override;
+		virtual std::optional<std::vector<std::byte>> read_catalog() override;
 
 		// Where a cooked asset of the user's Assets/ is; engine assets are in <root>/engine (see locate).
 		std::filesystem::path path_of(AssetGuid guid) const;
@@ -22,6 +23,8 @@ namespace wiwa
 		const std::filesystem::path& get_root() const { return m_Root; }
 
 	private:
+		static std::optional<std::vector<std::byte>> read_file(const std::filesystem::path& path);
+
 		std::filesystem::path m_Root;
 	};
 }

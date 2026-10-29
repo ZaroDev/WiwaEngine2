@@ -1,14 +1,8 @@
 #pragma once
 
-#include <assets/asset_guid.h>
-
-// The assets the engine itself relies on, by the guids of their .meta files (engine/ source root). Those .meta files are
-// committed and must not be regenerated or deleted: the guid in them is the one named here.
+// The assets the engine itself relies on, named by the path of their source in the engine/ source root. The asset catalog
+// (see assets/asset_catalog.h) turns a path into the asset; no guid is written in code.
 namespace wiwa::engine_assets
 {
-	// engine/shaders/imgui.hlsl
-	inline AssetRef imgui_shader()
-	{
-		return AssetRef{ AssetGuid{ 0x41caf8c4396f32d8ull, 0xafc8d91acc825038ull }, 0 };
-	}
+	inline constexpr const char* IMGUI_SHADER = "engine/shaders/imgui.hlsl";
 }

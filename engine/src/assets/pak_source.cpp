@@ -3,6 +3,8 @@
 
 #include <lz4.h>
 
+#include "asset_catalog.h"
+
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
 namespace wiwa
@@ -63,6 +65,11 @@ namespace wiwa
 		}
 
 		m_Valid = true;
+	}
+
+	std::optional<std::vector<std::byte>> PakSource::read_catalog()
+	{
+		return read(CATALOG_GUID);
 	}
 
 	std::optional<std::vector<std::byte>> PakSource::read(AssetGuid guid)
