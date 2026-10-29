@@ -124,11 +124,16 @@ namespace wiwa
 		// Renders the given number of frames (at least enough for what was added to load), then reads the image. False when a frame failed.
 		bool render(u32 frames = 6)
 		{
-			for (u32 i = 0; i < 3000; i++)
+			const auto started = std::chrono::steady_clock::now();
+			for (u32 i = 0; i < 20000; i++)
 			{
 				if (!frame())
 				{
 					return false;
+				}
+				if (std::chrono::steady_clock::now() - started > std::chrono::seconds(40))
+				{
+					break;
 				}
 				// An environment, and the BRDF table that comes with it, load on other threads: wait for them (a few ms per frame).
 				bool environmentBusy = false;
@@ -137,13 +142,23 @@ namespace wiwa
 					const EnvironmentCache::Stats stats = m_Renderer.get_environments().get_stats();
 					environmentBusy = (stats.Pending > 0 || !stats.BrdfReady) && stats.Failed == 0;
 				}
+				if (scene().settings().Source == EnvironmentSource::Atmosphere)
+				{
+					const EnvironmentCache& environments = m_Renderer.get_environments();
+					environmentBusy = environments.atmosphere() == nullptr || environments.atmosphere_builder().building();
+					if (environments.atmosphere_status().rfind("failed", 0) == 0)
+					{
+						environmentBusy = false;
+					}
+				}
 				if (i + 1 >= frames && cache().get_stats().Pending == 0 && !environmentBusy)
 				{
 					break;
 				}
 				if (environmentBusy)
 				{
-					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+					// a build of the atmosphere takes seconds: wait at about the pace of a display, not in a tight loop of presents
+					std::this_thread::sleep_for(std::chrono::milliseconds(scene().settings().Source == EnvironmentSource::Atmosphere ? 16 : 2));
 				}
 			}
 			return read();

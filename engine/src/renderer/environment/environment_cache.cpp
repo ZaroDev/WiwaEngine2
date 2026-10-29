@@ -22,6 +22,7 @@ namespace wiwa
 		: m_Device(device)
 		, m_Assets(assets)
 		, m_Uploads(uploads)
+		, m_Atmosphere(jobs)
 	{
 		if (jobs != nullptr)
 		{
@@ -158,9 +159,22 @@ namespace wiwa
 		m_BrdfLut = std::move(texture);
 	}
 
+	void EnvironmentCache::set_atmosphere_wanted(const AtmosphereDescription* wanted)
+	{
+		if (wanted != nullptr)
+		{
+			m_AtmosphereWanted = *wanted;
+		}
+		else
+		{
+			m_AtmosphereWanted.reset();
+		}
+	}
+
 	void EnvironmentCache::update()
 	{
 		finish_brdf();
+		update_atmosphere(m_AtmosphereWanted ? &*m_AtmosphereWanted : nullptr);
 
 		for (size_t i = 0; i < m_Pending.size();)
 		{
@@ -250,6 +264,52 @@ namespace wiwa
 		}
 	}
 
+	void EnvironmentCache::update_atmosphere(const AtmosphereDescription* wanted)
+	{
+		if (wanted != nullptr && (!m_AtmosphereRequested || !atmosphere_is_close(*m_AtmosphereRequested, *wanted)))
+		{
+			m_AtmosphereRequested = *wanted;
+			m_Atmosphere.request(*wanted);
+		}
+
+		if (std::optional<AtmosphereBuilder::Build> build = m_Atmosphere.poll())
+		{
+			m_AtmosphereWaiting = std::move(build);
+		}
+		m_AtmosphereFailed = !m_Atmosphere.error().empty();
+
+		if (m_AtmosphereWaiting)
+		{
+			size_t bytes = 0;
+			for (const std::vector<u16>& mip : m_AtmosphereWaiting->Data.Mips)
+			{
+				bytes += mip.size() * sizeof(u16);
+			}
+			if (m_Uploads->has_room(bytes))
+			{
+				if (!upload(m_AtmosphereEntry, m_AtmosphereWaiting->Data))
+				{
+					WI_ENV_LOG(Error, "the GPU refused the atmosphere cube: the previous environment stays");
+					m_AtmosphereFailed = true;
+				}
+				m_AtmosphereWaiting.reset();
+			}
+		}
+	}
+
+	std::string EnvironmentCache::atmosphere_status() const
+	{
+		if (m_AtmosphereFailed)
+		{
+			return "failed: " + (m_Atmosphere.error().empty() ? std::string("the GPU refused the cube") : m_Atmosphere.error());
+		}
+		if (!m_AtmosphereRequested)
+		{
+			return "none";
+		}
+		return m_Atmosphere.building() || m_AtmosphereWaiting ? (m_AtmosphereEntry.Uploaded ? "ready (rebuilding)" : "building") : "ready";
+	}
+
 	AssetRef EnvironmentCache::add_inline_environment(EnvironmentData environment)
 	{
 		AssetRef ref;
@@ -273,6 +333,7 @@ namespace wiwa
 		stats.Pending = static_cast<u32>(m_Pending.size());
 		stats.Failed = m_FailedCount;
 		stats.Reloads = m_Reloads;
+		stats.AtmosphereBuilds = m_Atmosphere.builds();
 		stats.BrdfReady = m_BrdfLut != nullptr;
 		return stats;
 	}

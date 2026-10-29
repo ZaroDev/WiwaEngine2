@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "../ibl/atmosphere_environment.h"
 #include "cascade_math.h"
 #include "frustum_culler.h"
 
@@ -194,9 +195,17 @@ namespace wiwa
 
 		// The environment of the scene, when it is ready; until then (and without one) the hemisphere ambient lights the scene.
 		m_FrameEnvironment = nullptr;
+		m_SkyKind = SkyKind::None;
+		bool useAtmosphere = false;
 		if (m_Environments != nullptr && m_Settings.Source == EnvironmentSource::File)
 		{
 			m_FrameEnvironment = m_Environments->get(m_Settings.EnvironmentAsset);
+			m_SkyKind = m_FrameEnvironment != nullptr ? SkyKind::Environment : SkyKind::None;
+		}
+		else if (m_Environments != nullptr && m_Settings.Source == EnvironmentSource::Atmosphere)
+		{
+			useAtmosphere = true;
+			m_SkyKind = SkyKind::Atmosphere; // drawn analytically at once; the ambient light follows when its build is uploaded
 		}
 		if (m_FrameEnvironment != nullptr)
 		{
@@ -262,6 +271,30 @@ namespace wiwa
 			}
 		}
 		constants.ClusterParams.w = m_ClusterCulling ? 0.0f : 1.0f;
+		if (useAtmosphere)
+		{
+			const AtmosphereDescription atmosphere = make_atmosphere_description(m_Settings.Atmosphere, sunLight != nullptr ? -sunLight->Direction : glm::vec3(0.0f));
+			m_Environments->set_atmosphere_wanted(&atmosphere); // built and uploaded by the next update()
+			m_FrameEnvironment = m_Environments->atmosphere();
+			constants.AtmosphereA = glm::vec4(atmosphere.Sky.RayleighScale, atmosphere.Sky.MieScale, atmosphere.Sky.OzoneScale, atmosphere.Sky.MieAnisotropy);
+			constants.AtmosphereB = glm::vec4(atmosphere.Sky.MultipleScattering, atmosphere.Sky.ObserverAltitude, 24.0f, 8.0f);
+			constants.AtmosphereGround = glm::vec4(atmosphere.Sky.GroundAlbedo, atmosphere.DiscBoost);
+			constants.AtmosphereSun = glm::vec4(atmosphere.SunDirection, 0.0f);
+			constants.AtmosphereIrradiance = glm::vec4(atmosphere.SunIrradiance, atmosphere.Brightness);
+			if (m_FrameEnvironment != nullptr)
+			{
+				for (int i = 0; i < 9; i++)
+				{
+					constants.EnvSH[i] = m_FrameEnvironment->SH[i];
+				}
+				constants.EnvParams = glm::vec4(1.0f, static_cast<float>(m_FrameEnvironment->MipCount - 1), m_Settings.Brightness * m_Settings.AmbientIntensity,
+					m_Environments->brdf_lut() != nullptr ? 1.0f : 0.0f);
+			}
+		}
+		else if (m_Environments != nullptr)
+		{
+			m_Environments->set_atmosphere_wanted(nullptr);
+		}
 		constants.LightInfo = glm::uvec4(static_cast<u32>(m_Lights.size()), 0, 0, 0);
 
 		const std::vector<RenderInstance>& allInstances = scene.instances();

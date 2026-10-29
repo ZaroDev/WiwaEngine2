@@ -12,5 +12,6 @@ namespace wiwa::engine_assets
 	inline constexpr const char* FORWARD_SHADER = "engine/shaders/forward.hlsl";
 	inline constexpr const char* BLIT_SHADER = "engine/shaders/blit.hlsl";
 	inline constexpr const char* SKY_SHADER = "engine/shaders/sky.hlsl";
+	inline constexpr const char* SKY_ATMOSPHERE_SHADER = "engine/shaders/sky_atmosphere.hlsl";
 	inline constexpr const char* RESOLVE_SHADER = "engine/shaders/resolve.hlsl";
 }

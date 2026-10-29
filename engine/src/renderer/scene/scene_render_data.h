@@ -92,6 +92,11 @@ namespace wiwa
 		glm::vec4 EnvParams{ 0.0f };      // x = 1 when an environment lights the scene, y = highest mip, z = brightness * ambient intensity, w = 1 when the BRDF table exists
 		glm::vec4 EnvRotation{ 1.0f, 0.0f, 1.0f, 0.0f }; // cos, sin of the rotation about +Y, the brightness of the sky seen
 		glm::mat4 InverseViewProjection{ 1.0f };
+		glm::vec4 AtmosphereA{ 1.0f, 1.0f, 1.0f, 0.8f }; // Rayleigh scale, Mie scale, ozone scale, Mie anisotropy
+		glm::vec4 AtmosphereB{ 0.6f, 0.05f, 24.0f, 8.0f }; // multiple scattering, observer altitude (km), steps along the view ray, steps towards the sun
+		glm::vec4 AtmosphereGround{ 0.05f, 0.08f, 0.1f, 120.0f }; // ground albedo, sun disc boost
+		glm::vec4 AtmosphereSun{ 0.0f, 1.0f, 0.0f, 0.0f };        // towards the sun
+		glm::vec4 AtmosphereIrradiance{ 3.4f, 3.4f, 3.4f, 3.5f }; // the sun outside the atmosphere, sky brightness
 	};
 	static_assert(sizeof(FrameConstants) % 16 == 0);
 
@@ -124,6 +129,9 @@ namespace wiwa
 		bool has_camera() const { return m_HasCamera; }
 		// An environment (a file's, ready) lights the scene this frame.
 		bool has_environment() const { return m_FrameEnvironment != nullptr; }
+		// What the sky pass draws behind the scene this frame.
+		enum class SkyKind { None, Environment, Atmosphere };
+		SkyKind sky_kind() const { return m_SkyKind; }
 		ViewportTarget* viewport() const { return m_Viewport; }
 		GpuResourceCache* cache() const { return m_Cache; }
 		const RenderScene* scene() const { return m_Scene; }
@@ -204,6 +212,7 @@ namespace wiwa
 		EnvironmentCache* m_Environments = nullptr;
 		const GpuEnvironment* m_FrameEnvironment = nullptr; // what build() chose for this frame (null: the hemisphere)
 		bool m_EnvironmentDummiesWritten = false;
+		SkyKind m_SkyKind = SkyKind::None;
 		const nvrhi::ITexture* m_BoundCube = nullptr;
 		const nvrhi::ITexture* m_BoundBrdf = nullptr;
 		bool m_DummiesCleared = false;

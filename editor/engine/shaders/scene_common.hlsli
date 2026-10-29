@@ -52,6 +52,11 @@ cbuffer FrameBuffer : register(b0)
 	float4 EnvParams;       // x = 1 when an environment lights the scene, y = highest mip of the cube, z = brightness * ambient intensity, w = 1 when the BRDF table exists
 	float4 EnvRotation;     // x = cos, y = sin of the rotation of the environment about +Y, z = the brightness of the sky seen
 	float4x4 InverseViewProjection;
+	float4 AtmosphereA;           // Rayleigh scale, Mie scale, ozone scale, Mie anisotropy
+	float4 AtmosphereB;           // multiple scattering, observer altitude (km), steps along the view ray, steps towards the sun
+	float4 AtmosphereGround;      // ground albedo, sun disc boost
+	float4 AtmosphereSun;         // towards the sun
+	float4 AtmosphereIrradiance;  // the sun outside the atmosphere, sky brightness
 };
 
 // The cluster grid the lights are sorted into: screen tiles times exponential depth slices. Mirrors the constants in C++.
