@@ -67,6 +67,29 @@ namespace wiwa
 		m_Exposure = make_buffer(1, "Viewport exposure");
 		m_Histogram = make_buffer(256, "Viewport luminance histogram");
 
+		nvrhi::TextureDesc ao;
+		ao.width = width;
+		ao.height = height;
+		ao.format = nvrhi::Format::R8_UNORM;
+		ao.isUAV = true; // written by compute shaders
+		ao.initialState = nvrhi::ResourceStates::ShaderResource;
+		ao.keepInitialState = true;
+		ao.debugName = "AO raw";
+		m_AoRaw = device->createTexture(ao);
+		ao.debugName = "AO blurred";
+		m_Ao = device->createTexture(ao);
+
+		// The distances are halvings of the size down to 1 pixel, at most MAX_AO_DEPTH_LEVELS.
+		m_AoDepthLevels = 1;
+		while (m_AoDepthLevels < MAX_AO_DEPTH_LEVELS && (std::max(width, height) >> m_AoDepthLevels) > 0)
+		{
+			m_AoDepthLevels++;
+		}
+		ao.format = nvrhi::Format::R32_FLOAT;
+		ao.mipLevels = m_AoDepthLevels;
+		ao.debugName = "AO distances";
+		m_AoDistance = device->createTexture(ao);
+
 		bool bloomOk = true;
 		for (u32 level = 0; level < MAX_BLOOM_MIPS; level++)
 		{
@@ -106,7 +129,7 @@ namespace wiwa
 		m_Ldr = device->createTexture(ldr);
 		ldr.debugName = "Viewport tonemapped (before FXAA)";
 		m_PreFxaa = device->createTexture(ldr);
-		if (!m_Hdr || !m_Depth || !m_Ldr || !m_PreFxaa || !m_Normal || !m_Exposure || !m_Histogram || !bloomOk)
+		if (!m_Hdr || !m_Depth || !m_Ldr || !m_PreFxaa || !m_Normal || !m_Exposure || !m_Histogram || !bloomOk || !m_AoRaw || !m_Ao || !m_AoDistance)
 		{
 			WI_LOG(Error, "Renderer", "could not create the {0}x{1} viewport targets", width, height);
 			destroy();
@@ -164,6 +187,9 @@ namespace wiwa
 		{
 			texture = nullptr;
 		}
+		m_AoDistance = nullptr;
+		m_AoRaw = nullptr;
+		m_Ao = nullptr;
 		m_Exposure = nullptr;
 		m_Histogram = nullptr;
 		m_Hdr = nullptr;

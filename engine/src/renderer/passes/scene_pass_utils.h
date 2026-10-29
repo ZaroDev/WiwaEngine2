@@ -27,8 +27,8 @@ namespace wiwa::scene_pass
 		nvrhi::IShader* pixelShader, const std::vector<nvrhi::IBindingLayout*>& layouts, nvrhi::IFramebuffer* framebuffer, const PipelineOptions& options);
 
 	// Draws the items: one indexed draw each, with the state set again only when the pipeline, the mesh page or (with bindMaterial)
-	// the material changes. singleSided / doubleSided are the pipelines for the two cull modes; frameBindings is set 0.
+	// the material changes. extraBindings, if given, is the set after the material's. singleSided / doubleSided are the pipelines for the two cull modes; frameBindings is set 0.
 	void draw_items(nvrhi::ICommandList* commandList, const SceneRenderData& data, nvrhi::IFramebuffer* framebuffer, const nvrhi::Viewport& viewport,
 		nvrhi::IBindingSet* frameBindings, const std::vector<DrawItem>& items, nvrhi::IGraphicsPipeline* singleSided, nvrhi::IGraphicsPipeline* doubleSided,
-		bool bindMaterial);
+		bool bindMaterial, nvrhi::IBindingSet* extraBindings = nullptr);
 }

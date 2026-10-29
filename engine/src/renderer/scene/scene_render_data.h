@@ -127,6 +127,13 @@ namespace wiwa
 		// There is a viewport target to draw into (the passes draw the background even when there is nothing else).
 		bool active() const { return m_Active; }
 		bool has_camera() const { return m_HasCamera; }
+		// The scene has ambient occlusion on this frame: the AO pass writes ViewportTarget::ao() and the forward pass reads it (else a
+		// white stand-in).
+		bool ao_active() const { return m_AoActive; }
+		// The forward pass reads the occlusion through a layout of its own (one SRV, t15): the frame layout's registers already span
+		// 1..9, and NVRHI rejects layouts whose register ranges overlap those of the material layout (t10..t13).
+		nvrhi::IBindingLayout* ao_layout() const { return m_AoLayout; }
+		nvrhi::IBindingSet* ao_bindings() const { return m_AoBindings; }
 		// An environment (a file's, ready) lights the scene this frame.
 		bool has_environment() const { return m_FrameEnvironment != nullptr; }
 		// What the sky pass draws behind the scene this frame.
@@ -180,6 +187,7 @@ namespace wiwa
 		nvrhi::IDevice* m_Device = nullptr;
 		bool m_Active = false;
 		bool m_HasCamera = false;
+		bool m_AoActive = false;
 		ViewportTarget* m_Viewport = nullptr;
 		GpuResourceCache* m_Cache = nullptr;
 		const RenderScene* m_Scene = nullptr;
@@ -210,12 +218,16 @@ namespace wiwa
 		nvrhi::SamplerHandle m_EnvironmentSampler{};
 		nvrhi::TextureHandle m_DummyCube{};
 		nvrhi::TextureHandle m_DummyBrdf{};
+		nvrhi::TextureHandle m_DummyAo{};    // 1x1, white: no occlusion
+		nvrhi::BindingLayoutHandle m_AoLayout{};
+		nvrhi::BindingSetHandle m_AoBindings{};
 		EnvironmentCache* m_Environments = nullptr;
 		const GpuEnvironment* m_FrameEnvironment = nullptr; // what build() chose for this frame (null: the hemisphere)
 		bool m_EnvironmentDummiesWritten = false;
 		SkyKind m_SkyKind = SkyKind::None;
 		const nvrhi::ITexture* m_BoundCube = nullptr;
 		const nvrhi::ITexture* m_BoundBrdf = nullptr;
+		const nvrhi::ITexture* m_BoundAo = nullptr;
 		bool m_DummiesCleared = false;
 		u32 m_ShadowGeneration = 0;
 		const nvrhi::ITexture* m_BoundCascades = nullptr;

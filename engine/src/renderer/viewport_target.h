@@ -15,6 +15,7 @@ namespace wiwa
 	public:
 		static constexpr u32 MAX_SIZE = 16384;
 		static constexpr u32 MAX_BLOOM_MIPS = 6;
+		static constexpr u32 MAX_AO_DEPTH_LEVELS = 5;
 
 		// The size a request is turned into: at least 1, at most MAX_SIZE.
 		static u32 clamp_dimension(u32 size);
@@ -34,6 +35,12 @@ namespace wiwa
 		// luminance histogram it is measured from.
 		nvrhi::IBuffer* exposure_buffer() const { return m_Exposure; }
 		nvrhi::IBuffer* histogram_buffer() const { return m_Histogram; }
+		// Ambient occlusion: the distance along the view direction of every pixel with a mip chain (R32F, ao_depth_levels() levels),
+		// the raw occlusion and the blurred one (R8, 1 = open, 0 = blocked) that the forward pass reads. Written by compute shaders.
+		nvrhi::ITexture* ao_distance() const { return m_AoDistance; }
+		nvrhi::ITexture* ao_raw() const { return m_AoRaw; }
+		nvrhi::ITexture* ao() const { return m_Ao; }
+		u32 ao_depth_levels() const { return m_AoDepthLevels; }
 		// The bloom chain: down(i) is half the size of the level before it (the first is half the viewport), up(i) is the spread-back
 		// level i. up(0) is the finished bloom. Level sizes are at least 1x1. RGBA16F, written by compute shaders.
 		nvrhi::ITexture* bloom_down(u32 level) const { return m_BloomDown[level]; }
@@ -58,6 +65,10 @@ namespace wiwa
 		nvrhi::TextureHandle m_Hdr{};
 		nvrhi::TextureHandle m_Depth{};
 		nvrhi::TextureHandle m_Ldr{};
+		nvrhi::TextureHandle m_AoDistance{};
+		nvrhi::TextureHandle m_AoRaw{};
+		nvrhi::TextureHandle m_Ao{};
+		u32 m_AoDepthLevels = 1;
 		nvrhi::TextureHandle m_BloomDown[MAX_BLOOM_MIPS]{};
 		nvrhi::TextureHandle m_BloomUp[MAX_BLOOM_MIPS - 1]{};
 		nvrhi::BufferHandle m_Exposure{};

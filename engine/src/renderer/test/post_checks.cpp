@@ -74,7 +74,7 @@ namespace wiwa
 			return settings;
 		}
 
-		// The octahedral mapping of scene_common.hlsli.
+		// The octahedral mapping of Common.hlsli.
 		glm::vec2 octahedral_encode(glm::vec3 n)
 		{
 			n /= std::abs(n.x) + std::abs(n.y) + std::abs(n.z);
@@ -139,6 +139,25 @@ namespace wiwa
 				*encoded = e;
 			}
 			return true;
+		}
+
+		// A floor and a wall that meet in a crease, seen from the front and above, with a bit of ambient light.
+		void add_corner(SceneTester& test)
+		{
+			const AssetRef material = test.add_material(test.color_material(glm::vec3(0.8f)));
+			test.add_instance(test.add_mesh(make_test_box(glm::vec3(3.0f, 0.02f, 3.0f), material)), glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f)));
+			test.add_instance(test.add_mesh(make_test_box(glm::vec3(3.0f, 1.5f, 0.02f), material)), glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.5f, -1.0f)));
+			test.set_camera(glm::vec3(0.0f, 1.0f, 4.0f), glm::vec3(0.0f, -0.5f, -1.0f));
+		}
+
+		SceneSettings ao_settings(bool enabled)
+		{
+			SceneSettings settings = dark();
+			settings.AmbientIntensity = 1.0f;
+			settings.Ao.Enabled = enabled;
+			settings.Ao.Radius = 1.5f;
+			settings.Ao.Power = 2.5f;
+			return settings;
 		}
 
 		// Renders an emissive gray cube with the tonemap settings and returns the linear value that was displayed.
@@ -463,6 +482,89 @@ namespace wiwa
 				context.check(encoded == glm::vec2(0.0f), "the cut-out half writes no normal");
 				context.check(read_normal(context, test, solid.x, solid.y, normal, &encoded), "read the solid half");
 				context.check(glm::length(normal - glm::vec3(0.7071f, 0.0f, 0.7071f)) < 0.03f, "the solid half writes its normal");
+			});
+
+		register_render_check("ao_corner_darker", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				add_corner(test);
+				const glm::ivec2 crease = test.to_pixel(glm::vec3(0.0f, -0.98f, -0.9f));
+				const glm::ivec2 open = test.to_pixel(glm::vec3(0.0f, -0.98f, 1.2f));
+
+				test.scene().set_settings(ao_settings(false));
+				context.check(test.render(), "render without AO");
+				const int creaseOff = SceneTester::luma(test.pixel(crease));
+				const int openOff = SceneTester::luma(test.pixel(open));
+
+				test.scene().set_settings(ao_settings(true));
+				context.check(test.render(), "render with AO");
+				const int creaseOn = SceneTester::luma(test.pixel(crease));
+				const int openOn = SceneTester::luma(test.pixel(open));
+				WI_LOG(Info, "RenderTest", "ao_corner_darker crease {0} -> {1}, open floor {2} -> {3}", creaseOff, creaseOn, openOff, openOn);
+				context.check(creaseOff > 20, "the crease is lit by the ambient light");
+				context.check(creaseOn < creaseOff * 85 / 100, "the crease is darker with AO");
+				context.check(std::abs(openOn - openOff) <= 8 && creaseOff - creaseOn > 5 * std::abs(openOn - openOff), "open floor is hardly darkened, the crease clearly is");
+			});
+
+		register_render_check("ao_off_equals_baseline", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				add_corner(test);
+				test.scene().set_settings(ao_settings(false));
+				context.check(test.render(), "render without AO");
+				const std::vector<u8> baseline = test.pixels();
+
+				test.scene().set_settings(ao_settings(true));
+				context.check(test.render(), "render with AO");
+				context.check(SceneTester::max_difference(baseline, test.pixels()) > 10, "AO changes the image");
+
+				test.scene().set_settings(ao_settings(false));
+				context.check(test.render(), "render without AO again");
+				context.check(SceneTester::max_difference(baseline, test.pixels()) == 0, "turning it off gives the baseline back, bit for bit");
+			});
+
+		register_render_check("ao_direct_light_untouched", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				add_corner(test);
+				test.add_light(test.sun(glm::vec3(0.0f, -1.0f, -0.3f)));
+				const glm::ivec2 crease = test.to_pixel(glm::vec3(0.0f, -0.98f, -0.9f));
+
+				SceneSettings off = ao_settings(false);
+				off.AmbientIntensity = 0.0f;
+				test.scene().set_settings(off);
+				context.check(test.render(), "render without AO");
+				const glm::ivec3 without = test.pixel(crease);
+
+				SceneSettings on = ao_settings(true);
+				on.AmbientIntensity = 0.0f;
+				test.scene().set_settings(on);
+				context.check(test.render(), "render with AO");
+				const glm::ivec3 with = test.pixel(crease);
+				WI_LOG(Info, "RenderTest", "ao_direct_light_untouched ({0}, {1}, {2}) -> ({3}, {4}, {5})", without.r, without.g, without.b, with.r, with.g, with.b);
+				context.check(SceneTester::luma(without) > 20, "the crease is lit by the sun");
+				context.check(without == with, "direct light is not occluded");
+			});
+
+		register_render_check("ao_scene_swap", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				add_corner(test);
+				test.scene().set_settings(ao_settings(false));
+				context.check(test.render(), "render without AO");
+				const std::vector<u8> baseline = test.pixels();
+
+				test.scene().set_settings(ao_settings(true));
+				context.check(test.render(), "render with AO");
+
+				// another scene with the same geometry and no AO: nothing of the old occlusion is left
+				SceneDelta reset;
+				reset.Reset = true;
+				reset.Settings = ao_settings(false);
+				test.scene().apply(std::move(reset));
+				add_corner(test);
+				context.check(test.render(), "render the other scene");
+				context.check(SceneTester::max_difference(baseline, test.pixels()) == 0, "the new scene shows no occlusion from the old one");
 			});
 	}
 }

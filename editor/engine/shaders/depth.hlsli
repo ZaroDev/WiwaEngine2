@@ -13,7 +13,7 @@ struct DepthVertexOutput
 // What the prepass writes besides depth: the world normal, facing the viewer, octahedral encoded.
 float2 DepthNormal(DepthVertexOutput input, bool frontFace)
 {
-	return EncodeOctahedral(frontFace ? input.Normal : -input.Normal);
+	return OctahedralEncode(frontFace ? input.Normal : -input.Normal);
 }
 
 DepthVertexOutput DepthVertex(MeshVertexInput input)

@@ -59,7 +59,7 @@ namespace wiwa::scene_pass
 
 	void draw_items(nvrhi::ICommandList* commandList, const SceneRenderData& data, nvrhi::IFramebuffer* framebuffer, const nvrhi::Viewport& viewport,
 		nvrhi::IBindingSet* frameBindings, const std::vector<DrawItem>& items, nvrhi::IGraphicsPipeline* singleSided, nvrhi::IGraphicsPipeline* doubleSided,
-		bool bindMaterial)
+		bool bindMaterial, nvrhi::IBindingSet* extraBindings)
 	{
 		if (items.empty() || frameBindings == nullptr)
 		{
@@ -96,6 +96,10 @@ namespace wiwa::scene_pass
 				if (bindMaterial)
 				{
 					state.addBindingSet(cache.get_material_bindings(item.Material));
+				}
+				if (extraBindings != nullptr)
+				{
+					state.addBindingSet(extraBindings);
 				}
 
 				nvrhi::VertexBufferBinding vertexBinding;

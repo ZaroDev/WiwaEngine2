@@ -12,6 +12,7 @@
 #include "passes/forward_pass.h"
 #include "passes/imgui_pass.h"
 #include "passes/light_cull_pass.h"
+#include "passes/ao_pass.h"
 #include "passes/bloom_pass.h"
 #include "passes/exposure_pass.h"
 #include "passes/fxaa_pass.h"
@@ -76,6 +77,7 @@ namespace wiwa
 				return m_Renderer->add_pass(CreateScope<ShadowPass>())
 					&& m_Renderer->add_pass(CreateScope<DepthPrepass>())
 					&& m_Renderer->add_pass(CreateScope<LightCullPass>())
+					&& m_Renderer->add_pass(CreateScope<AoPass>())
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Opaque))
 					&& m_Renderer->add_pass(CreateScope<SkyPass>())
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Blended))

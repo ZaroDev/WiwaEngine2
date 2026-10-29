@@ -84,6 +84,13 @@ namespace wiwa
 		layout.addItem(nvrhi::BindingLayoutItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
 		m_FrameLayout = device->createBindingLayout(layout);
 
+		// Slot t15 of set 2 on Vulkan (see ao_layout()).
+		nvrhi::BindingLayoutDesc aoLayout;
+		aoLayout.visibility = nvrhi::ShaderType::Pixel;
+		aoLayout.bindingOffsets = make_zero_binding_offsets();
+		aoLayout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(15));
+		m_AoLayout = device->createBindingLayout(aoLayout);
+
 		nvrhi::BufferDesc constants;
 		constants.byteSize = sizeof(FrameConstants);
 		constants.isConstantBuffer = true;
@@ -139,8 +146,17 @@ namespace wiwa
 		dummyBrdf.keepInitialState = true;
 		dummyBrdf.debugName = "BRDF table stand-in";
 		m_DummyBrdf = device->createTexture(dummyBrdf);
+		nvrhi::TextureDesc dummyAo;
+		dummyAo.width = 1;
+		dummyAo.height = 1;
+		dummyAo.format = nvrhi::Format::R8_UNORM;
+		dummyAo.isShaderResource = true;
+		dummyAo.initialState = nvrhi::ResourceStates::ShaderResource;
+		dummyAo.keepInitialState = true;
+		dummyAo.debugName = "AO stand-in";
+		m_DummyAo = device->createTexture(dummyAo);
 
-		return m_FrameLayout && m_ConstantBuffer && m_LightBuffer && m_ClusterCounts && m_ClusterIndices && m_ShadowSampler && m_EnvironmentSampler && m_DummyCube && m_DummyBrdf && m_DummyCascadeMap && m_DummySpotAtlas;
+		return m_FrameLayout && m_ConstantBuffer && m_LightBuffer && m_ClusterCounts && m_ClusterIndices && m_ShadowSampler && m_EnvironmentSampler && m_DummyCube && m_DummyBrdf && m_DummyAo && m_AoLayout && m_DummyCascadeMap && m_DummySpotAtlas;
 	}
 
 	void SceneRenderData::shutdown()
@@ -154,6 +170,9 @@ namespace wiwa
 		m_EnvironmentSampler = nullptr;
 		m_DummyCube = nullptr;
 		m_DummyBrdf = nullptr;
+		m_DummyAo = nullptr;
+		m_AoBindings = nullptr;
+		m_AoLayout = nullptr;
 		m_FrameEnvironment = nullptr;
 		m_LightBuffer = nullptr;
 		m_ClusterCounts = nullptr;
@@ -180,6 +199,7 @@ namespace wiwa
 		m_Cache = &cache;
 		m_Scene = &scene;
 		m_Settings = scene.settings();
+		m_AoActive = false;
 		if (!m_Active)
 		{
 			m_HasCamera = false;
@@ -567,6 +587,8 @@ namespace wiwa
 				commandList->writeTexture(m_DummyCube, face, 0, zeros, 8);
 			}
 			commandList->writeTexture(m_DummyBrdf, 0, 0, zeros, 4);
+			const u8 white = 255;
+			commandList->writeTexture(m_DummyAo, 0, 0, &white, 1);
 			m_EnvironmentDummiesWritten = true;
 		}
 
@@ -582,6 +604,15 @@ namespace wiwa
 		nvrhi::ITexture* atlas = m_SpotAtlas ? m_SpotAtlas.Get() : m_DummySpotAtlas.Get();
 		nvrhi::ITexture* cube = m_FrameEnvironment != nullptr ? m_FrameEnvironment->Cube.Get() : m_DummyCube.Get();
 		nvrhi::ITexture* brdf = (m_Environments != nullptr && m_Environments->brdf_lut() != nullptr) ? m_Environments->brdf_lut() : m_DummyBrdf.Get();
+		m_AoActive = m_Settings.Ao.Enabled && m_HasCamera && m_Viewport != nullptr && m_Constants.ClusterParams.z < 0.5f; // not for an orthographic camera
+		nvrhi::ITexture* ao = m_AoActive ? m_Viewport->ao() : m_DummyAo.Get();
+		if (m_AoBindings == nullptr || m_BoundAo != ao)
+		{
+			nvrhi::BindingSetDesc aoSet;
+			aoSet.addItem(nvrhi::BindingSetItem::Texture_SRV(15, ao));
+			m_AoBindings = m_Device->createBindingSet(aoSet, m_AoLayout);
+			m_BoundAo = ao;
+		}
 		if (m_FrameBindings == nullptr || m_BoundInstanceBuffer != m_InstanceBuffer.Get() || m_BoundMaterialBuffer != materials
 			|| m_BoundCascades != cascades || m_BoundAtlas != atlas || m_BoundCube != cube || m_BoundBrdf != brdf)
 		{

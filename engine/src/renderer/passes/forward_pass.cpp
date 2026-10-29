@@ -50,7 +50,7 @@ namespace wiwa
 		nvrhi::IShader* pixelShader = m_Shaders->get(engine_assets::FORWARD_SHADER, ShaderStage::Pixel);
 		m_InputLayout = scene_pass::make_mesh_input_layout(m_Device, vertexShader);
 
-		const std::vector<nvrhi::IBindingLayout*> layouts = { data.frame_layout(), data.cache()->material_layout() };
+		const std::vector<nvrhi::IBindingLayout*> layouts = { data.frame_layout(), data.cache()->material_layout(), data.ao_layout() };
 		for (int doubleSided = 0; doubleSided < 2; doubleSided++)
 		{
 			scene_pass::PipelineOptions options;
@@ -98,12 +98,12 @@ namespace wiwa
 		const nvrhi::Viewport viewport(static_cast<float>(data.viewport()->width()), static_cast<float>(data.viewport()->height()));
 		if (m_Stage == Stage::Opaque)
 		{
-			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Pipelines[0], m_Pipelines[1], true);
-			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Pipelines[0], m_Pipelines[1], true);
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Pipelines[0], m_Pipelines[1], true, data.ao_bindings());
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Pipelines[0], m_Pipelines[1], true, data.ao_bindings());
 		}
 		else
 		{
-			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.blended(), m_BlendPipelines[0], m_BlendPipelines[1], true);
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.blended(), m_BlendPipelines[0], m_BlendPipelines[1], true, data.ao_bindings());
 		}
 	}
 }

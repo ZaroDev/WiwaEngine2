@@ -18,5 +18,8 @@ namespace wiwa::engine_assets
 	inline constexpr const char* BLOOM_DOWN_SHADER = "engine/shaders/bloom_down.hlsl";
 	inline constexpr const char* BLOOM_UP_SHADER = "engine/shaders/bloom_up.hlsl";
 	inline constexpr const char* FXAA_SHADER = "engine/shaders/fxaa.hlsl";
+	inline constexpr const char* GTAO_DEPTH_SHADER = "engine/shaders/gtao_depth.hlsl";
+	inline constexpr const char* GTAO_SHADER = "engine/shaders/gtao.hlsl";
+	inline constexpr const char* GTAO_BLUR_SHADER = "engine/shaders/gtao_blur.hlsl";
 	inline constexpr const char* TONEMAP_SHADER = "engine/shaders/tonemap.hlsl";
 }
