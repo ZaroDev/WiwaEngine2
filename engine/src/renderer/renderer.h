@@ -1,50 +1,84 @@
 #pragma once
-#include <core/module.h>
-#include "device.h"
 
 #include <deque>
+#include <vector>
+
+#include <nvrhi/nvrhi.h>
+
+#include <core/common.h>
+
+#include "backend/render_backend.h"
+#include "pass_profiler.h"
+#include "render_pass.h"
+#include "render_queue.h"
 
 namespace wiwa
 {
-	class Renderer : public IModule
+	// The render thread's renderer: owns the backend and the passes, and turns a batch into a presented frame.
+	// Everything here runs on the render thread.
+	class Renderer
 	{
 	public:
 		Renderer() = default;
-		virtual ~Renderer() override = default;
+		~Renderer();
 
-		virtual void init() override;
-		virtual void shutdown() override;
+		Renderer(const Renderer&) = delete;
+		Renderer& operator=(const Renderer&) = delete;
 
-		virtual void pre_update(float deltaTime)override;
-		virtual void update(float deltaTime) override;
-		virtual void post_update(float deltaTime) override;
+		bool initialize(const RendererDescription& description);
+		void shutdown();
 
-		virtual void pre_render_update(float deltaTime) override;
-		virtual void render_update(float deltaTime) override;
-		virtual void post_render_update(float deltaTime) override;
+		bool add_pass(Scope<IRenderPass> pass);
 
-		virtual UpdateFlags get_update_flags() const { return UpdateFlags::UPDATE | UpdateFlags::UPDATE_RENDERER; }
-		virtual std::string get_name() const { return "Renderer"; };
+		// Draws one frame for the batch (the batch's commands were applied already). Returns false when the renderer has
+		// failed and cannot go on (device lost, a pass failed, the swapchain cannot be rebuilt).
+		bool render_frame(const RenderBatch& batch);
 
-		virtual int get_priority() const { return 0; }
+		nvrhi::IDevice* get_device() const { return m_Backend ? m_Backend->get_device() : nullptr; }
+		GraphicsApi get_api() const { return m_Description.Api; }
+		std::string get_adapter_name() const { return m_Backend ? m_Backend->get_adapter_name() : std::string{}; }
+		u32 get_width() const { return m_Backend ? m_Backend->get_width() : 0; }
+		u32 get_height() const { return m_Backend ? m_Backend->get_height() : 0; }
+
+		// Takes effect at the start of the next frame.
+		void set_vsync(bool enabled) { m_RequestedVsync = enabled; }
+		bool is_vsync_enabled() const { return m_RequestedVsync; }
+
+		// True once every pass can render (until then only the background colour is shown).
+		bool are_passes_ready() const { return m_PassesReady; }
+
+		// Averaged per-pass timings, in pass order. Empty until the passes have rendered once.
+		const std::vector<PassTiming>& get_pass_timings() const { return m_Profiler.get_timings(); }
+		bool are_gpu_timings_available() const { return m_Profiler.are_gpu_timings_available(); }
 
 	private:
-		bool add_pass(Ref<IRenderPass> pass);
+		bool apply_vsync(u32 width, u32 height);
+		bool resize_backend(u32 width, u32 height);
+		PassInitializationDescription make_pass_description() const;
+		FrameDescription make_frame_description(nvrhi::IFramebuffer* backbuffer, const RenderBatch& batch);
 
+		// Frames in flight: block until fewer than MaxFramesInFlight frames are still running on the GPU.
 		void wait_for_frame_slot();
+		// Marks the point the GPU has to reach for the frame just submitted to count as finished.
 		void mark_frame_submitted();
 
-		bool resize_device(u32 width, u32 height);
-
+	private:
+		RendererDescription m_Description{};
 		u64 m_FrameIndex = 0;
+		float m_Time = 0.0f;
+		bool m_RequestedVsync = true;
+		u32 m_PresentResizeStreak = 0; // consecutive frames whose present asked for a resize at an unchanged size
 
-		Ref<IDevice> m_Device;
-		nvrhi::CommandListHandle m_CommandList;
-		std::vector<Ref<IRenderPass>> m_Passes;
+		Scope<IRenderBackend> m_Backend{};
+		nvrhi::CommandListHandle m_CommandList{};
+		std::vector<Scope<IRenderPass>> m_Passes{};
+		PassProfiler m_Profiler{};
 
-		std::deque<nvrhi::EventQueryHandle> m_FramesInFlight;
-		std::vector<nvrhi::EventQueryHandle> m_QueryPool;
+		// One event query per submitted frame that has not been waited on yet, oldest first.
+		std::deque<nvrhi::EventQueryHandle> m_FramesInFlight{};
+		std::vector<nvrhi::EventQueryHandle> m_QueryPool{}; // queries ready for reuse
 
-		class Window* m_Window;
+		bool m_PassesReady = false;
+		bool m_Initialized = false;
 	};
 }

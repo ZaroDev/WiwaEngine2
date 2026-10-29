@@ -5,7 +5,6 @@
 
 #include <assets/asset_manager.h>
 #include <renderer/window.h>
-#include <renderer/renderer.h>
 
 #include <iostream>
 
@@ -35,7 +34,6 @@ namespace wiwa
 		
 		m_ModuleManager.add_module<AssetManager>();
 		m_ModuleManager.add_module<Window>();
-		m_ModuleManager.add_module<Renderer>();
 
 		on_init();
 	}
