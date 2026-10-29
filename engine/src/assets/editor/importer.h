@@ -84,6 +84,9 @@ namespace wiwa
 		virtual u32 version() const = 0;
 		// Lowercase, with the dot: ".png"
 		virtual std::vector<std::string> extensions() const = 0;
+		// True for importers that import other source files as dependencies (a model's textures): the scan runs them first,
+		// so that the textures are created with the settings the model asks for.
+		virtual bool imports_dependencies() const { return false; }
 		virtual nlohmann::json default_settings() const { return nlohmann::json::object(); }
 
 		// Cooks ctx.source(); returns false (after logging why) if it cannot.

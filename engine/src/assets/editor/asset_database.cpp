@@ -156,16 +156,22 @@ namespace wiwa
 			}
 		}
 
-		std::vector<std::future<void>> jobs;
-		jobs.reserve(sources.size());
-		for (const std::filesystem::path& source : sources)
+		// Models first: they import their textures with the settings they need (a normal map as a normal map).
+		for (const bool dependents : { true, false })
 		{
-			jobs.push_back(m_Jobs.submit([this, source]() { ensure_imported(source); }));
-		}
+			std::vector<std::future<void>> jobs;
+			for (const std::filesystem::path& source : sources)
+			{
+				if (find_importer(source)->imports_dependencies() == dependents)
+				{
+					jobs.push_back(m_Jobs.submit([this, source]() { ensure_imported(source); }));
+				}
+			}
 
-		for (std::future<void>& job : jobs)
-		{
-			job.get();
+			for (std::future<void>& job : jobs)
+			{
+				job.get();
+			}
 		}
 
 		WI_ASSET_LOG(Info, "Asset scan: {0} imported, {1} up to date, {2} failed", m_Imported.exchange(0), m_UpToDate.exchange(0), m_Failed.exchange(0));
