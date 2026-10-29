@@ -69,6 +69,8 @@ namespace wiwa
 	void register_debug_draw_checks();
 	// The viewport depth's stencil plane (stencil_checks.cpp).
 	void register_stencil_checks();
+	// The debug draw pass (debug_pass_checks.cpp).
+	void register_debug_pass_checks();
 
 	// `--render-test`: runs every check once on the render thread. True when all passed.
 	bool run_render_checks(RenderWorld& world);

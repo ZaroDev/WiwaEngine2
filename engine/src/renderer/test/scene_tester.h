@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "../debug/debug_draw.h"
 #include "../render_world.h"
 #include "../renderer.h"
 #include "render_test.h"
@@ -42,6 +43,8 @@ namespace wiwa
 		}
 
 		RenderScene& scene() { return m_Renderer.get_scene(); }
+		// The debug shapes of the frames this tester renders: sealed into every batch (shapes with a duration stay for several frames).
+		DebugDraw& debug() { return m_DebugDraw; }
 		GpuResourceCache& cache() { return m_Renderer.get_cache(); }
 		Renderer& renderer() { return m_Renderer; }
 		u32 size() const { return m_Size; }
@@ -179,6 +182,7 @@ namespace wiwa
 			batch.DeltaTime = m_Delta;
 			batch.Width = m_Renderer.get_width();
 			batch.Height = m_Renderer.get_height();
+			batch.Debug = m_DebugDraw.seal(m_Delta);
 			return m_Renderer.render_frame(batch);
 		}
 
@@ -232,5 +236,6 @@ namespace wiwa
 		u64 m_Frame = 0;
 		float m_Delta = 1.0f / 60.0f;
 		u64 m_NextGuid = 0;
+		DebugDraw m_DebugDraw{};
 	};
 }

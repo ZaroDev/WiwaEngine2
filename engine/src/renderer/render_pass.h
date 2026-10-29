@@ -11,6 +11,7 @@ namespace wiwa
 	class ShaderLibrary;
 	class TextureRegistry;
 	class SceneRenderData;
+	struct DebugDrawData;
 
 	// Everything a pass needs to know about the current frame.
 	struct FrameDescription
@@ -23,6 +24,7 @@ namespace wiwa
 		u64 FrameIndex = 0; // counts rendered frames
 		const OwnedDrawData* ImGui = nullptr; // the UI of this frame, built on the main thread
 		bool SceneInViewport = false; // the UI shows the scene in a panel; otherwise it fills the window (the blit pass draws it)
+		const DebugDrawData* Debug = nullptr; // the debug shapes of this frame (null when there are none)
 		const SceneRenderData* Scene = nullptr; // the scene's draw lists and buffers for this frame (null when there is nothing to draw)
 	};
 

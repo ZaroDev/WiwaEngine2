@@ -8,6 +8,7 @@
 
 #include <math/math.h>
 
+#include "debug/debug_draw.h"
 #include "imgui_draw_data.h"
 
 namespace wiwa
@@ -30,6 +31,7 @@ namespace wiwa
 		bool Minimized = false; // nothing to show: the render thread does not draw this frame
 		std::vector<RenderCommand> Commands{};
 		OwnedDrawData ImGui{};
+		DebugDrawData Debug{}; // the shapes of this frame (DebugDraw::seal)
 	};
 
 	// A bounded hand-off from one producer (the main thread) to one consumer (the render thread).

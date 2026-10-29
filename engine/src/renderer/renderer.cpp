@@ -273,6 +273,7 @@ namespace wiwa
 		frame.DeltaTime = batch.DeltaTime;
 		frame.FrameIndex = m_FrameIndex;
 		frame.ImGui = &batch.ImGui;
+		frame.Debug = &batch.Debug;
 		frame.Scene = &m_SceneData;
 		frame.SceneInViewport = m_SceneInViewport;
 		return frame;

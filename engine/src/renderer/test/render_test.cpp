@@ -116,6 +116,7 @@ namespace wiwa
 			register_environment_scene_checks();
 			register_debug_draw_checks();
 			register_stencil_checks();
+			register_debug_pass_checks();
 
 			register_render_check("copy_queue_roundtrip", [](RenderCheckContext& context)
 				{

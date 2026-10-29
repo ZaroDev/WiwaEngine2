@@ -8,6 +8,7 @@
 #include <assets/asset_guid.h>
 #include <core/module.h>
 
+#include "debug/debug_draw.h"
 #include "imgui_layer.h"
 #include "renderer.h"
 #include "render_quality.h"
@@ -44,6 +45,10 @@ namespace wiwa
 
 		// Main thread: queues a command for the next batch; it runs on the render thread against the render-side state.
 		void submit(RenderCommand command) { m_PendingCommands.push_back(std::move(command)); }
+
+		// The immediate-mode debug shapes (lines, boxes, spheres, ...) of the frame being built. Main thread only; they are drawn over the
+		// scene a frame or two later, and the ones with a duration stay for that long.
+		DebugDraw& get_debug_draw() { return m_DebugDraw; }
 
 		// The latest stats the render thread published.
 		RenderSnapshot get_snapshot() const { return m_Snapshot.read(); }
@@ -89,6 +94,7 @@ namespace wiwa
 		Scope<Renderer> m_Renderer{}; // created, used and destroyed on the render thread
 		ImGuiRenderPass* m_ImGuiPass = nullptr; // owned by the renderer; set on the render thread during start
 		std::vector<RenderCommand> m_PendingCommands{};
+		DebugDraw m_DebugDraw{};
 		SceneExtractor m_Extractor{}; // main thread: what the active scene changed since the last batch
 
 		// Assets the editor cooked again, noted by whichever thread reports it and taken by the render thread each frame.

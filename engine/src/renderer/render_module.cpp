@@ -8,6 +8,7 @@
 #include <scene/scene_module.h>
 
 #include "passes/blit_pass.h"
+#include "passes/debug_pass.h"
 #include "passes/depth_prepass.h"
 #include "passes/forward_pass.h"
 #include "passes/imgui_pass.h"
@@ -85,6 +86,7 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<BloomPass>())
 					&& m_Renderer->add_pass(CreateScope<TonemapPass>())
 					&& m_Renderer->add_pass(CreateScope<FxaaPass>())
+					&& m_Renderer->add_pass(CreateScope<DebugPass>())
 					&& m_Renderer->add_pass(CreateScope<BlitPass>())
 					&& m_Renderer->add_pass(std::move(imguiPass));
 			},
@@ -387,6 +389,7 @@ namespace wiwa
 		batch.Minimized = width == 0 || height == 0 || glfwGetWindowAttrib(window->get_window(), GLFW_ICONIFIED) != 0;
 		batch.Commands = std::move(m_PendingCommands);
 		m_PendingCommands.clear();
+		batch.Debug = m_DebugDraw.seal(deltaTime);
 
 		// What the active scene changed, for the render thread's scene mirror.
 		if (SceneModule* scenes = Engine::get().get_module<SceneModule>())
