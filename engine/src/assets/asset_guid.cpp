@@ -54,6 +54,29 @@ namespace wiwa
 		return AssetGuid{ parts[0], parts[1] };
 	}
 
+	static u64 mix64(u64 x)
+	{
+		x += 0x9E3779B97F4A7C15ull;
+		x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ull;
+		x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
+		return x ^ (x >> 31);
+	}
+
+	AssetGuid AssetRef::resolved() const
+	{
+		if (LocalId == 0)
+		{
+			return Guid;
+		}
+
+		AssetGuid result{ mix64(Guid.Hi ^ mix64(LocalId)), mix64(Guid.Lo + LocalId) };
+		if (!result.valid())
+		{
+			result.Lo = 1;
+		}
+		return result;
+	}
+
 	std::string AssetGuid::to_string() const
 	{
 		return fmt::format("{:016x}{:016x}", Hi, Lo);

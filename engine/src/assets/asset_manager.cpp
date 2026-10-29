@@ -1,0 +1,253 @@
+#include <pch.h>
+#include "asset_manager.h"
+
+#include "library_source.h"
+#include "pak_source.h"
+
+#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+
+namespace wiwa
+{
+	namespace
+	{
+		template<typename T>
+		Ref<void> make_asset(std::span<const std::byte> payload)
+		{
+			std::optional<T> data = deserialize<T>(payload);
+			if (!data)
+			{
+				return nullptr;
+			}
+			return std::make_shared<T>(std::move(*data));
+		}
+
+		Ref<void> deserialize_any(AssetType type, std::span<const std::byte> payload)
+		{
+			switch (type)
+			{
+			case AssetType::Texture: return make_asset<TextureData>(payload);
+			case AssetType::Mesh: return make_asset<MeshData>(payload);
+			case AssetType::Material: return make_asset<MaterialData>(payload);
+			case AssetType::Skeleton: return make_asset<SkeletonData>(payload);
+			case AssetType::AnimationClip: return make_asset<AnimationClipData>(payload);
+			case AssetType::Prefab: return make_asset<PrefabData>(payload);
+			case AssetType::Environment: return make_asset<EnvironmentData>(payload);
+			case AssetType::Lut: return make_asset<LutData>(payload);
+			case AssetType::Shader: return make_asset<ShaderData>(payload);
+			default: return nullptr;
+			}
+		}
+	}
+
+	void AssetManager::init()
+	{
+		m_Jobs = CreateScope<JobSystem>();
+
+		const std::filesystem::path pack = "assets.wpak";
+		std::error_code error;
+		if (std::filesystem::exists(pack, error))
+		{
+			auto source = CreateScope<PakSource>(pack);
+			if (source->valid())
+			{
+				m_Source = std::move(source);
+				WI_ASSET_LOG(Info, "Loading assets from {0}", pack.string());
+			}
+		}
+
+		if (!m_Source)
+		{
+#if WI_SHIPPING
+			WI_ASSET_LOG(Error, "No valid assets.wpak found");
+#else
+			m_Source = CreateScope<LibrarySource>("Library");
+			WI_ASSET_LOG(Info, "Loading assets from Library/ with {0} workers", m_Jobs->get_worker_count());
+#endif
+		}
+	}
+
+	void AssetManager::shutdown()
+	{
+		m_Jobs.reset(); // joins the workers; queued loads are dropped
+
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			for (auto& [guid, slot] : m_Cache)
+			{
+				LoadState expected = LoadState::Loading;
+				slot->State.compare_exchange_strong(expected, LoadState::Failed);
+			}
+			m_Cache.clear();
+		}
+
+		m_Source.reset();
+		WI_ASSET_LOG(Info, "Shutdown");
+	}
+
+	void AssetManager::set_source(Scope<IAssetSource> source)
+	{
+		m_Source = std::move(source);
+	}
+
+	LoadState AssetManager::get_state(AssetGuid resolvedGuid) const
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		auto found = m_Cache.find(resolvedGuid);
+		return found == m_Cache.end() ? LoadState::Failed : found->second->State.load(std::memory_order_acquire);
+	}
+
+	void AssetManager::unload_unused()
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto it = m_Cache.begin(); it != m_Cache.end();)
+		{
+			// only the cache refers to it, and no load job holds it
+			if (it->second.use_count() == 1 && it->second->State.load() != LoadState::Loading)
+			{
+				it = m_Cache.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+	}
+
+	void AssetManager::wait_idle() const
+	{
+		while (m_Pending.load() > 0)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+	}
+
+	void AssetManager::fail(const Ref<AssetSlot>& slot, const char* why)
+	{
+		WI_ASSET_LOG(Error, "Cannot load asset {0}: {1}", slot->Guid.to_string(), why);
+		slot->State.store(LoadState::Failed, std::memory_order_release);
+	}
+
+	Ref<AssetSlot> AssetManager::acquire(AssetRef ref, AssetType expected)
+	{
+		if (!ref.valid())
+		{
+			auto slot = CreateRef<AssetSlot>();
+			slot->State.store(LoadState::Failed);
+			return slot;
+		}
+
+		bool created = false;
+		Ref<AssetSlot> slot = acquire_resolved(ref.resolved(), expected, created);
+
+		// An existing slot may have been created by a dependency preload that did not know the type yet.
+		AssetType current = slot->Type.load();
+		if (current == AssetType::None)
+		{
+			slot->Type.compare_exchange_strong(current, expected);
+		}
+		if (current != AssetType::None && current != expected)
+		{
+			WI_ASSET_LOG(Error, "Asset {0} is a {1}, not a {2}", slot->Guid.to_string(), asset_type_name(current), asset_type_name(expected));
+			auto mismatch = CreateRef<AssetSlot>();
+			mismatch->Guid = slot->Guid;
+			mismatch->State.store(LoadState::Failed);
+			return mismatch;
+		}
+
+		return slot;
+	}
+
+	Ref<AssetSlot> AssetManager::acquire_resolved(AssetGuid guid, AssetType expected, bool& created)
+	{
+		Ref<AssetSlot> slot;
+		created = false;
+
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+
+			auto found = m_Cache.find(guid);
+			if (found != m_Cache.end())
+			{
+				return found->second;
+			}
+
+			slot = CreateRef<AssetSlot>();
+			slot->Guid = guid;
+			slot->Type.store(expected);
+			m_Cache.emplace(guid, slot);
+			created = true;
+
+			if (!m_Jobs || !m_Source)
+			{
+				slot->State.store(LoadState::Failed);
+				return slot;
+			}
+
+			m_Pending.fetch_add(1);
+		}
+
+		m_Jobs->submit([this, slot]() { run_load(slot); });
+		return slot;
+	}
+
+	void AssetManager::run_load(Ref<AssetSlot> slot)
+	{
+		struct PendingGuard
+		{
+			std::atomic<u32>& Counter;
+			~PendingGuard() { Counter.fetch_sub(1); }
+		} guard{ m_Pending };
+
+		try
+		{
+			std::optional<std::vector<std::byte>> blob = m_Source->read(slot->Guid);
+			if (!blob)
+			{
+				fail(slot, "missing or unreadable");
+				return;
+			}
+
+			std::span<const std::byte> payload;
+			std::optional<WAssetHeader> header = parse_wasset_header(*blob, payload);
+			if (!header)
+			{
+				fail(slot, "bad or truncated .wasset header");
+				return;
+			}
+
+			if (header->Guid != slot->Guid)
+			{
+				fail(slot, "file guid does not match");
+				return;
+			}
+
+			AssetType type = AssetType::None;
+			if (!slot->Type.compare_exchange_strong(type, header->Type) && type != header->Type)
+			{
+				fail(slot, "asset type does not match the requested one");
+				return;
+			}
+
+			Ref<void> data = deserialize_any(header->Type, payload);
+			if (!data)
+			{
+				fail(slot, "payload is damaged");
+				return;
+			}
+
+			// Dependencies start loading now; a cycle just finds the slot already in the cache.
+			for (AssetGuid dependency : header->Dependencies)
+			{
+				bool created = false;
+				acquire_resolved(dependency, AssetType::None, created);
+			}
+
+			slot->Data = std::move(data);
+			slot->State.store(LoadState::Ready, std::memory_order_release);
+		}
+		catch (const std::exception& exception)
+		{
+			fail(slot, exception.what());
+		}
+	}
+}

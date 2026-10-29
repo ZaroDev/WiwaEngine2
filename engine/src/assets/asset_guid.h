@@ -35,6 +35,10 @@ namespace wiwa
 		u64 LocalId = 0;
 
 		bool valid() const { return Guid.valid(); }
+
+		// The guid the cooked file is stored under: the guid itself for a whole asset, a deterministic mix of guid and
+		// LocalId for a sub-asset (so Library/ and the pack stay keyed by one guid per file).
+		AssetGuid resolved() const;
 		bool operator==(const AssetRef& other) const { return Guid == other.Guid && LocalId == other.LocalId; }
 	};
 }

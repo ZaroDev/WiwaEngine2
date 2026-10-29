@@ -3,6 +3,7 @@
 #include "engine.h"
 #include "memory.h"
 
+#include <assets/asset_manager.h>
 #include <renderer/window.h>
 #include <renderer/renderer.h>
 
@@ -32,6 +33,7 @@ namespace wiwa
 		m_Time.init();
 
 		
+		m_ModuleManager.add_module<AssetManager>();
 		m_ModuleManager.add_module<Window>();
 		m_ModuleManager.add_module<Renderer>();
 

@@ -13,7 +13,7 @@ namespace wiwa
 	struct AssetSlot
 	{
 		AssetGuid Guid{};
-		AssetType Type = AssetType::None;
+		std::atomic<AssetType> Type{ AssetType::None }; // None until the first loader or the file header says what it is
 		std::atomic<LoadState> State{ LoadState::Loading };
 		Ref<void> Data{}; // written once, before State becomes Ready
 	};
