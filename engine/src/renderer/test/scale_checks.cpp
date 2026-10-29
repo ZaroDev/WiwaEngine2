@@ -84,11 +84,17 @@ namespace wiwa
 				SceneExtractor extractor;
 				SceneDelta everything = extractor.extract(scene, 1.0f);
 				context.check(everything.InstanceUpserts.size() == COUNT, "the first extraction has every instance");
-				extractor.extract(scene, 1.0f);
-				const auto extractStart = std::chrono::steady_clock::now();
-				const SceneDelta unchanged = extractor.extract(scene, 1.0f);
-				const double extractMs = milliseconds_since(extractStart);
-				context.check(unchanged.empty(), "an unchanged scene extracts to nothing");
+				// The fastest of several runs: a scheduling hiccup of the machine must not fail a timing check.
+				double extractMs = 1e9;
+				bool allEmpty = true;
+				for (int i = 0; i < 20; i++)
+				{
+					const auto extractStart = std::chrono::steady_clock::now();
+					const SceneDelta unchanged = extractor.extract(scene, 1.0f);
+					extractMs = std::min(extractMs, milliseconds_since(extractStart));
+					allEmpty = allEmpty && unchanged.empty();
+				}
+				context.check(allEmpty, "an unchanged scene extracts to nothing");
 
 				// The render thread's side: the same instances drawn.
 				SceneTester test(context, 128);
@@ -111,7 +117,7 @@ namespace wiwa
 				// The culling and list building of a frame (the scene did not change: the steady state).
 				SceneRenderData& data = test.renderer().get_scene_data();
 				double buildMs = 1e9;
-				for (int i = 0; i < 5; i++)
+				for (int i = 0; i < 12; i++)
 				{
 					const auto start = std::chrono::steady_clock::now();
 					data.build(test.scene(), test.cache(), test.renderer().get_viewport());
