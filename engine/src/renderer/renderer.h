@@ -11,6 +11,7 @@
 #include "pass_profiler.h"
 #include "render_pass.h"
 #include "render_queue.h"
+#include "resources/gpu_resource_cache.h"
 #include "scene/render_scene.h"
 #include "upload_queue.h"
 
@@ -42,6 +43,8 @@ namespace wiwa
 		ShaderLibrary* get_shader_library() const { return m_Shaders.get(); }
 		UploadQueue& get_upload_queue() { return m_Uploads; }
 		RenderScene& get_scene() { return m_Scene; }
+		GpuResourceCache& get_cache() { return *m_Cache; }
+		AssetManager* get_assets() const { return m_Description.Assets; }
 		GraphicsApi get_api() const { return m_Description.Api; }
 		std::string get_adapter_name() const { return m_Backend ? m_Backend->get_adapter_name() : std::string{}; }
 		u32 get_width() const { return m_Backend ? m_Backend->get_width() : 0; }
@@ -81,6 +84,7 @@ namespace wiwa
 		Scope<ShaderLibrary> m_Shaders{};
 		UploadQueue m_Uploads{};
 		RenderScene m_Scene{};
+		Scope<GpuResourceCache> m_Cache{};
 		nvrhi::CommandListHandle m_CommandList{};
 		std::vector<Scope<IRenderPass>> m_Passes{};
 		PassProfiler m_Profiler{};

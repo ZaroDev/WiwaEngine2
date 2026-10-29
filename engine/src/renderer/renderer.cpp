@@ -60,6 +60,7 @@ namespace wiwa
 		{
 			m_Uploads.force_graphics_queue(true);
 		}
+		m_Cache = CreateScope<GpuResourceCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads);
 
 		if (m_Description.Assets == nullptr)
 		{
@@ -88,6 +89,7 @@ namespace wiwa
 		}
 
 		m_Passes.clear();
+		m_Cache.reset();
 		m_Uploads.shutdown();
 		m_Shaders.reset();
 		m_Profiler = PassProfiler{}; // its timer queries belong to the device
@@ -168,7 +170,11 @@ namespace wiwa
 			return false;
 		}
 
+		// The uploads go out first, as a list of their own that is closed before the frame list opens (D3D11 has one immediate
+		// context: two lists cannot be open at once). The graphics queue waits for the copy queue before the frame list runs.
 		m_Uploads.begin_frame();
+		m_Cache->update();
+		m_Uploads.submit();
 
 		m_CommandList->open();
 
@@ -203,8 +209,6 @@ namespace wiwa
 		}
 
 		m_CommandList->close();
-
-		m_Uploads.submit(); // before the frame list: the graphics queue waits for it
 
 		status = m_Backend->submit_and_present(m_CommandList);
 		if (status != FrameStatus::Failed)

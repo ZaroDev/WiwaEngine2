@@ -14,6 +14,7 @@ namespace wiwa
 
 		Renderer& get_renderer() { return m_Renderer; }
 		RenderScene& get_scene() { return m_Renderer.get_scene(); }
+		GpuResourceCache& get_cache() { return m_Renderer.get_cache(); }
 
 	private:
 		Renderer& m_Renderer;

@@ -148,6 +148,7 @@ namespace wiwa
 		for (AssetGuid guid : reloaded)
 		{
 			m_Renderer->get_shader_library()->invalidate(guid);
+			m_Renderer->get_cache().invalidate(guid);
 		}
 	}
 
