@@ -271,6 +271,14 @@ namespace wiwa
 		return frame;
 	}
 
+	void Renderer::set_quality(const RenderQuality& quality)
+	{
+		m_Quality = sanitized(quality);
+		m_SceneData.quality() = m_Quality;
+		m_RequestedVsync = m_Quality.Vsync;
+		m_Uploads.force_graphics_queue(!m_Quality.CopyQueue || !m_Description.EnableCopyQueue);
+	}
+
 	void Renderer::set_viewport_size(u32 width, u32 height)
 	{
 		if (width == 0 || height == 0)

@@ -24,7 +24,15 @@ namespace wiwa
 			reset.Reset = true;
 			scene().apply(std::move(reset));
 			scene().set_settings(SceneSettings{});
-			m_Renderer.get_scene_data().quality() = RenderQuality{};
+			RenderQuality quality = m_Renderer.get_quality(); // the shadow values go back to the defaults, vsync and the queue stay
+			const RenderQuality defaults;
+			quality.ShadowDistance = defaults.ShadowDistance;
+			quality.ShadowCascades = defaults.ShadowCascades;
+			quality.ShadowSplitLambda = defaults.ShadowSplitLambda;
+			quality.ShadowDepthBias = defaults.ShadowDepthBias;
+			quality.ShadowNormalBias = defaults.ShadowNormalBias;
+			quality.SpotShadowBias = defaults.SpotShadowBias;
+			m_Renderer.set_quality(quality);
 			scene().set_camera_override(std::nullopt);
 			set_camera(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f));
 		}

@@ -1,9 +1,14 @@
 #include <pch.h>
 #include "render_test.h"
 
+#include <filesystem>
+#include <fstream>
+
 #include <assets/wasset_io.h>
 #include <scene/scene.h>
 
+#include "../render_world.h"
+#include "../renderer.h"
 #include "../scene/scene_extractor.h"
 
 // Checks of the scene settings (and later the quality settings): values, formats and delivery. Plain logic, no GPU.
@@ -39,6 +44,73 @@ namespace wiwa
 
 	void register_settings_checks()
 	{
+		register_render_check("quality_roundtrip", [](RenderCheckContext& context)
+			{
+				RenderQuality quality;
+				quality.ShadowDistance = 123.0f;
+				quality.ShadowCascades = 3;
+				quality.ShadowSplitLambda = 0.5f;
+				quality.ShadowDepthBias = 0.002f;
+				quality.ShadowNormalBias = 2.5f;
+				quality.SpotShadowBias = 0.001f;
+				quality.Vsync = false;
+				quality.CopyQueue = false;
+				const std::filesystem::path path = "Library/quality_roundtrip.json";
+				std::filesystem::create_directories("Library");
+				context.check(save_render_quality(path, quality), "save");
+				std::string error;
+				const std::optional<RenderQuality> back = load_render_quality(path, error);
+				context.check(back && *back == quality && error.empty(), "load gives what was saved");
+				std::filesystem::remove(path);
+			});
+
+		register_render_check("quality_missing_file", [](RenderCheckContext& context)
+			{
+				std::string error = "stale";
+				const std::optional<RenderQuality> loaded = load_render_quality("Library/no_such_quality.json", error);
+				context.check(!loaded && error.empty(), "a missing file is not an error: the defaults are used");
+			});
+
+		register_render_check("quality_garbage_file", [](RenderCheckContext& context)
+			{
+				std::filesystem::create_directories("Library");
+				const std::filesystem::path path = "Library/quality_garbage.json";
+				{
+					std::ofstream file(path);
+					file << "{nope";
+				}
+				std::string error;
+				context.check(!load_render_quality(path, error) && !error.empty(), "text that is not JSON gives an error");
+				{
+					std::ofstream file(path, std::ios::trunc);
+					file << "{\"shadowDistance\": 1e9, \"shadowCascades\": 17, \"somethingNew\": true}";
+				}
+				const std::optional<RenderQuality> loaded = load_render_quality(path, error);
+				context.check(loaded && loaded->ShadowDistance == 1000.0f && loaded->ShadowCascades == 4, "absurd values are clamped and unknown keys ignored");
+				{
+					std::ofstream file(path, std::ios::trunc);
+					file << "{\"vsync\": false}";
+				}
+				const std::optional<RenderQuality> partial = load_render_quality(path, error);
+				const RenderQuality defaults;
+				context.check(partial && !partial->Vsync && partial->ShadowDistance == defaults.ShadowDistance && partial->CopyQueue == defaults.CopyQueue, "a missing key keeps its default");
+				std::filesystem::remove(path);
+			});
+
+		register_render_check("quality_applies", [](RenderCheckContext& context)
+			{
+				Renderer& renderer = context.World.get_renderer();
+				const RenderQuality before = renderer.get_quality();
+				RenderQuality changed = before;
+				changed.ShadowDistance = 6.0f;
+				renderer.set_quality(changed);
+				context.check(renderer.get_scene_data().quality().ShadowDistance == 6.0f && renderer.get_quality().ShadowDistance == 6.0f, "the shadow reach reaches the scene data");
+				changed.ShadowCascades = 99;
+				renderer.set_quality(changed);
+				context.check(renderer.get_quality().ShadowCascades == 4, "a value out of range is clamped on the way in");
+				renderer.set_quality(before);
+			});
+
 		register_render_check("settings_defaults_equal_old_look", [](RenderCheckContext& context)
 			{
 				const SceneSettings s;

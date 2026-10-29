@@ -1,5 +1,9 @@
 #pragma once
 
+#include <filesystem>
+#include <optional>
+#include <string>
+
 #include <math/math.h>
 
 namespace wiwa
@@ -18,4 +22,12 @@ namespace wiwa
 
 		bool operator==(const RenderQuality&) const = default;
 	};
+
+	// Finite values inside sane ranges (distance 1..1000, cascades 1..4, lambda 0..1, biases small).
+	RenderQuality sanitized(RenderQuality quality);
+
+	// The quality file of the project (JSON). A missing file gives nullopt and an empty error (use the defaults); a file that cannot be
+	// read gives nullopt and the reason. Missing keys keep their defaults, unknown keys are ignored, values are sanitized.
+	std::optional<RenderQuality> load_render_quality(const std::filesystem::path& path, std::string& error);
+	bool save_render_quality(const std::filesystem::path& path, const RenderQuality& quality);
 }

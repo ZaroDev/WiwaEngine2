@@ -211,7 +211,9 @@ namespace wiwa
 				const int lit = SceneTester::luma(test.pixel(litAt));
 
 				test.scene().set_settings(dim_ambient());
-				test.renderer().get_scene_data().quality().ShadowDistance = 6.0f; // the shadow is about 10 units from the camera
+				RenderQuality quality = test.renderer().get_quality();
+				quality.ShadowDistance = 6.0f; // the shadow is about 10 units from the camera
+				test.renderer().set_quality(quality);
 				context.check(test.render(), "render with a short shadow distance");
 				const int shadowedFar = SceneTester::luma(test.pixel(shadowAt));
 				WI_LOG(Info, "RenderTest", "shadow_distance inside {0} beyond {1} lit {2}", shadowedNear, shadowedFar, lit);

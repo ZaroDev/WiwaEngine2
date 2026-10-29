@@ -33,7 +33,8 @@ project "wiwa"
 		"%{IncludeDirs.vkbootstrap}",
 		"%{IncludeDirs.ImGui}",
 		"%{IncludeDirs.LZ4}",
-		"%{IncludeDirs.ENTT}"
+		"%{IncludeDirs.ENTT}",
+		"%{IncludeDirs.NJSON}"
 	}
 
 	links

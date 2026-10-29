@@ -58,6 +58,9 @@ namespace wiwa
 		void set_viewport_size(u32 width, u32 height);
 		// True: the scene is drawn into the viewport target at the size requested above and the UI shows it (the editor). False, the
 		// default: the viewport target follows the window and the blit pass draws it fullscreen (a game).
+		// Applies the quality settings (render thread; commands run between frames). Vsync and the copy queue take effect at once.
+		void set_quality(const RenderQuality& quality);
+		const RenderQuality& get_quality() const { return m_Quality; }
 		void set_scene_in_viewport(bool inViewport) { m_SceneInViewport = inViewport; }
 		bool is_scene_in_viewport() const { return m_SceneInViewport; }
 		GraphicsApi get_api() const { return m_Description.Api; }
@@ -106,6 +109,7 @@ namespace wiwa
 		ViewportTarget m_Viewport{};
 		u32 m_RequestedViewportWidth = 0;
 		u32 m_RequestedViewportHeight = 0;
+		RenderQuality m_Quality{};
 		bool m_SceneInViewport = false;
 		bool m_ViewportFailed = false; // creating the target at the requested size failed: not tried again until the size changes
 		nvrhi::CommandListHandle m_CommandList{};

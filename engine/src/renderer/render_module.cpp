@@ -21,6 +21,11 @@
 
 #define WI_RENDER_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
 
+namespace
+{
+	constexpr const char* QUALITY_FILE = "render_quality.json";
+}
+
 namespace wiwa
 {
 	void RenderModule::init()
@@ -32,7 +37,17 @@ namespace wiwa
 
 		Window* window = Engine::get().get_module<Window>();
 		m_Description.Window = window->get_window();
-		m_Description.EnableVsync = true;
+		std::string qualityError;
+		if (const std::optional<RenderQuality> loaded = load_render_quality(QUALITY_FILE, qualityError))
+		{
+			m_Quality = *loaded;
+		}
+		else if (!qualityError.empty())
+		{
+			WI_RENDER_LOG(Warning, "{0}: the default quality settings are used", qualityError);
+		}
+		m_Description.EnableVsync = m_Quality.Vsync;
+		m_Description.EnableCopyQueue = m_Description.EnableCopyQueue && m_Quality.CopyQueue;
 		m_Description.Assets = Engine::get().get_module<AssetManager>(); // looked up here: the render thread must not touch the module map
 
 		int width = 0;
@@ -98,6 +113,8 @@ namespace wiwa
 		}
 
 		m_Started = true;
+
+		set_quality(m_Quality); // the render thread starts with the defaults: tell it what the file said
 
 		// Hot reload: an asset cooked again is reported from the importer's thread; the render thread picks it up next frame.
 		m_ReloadListenerId = m_Description.Assets->add_reload_listener([this](AssetGuid guid)
@@ -168,10 +185,24 @@ namespace wiwa
 
 	void RenderModule::set_vsync(bool enabled)
 	{
-		submit([enabled](RenderWorld& world)
+		RenderQuality quality = m_Quality;
+		quality.Vsync = enabled;
+		set_quality(quality);
+	}
+
+	void RenderModule::set_quality(const RenderQuality& wanted)
+	{
+		const RenderQuality quality = sanitized(wanted);
+		const bool changed = !(quality == m_Quality);
+		m_Quality = quality;
+		submit([quality](RenderWorld& world)
 			{
-				world.get_renderer().set_vsync(enabled);
+				world.get_renderer().set_quality(quality);
 			});
+		if (changed && !save_render_quality(QUALITY_FILE, quality))
+		{
+			WI_RENDER_LOG(Warning, "Could not write {0}", QUALITY_FILE);
+		}
 	}
 
 	void RenderModule::set_viewport_size(u32 width, u32 height)

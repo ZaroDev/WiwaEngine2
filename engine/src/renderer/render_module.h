@@ -10,6 +10,7 @@
 
 #include "imgui_layer.h"
 #include "renderer.h"
+#include "render_quality.h"
 #include "render_snapshot.h"
 #include "render_thread.h"
 #include "scene/scene_extractor.h"
@@ -49,6 +50,11 @@ namespace wiwa
 
 		// Turns vertical sync on or off; it takes effect on the render thread a frame or two later.
 		void set_vsync(bool enabled);
+
+		// The quality settings of the project (shadow reach and biases, vsync, copy queue). set_quality() applies them on the render
+		// thread and saves them to render_quality.json next to the program.
+		const RenderQuality& get_quality() const { return m_Quality; }
+		void set_quality(const RenderQuality& quality);
 
 		// The size the scene is rendered at, in pixels; the Viewport panel asks for the size of its content region every frame. The render
 		// thread makes (or remakes) the viewport target a frame or two later. The result is drawn by ImGui as the texture id below.
@@ -92,6 +98,7 @@ namespace wiwa
 		u32 m_RequestedViewportWidth = 0; // main thread: what was last sent
 		u32 m_RequestedViewportHeight = 0;
 		bool m_SentSceneInViewport = false;
+		RenderQuality m_Quality{};
 		std::optional<RenderCamera> m_SentCameraOverride{};
 		u64 m_FrameIndex = 0;
 		u64 m_SmokeCounted = 0;        // frames counted so far (they start once the scene of --scene has loaded)
