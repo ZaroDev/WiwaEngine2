@@ -213,6 +213,7 @@ namespace wiwa
 				WI_LOG(Warning, "Renderer", "{0} lights over the limit of {1} are not used", m_DroppedLights, MAX_LIGHTS);
 			}
 		}
+		constants.ClusterParams.w = m_ClusterCulling ? 0.0f : 1.0f;
 		constants.LightInfo = glm::uvec4(static_cast<u32>(m_Lights.size()), 0, 0, 0);
 
 		const std::vector<RenderInstance>& allInstances = scene.instances();
@@ -238,7 +239,7 @@ namespace wiwa
 			// Slices are exponential in view depth between near and far: slice = log2(depth) * scale + bias.
 			const float depthRatio = std::log2(std::max(camera->Far / camera->Near, 1.0001f));
 			const float sliceScale = static_cast<float>(CLUSTERS_Z) / depthRatio;
-			constants.ClusterParams = glm::vec4(sliceScale, -std::log2(camera->Near) * sliceScale, camera->Projection[3][3] == 1.0f ? 1.0f : 0.0f, 0.0f);
+			constants.ClusterParams = glm::vec4(sliceScale, -std::log2(camera->Near) * sliceScale, camera->Projection[3][3] == 1.0f ? 1.0f : 0.0f, m_ClusterCulling ? 0.0f : 1.0f);
 
 			const Frustum frustum(constants.ViewProjection);
 			const std::vector<RenderInstance>& instances = scene.instances();
@@ -257,7 +258,7 @@ namespace wiwa
 				}
 				// One primitive: its box is the mesh's box, tested once.
 				const bool single = mesh->Primitives.size() == 1;
-				if (!single && !frustum.intersects(instance.World, mesh->BoundsMin, mesh->BoundsMax))
+				if (!single && !visible(frustum, instance.World, mesh->BoundsMin, mesh->BoundsMax))
 				{
 					continue;
 				}
@@ -266,7 +267,7 @@ namespace wiwa
 				for (size_t p = 0; p < mesh->Primitives.size(); p++)
 				{
 					const GpuPrimitive& primitive = mesh->Primitives[p];
-					if (!frustum.intersects(instance.World, primitive.BoundsMin, primitive.BoundsMax))
+					if (!visible(frustum, instance.World, primitive.BoundsMin, primitive.BoundsMax))
 					{
 						continue;
 					}
@@ -368,6 +369,11 @@ namespace wiwa
 	}
 
 	// The draws of everything that can cast a shadow into the view: every instance whose bounds touch it, blended materials excepted.
+	bool SceneRenderData::visible(const Frustum& frustum, const glm::mat4& world, const glm::vec3& boundsMin, const glm::vec3& boundsMax) const
+	{
+		return !m_Culling || frustum.intersects(world, boundsMin, boundsMax);
+	}
+
 	void SceneRenderData::collect_casters(const glm::mat4& viewProjection, u32 matrixIndex, std::vector<DrawItem>& items)
 	{
 		const Frustum frustum(viewProjection);
@@ -381,7 +387,7 @@ namespace wiwa
 			}
 
 			const GpuMesh* mesh = m_Meshes[slot];
-			if (mesh == nullptr || (mesh->Primitives.size() != 1 && !frustum.intersects(instance.World, mesh->BoundsMin, mesh->BoundsMax)))
+			if (mesh == nullptr || (mesh->Primitives.size() != 1 && !visible(frustum, instance.World, mesh->BoundsMin, mesh->BoundsMax)))
 			{
 				continue;
 			}
@@ -389,7 +395,7 @@ namespace wiwa
 			for (size_t p = 0; p < mesh->Primitives.size(); p++)
 			{
 				const GpuPrimitive& primitive = mesh->Primitives[p];
-				if (!frustum.intersects(instance.World, primitive.BoundsMin, primitive.BoundsMax))
+				if (!visible(frustum, instance.World, primitive.BoundsMin, primitive.BoundsMax))
 				{
 					continue;
 				}

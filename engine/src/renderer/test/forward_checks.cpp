@@ -35,6 +35,146 @@ namespace wiwa
 				context.check(FrustumCuller::is_visible(viewProjection, scaled, low, high), "a big box reaching into view is visible");
 			});
 
+		register_render_check("frustum_culling_property", [](RenderCheckContext& context)
+			{
+				// Whatever the camera and the box: if any point of the box is inside the view volume, the box must not be culled.
+				u32 seed = 4242;
+				auto random = [&seed](float low, float high) { seed = seed * 1664525u + 1013904223u; return low + (high - low) * (static_cast<float>(seed >> 8) / static_cast<float>(1 << 24)); };
+				u32 wrong = 0;
+				for (int trial = 0; trial < 3000 && wrong == 0; trial++)
+				{
+					const glm::vec3 eye(random(-20, 20), random(-20, 20), random(-20, 20));
+					const glm::vec3 target(random(-5, 5), random(-5, 5), random(-5, 5));
+					if (glm::length(target - eye) < 1.0f || std::abs(glm::normalize(target - eye).y) > 0.98f)
+					{
+						continue;
+					}
+					const glm::mat4 projection = trial % 2 ? glm::perspectiveRH_ZO(glm::radians(random(20, 120)), random(0.5f, 2.5f), 0.1f, random(20, 200))
+						: glm::orthoRH_ZO(-random(2, 20), random(2, 20), -random(2, 20), random(2, 20), 0.1f, random(20, 100));
+					const glm::mat4 viewProjection = projection * glm::lookAt(eye, target, glm::vec3(0, 1, 0));
+					const glm::mat4 world = glm::translate(glm::mat4(1.0f), glm::vec3(random(-30, 30), random(-30, 30), random(-30, 30)))
+						* glm::mat4_cast(glm::angleAxis(random(0, 6.28f), glm::normalize(glm::vec3(random(0.1f, 1), random(0.1f, 1), random(0.1f, 1)))))
+						* glm::scale(glm::mat4(1.0f), glm::vec3(random(0.2f, 6), random(0.2f, 6), random(0.2f, 6)));
+					const glm::vec3 low(-1.0f);
+					const glm::vec3 high(1.0f);
+					bool anyInside = false;
+					for (int i = 0; i < 125 && !anyInside; i++)
+					{
+						const glm::vec3 local = glm::mix(low, high, glm::vec3(static_cast<float>(i % 5), static_cast<float>((i / 5) % 5), static_cast<float>(i / 25)) / 4.0f);
+						const glm::vec4 clip = viewProjection * world * glm::vec4(local, 1.0f);
+						anyInside = clip.w > 0.0f && std::abs(clip.x) <= clip.w && std::abs(clip.y) <= clip.w && clip.z >= 0.0f && clip.z <= clip.w;
+					}
+					if (anyInside && !FrustumCuller::is_visible(viewProjection, world, low, high))
+					{
+						wrong++;
+					}
+				}
+				context.check(wrong == 0, "a box with a point inside the view is never culled");
+			});
+
+		register_render_check("culling_does_not_change_image", [](RenderCheckContext& context)
+			{
+				// Random cubes and cameras, with shadows: the culled frame must equal the frame drawn without any culling.
+				u32 seed = 99;
+				auto random = [&seed](float low, float high) { seed = seed * 1664525u + 1013904223u; return low + (high - low) * (static_cast<float>(seed >> 8) / static_cast<float>(1 << 24)); };
+				u32 differing = 0;
+				for (int trial = 0; trial < 12; trial++)
+				{
+					SceneTester test(context);
+					const AssetRef cube = test.add_mesh(make_test_cube(test.add_material(test.color_material(glm::vec3(random(0.2f, 1), random(0.2f, 1), random(0.2f, 1))))));
+					for (int i = 0; i < 40; i++)
+					{
+						test.add_instance(cube, glm::translate(glm::mat4(1.0f), glm::vec3(random(-14, 14), random(-3, 8), random(-14, 14)))
+							* glm::mat4_cast(glm::angleAxis(random(0, 6.28f), glm::normalize(glm::vec3(random(0.1f, 1), random(0.1f, 1), random(0.1f, 1)))))
+							* glm::scale(glm::mat4(1.0f), glm::vec3(random(0.3f, 2.5f))));
+					}
+					test.add_light(test.sun(glm::normalize(glm::vec3(random(-1, 1), -1.0f, random(-1, 1))), 2.0f, true));
+					for (int l = 0; l < 30; l++)
+					{
+						RenderLight light;
+						light.Kind = l % 3 == 0 ? LightKind::Spot : LightKind::Point;
+						light.Position = glm::vec3(random(-14, 14), random(-2, 8), random(-14, 14));
+						light.Direction = glm::normalize(glm::vec3(random(-1, 1), random(-1, 1), random(-1, 1)));
+						light.Range = random(1.0f, 9.0f);
+						light.Intensity = random(0.5f, 4.0f);
+						light.Color = glm::vec3(random(0.2f, 1), random(0.2f, 1), random(0.2f, 1));
+						light.CastsShadows = l % 6 == 0;
+						test.add_light(light);
+					}
+					test.set_camera(glm::vec3(random(-18, 18), random(0, 12), random(-18, 18)), glm::vec3(random(-5, 5), random(0, 3), random(-5, 5)), random(30, 100), 0.1f, 80.0f);
+
+					test.renderer().get_scene_data().set_culling_enabled(true);
+					context.check(test.render(), "render culled");
+					const std::vector<u8> culled = test.pixels();
+					test.renderer().get_scene_data().set_culling_enabled(false);
+					context.check(test.render(), "render unculled");
+					test.renderer().get_scene_data().set_culling_enabled(true);
+					const int difference = SceneTester::max_difference(culled, test.pixels());
+					if (difference != 0)
+					{
+						differing++;
+						WI_LOG(Info, "RenderTest", "culling trial {0} differs by {1}", trial, difference);
+					}
+				}
+				context.check(differing == 0, "culling never changes what is drawn");
+			});
+
+		register_render_check("culling_real_model", [](RenderCheckContext& context)
+			{
+				// The sample scene's model (when it is in the asset catalog): culled and unculled frames from many cameras must be equal.
+				AssetManager* assets = context.World.get_renderer().get_assets();
+				std::optional<AssetRef> model = assets->find_asset("Assets/models/torus_knot.glb");
+				if (!model)
+				{
+					WI_LOG(Info, "RenderTest", "culling_real_model: no Assets/models/torus_knot.glb, skipped");
+					return;
+				}
+				Handle<PrefabData> prefab = assets->load<PrefabData>(*model);
+				for (int i = 0; i < 2000 && prefab.state() == LoadState::Loading; i++)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
+				const PrefabData* data = prefab.get();
+				context.check(data != nullptr, "the model loads");
+				if (data == nullptr)
+				{
+					return;
+				}
+
+				u32 seed = 5;
+				auto random = [&seed](float low, float high) { seed = seed * 1664525u + 1013904223u; return low + (high - low) * (static_cast<float>(seed >> 8) / static_cast<float>(1 << 24)); };
+				u32 differing = 0;
+				for (int trial = 0; trial < 16; trial++)
+				{
+					SceneTester test(context);
+					for (const PrefabNode& node : data->Nodes)
+					{
+						if (node.Mesh.valid())
+						{
+							test.add_instance(node.Mesh, glm::translate(glm::mat4(1.0f), node.Translation) * glm::mat4_cast(node.Rotation) * glm::scale(glm::mat4(1.0f), node.Scale));
+						}
+					}
+					const float radius = random(2.0f, 14.0f);
+					const glm::vec3 around(random(-1, 1), random(-1, 1), random(-1, 1));
+					test.set_camera(glm::normalize(around + glm::vec3(0.01f)) * radius, glm::vec3(random(-1.5f, 1.5f), random(-1.5f, 1.5f), random(-1.5f, 1.5f)), random(25, 100), 0.1f, 200.0f);
+					test.add_light(test.sun(glm::normalize(glm::vec3(random(-1, 1), -1.0f, random(-1, 1))), 2.0f, true));
+
+					test.renderer().get_scene_data().set_culling_enabled(true);
+					context.check(test.render(12), "render culled");
+					const std::vector<u8> culled = test.pixels();
+					test.renderer().get_scene_data().set_culling_enabled(false);
+					context.check(test.render(2), "render unculled");
+					test.renderer().get_scene_data().set_culling_enabled(true);
+					const int difference = SceneTester::max_difference(culled, test.pixels());
+					if (difference != 0)
+					{
+						differing++;
+						WI_LOG(Info, "RenderTest", "real model trial {0} differs by {1}", trial, difference);
+					}
+				}
+				context.check(differing == 0, "culling never changes what is drawn of the real model");
+			});
+
 		register_render_check("forward_flat_color", [](RenderCheckContext& context)
 			{
 				SceneTester test(context);

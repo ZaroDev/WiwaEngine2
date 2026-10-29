@@ -13,6 +13,7 @@
 
 namespace wiwa
 {
+	class Frustum;
 	// The cluster grid lights are sorted into (mirrored in scene_common.hlsli).
 	constexpr u32 CLUSTERS_X = 16;
 	constexpr u32 CLUSTERS_Y = 9;
@@ -135,6 +136,10 @@ namespace wiwa
 		const std::vector<GpuLight>& lights() const { return m_Lights; }
 		u32 dropped_lights() const { return m_DroppedLights; }
 
+		// Off: every instance is drawn and every caster is rendered, whatever the camera sees (for comparing against the culled frame).
+		void set_culling_enabled(bool enabled) { m_Culling = enabled; m_ClusterCulling = enabled; }
+		// Off: the forward shader tests every light instead of its cluster's list.
+
 		// The shadow maps to draw this frame; they are made when the first view needs them (and are 1x1 stand-ins until then).
 		const std::vector<ShadowView>& shadow_views() const { return m_ShadowViews; }
 		nvrhi::ITexture* cascade_map() const { return m_CascadeMap; }
@@ -162,10 +167,13 @@ namespace wiwa
 		std::vector<DrawItem> m_Masked{};
 		std::vector<DrawItem> m_Blended{};
 		u32 m_VisibleInstances = 0;
+		bool visible(const Frustum& frustum, const glm::mat4& world, const glm::vec3& boundsMin, const glm::vec3& boundsMax) const;
 		void collect_casters(const glm::mat4& viewProjection, u32 matrixIndex, std::vector<DrawItem>& items);
 		std::vector<const GpuMesh*> m_Meshes{}; // per instance slot, looked up once per frame
 		std::vector<GpuLight> m_Lights{};
 		u32 m_DroppedLights = 0;
+		bool m_Culling = true;
+		bool m_ClusterCulling = true;
 		std::chrono::steady_clock::time_point m_LastLightWarning{};
 
 		std::vector<ShadowView> m_ShadowViews{};

@@ -37,7 +37,7 @@ cbuffer FrameBuffer : register(b0)
 	float4 SkyColor;        // rgb * ambient intensity
 	float4 GroundColor;
 	float4 ViewportSize;    // width, height, 1 / width, 1 / height
-	float4 ClusterParams;   // x = slice scale, y = slice bias (slice = log2(viewDepth) * x + y), z = 1 for an orthographic camera
+	float4 ClusterParams;   // x = slice scale, y = slice bias (slice = log2(viewDepth) * x + y), z = 1 for an orthographic camera, w = 1 to skip the clusters (debug)
 	uint4 LightInfo;        // x = number of lights in uLights
 	float4x4 ShadowMatrices[8]; // 0..3 the sun's cascades, 4..7 the shadowed spot lights
 	float4 CascadeSplits;   // view depth at which each cascade ends

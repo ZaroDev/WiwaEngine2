@@ -235,6 +235,15 @@ float3 ClusteredLights(SurfaceData surface, float2 pixel)
 	}
 
 	float viewDepth = -mul(View, float4(surface.Position, 1.0)).z;
+	if (ClusterParams.w > 0.5)
+	{
+		// Debug: every light, no clusters (for comparing against the clustered result).
+		for (uint l = 0; l < LightInfo.x; l++)
+		{
+			result += LocalLight(surface, uLights[l]);
+		}
+		return result;
+	}
 	uint cluster = ClusterIndexOf(pixel, viewDepth);
 	uint count = min(uClusterCounts[cluster], MAX_LIGHTS_PER_CLUSTER);
 	for (uint i = 0; i < count; i++)
