@@ -8,6 +8,7 @@ class ConsolePanel final : public Panel
 {
 public:
 	ConsolePanel();
+	~ConsolePanel() override;
 
 	void on_update() override;
 	void on_draw() override;

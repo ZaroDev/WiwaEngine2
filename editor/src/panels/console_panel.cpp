@@ -17,6 +17,11 @@ ConsolePanel::ConsolePanel()
 		add_log(level, string.c_str());
 	});
 }
+ConsolePanel::~ConsolePanel()
+{
+	// The callback captures this; stop listening before the panel is gone.
+	wiwa::Log::set_log_callback(nullptr);
+}
 void ConsolePanel::on_update()
 {
 }
