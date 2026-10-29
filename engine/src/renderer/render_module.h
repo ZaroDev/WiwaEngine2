@@ -53,6 +53,10 @@ namespace wiwa
 		// The size the scene is rendered at, in pixels; the Viewport panel asks for the size of its content region every frame. The render
 		// thread makes (or remakes) the viewport target a frame or two later. The result is drawn by ImGui as the texture id below.
 		void set_viewport_size(u32 width, u32 height);
+
+		// Draws the scene with this camera instead of the scene's primary one (the editor's fly camera); an empty one goes back to the
+		// scene's camera. Sends a command only when it changed.
+		void set_camera_override(const std::optional<RenderCamera>& camera);
 		static constexpr u32 get_viewport_texture_id() { return VIEWPORT_TEXTURE_ID; }
 
 		GraphicsApi get_api() const { return m_Description.Api; }
@@ -81,6 +85,7 @@ namespace wiwa
 		u32 m_ReloadListenerId = 0;
 		u32 m_RequestedViewportWidth = 0; // main thread: what was last sent
 		u32 m_RequestedViewportHeight = 0;
+		std::optional<RenderCamera> m_SentCameraOverride{};
 		u64 m_FrameIndex = 0;
 		u64 m_SmokeFrames = 0; // --render-smoke: quit after this many frames, with exit code 1 if the GPU layers reported an error
 		bool m_RenderTest = false;                // --render-test: run the render checks once the passes are ready, then quit

@@ -81,6 +81,12 @@ namespace wiwa
 		// The scene's primary camera.
 		const std::optional<RenderCamera>& camera() const { return m_Camera; }
 
+		// A camera that replaces the scene's (the editor's fly camera); an empty one gives the scene's camera back. A Reset does not
+		// clear it.
+		void set_camera_override(std::optional<RenderCamera> camera) { m_CameraOverride = camera; }
+		// What the frame is drawn with: the override if there is one, else the scene's camera.
+		const std::optional<RenderCamera>& effective_camera() const { return m_CameraOverride ? m_CameraOverride : m_Camera; }
+
 		// Counts up on every apply that changed something.
 		u64 revision() const { return m_Revision; }
 
@@ -110,6 +116,7 @@ namespace wiwa
 		size_t m_LightCount = 0;
 
 		std::optional<RenderCamera> m_Camera{};
+		std::optional<RenderCamera> m_CameraOverride{};
 		u64 m_Revision = 0;
 	};
 }

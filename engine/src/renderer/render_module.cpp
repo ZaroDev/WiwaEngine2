@@ -174,6 +174,21 @@ namespace wiwa
 			});
 	}
 
+	void RenderModule::set_camera_override(const std::optional<RenderCamera>& camera)
+	{
+		const bool same = camera.has_value() == m_SentCameraOverride.has_value()
+			&& (!camera || std::memcmp(&*camera, &*m_SentCameraOverride, sizeof(RenderCamera)) == 0);
+		if (same)
+		{
+			return;
+		}
+		m_SentCameraOverride = camera;
+		submit([camera](RenderWorld& world)
+			{
+				world.get_scene().set_camera_override(camera);
+			});
+	}
+
 	// Render thread: what the UI shows about the renderer.
 	void RenderModule::publish_snapshot()
 	{
@@ -201,6 +216,7 @@ namespace wiwa
 		snapshot.ShaderStatus = m_Renderer->get_shader_library()->get_status();
 		snapshot.Vsync = m_Renderer->is_vsync_enabled();
 		snapshot.ErrorCount = get_error_message_count();
+		snapshot.HasCamera = m_Renderer->get_scene().effective_camera().has_value();
 		const UploadQueue& uploads = m_Renderer->get_upload_queue();
 		snapshot.UploadQueueName = uploads.is_using_copy_queue() ? "copy queue" : "graphics queue";
 		snapshot.UploadBytesTotal = uploads.bytes_total();
@@ -258,7 +274,10 @@ namespace wiwa
 		// What the active scene changed, for the render thread's scene mirror.
 		if (SceneModule* scenes = Engine::get().get_module<SceneModule>())
 		{
-			const float aspect = batch.Height > 0 ? static_cast<float>(batch.Width) / static_cast<float>(batch.Height) : 1.0f;
+			// The scene is drawn at the viewport's size when there is a Viewport panel, else at the window's.
+			const u32 shapeWidth = m_RequestedViewportWidth > 0 ? m_RequestedViewportWidth : batch.Width;
+			const u32 shapeHeight = m_RequestedViewportHeight > 0 ? m_RequestedViewportHeight : batch.Height;
+			const float aspect = shapeHeight > 0 ? static_cast<float>(shapeWidth) / static_cast<float>(shapeHeight) : 1.0f;
 			SceneDelta delta = m_Extractor.extract(scenes->get_active(), aspect);
 			if (!delta.empty())
 			{

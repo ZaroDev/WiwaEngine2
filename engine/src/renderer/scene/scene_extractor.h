@@ -9,8 +9,10 @@
 
 namespace wiwa
 {
-	// The RenderCamera for a Camera component at a world transform; aspect is width / height of what it renders into.
-	RenderCamera make_render_camera(const Camera& camera, const glm::mat4& world, float aspect);
+	// The RenderCamera for a Camera component at a world transform; aspect is width / height of what it renders into. Input that
+	// cannot make a camera (near >= far, an aspect of 0, a NaN in the transform, ...) is replaced by sane values; degenerate, when
+	// given, says whether that happened.
+	RenderCamera make_render_camera(const Camera& camera, const glm::mat4& world, float aspect, bool* degenerate = nullptr);
 
 	// Main thread. Compares the scene's MeshRenderers, Lights and primary Camera with what it sent last time and returns what
 	// changed, ready to be applied to the render thread's RenderScene. Nothing here touches the render thread.
@@ -44,6 +46,7 @@ namespace wiwa
 		RenderCamera m_Camera{};
 		float m_CameraAspect = 0.0f;
 		Camera m_CameraComponent{};
+		bool m_WarnedDegenerate = false;
 
 		u64 m_Pass = 0;
 	};

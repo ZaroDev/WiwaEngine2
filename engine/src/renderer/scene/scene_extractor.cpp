@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "scene_extractor.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace wiwa
@@ -47,22 +49,80 @@ namespace wiwa
 		}
 	}
 
-	RenderCamera make_render_camera(const Camera& camera, const glm::mat4& world, float aspect)
+	namespace
 	{
+		bool finite_matrix(const glm::mat4& matrix)
+		{
+			for (int column = 0; column < 4; column++)
+			{
+				for (int row = 0; row < 4; row++)
+				{
+					if (!std::isfinite(matrix[column][row]))
+					{
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+	}
+
+	RenderCamera make_render_camera(const Camera& camera, const glm::mat4& world, float aspect, bool* degenerate)
+	{
+		bool broken = false;
+
+		glm::mat4 placement = world;
+		if (!finite_matrix(placement) || std::abs(glm::determinant(placement)) < 1e-12f)
+		{
+			placement = glm::mat4(1.0f);
+			broken = true;
+		}
+
+		float nearPlane = camera.Near;
+		float farPlane = camera.Far;
+		if (!std::isfinite(nearPlane) || !std::isfinite(farPlane) || nearPlane <= 0.0f || farPlane <= nearPlane)
+		{
+			nearPlane = 0.1f;
+			farPlane = 1000.0f;
+			broken = true;
+		}
+
+		if (!std::isfinite(aspect) || aspect <= 0.0f)
+		{
+			aspect = 1.0f;
+			broken = true;
+		}
+
 		RenderCamera result;
-		result.View = glm::inverse(world);
-		result.Position = glm::vec3(world[3]);
-		result.Near = camera.Near;
-		result.Far = camera.Far;
+		result.View = glm::inverse(placement);
+		result.Position = glm::vec3(placement[3]);
+		result.Near = nearPlane;
+		result.Far = farPlane;
 		if (camera.Projection == ProjectionKind::Orthographic)
 		{
-			const float halfHeight = camera.OrthoSize;
+			float halfHeight = camera.OrthoSize;
+			if (!std::isfinite(halfHeight) || halfHeight <= 0.0f)
+			{
+				halfHeight = 10.0f;
+				broken = true;
+			}
 			const float halfWidth = halfHeight * aspect;
-			result.Projection = glm::orthoRH_ZO(-halfWidth, halfWidth, -halfHeight, halfHeight, camera.Near, camera.Far);
+			result.Projection = glm::orthoRH_ZO(-halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
 		}
 		else
 		{
-			result.Projection = glm::perspectiveRH_ZO(glm::radians(camera.FovY), aspect, camera.Near, camera.Far);
+			float fov = camera.FovY;
+			if (!std::isfinite(fov) || fov < 1.0f || fov > 179.0f)
+			{
+				fov = std::isfinite(fov) ? std::clamp(fov, 1.0f, 179.0f) : 60.0f;
+				broken = true;
+			}
+			result.Projection = glm::perspectiveRH_ZO(glm::radians(fov), aspect, nearPlane, farPlane);
+		}
+
+		if (degenerate != nullptr)
+		{
+			*degenerate = broken;
 		}
 		return result;
 	}
@@ -177,7 +237,13 @@ namespace wiwa
 			}
 
 			found = true;
-			const RenderCamera current = make_render_camera(camera, world.Matrix, aspect);
+			bool degenerate = false;
+			const RenderCamera current = make_render_camera(camera, world.Matrix, aspect, &degenerate);
+			if (degenerate && !m_WarnedDegenerate)
+			{
+				WI_LOG(Warning, "Renderer", "the primary camera has values that cannot make a camera (near/far, field of view, transform): defaults are used");
+			}
+			m_WarnedDegenerate = degenerate;
 			if (!m_HasCamera || m_CameraId != id.Guid || m_CameraAspect != aspect || !same_matrix(m_Camera.View, current.View)
 				|| !same_camera_component(m_CameraComponent, camera))
 			{

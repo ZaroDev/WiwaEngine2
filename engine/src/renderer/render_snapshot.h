@@ -20,6 +20,7 @@ namespace wiwa
 		std::vector<std::pair<std::string, double>> PassMs{};
 		bool Vsync = true;
 		u32 ErrorCount = 0;
+		bool HasCamera = false; // the scene has a camera to draw with (the editor's camera counts)
 		std::string UploadQueueName{}; // "copy queue" or "graphics queue"
 		u64 UploadBytesTotal = 0;
 		double UploadMs = 0.0; // the CPU time of the latest frame that uploaded something
