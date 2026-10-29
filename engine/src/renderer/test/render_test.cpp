@@ -40,6 +40,44 @@ namespace wiwa
 						context.check(copyOk, "copy queue upload: " + error);
 					}
 				});
+
+			register_render_check("readback_clear_color", [](RenderCheckContext& context)
+				{
+					nvrhi::TextureDesc description;
+					description.width = 64;
+					description.height = 32;
+					description.format = nvrhi::Format::RGBA8_UNORM;
+					description.isRenderTarget = true;
+					description.initialState = nvrhi::ResourceStates::RenderTarget;
+					description.keepInitialState = true;
+					description.debugName = "readback_clear_color target";
+					nvrhi::TextureHandle target = context.Device->createTexture(description);
+					nvrhi::CommandListHandle commandList = context.Device->createCommandList();
+					context.check(target && commandList, "could not create the target");
+					if (!target || !commandList)
+					{
+						return;
+					}
+
+					commandList->open();
+					commandList->clearTextureFloat(target, nvrhi::AllSubresources, nvrhi::Color(0.25f, 0.5f, 0.75f, 1.0f));
+					commandList->close();
+					context.Device->executeCommandList(commandList);
+
+					std::vector<u8> pixels;
+					u32 width = 0;
+					u32 height = 0;
+					context.check(read_texture_rgba8(context.Device, target, pixels, width, height), "readback failed");
+					context.check(width == 64 && height == 32 && pixels.size() == 64 * 32 * 4, "wrong readback size");
+
+					const u8 expected[4] = { 64, 128, 191, 255 };
+					bool allEqual = pixels.size() == 64 * 32 * 4;
+					for (size_t i = 0; allEqual && i < pixels.size(); i++)
+					{
+						allEqual = std::abs(static_cast<int>(pixels[i]) - static_cast<int>(expected[i % 4])) <= 1;
+					}
+					context.check(allEqual, "every pixel is (64, 128, 191, 255) within 1");
+				});
 		}
 	}
 
