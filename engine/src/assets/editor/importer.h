@@ -43,7 +43,8 @@ namespace wiwa
 
 		// Imports another source file (a texture a model uses) if needed and returns its asset. The path may be
 		// relative to this source's folder. nullopt if there is no importer for it.
-		std::optional<AssetRef> import_dependency(const std::filesystem::path& file);
+		// defaultSettings only apply if that file has no .meta yet (e.g. a model asks for a normal map to be imported as one).
+		std::optional<AssetRef> import_dependency(const std::filesystem::path& file, const nlohmann::json* defaultSettings = nullptr);
 
 		template<typename T>
 		void emit(AssetRef ref, const T& data, const std::vector<AssetRef>& dependencies = {})

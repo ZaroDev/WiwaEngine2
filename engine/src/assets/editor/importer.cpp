@@ -27,10 +27,10 @@ namespace wiwa
 		return AssetRef{ m_Meta.Guid, next };
 	}
 
-	std::optional<AssetRef> ImportContext::import_dependency(const std::filesystem::path& file)
+	std::optional<AssetRef> ImportContext::import_dependency(const std::filesystem::path& file, const nlohmann::json* defaultSettings)
 	{
 		std::filesystem::path path = file.is_absolute() ? file : m_Source.parent_path() / file;
-		return m_Database.ensure_imported(path.lexically_normal());
+		return m_Database.ensure_imported(path.lexically_normal(), defaultSettings);
 	}
 
 	void ImportContext::warn(const std::string& message)

@@ -175,16 +175,16 @@ namespace wiwa
 	{
 		if (find_importer(source))
 		{
-			import_source(source, true);
+			import_source(source, true, nullptr);
 		}
 	}
 
-	std::optional<AssetRef> AssetDatabase::ensure_imported(const std::filesystem::path& source)
+	std::optional<AssetRef> AssetDatabase::ensure_imported(const std::filesystem::path& source, const nlohmann::json* defaultSettings)
 	{
-		return import_source(source, false);
+		return import_source(source, false, defaultSettings);
 	}
 
-	std::optional<AssetRef> AssetDatabase::import_source(const std::filesystem::path& source, bool recheck)
+	std::optional<AssetRef> AssetDatabase::import_source(const std::filesystem::path& source, bool recheck, const nlohmann::json* defaultSettings)
 	{
 		if (!find_importer(source))
 		{
@@ -207,7 +207,7 @@ namespace wiwa
 		}
 
 		bool failed = false;
-		std::optional<AssetRef> result = do_import(source, key, failed);
+		std::optional<AssetRef> result = do_import(source, key, defaultSettings, failed);
 
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex);
@@ -223,7 +223,7 @@ namespace wiwa
 		return result;
 	}
 
-	std::optional<AssetRef> AssetDatabase::do_import(const std::filesystem::path& source, const std::string& key, bool& failed)
+	std::optional<AssetRef> AssetDatabase::do_import(const std::filesystem::path& source, const std::string& key, const nlohmann::json* defaultSettings, bool& failed)
 	{
 		IImporter* importer = find_importer(source);
 		const std::filesystem::path metaPath = MetaFile::meta_path_for(source);
@@ -250,7 +250,7 @@ namespace wiwa
 			}
 
 			meta.Guid = AssetGuid::generate();
-			meta.Settings = importer->default_settings();
+			meta.Settings = defaultSettings ? *defaultSettings : importer->default_settings();
 			metaDirty = true;
 		}
 

@@ -30,7 +30,8 @@ namespace wiwa
 
 		// Imports the file first if it is stale; returns its asset, or nullopt if there is no importer for it.
 		// Safe to call from importers running on the worker pool.
-		std::optional<AssetRef> ensure_imported(const std::filesystem::path& source);
+		// defaultSettings replace the importer's defaults, but only when the file gets its .meta now.
+		std::optional<AssetRef> ensure_imported(const std::filesystem::path& source, const nlohmann::json* defaultSettings = nullptr);
 
 		std::optional<std::filesystem::path> path_of(AssetGuid guid) const;
 		bool has_importer_for(const std::filesystem::path& source) const;
@@ -50,8 +51,8 @@ namespace wiwa
 		};
 
 		IImporter* find_importer(const std::filesystem::path& source) const;
-		std::optional<AssetRef> import_source(const std::filesystem::path& source, bool recheck);
-		std::optional<AssetRef> do_import(const std::filesystem::path& source, const std::string& key, bool& failed);
+		std::optional<AssetRef> import_source(const std::filesystem::path& source, bool recheck, const nlohmann::json* defaultSettings);
+		std::optional<AssetRef> do_import(const std::filesystem::path& source, const std::string& key, const nlohmann::json* defaultSettings, bool& failed);
 		std::filesystem::path cooked_path(AssetGuid guid) const;
 		void load_cache();
 		void save_cache_locked();
