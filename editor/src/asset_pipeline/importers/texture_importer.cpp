@@ -1,10 +1,8 @@
-#include <pch.h>
+#include <editor_common.h>
 #include "importers.h"
 
-#if !WI_SHIPPING
-
-#include "assets/editor/file_utils.h"
-#include "assets/editor/image_utils.h"
+#include "../file_utils.h"
+#include "../image_utils.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -79,5 +77,3 @@ namespace wiwa
 	Scope<IImporter> create_texture_importer() { return CreateScope<TextureImporter>(); }
 	Scope<IImporter> create_environment_importer() { return CreateScope<EnvironmentImporter>(); }
 }
-
-#endif

@@ -15,6 +15,13 @@ project "wiwa_editor"
 
 	includedirs
 	{
+		"src",
+		"%{IncludeDirs.NJSON}",
+		"%{IncludeDirs.STB}",
+		"%{IncludeDirs.CGLTF}",
+		"%{IncludeDirs.UFBX}",
+		"%{IncludeDirs.LZ4}",
+		"%{IncludeDirs.filewatch}",
 		"%{IncludeDirs.SPDLOG}",
 		--"%{IncludeDirs.ImGui}",
 		"%{IncludeDirs.GLM}",
@@ -32,6 +39,8 @@ project "wiwa_editor"
 	links
 	{
 		"wiwa",
+		"LZ4",
+		"ufbx",
 		--"ImGui",
 		-- "Optick",
 		-- "ImGuizmo"

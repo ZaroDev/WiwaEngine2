@@ -1,7 +1,5 @@
 #pragma once
 
-#if !WI_SHIPPING
-
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -27,5 +25,3 @@ namespace wiwa
 		return bytes;
 	}
 }
-
-#endif

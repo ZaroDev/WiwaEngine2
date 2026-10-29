@@ -2,6 +2,7 @@
 #include <core/engine.h>
 
 #include "editor_module.h"
+#include "asset_pipeline/asset_pipeline_module.h"
 
 class Editor final : public wiwa::Engine
 {
@@ -21,6 +22,7 @@ public:
 protected:
 	virtual void on_init() override
 	{
+		m_ModuleManager.add_module<wiwa::AssetPipelineModule>();
 		m_ModuleManager.add_module<EditorModule>();
 	}
 };

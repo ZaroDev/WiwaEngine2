@@ -1,7 +1,5 @@
-#include <pch.h>
+#include <editor_common.h>
 #include "meta_file.h"
-
-#if !WI_SHIPPING
 
 #include <fstream>
 
@@ -91,5 +89,3 @@ namespace wiwa
 		return !error;
 	}
 }
-
-#endif

@@ -1,7 +1,5 @@
 #pragma once
 
-#if !WI_SHIPPING
-
 #include <atomic>
 #include <condition_variable>
 #include <functional>
@@ -77,5 +75,3 @@ namespace wiwa
 		JobSystem m_Jobs{ 4 };
 	};
 }
-
-#endif

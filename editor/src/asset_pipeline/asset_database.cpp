@@ -1,7 +1,5 @@
-#include <pch.h>
+#include <editor_common.h>
 #include "asset_database.h"
-
-#if !WI_SHIPPING
 
 #include <fstream>
 
@@ -410,5 +408,3 @@ namespace wiwa
 		return mainAsset;
 	}
 }
-
-#endif

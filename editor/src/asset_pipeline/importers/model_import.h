@@ -1,7 +1,5 @@
 #pragma once
 
-#if !WI_SHIPPING
-
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -55,5 +53,3 @@ namespace wiwa
 	bool read_gltf_model(const std::filesystem::path& path, ImportedModel& model, std::string& error);
 	bool read_fbx_model(const std::filesystem::path& path, ImportedModel& model, std::string& error);
 }
-
-#endif

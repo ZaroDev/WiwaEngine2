@@ -1,7 +1,5 @@
-#include <pch.h>
+#include <editor_common.h>
 #include "importer.h"
-
-#if !WI_SHIPPING
 
 #include "asset_database.h"
 
@@ -38,5 +36,3 @@ namespace wiwa
 		WI_ASSET_LOG(Warning, "{0}: {1}", m_Source.filename().string(), message);
 	}
 }
-
-#endif

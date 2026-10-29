@@ -1,7 +1,5 @@
 #pragma once
 
-#if !WI_SHIPPING
-
 #include <optional>
 #include <span>
 #include <string>
@@ -23,5 +21,3 @@ namespace wiwa
 	TextureKind texture_kind_from_string(const std::string& name);
 	const char* texture_kind_to_string(TextureKind kind);
 }
-
-#endif

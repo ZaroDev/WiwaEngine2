@@ -1,7 +1,5 @@
 #pragma once
 
-#if !WI_SHIPPING
-
 #include <filesystem>
 #include <optional>
 #include <span>
@@ -93,5 +91,3 @@ namespace wiwa
 		virtual bool import(ImportContext& ctx) = 0;
 	};
 }
-
-#endif

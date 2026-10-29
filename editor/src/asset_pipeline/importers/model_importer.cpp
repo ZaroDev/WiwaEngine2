@@ -1,13 +1,11 @@
-#include <pch.h>
+#include <editor_common.h>
 #include "importers.h"
-
-#if !WI_SHIPPING
 
 #include <algorithm>
 
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "assets/editor/image_utils.h"
+#include "../image_utils.h"
 #include "model_import.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
@@ -245,5 +243,3 @@ namespace wiwa
 
 	Scope<IImporter> create_model_importer() { return CreateScope<ModelImporter>(); }
 }
-
-#endif

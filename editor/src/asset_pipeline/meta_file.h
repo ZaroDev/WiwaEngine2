@@ -1,7 +1,5 @@
 #pragma once
 
-#if !WI_SHIPPING
-
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -30,5 +28,3 @@ namespace wiwa
 		bool save(const std::filesystem::path& metaPath) const;
 	};
 }
-
-#endif

@@ -1,11 +1,9 @@
-#include <pch.h>
+#include <editor_common.h>
 #include "importers.h"
-
-#if !WI_SHIPPING
 
 #include <sstream>
 
-#include "assets/editor/file_utils.h"
+#include "../file_utils.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -177,5 +175,3 @@ namespace wiwa
 	Scope<IImporter> create_lut_importer() { return CreateScope<LutImporter>(); }
 	Scope<IImporter> create_shader_importer() { return CreateScope<ShaderImporter>(); }
 }
-
-#endif

@@ -11,10 +11,6 @@
 #include "job_system.h"
 #include "wasset_io.h"
 
-#if !WI_SHIPPING
-#include "editor/asset_database.h"
-#endif
-
 namespace wiwa
 {
 	// Loads assets by guid on worker threads and keeps them in a refcounted cache.
@@ -42,11 +38,6 @@ namespace wiwa
 
 		LoadState get_state(AssetGuid resolvedGuid) const;
 
-#if !WI_SHIPPING
-		// Editor only: the database of source files, null when the assets come from a pack.
-		AssetDatabase* get_database() const { return m_Database.get(); }
-#endif
-
 		// Replaces the source; assets already loaded stay.
 		void set_source(Scope<IAssetSource> source);
 		IAssetSource* get_source() const { return m_Source.get(); }
@@ -65,9 +56,6 @@ namespace wiwa
 
 		Scope<IAssetSource> m_Source{};
 		Scope<JobSystem> m_Jobs{};
-#if !WI_SHIPPING
-		Scope<AssetDatabase> m_Database{};
-#endif
 
 		mutable std::mutex m_Mutex{};
 		std::unordered_map<AssetGuid, Ref<AssetSlot>> m_Cache{};

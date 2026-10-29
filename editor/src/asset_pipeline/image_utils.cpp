@@ -1,7 +1,5 @@
-#include <pch.h>
+#include <editor_common.h>
 #include "image_utils.h"
-
-#if !WI_SHIPPING
 
 #include <algorithm>
 #include <array>
@@ -262,5 +260,3 @@ namespace wiwa
 		}
 	}
 }
-
-#endif

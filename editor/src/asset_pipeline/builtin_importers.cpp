@@ -1,7 +1,5 @@
-#include <pch.h>
+#include <editor_common.h>
 #include "builtin_importers.h"
-
-#if !WI_SHIPPING
 
 #include "asset_database.h"
 #include "importers/importers.h"
@@ -17,5 +15,3 @@ namespace wiwa
 		database.register_importer(create_model_importer());
 	}
 }
-
-#endif

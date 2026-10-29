@@ -1,7 +1,5 @@
-#include <pch.h>
+#include <editor_common.h>
 #include "model_import.h"
-
-#if !WI_SHIPPING
 
 #include <algorithm>
 #include <memory>
@@ -656,5 +654,3 @@ namespace wiwa
 		return true;
 	}
 }
-
-#endif
