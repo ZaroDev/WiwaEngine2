@@ -27,6 +27,8 @@ namespace wiwa {
 		{
 			return m_ModuleManager.get_module<T>();
 		}
+
+		Time& get_time() { return m_Time; }
 	protected:
 		virtual void on_init() {};
 		virtual void on_update(float deltaTime) {};

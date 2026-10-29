@@ -6,6 +6,7 @@
 
 #include <core/engine.h>
 #include <renderer/window.h>
+#include <time/time.h>
 
 
 #define WI_RENDER_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
@@ -31,6 +32,18 @@ namespace wiwa
 				ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_FirstUseEver);
 				ImGui::Begin("Renderer");
 				ImGui::Text("%.1f FPS (%.2f ms)", io.Framerate, 1000.0f / io.Framerate);
+
+				static bool limitFrames = false;
+				ImGui::Checkbox("Limit frame rate", &limitFrames);
+				if (limitFrames)
+				{
+					int currentFPS = Engine::get().get_time().get_target_fps() < 0 ? 1 : Engine::get().get_time().get_target_fps();
+					if (ImGui::InputInt("Target fps", &currentFPS, 1, 10))
+					{
+						Engine::get().get_time().set_target_fps(currentFPS);
+					}
+				}
+
 				static bool showDemoWindow = false;
 				ImGui::Checkbox("ImGui demo window", &showDemoWindow);
 				ImGui::End();
