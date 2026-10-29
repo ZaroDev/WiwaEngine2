@@ -1,5 +1,6 @@
 #include "editor_module.h"
 
+#include <asset_pipeline/asset_pipeline_module.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <scene/scene_module.h>
@@ -32,6 +33,7 @@ void EditorModule::init()
 	m_Panels.push_back(CreateRef<RendererPanel>());
 	m_Panels.push_back(CreateRef<QualityPanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
+	m_Panels.push_back(CreateRef<AssetBrowserPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
 
 	set_theme();
 }
