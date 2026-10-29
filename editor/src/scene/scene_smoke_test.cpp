@@ -6,6 +6,7 @@
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <scene/entity_guid.h>
+#include <scene/prefab_expander.h>
 #include <scene/prefab_node_id.h>
 #include <scene/reflection/component_registry.h>
 #include <scene/reflection/value_bag.h>
@@ -499,6 +500,177 @@ namespace wiwa
 			}
 			check(stable, "a forced re-import gives the same node ids");
 		}
+
+		EntityRecord make_instance(EntityGuid id, AssetRef prefab)
+		{
+			EntityRecord record;
+			record.Id = id;
+			record.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Instance")) } } });
+			record.Components.push_back(ComponentRecord{ "PrefabInstance", { FieldRecord{ "Prefab", FieldValue(prefab) } } });
+			return record;
+		}
+
+		PrefabOverride set_field_override(u64 node, const std::string& component, const std::string& field, FieldValue value)
+		{
+			PrefabOverride override;
+			override.Kind = OverrideKind::SetField;
+			override.NodeId = node;
+			override.Component = component;
+			override.Field = field;
+			override.Value = std::move(value);
+			return override;
+		}
+
+		const EntityRecord* find_entity(const std::vector<EntityRecord>& entities, EntityGuid id)
+		{
+			for (const EntityRecord& entity : entities)
+			{
+				if (entity.Id == id)
+				{
+					return &entity;
+				}
+			}
+			return nullptr;
+		}
+
+		glm::vec3 position_of(const EntityRecord* entity)
+		{
+			const ComponentRecord* transform = entity ? find_component(*entity, "Transform") : nullptr;
+			const FieldRecord* position = transform ? find_field(*transform, "Position") : nullptr;
+			return position ? std::get<glm::vec3>(position->Value) : glm::vec3(-1000.0f);
+		}
+
+		void check_prefab(Check& check)
+		{
+			const AssetRef meshRef{ AssetGuid::generate(), 1 };
+			const AssetRef prefabRef{ AssetGuid::generate(), 0 };
+
+			PrefabData prefab;
+			prefab.Name = "car";
+			prefab.Nodes = { make_node("Body", -1), make_node("Wheel", 0), make_node("Wheel", 0), make_node("Door", 0), make_node("Hub", 2) };
+			prefab.Nodes[3].Mesh = meshRef;
+			prefab.Nodes[3].Translation = glm::vec3(0, 1, 0);
+			assign_stable_ids(prefab.Nodes);
+			const u64 bodyNode = prefab.Nodes[0].StableId;
+			const u64 wheelNode = prefab.Nodes[1].StableId;
+			const u64 wheel2Node = prefab.Nodes[2].StableId;
+			const u64 doorNode = prefab.Nodes[3].StableId;
+
+			const EntityGuid instanceId = EntityGuid::generate();
+			EntityRecord instance = make_instance(instanceId, prefabRef);
+
+			// the plain expansion
+			const ExpandResult plain = expand_prefab(instance, prefab);
+			check(plain.Entities.size() == prefab.Nodes.size() + 1 && plain.NodeIds.size() == plain.Entities.size(), "an expansion has the instance root plus one entity per node");
+			check(!plain.Entities.empty() && plain.Entities[0].Id == instanceId && plain.NodeIds[0] == 0, "the first record is the instance root");
+			bool parentsFirst = true;
+			for (size_t i = 0; i < plain.Entities.size(); i++)
+			{
+				const EntityRecord& entity = plain.Entities[i];
+				if (entity.Parent.valid() && (find_entity(plain.Entities, entity.Parent) == nullptr || find_entity(plain.Entities, entity.Parent) > &entity))
+				{
+					parentsFirst = false;
+				}
+			}
+			check(parentsFirst, "parents come before their children");
+
+			const ExpandResult again = expand_prefab(instance, prefab);
+			bool sameIds = again.Entities.size() == plain.Entities.size();
+			for (size_t i = 0; sameIds && i < again.Entities.size(); i++)
+			{
+				sameIds = again.Entities[i].Id == plain.Entities[i].Id;
+			}
+			check(sameIds, "two expansions give the same entity ids");
+			const ExpandResult other = expand_prefab(make_instance(EntityGuid::generate(), prefabRef), prefab);
+			check(other.Entities.size() == plain.Entities.size() && other.Entities[1].Id != plain.Entities[1].Id, "two instances of a prefab get different entity ids");
+
+			const EntityGuid bodyId = EntityGuid::derive(instanceId, bodyNode);
+			const EntityGuid wheelId = EntityGuid::derive(instanceId, wheelNode);
+			const EntityGuid wheel2Id = EntityGuid::derive(instanceId, wheel2Node);
+			const EntityGuid doorId = EntityGuid::derive(instanceId, doorNode);
+			const EntityRecord* body = find_entity(plain.Entities, bodyId);
+			const EntityRecord* door = find_entity(plain.Entities, doorId);
+			check(body && body->Parent == instanceId, "a top-level node goes under the instance root");
+			check(door && door->Parent == bodyId, "a node goes under its parent node");
+			const ComponentRecord* doorMesh = door ? find_component(*door, "MeshRenderer") : nullptr;
+			check(doorMesh && find_field(*doorMesh, "Mesh") && std::get<AssetRef>(find_field(*doorMesh, "Mesh")->Value) == meshRef, "a node with a mesh gets a MeshRenderer");
+			const EntityRecord* wheel = find_entity(plain.Entities, wheelId);
+			check(wheel && !find_component(*wheel, "MeshRenderer"), "a node without a mesh has no MeshRenderer");
+			check(position_of(door) == glm::vec3(0, 1, 0), "a node's transform comes from the prefab");
+
+			// each kind of override
+			instance.Overrides = { set_field_override(doorNode, "Transform", "Position", FieldValue(glm::vec3(9, 8, 7))) };
+			ExpandResult result = expand_prefab(instance, prefab);
+			check(position_of(find_entity(result.Entities, doorId)) == glm::vec3(9, 8, 7), "SetField changes a field of a node");
+			check(result.Entities[0].Overrides.size() == 1, "the instance root keeps its overrides, so that the scene can be saved again");
+
+			PrefabOverride addLight;
+			addLight.Kind = OverrideKind::AddComponent;
+			addLight.NodeId = doorNode;
+			addLight.Added = ComponentRecord{ "Light", { FieldRecord{ "Intensity", FieldValue(5.0f) } } };
+			PrefabOverride removeMesh;
+			removeMesh.Kind = OverrideKind::RemoveComponent;
+			removeMesh.NodeId = doorNode;
+			removeMesh.Component = "MeshRenderer";
+			instance.Overrides = { addLight, removeMesh };
+			result = expand_prefab(instance, prefab);
+			const EntityRecord* changedDoor = find_entity(result.Entities, doorId);
+			check(changedDoor && find_component(*changedDoor, "Light") && !find_component(*changedDoor, "MeshRenderer"), "AddComponent adds one, RemoveComponent takes one away");
+
+			PrefabOverride addChild;
+			addChild.Kind = OverrideKind::AddChild;
+			addChild.NodeId = wheel2Node;
+			addChild.Child.Id = EntityGuid::generate();
+			addChild.Child.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Bolt")) } } });
+			instance.Overrides = { addChild };
+			result = expand_prefab(instance, prefab);
+			check(result.Entities.size() == plain.Entities.size() + 1, "AddChild adds one entity");
+			const EntityRecord& bolt = result.Entities.back();
+			check(bolt.Parent == wheel2Id && bolt.Id.valid() && bolt.Id != addChild.Child.Id, "the added child goes under its node and gets an id derived from the instance");
+			check(expand_prefab(instance, prefab).Entities.back().Id == bolt.Id, "the added child has the same id on every expansion");
+			check(expand_prefab(make_instance(EntityGuid::generate(), prefabRef), prefab).Entities.size() == plain.Entities.size(), "an instance without overrides does not get the added child");
+
+			PrefabOverride removeNode;
+			removeNode.Kind = OverrideKind::RemoveNode;
+			removeNode.NodeId = wheel2Node;
+			instance.Overrides = { removeNode };
+			result = expand_prefab(instance, prefab);
+			check(result.Entities.size() == plain.Entities.size() - 2 && !find_entity(result.Entities, wheel2Id) && !find_entity(result.Entities, EntityGuid::derive(instanceId, prefab.Nodes[4].StableId)), "RemoveNode removes the node and everything below it");
+
+			instance.Overrides = { set_field_override(0, "Transform", "Scale", FieldValue(glm::vec3(2, 2, 2))) };
+			result = expand_prefab(instance, prefab);
+			const ComponentRecord* rootTransform = find_component(result.Entities[0], "Transform");
+			const FieldRecord* rootScale = rootTransform ? find_field(*rootTransform, "Scale") : nullptr;
+			check(rootScale && std::get<glm::vec3>(rootScale->Value) == glm::vec3(2, 2, 2), "node id 0 addresses the instance root itself");
+
+			// revert
+			instance.Overrides = { set_field_override(doorNode, "Transform", "Position", FieldValue(glm::vec3(9, 8, 7))), set_field_override(doorNode, "Transform", "Scale", FieldValue(glm::vec3(3, 3, 3))) };
+			const std::optional<FieldValue> original = prefab_value(prefab, doorNode, "Transform", "Position");
+			check(original && std::get<glm::vec3>(*original) == glm::vec3(0, 1, 0), "prefab_value gives the value the prefab itself has");
+			check(!prefab_value(prefab, doorNode, "Light", "Intensity").has_value() && !prefab_value(prefab, 12345, "Transform", "Position").has_value(), "prefab_value is empty for a component or node the prefab does not have");
+			revert_field(instance, doorNode, "Transform", "Position");
+			check(instance.Overrides.size() == 1 && instance.Overrides[0].Field == "Scale", "revert_field removes exactly that override");
+			check(position_of(find_entity(expand_prefab(instance, prefab).Entities, doorId)) == glm::vec3(0, 1, 0), "after a revert the node has the prefab's value again");
+			revert_all(instance);
+			check(instance.Overrides.empty(), "revert_all leaves no override");
+
+			// a node that is gone from the prefab: the override is dropped, the others still apply
+			instance.Overrides = { set_field_override(wheel2Node, "Transform", "Position", FieldValue(glm::vec3(1, 1, 1))), set_field_override(doorNode, "Transform", "Position", FieldValue(glm::vec3(4, 4, 4))) };
+			PrefabData reduced = prefab;
+			reduced.Nodes.erase(reduced.Nodes.begin() + 4); // the hub goes first, it points at the wheel
+			reduced.Nodes.erase(reduced.Nodes.begin() + 2); // the second wheel
+			assign_stable_ids(reduced.Nodes);
+			check(reduced.Nodes[1].StableId == wheelNode && reduced.Nodes[2].StableId == doorNode, "the ids of the other nodes do not change when a node is removed from the prefab");
+			result = expand_prefab(instance, reduced);
+			check(result.DroppedOverrideNodes == std::vector<u64>{ wheel2Node } && !result.Warnings.empty(), "an override on a node that is gone is reported and dropped");
+			check(position_of(find_entity(result.Entities, doorId)) == glm::vec3(4, 4, 4), "the other overrides still apply");
+
+			// unpack
+			instance.Overrides = { set_field_override(doorNode, "Transform", "Position", FieldValue(glm::vec3(9, 8, 7))) };
+			const std::vector<EntityRecord> unpacked = unpack(instance, prefab);
+			check(unpacked.size() == plain.Entities.size() && !find_component(unpacked[0], "PrefabInstance") && unpacked[0].Overrides.empty(), "unpack flattens the instance into plain entities");
+			check(position_of(find_entity(unpacked, doorId)) == glm::vec3(9, 8, 7), "unpack keeps the overridden values");
+		}
 	}
 
 	bool run_scene_smoke_test(AssetPipelineModule& pipeline)
@@ -510,6 +682,7 @@ namespace wiwa
 		check_render_components(check);
 		check_scene_data(check);
 		check_node_ids(check, pipeline);
+		check_prefab(check);
 
 		if (check.Failures == 0)
 		{
