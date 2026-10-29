@@ -18,7 +18,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "SceneImporter"; }
-			virtual u32 version() const override { return 2; } // 2: the scene settings block
+			virtual u32 version() const override { return 3; } // 3: the post-processing settings
 			virtual std::vector<std::string> extensions() const override { return { ".wscene" }; }
 
 			virtual bool import(ImportContext& ctx) override
