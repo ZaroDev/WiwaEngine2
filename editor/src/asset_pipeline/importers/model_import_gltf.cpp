@@ -457,6 +457,29 @@ namespace wiwa
 				{
 					compute_normals(data.Vertices, firstVertex, validIndices);
 				}
+				else
+				{
+					// glTF triangles are counter-clockwise seen from outside. A file whose triangles run the other way round to its own
+					// normals (a broken exporter) would be drawn inside out with back-face culling: turn those triangles round.
+					u32 agree = 0;
+					u32 disagree = 0;
+					for (size_t t = 0; t + 2 < validIndices.size(); t += 3)
+					{
+						const glm::vec3 a = glm::make_vec3(data.Vertices[firstVertex + validIndices[t]].Position);
+						const glm::vec3 b = glm::make_vec3(data.Vertices[firstVertex + validIndices[t + 1]].Position);
+						const glm::vec3 c = glm::make_vec3(data.Vertices[firstVertex + validIndices[t + 2]].Position);
+						const glm::vec3 vertexNormal = glm::make_vec3(data.Vertices[firstVertex + validIndices[t]].Normal);
+						(glm::dot(glm::cross(b - a, c - a), vertexNormal) >= 0.0f ? agree : disagree)++;
+					}
+					if (disagree > agree)
+					{
+						for (size_t t = 0; t + 2 < validIndices.size(); t += 3)
+						{
+							std::swap(validIndices[t + 1], validIndices[t + 2]);
+						}
+						m_Model.Warnings.push_back("A primitive's triangles ran against its normals: the winding was reversed");
+					}
+				}
 
 				MeshPrimitive result;
 				result.VertexCount = static_cast<u32>(vertexCount);

@@ -109,7 +109,7 @@ namespace wiwa
 		m_BytesTotal += rowPitch * rows;
 	}
 
-	void UploadQueue::submit()
+	void UploadQueue::submit(u64 graphicsInstance)
 	{
 		if (!m_Open)
 		{
@@ -121,6 +121,10 @@ namespace wiwa
 
 		if (m_UsingCopyQueue)
 		{
+			if (graphicsInstance != 0)
+			{
+				m_Device->queueWaitForCommandList(nvrhi::CommandQueue::Copy, nvrhi::CommandQueue::Graphics, graphicsInstance);
+			}
 			const u64 instance = m_Device->executeCommandList(m_List, nvrhi::CommandQueue::Copy);
 			m_Device->queueWaitForCommandList(nvrhi::CommandQueue::Graphics, nvrhi::CommandQueue::Copy, instance);
 		}

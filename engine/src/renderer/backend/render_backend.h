@@ -69,6 +69,9 @@ namespace wiwa
 		virtual std::string get_adapter_name() const = 0;
 		// True when the NVRHI device has a queue for nvrhi::CommandQueue::Copy.
 		virtual bool has_copy_queue() const = 0;
+		// The graphics queue instance of the frame list last submitted (0 before the first): what a copy queue write to a buffer that
+		// frames still read has to wait for.
+		u64 get_last_graphics_instance() const { return m_LastGraphicsInstance; }
 
 		// Any backbuffer framebuffer: pipelines are created against it, and all of them share a layout.
 		virtual nvrhi::IFramebuffer* get_reference_framebuffer() const = 0;
@@ -83,6 +86,9 @@ namespace wiwa
 		// Changes vertical sync. Returns true when the swapchain has to be recreated (resize() at the
 		// current size) for it to take effect; false when it applies from the next present.
 		virtual bool set_vsync(bool enabled) = 0;
+
+	protected:
+		u64 m_LastGraphicsInstance = 0; // set by submit_and_present
 	};
 
 	// Returns nullptr (after logging why) if the backend cannot be created.

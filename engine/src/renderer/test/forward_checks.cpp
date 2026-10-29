@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "scene_tester.h"
 
+#include <glm/gtc/type_ptr.hpp>
+
 #include "../scene/frustum_culler.h"
 
 // Checks of the depth prepass and the forward pass: scenes rendered through the whole renderer and read back.
@@ -139,6 +141,34 @@ namespace wiwa
 				if (data == nullptr)
 				{
 					return;
+				}
+
+				for (const PrefabNode& node : data->Nodes)
+				{
+					if (!node.Mesh.valid())
+					{
+						continue;
+					}
+					Handle<MeshData> mesh = assets->load<MeshData>(node.Mesh);
+					for (int i = 0; i < 2000 && mesh.state() == LoadState::Loading; i++)
+					{
+						std::this_thread::sleep_for(std::chrono::milliseconds(1));
+					}
+					if (const MeshData* m = mesh.get())
+					{
+						u32 agree = 0;
+						u32 disagree = 0;
+						for (size_t t = 0; t + 2 < m->Indices.size(); t += 3)
+						{
+							auto position = [&](u32 index) { return glm::make_vec3(m->Vertices[index].Position); };
+							const glm::vec3 faceNormal = glm::cross(position(m->Indices[t + 1]) - position(m->Indices[t]), position(m->Indices[t + 2]) - position(m->Indices[t]));
+							const glm::vec3 vertexNormal = glm::make_vec3(m->Vertices[m->Indices[t]].Normal);
+							(glm::dot(faceNormal, vertexNormal) >= 0.0f ? agree : disagree)++;
+						}
+						const glm::mat4 local = glm::translate(glm::mat4(1.0f), node.Translation) * glm::mat4_cast(node.Rotation) * glm::scale(glm::mat4(1.0f), node.Scale);
+						WI_LOG(Info, "RenderTest", "winding of {0}: {1} triangles agree with their normals, {2} do not; node determinant {3}", node.Name, agree, disagree, glm::determinant(local));
+						context.check(disagree == 0, "the imported triangles are counter-clockwise seen from outside, as the pipelines expect");
+					}
 				}
 
 				u32 seed = 5;

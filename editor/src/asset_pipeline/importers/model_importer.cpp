@@ -90,7 +90,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "ModelImporter"; }
-			virtual u32 version() const override { return 2; } // 2: prefab nodes have stable ids
+			virtual u32 version() const override { return 3; } // 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
 			virtual bool imports_dependencies() const override { return true; }
 			virtual std::vector<std::string> extensions() const override { return { ".gltf", ".glb", ".fbx" }; }
 

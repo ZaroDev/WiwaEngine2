@@ -110,7 +110,7 @@ namespace wiwa
 
 	FrameStatus D3D11Backend::submit_and_present(nvrhi::ICommandList* commandList)
 	{
-		m_Device->executeCommandList(commandList);
+		m_LastGraphicsInstance = m_Device->executeCommandList(commandList);
 
 		const UINT presentFlags = (!m_EnableVsync && m_TearingSupported) ? DXGI_PRESENT_ALLOW_TEARING : 0;
 		if (!check(m_Swapchain->Present(m_EnableVsync ? 1 : 0, presentFlags), "Present"))

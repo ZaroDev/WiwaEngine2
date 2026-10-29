@@ -184,7 +184,7 @@ namespace wiwa
 		// context: two lists cannot be open at once). The graphics queue waits for the copy queue before the frame list runs.
 		m_Uploads.begin_frame();
 		m_Cache->update();
-		m_Uploads.submit();
+		m_Uploads.submit(m_Backend->get_last_graphics_instance());
 
 		update_viewport();
 		m_SceneData.build(m_Scene, *m_Cache, m_Viewport);

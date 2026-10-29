@@ -40,7 +40,9 @@ namespace wiwa
 
 		// Closes the list and executes it (on the copy queue, after which the graphics queue waits for it). Nothing happens when
 		// nothing was written.
-		void submit();
+		// graphicsInstance: the graphics frame submitted last (IRenderBackend::get_last_graphics_instance()). The copy queue waits for it
+		// before it writes, because it may write buffers that frame is still reading (material records, mesh ranges).
+		void submit(u64 graphicsInstance = 0);
 
 		bool is_using_copy_queue() const { return m_List != nullptr && m_UsingCopyQueue; }
 		size_t bytes_this_frame() const { return m_BytesThisFrame; }

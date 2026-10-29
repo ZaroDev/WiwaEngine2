@@ -144,7 +144,7 @@ namespace wiwa
 	{
 		// Signal when rendering is done so presentation can wait for it.
 		m_VulkanDevice->queueSignalSemaphore(nvrhi::CommandQueue::Graphics, m_PresentSemaphores[m_CurrentImageIndex], 0);
-		m_Device->executeCommandList(commandList);
+		m_LastGraphicsInstance = m_Device->executeCommandList(commandList);
 
 		VkPresentInfoKHR presentInfo{};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
