@@ -56,6 +56,10 @@ namespace wiwa
 		// The size the scene is rendered at (the Viewport panel's size). The target is made, or made again, at the start of the next
 		// frame. 0 in either dimension changes nothing (a hidden panel keeps its target).
 		void set_viewport_size(u32 width, u32 height);
+		// True: the scene is drawn into the viewport target at the size requested above and the UI shows it (the editor). False, the
+		// default: the viewport target follows the window and the blit pass draws it fullscreen (a game).
+		void set_scene_in_viewport(bool inViewport) { m_SceneInViewport = inViewport; }
+		bool is_scene_in_viewport() const { return m_SceneInViewport; }
 		GraphicsApi get_api() const { return m_Description.Api; }
 		std::string get_adapter_name() const { return m_Backend ? m_Backend->get_adapter_name() : std::string{}; }
 		u32 get_width() const { return m_Backend ? m_Backend->get_width() : 0; }
@@ -102,6 +106,7 @@ namespace wiwa
 		ViewportTarget m_Viewport{};
 		u32 m_RequestedViewportWidth = 0;
 		u32 m_RequestedViewportHeight = 0;
+		bool m_SceneInViewport = false;
 		bool m_ViewportFailed = false; // creating the target at the requested size failed: not tried again until the size changes
 		nvrhi::CommandListHandle m_CommandList{};
 		std::vector<Scope<IRenderPass>> m_Passes{};

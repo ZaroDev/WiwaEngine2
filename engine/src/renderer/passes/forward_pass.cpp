@@ -58,7 +58,9 @@ namespace wiwa
 			options.DepthTest = true;
 			options.DepthWrite = false; // the prepass wrote the depth
 			m_Pipelines[doubleSided] = scene_pass::make_pipeline(m_Device, m_InputLayout, vertexShader, pixelShader, layouts, data.viewport()->hdr_framebuffer(), options);
-			if (m_Pipelines[doubleSided] == nullptr)
+			options.Blend = true;
+			m_BlendPipelines[doubleSided] = scene_pass::make_pipeline(m_Device, m_InputLayout, vertexShader, pixelShader, layouts, data.viewport()->hdr_framebuffer(), options);
+			if (m_Pipelines[doubleSided] == nullptr || m_BlendPipelines[doubleSided] == nullptr)
 			{
 				WI_FORWARD_LOG(Error, "Could not create the forward pipelines");
 				m_Failed = true;
@@ -77,7 +79,7 @@ namespace wiwa
 		const glm::vec3& background = data.settings().Background;
 		commandList->clearTextureFloat(data.viewport()->hdr(), nvrhi::AllSubresources, nvrhi::Color(background.r, background.g, background.b, 1.0f));
 
-		if (!data.has_camera() || (data.opaque().empty() && data.masked().empty()))
+		if (!data.has_camera() || (data.opaque().empty() && data.masked().empty() && data.blended().empty()))
 		{
 			return;
 		}
@@ -92,5 +94,6 @@ namespace wiwa
 		const nvrhi::Viewport viewport(static_cast<float>(data.viewport()->width()), static_cast<float>(data.viewport()->height()));
 		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Pipelines[0], m_Pipelines[1], true);
 		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Pipelines[0], m_Pipelines[1], true);
+		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.blended(), m_BlendPipelines[0], m_BlendPipelines[1], true);
 	}
 }

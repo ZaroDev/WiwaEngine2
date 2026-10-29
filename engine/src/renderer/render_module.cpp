@@ -7,6 +7,7 @@
 #include <core/engine.h>
 #include <scene/scene_module.h>
 
+#include "passes/blit_pass.h"
 #include "passes/depth_prepass.h"
 #include "passes/forward_pass.h"
 #include "passes/imgui_pass.h"
@@ -58,6 +59,7 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<LightCullPass>())
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>())
 					&& m_Renderer->add_pass(CreateScope<ResolvePass>())
+					&& m_Renderer->add_pass(CreateScope<BlitPass>())
 					&& m_Renderer->add_pass(std::move(imguiPass));
 			},
 			[this](RenderBatch& batch)
@@ -181,6 +183,19 @@ namespace wiwa
 		submit([width, height](RenderWorld& world)
 			{
 				world.get_renderer().set_viewport_size(width, height);
+			});
+	}
+
+	void RenderModule::set_scene_in_viewport(bool inViewport)
+	{
+		if (inViewport == m_SentSceneInViewport)
+		{
+			return;
+		}
+		m_SentSceneInViewport = inViewport;
+		submit([inViewport](RenderWorld& world)
+			{
+				world.get_renderer().set_scene_in_viewport(inViewport);
 			});
 	}
 

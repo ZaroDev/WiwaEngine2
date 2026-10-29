@@ -17,6 +17,7 @@ namespace wiwa
 		SceneTester(RenderCheckContext& context, u32 size = 64)
 			: m_Context(context), m_Renderer(context.World.get_renderer()), m_Size(size)
 		{
+			m_Renderer.set_scene_in_viewport(true);
 			m_Renderer.set_viewport_size(size, size);
 
 			SceneDelta reset;

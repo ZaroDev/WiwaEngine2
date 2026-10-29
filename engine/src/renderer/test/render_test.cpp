@@ -105,6 +105,7 @@ namespace wiwa
 			register_forward_checks();
 			register_light_checks();
 			register_shadow_checks();
+			register_blend_checks();
 
 			register_render_check("copy_queue_roundtrip", [](RenderCheckContext& context)
 				{

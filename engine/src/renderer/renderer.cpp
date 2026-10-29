@@ -267,6 +267,7 @@ namespace wiwa
 		frame.FrameIndex = m_FrameIndex;
 		frame.ImGui = &batch.ImGui;
 		frame.Scene = &m_SceneData;
+		frame.SceneInViewport = m_SceneInViewport;
 		return frame;
 	}
 
@@ -286,13 +287,16 @@ namespace wiwa
 
 	void Renderer::update_viewport()
 	{
-		if (m_RequestedViewportWidth == 0 || m_ViewportFailed)
+		// Without a panel the scene is the window: the target follows the swapchain.
+		const u32 requestedWidth = m_SceneInViewport ? m_RequestedViewportWidth : m_Backend->get_width();
+		const u32 requestedHeight = m_SceneInViewport ? m_RequestedViewportHeight : m_Backend->get_height();
+		if (requestedWidth == 0 || requestedHeight == 0 || (m_SceneInViewport && m_ViewportFailed))
 		{
 			return;
 		}
 
-		const u32 width = ViewportTarget::clamp_dimension(m_RequestedViewportWidth);
-		const u32 height = ViewportTarget::clamp_dimension(m_RequestedViewportHeight);
+		const u32 width = ViewportTarget::clamp_dimension(requestedWidth);
+		const u32 height = ViewportTarget::clamp_dimension(requestedHeight);
 		if (m_Viewport.valid() && m_Viewport.width() == width && m_Viewport.height() == height)
 		{
 			return;

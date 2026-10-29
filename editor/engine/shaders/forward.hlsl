@@ -28,6 +28,13 @@ float4 PSMain(ForwardVertexOutput input, bool frontFace : SV_IsFrontFace) : SV_T
 {
 	SurfaceData surface = LoadSurface(input.WorldPosition, input.WorldNormal, input.Uv, frontFace);
 
+	// The depth prepass left no depth where a masked material is cut out, so these pixels must not be shaded here either.
+	MaterialRecord material = uMaterials[DrawConstants.MaterialSlot];
+	if ((material.Flags & MATERIAL_ALPHA_MASK_BIT) != 0u && surface.Alpha < material.AlphaCutoff)
+	{
+		discard;
+	}
+
 	float3 color = AmbientLight(surface) + surface.Emissive;
 	if (SunDirection.w > 0.5)
 	{

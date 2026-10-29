@@ -54,6 +54,10 @@ namespace wiwa
 		// thread makes (or remakes) the viewport target a frame or two later. The result is drawn by ImGui as the texture id below.
 		void set_viewport_size(u32 width, u32 height);
 
+		// True when the UI shows the scene in a panel (the editor's Viewport panel says so); false, the default, draws the scene over the
+		// whole window (a game). Takes effect on the render thread a frame or two later.
+		void set_scene_in_viewport(bool inViewport);
+
 		// Draws the scene with this camera instead of the scene's primary one (the editor's fly camera); an empty one goes back to the
 		// scene's camera. Sends a command only when it changed.
 		void set_camera_override(const std::optional<RenderCamera>& camera);
@@ -88,6 +92,7 @@ namespace wiwa
 		u32 m_ReloadListenerId = 0;
 		u32 m_RequestedViewportWidth = 0; // main thread: what was last sent
 		u32 m_RequestedViewportHeight = 0;
+		bool m_SentSceneInViewport = false;
 		std::optional<RenderCamera> m_SentCameraOverride{};
 		u64 m_FrameIndex = 0;
 		u64 m_SmokeFrames = 0; // --render-smoke: quit after this many frames, with exit code 1 if the GPU layers reported an error
