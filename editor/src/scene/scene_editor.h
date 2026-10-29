@@ -59,6 +59,11 @@ namespace wiwa
 		// What save() writes: the authored entities, without the ones a prefab instance generates.
 		SceneData to_scene_data();
 
+		// ---- the scene's look ----
+		const SceneSettings& settings() const { return m_Scene->settings(); }
+		// Applies new settings (sanitized by the scene); marks the scene changed when they differ from the current ones.
+		void edit_settings(const SceneSettings& settings);
+
 		// ---- selection ----
 		entt::entity selected() const { return m_Selected; }
 		void select(entt::entity entity);

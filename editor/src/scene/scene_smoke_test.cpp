@@ -1249,6 +1249,25 @@ namespace wiwa
 			check(bolt != entt::null && editor.set_field(bolt, "Name", "Value", FieldValue(std::string("Bolt"))), "an added child can be renamed");
 			check(!editor.reparent(bolt, entt::null) && !editor.reparent(a, door), "entities of an instance cannot be moved out, and nothing can be moved into one");
 
+			// the scene's look
+			{
+				SceneEditor looks(manager, module);
+				looks.set_scene(CreateRef<Scene>(), {});
+				check(!looks.dirty(), "a fresh scene is clean");
+				looks.edit_settings(looks.settings());
+				check(!looks.dirty(), "settings_edit_marks_dirty: applying the same settings does not make the scene dirty");
+				looks.edit_settings(smoke_settings());
+				check(looks.dirty() && looks.settings() == sanitized(smoke_settings()), "settings_edit_marks_dirty: changed settings make it dirty and are kept (sanitized)");
+			}
+			SceneData beforeLook = editor.to_scene_data();
+			beforeLook.Settings = SceneSettings{};
+			const std::vector<std::byte> entitiesBefore = serialize(beforeLook);
+			editor.edit_settings(smoke_settings());
+			SceneData afterLook = editor.to_scene_data();
+			check(afterLook.Settings == sanitized(smoke_settings()), "the edited settings are what is saved");
+			afterLook.Settings = SceneSettings{};
+			check(serialize(afterLook) == entitiesBefore, "settings_prefab_untouched: editing the settings leaves every entity and prefab override as it was");
+
 			// save, open
 			const std::string relativePath = "Assets/_scene_smoke/edited.wscene";
 			check(editor.save_as(relativePath) && !editor.dirty(), "the scene saves, and is clean afterwards");
@@ -1278,6 +1297,7 @@ namespace wiwa
 				WI_SCENE_LOG(Error, "reopened: {0}", scene_to_json(reopened.to_scene_data()).dump());
 			}
 			check(!reopened.dirty() && reopened.path() == relativePath, "an opened scene is clean and knows its file");
+			check(reopened.settings() == sanitized(smoke_settings()), "settings_save_open_roundtrip: the settings come back from the saved file");
 			const entt::entity reopenedDoor = reopened.scene().find(registry.get<Id>(door).Guid);
 			check(reopenedDoor != entt::null && reopened.scene().registry().get<Transform>(reopenedDoor).Position == glm::vec3(0, 0, 0) && reopened.scene().registry().get<Transform>(reopenedDoor).Scale == glm::vec3(2, 2, 2), "the overrides are applied in the opened scene");
 			check(reopenedDoor != entt::null && reopened.set_field(reopenedDoor, "Transform", "Position", FieldValue(glm::vec3(1, 1, 1))) && reopened.dirty(), "editing an opened scene makes it dirty");

@@ -146,6 +146,16 @@ namespace wiwa
 		m_Opening = m_Scenes.load_async(std::string_view(sourcePath));
 	}
 
+	void SceneEditor::edit_settings(const SceneSettings& settings)
+	{
+		const u64 revision = m_Scene->settings_revision();
+		m_Scene->set_settings(settings);
+		if (m_Scene->settings_revision() != revision)
+		{
+			mark_dirty();
+		}
+	}
+
 	SceneData SceneEditor::to_scene_data()
 	{
 		const std::string name = m_Path.empty() ? "untitled" : m_Path.stem().string();

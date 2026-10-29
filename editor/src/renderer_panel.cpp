@@ -31,6 +31,7 @@ void RendererPanel::draw()
 		ImGui::Text("Uploads: %s, %.2f MiB total, last %.2f ms", snapshot.UploadQueueName.c_str(),
 			static_cast<double>(snapshot.UploadBytesTotal) / (1024.0 * 1024.0), snapshot.UploadMs);
 
+		ImGui::Text("Environment: %s", snapshot.EnvironmentStatus.c_str());
 		ImGui::Text("Scene: %u instances (%u visible, %u draws), %u lights, %u shadow maps", snapshot.SceneInstances, snapshot.VisibleInstances, snapshot.DrawCalls,
 			snapshot.SceneLights, snapshot.ShadowViews);
 		ImGui::Text("GPU assets: %u meshes, %u materials, %u textures, %.1f MiB", snapshot.CacheMeshes, snapshot.CacheMaterials, snapshot.CacheTextures,

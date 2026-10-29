@@ -311,7 +311,7 @@ namespace wiwa
 		{
 			const SceneSettings& look = m_Renderer->get_scene().settings();
 			snapshot.EnvironmentStatus = look.Source == EnvironmentSource::File ? m_Renderer->get_environments().status(look.EnvironmentAsset)
-				: (look.Source == EnvironmentSource::Atmosphere ? "atmosphere" : "none");
+				: (look.Source == EnvironmentSource::Atmosphere ? "atmosphere: " + m_Renderer->get_environments().atmosphere_status() : std::string("none"));
 		}
 		snapshot.SceneInstances = static_cast<u32>(m_Renderer->get_scene().instance_count());
 		snapshot.SceneLights = static_cast<u32>(m_Renderer->get_scene().light_count());
