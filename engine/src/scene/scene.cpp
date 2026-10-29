@@ -8,6 +8,17 @@ namespace wiwa
 		m_Registry.on_destroy<Id>().connect<&Scene::on_id_destroyed>(this);
 	}
 
+	void Scene::set_settings(SceneSettings settings)
+	{
+		settings = sanitized(std::move(settings));
+		if (settings == m_Settings)
+		{
+			return;
+		}
+		m_Settings = std::move(settings);
+		m_SettingsRevision++;
+	}
+
 	entt::entity Scene::create(EntityGuid id, std::string name, entt::entity parent)
 	{
 		const entt::entity entity = m_Registry.create();

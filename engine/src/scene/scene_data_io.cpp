@@ -135,10 +135,61 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		template<typename E>
+		void archive_enum_value(BinaryArchive& ar, E& value, u32 count)
+		{
+			u32 raw = static_cast<u32>(value);
+			ar.value(raw);
+			if (ar.reading())
+			{
+				if (raw >= count)
+				{
+					ar.fail();
+					return;
+				}
+				value = static_cast<E>(raw);
+			}
+		}
+
+		void archive_settings(BinaryArchive& ar, SceneSettings& s)
+		{
+			archive_enum_value(ar, s.Source, 3);
+			ar.value(s.EnvironmentAsset);
+			ar.value(s.RotationDegrees);
+			ar.value(s.Brightness);
+			ar.value(s.AmbientIntensity);
+			ar.value(s.HemisphereSky);
+			ar.value(s.HemisphereGround);
+			AtmosphereParameters& a = s.Atmosphere;
+			ar.value(a.RayleighScale);
+			ar.value(a.MieScale);
+			ar.value(a.OzoneScale);
+			ar.value(a.MieAnisotropy);
+			ar.value(a.MultipleScattering);
+			ar.value(a.SunIlluminance);
+			ar.value(a.SkyBrightness);
+			ar.value(a.SunDiscBoost);
+			ar.value(a.GroundAlbedo);
+			archive_enum_value(ar, s.Background, 2);
+			ar.value(s.BackgroundColor);
+			ar.value(s.ExposureEv);
+		}
+	}
+
 	void archive(BinaryArchive& ar, SceneData& v)
 	{
 		ar.string(v.Name);
 		// the smallest entity: two guids (32 bytes) and the counts of its components and overrides (16 bytes)
 		bounded_list(ar, v.Entities, SCENE_MAX_ENTITIES, 48, [&](EntityRecord& entity) { archive_entity(ar, entity, 0); });
+		if (ar.ok())
+		{
+			archive_settings(ar, v.Settings);
+		}
+		if (ar.reading() && ar.ok())
+		{
+			v.Settings = sanitized(v.Settings);
+		}
 	}
 }

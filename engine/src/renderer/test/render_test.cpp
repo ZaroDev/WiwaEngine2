@@ -108,6 +108,7 @@ namespace wiwa
 			register_blend_checks();
 			register_scale_checks();
 			register_ibl_checks();
+			register_settings_checks();
 
 			register_render_check("copy_queue_roundtrip", [](RenderCheckContext& context)
 				{

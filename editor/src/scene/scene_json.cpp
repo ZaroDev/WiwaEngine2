@@ -633,6 +633,185 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// ---- the settings block ----
+
+		SceneJson vec3_json(const glm::vec3& v)
+		{
+			return SceneJson::array({ static_cast<double>(v.x), static_cast<double>(v.y), static_cast<double>(v.z) });
+		}
+
+		void put_float_if_different(SceneJson& json, const char* key, float value, float defaultValue)
+		{
+			if (value != defaultValue)
+			{
+				json[key] = static_cast<double>(value);
+			}
+		}
+
+		void put_vec3_if_different(SceneJson& json, const char* key, const glm::vec3& value, const glm::vec3& defaultValue)
+		{
+			if (value != defaultValue)
+			{
+				json[key] = vec3_json(value);
+			}
+		}
+
+		SceneJson settings_to_json(const SceneSettings& s)
+		{
+			const SceneSettings d;
+			SceneJson json = SceneJson::object();
+			if (s.Source != d.Source)
+			{
+				json["source"] = s.Source == EnvironmentSource::File ? "file" : (s.Source == EnvironmentSource::Atmosphere ? "atmosphere" : "none");
+			}
+			if (s.EnvironmentAsset.valid())
+			{
+				json["environment"] = ref_to_json(s.EnvironmentAsset);
+			}
+			put_float_if_different(json, "rotation", s.RotationDegrees, d.RotationDegrees);
+			put_float_if_different(json, "brightness", s.Brightness, d.Brightness);
+			put_float_if_different(json, "ambient", s.AmbientIntensity, d.AmbientIntensity);
+			put_vec3_if_different(json, "hemisphereSky", s.HemisphereSky, d.HemisphereSky);
+			put_vec3_if_different(json, "hemisphereGround", s.HemisphereGround, d.HemisphereGround);
+
+			SceneJson atmosphere = SceneJson::object();
+			const AtmosphereParameters& a = s.Atmosphere;
+			const AtmosphereParameters& da = d.Atmosphere;
+			put_float_if_different(atmosphere, "rayleigh", a.RayleighScale, da.RayleighScale);
+			put_float_if_different(atmosphere, "mie", a.MieScale, da.MieScale);
+			put_float_if_different(atmosphere, "ozone", a.OzoneScale, da.OzoneScale);
+			put_float_if_different(atmosphere, "mieAnisotropy", a.MieAnisotropy, da.MieAnisotropy);
+			put_float_if_different(atmosphere, "multipleScattering", a.MultipleScattering, da.MultipleScattering);
+			put_float_if_different(atmosphere, "sunIlluminance", a.SunIlluminance, da.SunIlluminance);
+			put_float_if_different(atmosphere, "skyBrightness", a.SkyBrightness, da.SkyBrightness);
+			put_float_if_different(atmosphere, "sunDiscBoost", a.SunDiscBoost, da.SunDiscBoost);
+			put_vec3_if_different(atmosphere, "groundAlbedo", a.GroundAlbedo, da.GroundAlbedo);
+			if (!atmosphere.empty())
+			{
+				json["atmosphere"] = std::move(atmosphere);
+			}
+
+			if (s.Background != d.Background)
+			{
+				json["background"] = s.Background == BackgroundMode::SolidColor ? "color" : "sky";
+			}
+			put_vec3_if_different(json, "backgroundColor", s.BackgroundColor, d.BackgroundColor);
+			put_float_if_different(json, "exposureEv", s.ExposureEv, d.ExposureEv);
+			return json;
+		}
+
+		bool read_float(const SceneJson& json, const char* key, const std::string& path, float& out, std::string& error)
+		{
+			if (!json.contains(key))
+			{
+				return true;
+			}
+			if (!json[key].is_number())
+			{
+				error = path + "." + key + ": not a number";
+				return false;
+			}
+			out = json[key].get<float>();
+			return true;
+		}
+
+		bool read_vec3(const SceneJson& json, const char* key, const std::string& path, glm::vec3& out, std::string& error)
+		{
+			if (!json.contains(key))
+			{
+				return true;
+			}
+			const SceneJson& value = json[key];
+			if (!value.is_array() || value.size() != 3 || !value[0].is_number() || !value[1].is_number() || !value[2].is_number())
+			{
+				error = path + "." + key + ": not an array of 3 numbers";
+				return false;
+			}
+			out = glm::vec3(value[0].get<float>(), value[1].get<float>(), value[2].get<float>());
+			return true;
+		}
+
+		bool read_choice(const SceneJson& json, const char* key, const std::string& path, std::initializer_list<const char*> names, u32& out, std::string& error)
+		{
+			if (!json.contains(key))
+			{
+				return true;
+			}
+			if (!json[key].is_string())
+			{
+				error = path + "." + key + ": not a string";
+				return false;
+			}
+			const std::string& text = json[key].get_ref<const std::string&>();
+			u32 index = 0;
+			for (const char* name : names)
+			{
+				if (text == name)
+				{
+					out = index;
+					return true;
+				}
+				index++;
+			}
+			error = path + "." + key + ": unknown value \"" + text + "\"";
+			return false;
+		}
+
+		bool settings_from_json(const SceneJson& json, SceneSettings& s, std::string& error)
+		{
+			const std::string path = "settings";
+			if (!json.is_object())
+			{
+				error = "settings: not an object";
+				return false;
+			}
+
+			u32 source = static_cast<u32>(s.Source);
+			u32 background = static_cast<u32>(s.Background);
+			if (!read_choice(json, "source", path, { "none", "file", "atmosphere" }, source, error)
+				|| !read_choice(json, "background", path, { "sky", "color" }, background, error)
+				|| !read_float(json, "rotation", path, s.RotationDegrees, error) || !read_float(json, "brightness", path, s.Brightness, error)
+				|| !read_float(json, "ambient", path, s.AmbientIntensity, error) || !read_float(json, "exposureEv", path, s.ExposureEv, error)
+				|| !read_vec3(json, "hemisphereSky", path, s.HemisphereSky, error) || !read_vec3(json, "hemisphereGround", path, s.HemisphereGround, error)
+				|| !read_vec3(json, "backgroundColor", path, s.BackgroundColor, error))
+			{
+				return false;
+			}
+			s.Source = static_cast<EnvironmentSource>(source);
+			s.Background = static_cast<BackgroundMode>(background);
+
+			if (json.contains("environment") && !ref_from_json(json["environment"], s.EnvironmentAsset))
+			{
+				error = path + ".environment: not an AssetRef";
+				return false;
+			}
+
+			if (json.contains("atmosphere"))
+			{
+				const SceneJson& atmosphere = json["atmosphere"];
+				const std::string atmospherePath = path + ".atmosphere";
+				if (!atmosphere.is_object())
+				{
+					error = atmospherePath + ": not an object";
+					return false;
+				}
+				AtmosphereParameters& a = s.Atmosphere;
+				if (!read_float(atmosphere, "rayleigh", atmospherePath, a.RayleighScale, error) || !read_float(atmosphere, "mie", atmospherePath, a.MieScale, error)
+					|| !read_float(atmosphere, "ozone", atmospherePath, a.OzoneScale, error) || !read_float(atmosphere, "mieAnisotropy", atmospherePath, a.MieAnisotropy, error)
+					|| !read_float(atmosphere, "multipleScattering", atmospherePath, a.MultipleScattering, error)
+					|| !read_float(atmosphere, "sunIlluminance", atmospherePath, a.SunIlluminance, error)
+					|| !read_float(atmosphere, "skyBrightness", atmospherePath, a.SkyBrightness, error) || !read_float(atmosphere, "sunDiscBoost", atmospherePath, a.SunDiscBoost, error)
+					|| !read_vec3(atmosphere, "groundAlbedo", atmospherePath, a.GroundAlbedo, error))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+	}
+
 	SceneJsonResult scene_from_json(const SceneJson& json)
 	{
 		SceneJsonResult result;
@@ -712,6 +891,16 @@ namespace wiwa
 			}
 		}
 
+		if (json.contains("settings"))
+		{
+			std::string error;
+			if (!settings_from_json(json["settings"], data.Settings, error))
+			{
+				return fail(error);
+			}
+			data.Settings = sanitized(data.Settings);
+		}
+
 		result.Scene = std::move(data);
 		return result;
 	}
@@ -726,6 +915,11 @@ namespace wiwa
 			entities.push_back(entity_to_json(entity, true, true));
 		}
 		json["entities"] = std::move(entities);
+		SceneJson settings = settings_to_json(data.Settings);
+		if (!settings.empty())
+		{
+			json["settings"] = std::move(settings);
+		}
 		return json;
 	}
 }

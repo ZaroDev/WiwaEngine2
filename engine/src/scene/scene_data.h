@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "entity_guid.h"
+#include "scene_settings.h"
 #include "reflection/field_value.h"
 
 // The neutral description of a scene: entities, their components and the value of each field, by name. The scene file
@@ -65,5 +66,6 @@ namespace wiwa
 	{
 		std::string Name{};
 		std::vector<EntityRecord> Entities{};
+		SceneSettings Settings{}; // how the scene is lit and shown; a file without it has the defaults
 	};
 }

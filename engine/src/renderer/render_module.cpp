@@ -230,14 +230,6 @@ namespace wiwa
 			});
 	}
 
-	void RenderModule::set_scene_settings(const SceneSettings& settings)
-	{
-		submit([settings](RenderWorld& world)
-			{
-				world.get_scene().set_settings(settings);
-			});
-	}
-
 	void RenderModule::set_camera_override(const std::optional<RenderCamera>& camera)
 	{
 		const bool same = camera.has_value() == m_SentCameraOverride.has_value()

@@ -76,7 +76,7 @@ namespace wiwa
 		}
 
 		const SceneRenderData& data = *frame.Scene;
-		const glm::vec3& background = data.settings().Background;
+		const glm::vec3& background = data.settings().BackgroundColor;
 		commandList->clearTextureFloat(data.viewport()->hdr(), nvrhi::AllSubresources, nvrhi::Color(background.r, background.g, background.b, 1.0f));
 
 		if (!data.has_camera() || (data.opaque().empty() && data.masked().empty() && data.blended().empty()))

@@ -48,6 +48,8 @@ namespace wiwa
 		Camera m_CameraComponent{};
 		bool m_WarnedDegenerate = false;
 
+		u64 m_SettingsRevision = 0; // of the settings last sent (0 = none yet)
+
 		u64 m_Pass = 0;
 	};
 }

@@ -24,7 +24,8 @@ namespace wiwa
 		std::string Name{};
 		std::vector<EntityRecord> Entities{};
 		std::vector<EntityOrigin> Origins{};     // parallel to Entities
-		std::vector<AssetRef> References{};      // every asset the entities refer to
+		std::vector<AssetRef> References{};      // every asset the entities and the settings refer to
+		SceneSettings Settings{};
 		std::vector<std::string> Warnings{};
 	};
 

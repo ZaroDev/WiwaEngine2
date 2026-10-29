@@ -24,6 +24,7 @@ namespace wiwa
 			reset.Reset = true;
 			scene().apply(std::move(reset));
 			scene().set_settings(SceneSettings{});
+			m_Renderer.get_scene_data().quality() = RenderQuality{};
 			scene().set_camera_override(std::nullopt);
 			set_camera(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f));
 		}

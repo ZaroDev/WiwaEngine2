@@ -9,6 +9,7 @@
 #include <math/math.h>
 #include <scene/components.h>
 #include <scene/entity_guid.h>
+#include <scene/scene_settings.h>
 
 namespace wiwa
 {
@@ -46,24 +47,6 @@ namespace wiwa
 		float Far = 1000.0f;
 	};
 
-	// How the scene as a whole is lit and shown; later the panels of the post-processing chain edit it.
-	struct SceneSettings
-	{
-		glm::vec3 SkyColor{ 0.5f, 0.6f, 0.8f };   // hemisphere ambient: color of the light from above
-		glm::vec3 GroundColor{ 0.15f };           // and from below
-		float AmbientIntensity = 0.3f;
-		glm::vec3 Background{ 0.05f, 0.06f, 0.08f }; // what is behind the geometry
-		float Exposure = 1.0f;
-
-		// Shadows: the sun's cascades reach ShadowDistance in front of the camera.
-		float ShadowDistance = 60.0f;
-		u32 ShadowCascades = 4;           // 1..4
-		float ShadowSplitLambda = 0.8f;   // 0 = even splits, 1 = logarithmic
-		float ShadowDepthBias = 0.0006f;  // in depth units of the shadow map, scaled up on surfaces turned away from the light
-		float ShadowNormalBias = 1.5f;    // texels: receivers are moved along their normal by this much before they are looked up
-		float SpotShadowBias = 0.0004f;
-	};
-
 	// Everything that changed on the main thread since the last frame.
 	struct SceneDelta
 	{
@@ -74,11 +57,12 @@ namespace wiwa
 		std::vector<EntityGuid> LightRemovals{};
 		std::optional<RenderCamera> Camera{}; // the primary camera, when it changed
 		bool CameraRemoved = false;
+		std::optional<SceneSettings> Settings{}; // when they changed (always with a Reset)
 
 		bool empty() const
 		{
 			return !Reset && InstanceUpserts.empty() && InstanceRemovals.empty() && LightUpserts.empty() && LightRemovals.empty()
-				&& !Camera && !CameraRemoved;
+				&& !Camera && !CameraRemoved && !Settings;
 		}
 	};
 

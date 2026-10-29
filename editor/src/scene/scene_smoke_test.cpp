@@ -771,8 +771,68 @@ namespace wiwa
 			return data;
 		}
 
+		SceneSettings smoke_settings()
+		{
+			SceneSettings s;
+			s.Source = EnvironmentSource::Atmosphere;
+			s.EnvironmentAsset = AssetRef{ AssetGuid{ 5, 6 }, 7 };
+			s.RotationDegrees = 45.0f;
+			s.Brightness = 1.5f;
+			s.AmbientIntensity = 0.6f;
+			s.HemisphereSky = glm::vec3(0.2f, 0.3f, 0.4f);
+			s.Atmosphere.RayleighScale = 2.0f;
+			s.Atmosphere.GroundAlbedo = glm::vec3(0.3f);
+			s.Background = BackgroundMode::SolidColor;
+			s.BackgroundColor = glm::vec3(0.5f, 0.25f, 0.125f);
+			s.ExposureEv = 1.5f;
+			return s;
+		}
+
+		void check_scene_settings_json(Check& check)
+		{
+			SceneData plain;
+			plain.Name = "plain";
+			check(!scene_to_json(plain).contains("settings"), "default settings are not written");
+			const SceneJson noSettings = scene_to_json(plain);
+			const SceneJsonResult old = scene_from_json(noSettings);
+			check(old.Scene && old.Scene->Settings == SceneSettings{}, "a file without settings has the defaults");
+
+			SceneData with = plain;
+			with.Settings = smoke_settings();
+			const SceneJson doc = scene_to_json(with);
+			check(doc.contains("settings") && doc["settings"]["source"] == "atmosphere" && doc["settings"]["background"] == "color", "enums are written by name");
+			check(!doc["settings"].contains("ambient") == false && !doc["settings"].contains("brightness") == false, "changed values are written");
+			check(!doc["settings"].contains("hemisphereGround"), "unchanged values are not");
+			const SceneJsonResult back = scene_from_json(SceneJson::parse(doc.dump(2)));
+			check(back.Scene && back.Scene->Settings == with.Settings, "settings round-trip through the text of the file (" + back.Error + ")");
+			check(back.Scene && serialize(*back.Scene) == serialize(with), "and give the same binary scene");
+
+			auto error_of = [&](const std::function<void(SceneJson&)>& edit)
+			{
+				SceneJson edited = doc;
+				edit(edited);
+				const SceneJsonResult result = scene_from_json(edited);
+				return result.Scene.has_value() ? std::string() : result.Error;
+			};
+			auto contains = [](const std::string& text, const char* part) { return text.find(part) != std::string::npos; };
+			std::string error = error_of([](SceneJson& j) { j["settings"]["source"] = "bogus"; });
+			check(contains(error, "settings.source"), "an unknown source is rejected with its path (" + error + ")");
+			error = error_of([](SceneJson& j) { j["settings"]["brightness"] = "x"; });
+			check(contains(error, "settings.brightness"), "a value of the wrong type is rejected with its path (" + error + ")");
+			error = error_of([](SceneJson& j) { j["settings"]["atmosphere"]["mie"] = true; });
+			check(contains(error, "settings.atmosphere.mie"), "so is one inside the atmosphere block (" + error + ")");
+			SceneJson extra = doc;
+			extra["settings"]["somethingNew"] = 1;
+			check(scene_from_json(extra).Scene.has_value(), "unknown keys are ignored");
+			SceneJson wild = doc;
+			wild["settings"]["exposureEv"] = 1000.0;
+			const SceneJsonResult wildResult = scene_from_json(wild);
+			check(wildResult.Scene && wildResult.Scene->Settings.ExposureEv == 10.0f, "an absurd value is clamped");
+		}
+
 		void check_scene_json(Check& check, AssetPipelineModule& pipeline)
 		{
+			check_scene_settings_json(check);
 			register_scene_components();
 			const SceneData sample = build_json_sample();
 			const std::vector<std::byte> sampleBytes = serialize(sample);
@@ -937,6 +997,7 @@ namespace wiwa
 			EntityRecord instance = make_instance(EntityGuid::generate(), *prefabRef);
 			instance.Overrides = { set_field_override(doorNode, "Transform", "Position", FieldValue(glm::vec3(9, 8, 7))) };
 			level.Entities = { camera, light, instance };
+			level.Settings = smoke_settings();
 			const std::optional<AssetRef> levelRef = write_scene("level.wscene", level);
 			check(levelRef.has_value(), "the level imports");
 			if (!levelRef)
@@ -951,6 +1012,7 @@ namespace wiwa
 			progress->wait();
 			check(progress->succeeded(), "a scene loads (" + progress->stage() + ")");
 			Ref<Scene> first = module.get_active();
+			check(first && first->settings() == sanitized(smoke_settings()), "a loaded scene has the settings of its file");
 			check(first != initial && entity_count(first) == 7, "the loaded scene has the scene's entities plus the four nodes (found " + std::to_string(entity_count(first)) + ")");
 			if (first && entity_count(first) == 7)
 			{

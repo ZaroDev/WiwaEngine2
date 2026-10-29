@@ -142,6 +142,13 @@ namespace wiwa
 			m_Instances.clear();
 			m_Lights.clear();
 			m_HasCamera = false;
+			m_SettingsRevision = 0;
+		}
+
+		if (scene->settings_revision() != m_SettingsRevision)
+		{
+			m_SettingsRevision = scene->settings_revision();
+			delta.Settings = scene->settings();
 		}
 
 		const u64 pass = ++m_Pass;

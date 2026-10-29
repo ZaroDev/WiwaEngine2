@@ -8,6 +8,7 @@
 #include <math/math.h>
 
 #include "../resources/gpu_resource_cache.h"
+#include "../render_quality.h"
 #include "../viewport_target.h"
 #include "render_scene.h"
 
@@ -120,6 +121,8 @@ namespace wiwa
 		GpuResourceCache* cache() const { return m_Cache; }
 		const RenderScene* scene() const { return m_Scene; }
 		const SceneSettings& settings() const { return m_Settings; }
+		// What the project decides about shadows (the Renderer sets it; checks change it).
+		RenderQuality& quality() { return m_Quality; }
 		const FrameConstants& constants() const { return m_Constants; }
 
 		const std::vector<DrawItem>& opaque() const { return m_Opaque; }   // sorted by cull mode, page and material
@@ -162,6 +165,7 @@ namespace wiwa
 		GpuResourceCache* m_Cache = nullptr;
 		const RenderScene* m_Scene = nullptr;
 		SceneSettings m_Settings{};
+		RenderQuality m_Quality{};
 		FrameConstants m_Constants{};
 		std::vector<DrawItem> m_Opaque{};
 		std::vector<DrawItem> m_Masked{};

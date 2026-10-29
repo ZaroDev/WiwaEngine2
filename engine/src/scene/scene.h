@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "components.h"
+#include "scene_settings.h"
 
 namespace wiwa
 {
@@ -41,6 +42,12 @@ namespace wiwa
 		// The top-level entities in the order they were made (or last moved to the top level), whatever was destroyed since.
 		const std::vector<entt::entity>& roots() const { return m_Roots; }
 
+		// How the scene is lit and shown. set_settings() sanitizes the value and bumps settings_revision() when it differs from the
+		// current one, so that whoever mirrors the settings (the SceneExtractor) can tell cheaply.
+		const SceneSettings& settings() const { return m_Settings; }
+		void set_settings(SceneSettings settings);
+		u64 settings_revision() const { return m_SettingsRevision; }
+
 		entt::registry& registry() { return m_Registry; }
 		const entt::registry& registry() const { return m_Registry; }
 
@@ -51,5 +58,7 @@ namespace wiwa
 		entt::registry m_Registry{};
 		std::unordered_map<EntityGuid, entt::entity> m_ByGuid{};
 		std::vector<entt::entity> m_Roots{};
+		SceneSettings m_Settings{};
+		u64 m_SettingsRevision = 1;
 	};
 }

@@ -156,8 +156,8 @@ namespace wiwa
 		}
 
 		FrameConstants constants;
-		constants.SkyColor = glm::vec4(m_Settings.SkyColor * m_Settings.AmbientIntensity, 0.0f);
-		constants.GroundColor = glm::vec4(m_Settings.GroundColor * m_Settings.AmbientIntensity, 0.0f);
+		constants.SkyColor = glm::vec4(m_Settings.HemisphereSky * m_Settings.AmbientIntensity, 0.0f);
+		constants.GroundColor = glm::vec4(m_Settings.HemisphereGround * m_Settings.AmbientIntensity, 0.0f);
 		const float width = static_cast<float>(viewport.width());
 		const float height = static_cast<float>(viewport.height());
 		constants.ViewportSize = glm::vec4(width, height, 1.0f / width, 1.0f / height);
@@ -307,9 +307,9 @@ namespace wiwa
 			// Shadows: the sun's cascades fitted to the camera, and up to four spot lights with a tile of the atlas each.
 			if (sunLight != nullptr && sunLight->CastsShadows)
 			{
-				const u32 cascades = std::clamp(m_Settings.ShadowCascades, 1u, MAX_CASCADES);
-				const CascadeSet set = compute_cascades(*camera, sunLight->Direction, cascades, m_Settings.ShadowDistance, m_Settings.ShadowSplitLambda);
-				constants.ShadowParams = glm::vec4(1.0f, static_cast<float>(cascades), m_Settings.ShadowDepthBias, m_Settings.ShadowNormalBias);
+				const u32 cascades = std::clamp(m_Quality.ShadowCascades, 1u, MAX_CASCADES);
+				const CascadeSet set = compute_cascades(*camera, sunLight->Direction, cascades, m_Quality.ShadowDistance, m_Quality.ShadowSplitLambda);
+				constants.ShadowParams = glm::vec4(1.0f, static_cast<float>(cascades), m_Quality.ShadowDepthBias, m_Quality.ShadowNormalBias);
 				for (u32 i = 0; i < MAX_CASCADES; i++)
 				{
 					constants.ShadowMatrices[i] = set.ViewProjection[i];
@@ -328,10 +328,10 @@ namespace wiwa
 				m_NeedCascades = true;
 			}
 
-			constants.ShadowParams2 = glm::vec4(m_Settings.SpotShadowBias, 0.0f, 0.0f, 0.0f);
+			constants.ShadowParams2 = glm::vec4(m_Quality.SpotShadowBias, 0.0f, 0.0f, 0.0f);
 			if (constants.ShadowParams.w == 0.0f)
 			{
-				constants.ShadowParams.w = m_Settings.ShadowNormalBias; // the spot lights use it too
+				constants.ShadowParams.w = m_Quality.ShadowNormalBias; // the spot lights use it too
 			}
 			u32 spotShadows = 0;
 			for (size_t i = 0; i < m_Lights.size() && spotShadows < MAX_SPOT_SHADOWS; i++)

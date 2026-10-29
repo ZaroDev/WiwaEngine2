@@ -413,6 +413,10 @@ namespace wiwa
 		if (op.Commit == nullptr)
 		{
 			op.Target = op.Mode == LoadMode::Additive ? get_active() : CreateRef<Scene>();
+			if (op.Mode == LoadMode::Replace)
+			{
+				op.Target->set_settings(op.Blueprint.Settings);
+			}
 			op.Progress->begin("Creating entities", static_cast<u32>(op.Blueprint.Entities.size()));
 			op.Commit = CreateScope<SceneCommit>(*op.Target, std::move(op.Blueprint));
 			std::lock_guard<std::mutex> lock(m_Mutex);

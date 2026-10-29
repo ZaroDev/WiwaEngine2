@@ -64,6 +64,11 @@ namespace wiwa
 		}
 
 		blueprint.References = collect_references(blueprint.Entities);
+		blueprint.Settings = data.Settings;
+		if (data.Settings.Source == EnvironmentSource::File && data.Settings.EnvironmentAsset.valid())
+		{
+			blueprint.References.push_back(data.Settings.EnvironmentAsset); // loaded with the rest before the scene shows
+		}
 		return blueprint;
 	}
 

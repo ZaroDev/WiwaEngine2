@@ -85,6 +85,11 @@ namespace wiwa
 			upsert(lights, guid, std::move(light));
 		}
 
+		if (delta.Settings)
+		{
+			m_Settings = *delta.Settings;
+		}
+
 		if (delta.CameraRemoved)
 		{
 			m_Camera.reset();

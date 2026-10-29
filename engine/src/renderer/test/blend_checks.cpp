@@ -12,7 +12,7 @@ namespace wiwa
 		{
 			SceneSettings settings;
 			settings.AmbientIntensity = 0.0f;
-			settings.Background = background;
+			settings.BackgroundColor = background;
 			return settings;
 		}
 
@@ -145,7 +145,7 @@ namespace wiwa
 				for (int i = 0; i < 3; i++)
 				{
 					SceneSettings settings = dark();
-					settings.Exposure = exposures[i];
+					settings.ExposureEv = std::log2(exposures[i]);
 					test.scene().set_settings(settings);
 					context.check(test.render(), "render");
 					luma[i] = SceneTester::luma(test.pixel(32, 32));

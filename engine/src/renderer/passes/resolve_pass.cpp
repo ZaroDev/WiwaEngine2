@@ -99,7 +99,7 @@ namespace wiwa
 		commandList->setGraphicsState(state);
 
 		PushConstants constants;
-		constants.Exposure = frame.Scene->settings().Exposure;
+		constants.Exposure = std::exp2(frame.Scene->settings().ExposureEv);
 		commandList->setPushConstants(&constants, sizeof(constants));
 
 		nvrhi::DrawArguments arguments;

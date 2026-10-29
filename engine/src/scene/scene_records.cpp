@@ -227,6 +227,7 @@ namespace wiwa
 
 		SceneData data;
 		data.Name = std::move(name);
+		data.Settings = scene.settings();
 
 		std::vector<entt::entity> order;
 		std::vector<entt::entity> stack;
@@ -263,6 +264,7 @@ namespace wiwa
 	ApplyReport apply_scene_data(Scene& scene, const SceneData& data)
 	{
 		ApplyReport report;
+		scene.set_settings(data.Settings);
 		for (const EntityRecord& record : data.Entities)
 		{
 			apply_record(scene, record, &report);
