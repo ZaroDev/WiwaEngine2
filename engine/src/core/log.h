@@ -17,9 +17,9 @@
 
 namespace wiwa
 {
-	enum class LogLevel
+	enum LogLevel
 	{
-		Trace,
+		Trace = 0,
 		Info,
 		Warning,
 		Error,
@@ -49,6 +49,8 @@ namespace wiwa
 		static void log_error(const std::string& title, const std::string& message);
 
 		static void log_critical(const std::string& title, const std::string& message);
+
+		static void set_log_callback(LogCallback callback) { s_Callback = callback; }
 
 	private:
 		static void on_log_event(LogLevel level);

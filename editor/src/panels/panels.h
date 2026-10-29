@@ -1,0 +1,9 @@
+#pragma once
+#include "lighting_panel.h"
+#include "environment_panel.h"
+#include "hierarchy_panel.h"
+#include "inspector_panel.h"
+#include "quality_panel.h"
+#include "renderer_panel.h"
+#include "viewport_panel.h"
+#include "console_panel.h"

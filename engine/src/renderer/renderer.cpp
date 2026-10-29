@@ -316,6 +316,13 @@ namespace wiwa
 			return;
 		}
 
+		// create() lets go of the old targets at once. The frames still in flight may use them, and NVRHI's Vulkan backend does not
+		// keep a texture alive that a command list only clears, so the GPU has to be done with them first.
+		if (m_Viewport.valid())
+		{
+			m_Backend->get_device()->waitForIdle();
+		}
+
 		if (m_Viewport.create(m_Backend->get_device(), width, height))
 		{
 			m_Textures.set(VIEWPORT_TEXTURE_ID, m_Viewport.ldr());

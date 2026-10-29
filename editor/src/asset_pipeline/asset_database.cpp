@@ -268,7 +268,7 @@ namespace wiwa
 	}
 
 	// Library/catalog.wcat: which source path names which asset, so that code can say "engine/shaders/imgui.hlsl" instead of a
-	// guid. The paths start with the name of the source root, as the root was given ("Assets", "engine").
+	// guid. The paths start with the name of the source root, as the root was given ("assets", "engine").
 	void AssetDatabase::write_catalog()
 	{
 		AssetCatalog catalog;

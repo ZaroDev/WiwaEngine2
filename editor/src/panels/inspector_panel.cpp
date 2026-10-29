@@ -25,11 +25,11 @@ namespace
 	}
 }
 
-void InspectorPanel::draw()
+void InspectorPanel::on_draw()
 {
 	ImGui::SetNextWindowPos(ImVec2(984.0f, 12.0f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(ImVec2(284.0f, 300.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin("Inspector") && m_Editor.get_scene() != nullptr)
+	if (ImGui::Begin(get_name(), &m_Open) && m_Editor.get_scene() != nullptr)
 	{
 		const entt::entity entity = m_Editor.selected();
 		if (entity == entt::null || !m_Editor.scene().registry().valid(entity))

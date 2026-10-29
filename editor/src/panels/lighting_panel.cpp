@@ -3,11 +3,11 @@
 
 #include <imgui.h>
 
-void LightingPanel::draw()
+void LightingPanel::on_draw()
 {
 	ImGui::SetNextWindowPos(ImVec2(376.0f, 560.0f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(ImVec2(296.0f, 150.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin("Lighting"))
+	if (ImGui::Begin(get_name(), &m_Open))
 	{
 		const wiwa::SceneSettings before = m_Editor.settings();
 		wiwa::SceneSettings settings = before;

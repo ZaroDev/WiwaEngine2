@@ -6,7 +6,7 @@
 #include <core/engine.h>
 #include <renderer/render_module.h>
 
-void QualityPanel::draw()
+void QualityPanel::on_draw()
 {
 	wiwa::RenderModule* render = wiwa::Engine::get().get_module<wiwa::RenderModule>();
 	if (render == nullptr || !render->is_ready())
@@ -16,7 +16,7 @@ void QualityPanel::draw()
 
 	ImGui::SetNextWindowPos(ImVec2(680.0f, 560.0f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(ImVec2(296.0f, 150.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin("Quality"))
+	if (ImGui::Begin(get_name(), &m_Open))
 	{
 		wiwa::RenderQuality quality = render->get_quality();
 		const wiwa::RenderQuality before = quality;

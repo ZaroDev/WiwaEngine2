@@ -16,7 +16,7 @@ namespace
 	}
 }
 
-void ViewportPanel::draw()
+void ViewportPanel::on_draw()
 {
 	wiwa::RenderModule* render = wiwa::Engine::get().get_module<wiwa::RenderModule>();
 	if (render == nullptr || !render->is_ready())
@@ -29,7 +29,7 @@ void ViewportPanel::draw()
 	ImGui::SetNextWindowPos(ImVec2(376.0f, 12.0f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(ImVec2(600.0f, 540.0f), ImGuiCond_FirstUseEver);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-	const bool open = ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+	const bool open = ImGui::Begin(get_name(), nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 	ImGui::PopStyleVar();
 
 	if (open)

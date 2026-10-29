@@ -2,14 +2,8 @@
 
 #include <core/module.h>
 
-#include "renderer_panel.h"
-#include "scene/hierarchy_panel.h"
-#include "render_panels/environment_panel.h"
-#include "render_panels/lighting_panel.h"
-#include "render_panels/quality_panel.h"
-#include "scene/inspector_panel.h"
-#include "scene/scene_editor.h"
-#include "viewport/viewport_panel.h"
+#include <panels/panels.h>
+#include <scene/scene_editor.h>
 
 class EditorModule : public wiwa::IModule
 {
@@ -39,13 +33,8 @@ public:
 private:
 	void dock_space();
 	void main_bar();
+	void set_theme();
 private:
-	RendererPanel m_RendererPanel{};
-	ViewportPanel m_ViewportPanel{};
-	Scope<wiwa::SceneEditor> m_SceneEditor{};
-	Scope<HierarchyPanel> m_HierarchyPanel{};
-	Scope<InspectorPanel> m_InspectorPanel{};
-	Scope<EnvironmentPanel> m_EnvironmentPanel{};
-	Scope<LightingPanel> m_LightingPanel{};
-	QualityPanel m_QualityPanel{};
+	std::vector<Ref<Panel>> m_Panels{};
+	Scope<wiwa::SceneEditor> m_SceneEditor;
 };

@@ -1,18 +1,19 @@
 #pragma once
 
 #include <string>
+#include "panel.h"
 
-#include "../scene/scene_editor.h"
+#include <scene/scene_editor.h>
 
 // The "Environment" panel: where the light around the scene comes from (an Environment asset or the procedural atmosphere), how it is
 // turned and how bright it is, and whether it works. Edits the settings of the scene being edited; Save writes them with the scene.
 // Main thread, between the ImGui frame's begin and end.
-class EnvironmentPanel
+class EnvironmentPanel : public Panel
 {
 public:
-	explicit EnvironmentPanel(wiwa::SceneEditor& editor) : m_Editor(editor) {}
+	explicit EnvironmentPanel(wiwa::SceneEditor& editor) : m_Editor(editor), Panel("Environment", PanelCategory::Renderer) {}
 
-	void draw();
+	virtual void on_draw() override;
 
 private:
 	wiwa::SceneEditor& m_Editor;

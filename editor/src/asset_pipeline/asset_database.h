@@ -22,7 +22,7 @@ namespace wiwa
 		void register_importer(Scope<IImporter> importer);
 
 		// Another folder of source assets, cooked into its own folder of the Library (the engine's own assets: "engine" ->
-		// "Library/engine"). It behaves exactly like Assets/: .meta files, guids, importers, live re-import.
+		// "library/engine"). It behaves exactly like assets/: .meta files, guids, importers, live re-import.
 		void add_root(std::filesystem::path sourceRoot, std::filesystem::path libraryFolder);
 
 		// Imports everything under the source roots that is new or changed, in the background, and returns at once. The

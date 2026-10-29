@@ -14,11 +14,11 @@ namespace
 	const ImVec4 INSTANCE_COLOR(1.00f, 0.80f, 0.45f, 1.0f);
 }
 
-void HierarchyPanel::draw()
+void HierarchyPanel::on_draw()
 {
 	ImGui::SetNextWindowPos(ImVec2(12.0f, 250.0f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(ImVec2(360.0f, 420.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin("Hierarchy") && m_Editor.get_scene() != nullptr)
+	if (ImGui::Begin(get_name(), &m_Open) && m_Editor.get_scene() != nullptr)
 	{
 		draw_toolbar();
 		ImGui::Separator();

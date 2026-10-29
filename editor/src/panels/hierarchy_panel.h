@@ -2,18 +2,19 @@
 
 #include <functional>
 #include <string>
+#include "panel.h"
 
-#include "scene_editor.h"
+#include <scene/scene_editor.h>
 
 // The "Hierarchy" panel: the entity tree of the scene being edited, and the scene's file actions (new, open, save, add an entity or
 // a prefab). Entities of a prefab instance are shown in colors and can be edited through the Inspector (their edits become
 // overrides). Main thread, between the ImGui frame's begin and end.
-class HierarchyPanel
+class HierarchyPanel : public Panel
 {
 public:
-	explicit HierarchyPanel(wiwa::SceneEditor& editor) : m_Editor(editor) {}
+	explicit HierarchyPanel(wiwa::SceneEditor& editor) : m_Editor(editor), Panel("Hierarchy", PanelCategory::Window) {}
 
-	void draw();
+	virtual void on_draw() override;
 
 private:
 	void draw_toolbar();

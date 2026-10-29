@@ -5,7 +5,7 @@
 #include <core/engine.h>
 #include <renderer/render_module.h>
 
-void RendererPanel::draw()
+void RendererPanel::on_draw()
 {
 	wiwa::RenderModule* render = wiwa::Engine::get().get_module<wiwa::RenderModule>();
 	if (render == nullptr || !render->is_ready())
@@ -17,7 +17,7 @@ void RendererPanel::draw()
 
 	ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(ImVec2(360.0f, 0.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin("Renderer"))
+	if (ImGui::Begin(get_name(), &m_Open))
 	{
 		ImGui::Text("%.1f FPS (%.2f ms)", snapshot.Fps, snapshot.FrameMs);
 		ImGui::Text("API: %s", snapshot.Api.c_str());

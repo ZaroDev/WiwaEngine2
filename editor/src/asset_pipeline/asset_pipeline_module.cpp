@@ -13,8 +13,8 @@ namespace wiwa
 	void AssetPipelineModule::init()
 	{
 		// Assets/ is the user's; engine/ holds the engine's own assets (its shaders, ...) and is cooked into Library/engine.
-		m_Database = CreateScope<AssetDatabase>("Assets", "Library");
-		m_Database->add_root("engine", "Library/engine");
+		m_Database = CreateScope<AssetDatabase>("assets", "library");
+		m_Database->add_root("engine", "library/engine");
 		register_builtin_importers(*m_Database);
 		// In the background: the editor opens at once and the import reports through the database's progress object.
 		m_Database->scan_async();

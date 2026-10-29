@@ -7,11 +7,11 @@
 #include <core/engine.h>
 #include <renderer/render_module.h>
 
-void EnvironmentPanel::draw()
+void EnvironmentPanel::on_draw()
 {
 	ImGui::SetNextWindowPos(ImVec2(984.0f, 320.0f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(ImVec2(284.0f, 340.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin("Environment"))
+	if (ImGui::Begin(get_name(), &m_Open))
 	{
 		const wiwa::SceneSettings before = m_Editor.settings();
 		wiwa::SceneSettings settings = before;
