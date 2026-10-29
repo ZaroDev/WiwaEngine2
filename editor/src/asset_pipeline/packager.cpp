@@ -13,9 +13,16 @@
 
 namespace wiwa
 {
-	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory)
+	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress)
 	{
-		// Library/ is brought up to date first, so the pack never holds stale files.
+		JobProgress local;
+		if (progress == nullptr)
+		{
+			progress = &local;
+		}
+
+		// Library/ is brought up to date first, so the pack never holds stale files (this waits for a running import).
+		progress->begin("Importing assets", 0);
 		database.scan();
 
 		std::vector<std::filesystem::path> files;
@@ -29,6 +36,8 @@ namespace wiwa
 		}
 		std::sort(files.begin(), files.end()); // the same Library gives the same pack
 
+		progress->begin("Compressing assets", static_cast<u32>(files.size()));
+
 		std::filesystem::create_directories(outDirectory, error);
 		const std::filesystem::path target = outDirectory / "assets.wpak";
 		std::filesystem::path temp = target;
@@ -38,6 +47,7 @@ namespace wiwa
 		if (!out)
 		{
 			WI_ASSET_LOG(Error, "Cannot write {0}", temp.string());
+			progress->finish(false);
 			return false;
 		}
 
@@ -51,6 +61,17 @@ namespace wiwa
 
 		for (const std::filesystem::path& file : files)
 		{
+			if (progress->cancel_requested())
+			{
+				out.close();
+				std::filesystem::remove(temp, error);
+				WI_ASSET_LOG(Warning, "Packing cancelled");
+				progress->finish(false);
+				return false;
+			}
+
+			progress->advance(file.stem().string());
+
 			std::optional<std::vector<std::byte>> blob = read_binary_file(file);
 			if (!blob)
 			{
@@ -112,6 +133,7 @@ namespace wiwa
 		{
 			std::filesystem::remove(temp, error);
 			WI_ASSET_LOG(Error, "Packing failed, {0} was not written", target.string());
+			progress->finish(false);
 			return false;
 		}
 
@@ -119,10 +141,12 @@ namespace wiwa
 		if (error)
 		{
 			WI_ASSET_LOG(Error, "Cannot move the pack to {0}", target.string());
+			progress->finish(false);
 			return false;
 		}
 
 		WI_ASSET_LOG(Info, "Packed {0} assets into {1} ({2} bytes, {3} before compression)", index.size(), target.string(), offset + index.size() * sizeof(PakEntry), totalRaw);
+		progress->finish(true);
 		return true;
 	}
 }

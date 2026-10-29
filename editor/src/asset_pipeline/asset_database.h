@@ -8,6 +8,7 @@
 
 #include "assets/job_system.h"
 #include "importer.h"
+#include "job_progress.h"
 
 namespace wiwa
 {
@@ -24,7 +25,11 @@ namespace wiwa
 		// "Library/engine"). It behaves exactly like Assets/: .meta files, guids, importers, live re-import.
 		void add_root(std::filesystem::path sourceRoot, std::filesystem::path libraryFolder);
 
-		// Imports everything under Assets/ that is new or changed, on the worker pool, and waits for it.
+		// Imports everything under the source roots that is new or changed, in the background, and returns at once. The
+		// progress object is updated while it runs. If a scan is already running, that one's progress is returned.
+		Ref<JobProgress> scan_async();
+
+		// scan_async() and wait for it. Only for command-line runs and background jobs; never call it from the editor's main thread.
 		void scan();
 
 		// Re-cooks one source file if its content or settings changed (or always, with force).
@@ -58,6 +63,7 @@ namespace wiwa
 			AssetGuid Guid{};
 		};
 
+		void scan_impl(JobProgress& progress);
 		IImporter* find_importer(const std::filesystem::path& source) const;
 		std::optional<AssetRef> import_source(const std::filesystem::path& source, bool recheck, bool force, const nlohmann::json* defaultSettings);
 		std::optional<AssetRef> do_import(const std::filesystem::path& source, const std::string& key, bool force, const nlohmann::json* defaultSettings, bool& failed);
@@ -83,6 +89,10 @@ namespace wiwa
 		std::atomic<u32> m_Imported{ 0 };
 		std::atomic<u32> m_UpToDate{ 0 };
 		std::atomic<u32> m_Failed{ 0 };
+
+		std::mutex m_ScanMutex{};
+		Ref<JobProgress> m_ScanProgress{};
+		std::thread m_ScanThread{};
 
 		JobSystem m_Jobs{ 4 };
 	};

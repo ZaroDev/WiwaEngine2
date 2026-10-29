@@ -132,6 +132,14 @@ namespace wiwa
 		std::error_code error;
 		std::filesystem::remove_all(temp, error);
 
+		// 0. an import reports its progress and ends with every item done
+		{
+			Ref<JobProgress> scan = pipeline.scan_async();
+			scan->wait();
+			check(scan->succeeded(), "the import job succeeds");
+			check(scan->done() == scan->total() && scan->fraction() == 1.0f, "the import job reports all its items done");
+		}
+
 		// 1. import + pack
 		check(Packager::pack(database, temp), "packing the Library");
 		const std::vector<CookedFile> cooked = read_library(database.get_library_root());

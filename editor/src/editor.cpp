@@ -39,7 +39,13 @@ protected:
 		{
 			if (m_Args[i] == "--pack")
 			{
-				const bool ok = i + 1 < m_Args.size() && wiwa::Packager::pack(assets->get_database(), m_Args[i + 1]);
+				bool ok = false;
+				if (i + 1 < m_Args.size())
+				{
+					Ref<wiwa::JobProgress> progress = assets->pack_async(m_Args[i + 1]);
+					progress->wait();
+					ok = progress->succeeded();
+				}
 				if (i + 1 >= m_Args.size())
 				{
 					WI_ERROR("Assets", "--pack needs an output folder");

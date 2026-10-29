@@ -4,6 +4,7 @@
 
 #include "asset_database.h"
 #include "file_watcher.h"
+#include "packager.h"
 
 namespace wiwa
 {
@@ -24,8 +25,20 @@ namespace wiwa
 
 		AssetDatabase& get_database() { return *m_Database; }
 
+		// Imports what is new or changed in the background; the progress object is for a progress bar.
+		Ref<JobProgress> scan_async() { return m_Database->scan_async(); }
+
+		// Packs Library/ into <outDirectory>/assets.wpak in the background. One pack at a time: while one is running, its
+		// progress is returned.
+		Ref<JobProgress> pack_async(const std::filesystem::path& outDirectory);
+
+		// The pack in progress (or the last one), null if none was started.
+		Ref<JobProgress> get_pack_progress() const { return m_PackProgress; }
+
 	private:
 		Scope<AssetDatabase> m_Database{};
 		std::vector<Scope<FileWatcher>> m_Watchers{};
+		Ref<JobProgress> m_PackProgress{};
+		std::thread m_PackThread{};
 	};
 }

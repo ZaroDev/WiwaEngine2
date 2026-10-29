@@ -53,7 +53,21 @@ namespace wiwa
 		load_cache();
 	}
 
-	AssetDatabase::~AssetDatabase() = default;
+	AssetDatabase::~AssetDatabase()
+	{
+		{
+			std::lock_guard<std::mutex> lock(m_ScanMutex);
+			if (m_ScanProgress)
+			{
+				m_ScanProgress->request_cancel();
+			}
+		}
+
+		if (m_ScanThread.joinable())
+		{
+			m_ScanThread.join();
+		}
+	}
 
 	void AssetDatabase::register_importer(Scope<IImporter> importer)
 	{
@@ -155,8 +169,35 @@ namespace wiwa
 		std::filesystem::rename(temp, path, error);
 	}
 
+	Ref<JobProgress> AssetDatabase::scan_async()
+	{
+		std::lock_guard<std::mutex> lock(m_ScanMutex);
+		if (m_ScanProgress && !m_ScanProgress->finished())
+		{
+			return m_ScanProgress;
+		}
+
+		if (m_ScanThread.joinable())
+		{
+			m_ScanThread.join(); // the previous scan has finished
+		}
+
+		Ref<JobProgress> progress = CreateRef<JobProgress>();
+		m_ScanProgress = progress;
+		// Its own thread: it waits for the pool's jobs, so it must not be one of the pool's workers.
+		m_ScanThread = std::thread([this, progress]() { scan_impl(*progress); });
+		return progress;
+	}
+
 	void AssetDatabase::scan()
 	{
+		scan_async()->wait();
+	}
+
+	void AssetDatabase::scan_impl(JobProgress& progress)
+	{
+		progress.begin("Finding assets", 0);
+
 		std::vector<std::filesystem::path> sources;
 		for (const SourceRoot& root : m_Roots)
 		{
@@ -179,6 +220,8 @@ namespace wiwa
 			}
 		}
 
+		progress.begin("Importing assets", static_cast<u32>(sources.size()));
+
 		// Models first: they import their textures with the settings they need (a normal map as a normal map).
 		for (const bool dependents : { true, false })
 		{
@@ -187,7 +230,14 @@ namespace wiwa
 			{
 				if (find_importer(source)->imports_dependencies() == dependents)
 				{
-					jobs.push_back(m_Jobs.submit([this, source]() { ensure_imported(source); }));
+					jobs.push_back(m_Jobs.submit([this, source, &progress]()
+					{
+						if (!progress.cancel_requested())
+						{
+							ensure_imported(source);
+						}
+						progress.advance(source.filename().string());
+					}));
 				}
 			}
 
@@ -197,7 +247,11 @@ namespace wiwa
 			}
 		}
 
-		WI_ASSET_LOG(Info, "Asset scan: {0} imported, {1} up to date, {2} failed", m_Imported.exchange(0), m_UpToDate.exchange(0), m_Failed.exchange(0));
+		const u32 imported = m_Imported.exchange(0);
+		const u32 upToDate = m_UpToDate.exchange(0);
+		const u32 failed = m_Failed.exchange(0);
+		WI_ASSET_LOG(Info, "Asset scan: {0} imported, {1} up to date, {2} failed{3}", imported, upToDate, failed, progress.cancel_requested() ? " (cancelled)" : "");
+		progress.finish(failed == 0 && !progress.cancel_requested());
 	}
 
 	void AssetDatabase::reimport(const std::filesystem::path& source, bool force)
