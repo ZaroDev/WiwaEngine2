@@ -3,7 +3,7 @@
 #include "panel.h"
 #include <scene/scene_editor.h>
 
-// The "Lighting" panel: the ambient light, the background and the exposure of the scene being edited. Main thread, between the ImGui
+// The "Lighting" panel: the ambient light and the background of the scene being edited. Main thread, between the ImGui
 // frame's begin and end.
 class LightingPanel final : public Panel
 {

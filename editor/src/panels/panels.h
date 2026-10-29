@@ -1,5 +1,9 @@
 #pragma once
+#include "ao_panel.h"
+#include "bloom_panel.h"
+#include "exposure_panel.h"
 #include "lighting_panel.h"
+#include "tonemap_panel.h"
 #include "environment_panel.h"
 #include "hierarchy_panel.h"
 #include "inspector_panel.h"

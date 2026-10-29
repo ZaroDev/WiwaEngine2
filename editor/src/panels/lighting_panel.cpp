@@ -6,7 +6,7 @@
 void LightingPanel::on_draw()
 {
 	ImGui::SetNextWindowPos(ImVec2(376.0f, 560.0f), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(296.0f, 150.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(296.0f, 160.0f), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin(get_name(), &m_Open))
 	{
 		const wiwa::SceneSettings before = m_Editor.settings();
@@ -24,7 +24,7 @@ void LightingPanel::on_draw()
 			settings.Background = static_cast<wiwa::BackgroundMode>(background);
 		}
 		ImGui::ColorEdit3("Background color", &settings.BackgroundColor.x);
-		ImGui::SliderFloat("Exposure (EV)", &settings.ExposureEv, -10.0f, 10.0f);
+		ImGui::TextDisabled("The exposure is in the Exposure panel.");
 
 		if (!(settings == before))
 		{
