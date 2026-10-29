@@ -174,6 +174,17 @@ namespace wiwa
 				check(handles[i]() == LoadState::Ready, "asset " + cooked[i].Guid.to_string() + " loads from the pack");
 			}
 
+			// the same assets asked for through preload() report their progress to the end
+			std::vector<AssetRef> refs;
+			for (const CookedFile& file : cooked)
+			{
+				refs.push_back(AssetRef{ file.Guid, 0 });
+			}
+			Ref<JobProgress> preload = manager.preload(refs);
+			preload->wait();
+			check(preload->succeeded(), "preloading every asset succeeds");
+			check(preload->total() == cooked.size() && preload->done() == preload->total(), "preload counts every asset once");
+
 			// the same guid asked for as the wrong type fails, and a missing guid fails
 			WI_ASSET_LOG(Info, "Smoke test: the next two load errors are expected");
 			const AssetType other = (cooked[0].Type == AssetType::Mesh) ? AssetType::Texture : AssetType::Mesh;

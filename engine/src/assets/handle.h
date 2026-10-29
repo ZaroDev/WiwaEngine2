@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <memory>
+#include <vector>
 
 #include <core/common.h>
 #include "asset_guid.h"
@@ -16,6 +17,7 @@ namespace wiwa
 		std::atomic<AssetType> Type{ AssetType::None }; // None until the first loader or the file header says what it is
 		std::atomic<LoadState> State{ LoadState::Loading };
 		Ref<void> Data{}; // written once, before State becomes Ready
+		std::vector<AssetGuid> Dependencies{}; // written before State leaves Loading
 	};
 
 	// What ECS components store: the asset reference plus a shared view of its load state.

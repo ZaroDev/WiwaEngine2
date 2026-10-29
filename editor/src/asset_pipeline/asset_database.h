@@ -8,7 +8,7 @@
 
 #include "assets/job_system.h"
 #include "importer.h"
-#include "job_progress.h"
+#include <core/job_progress.h>
 
 namespace wiwa
 {

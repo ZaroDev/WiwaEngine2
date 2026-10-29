@@ -3,7 +3,9 @@
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
+#include <core/job_progress.h>
 #include <core/module.h>
 
 #include "asset_source.h"
@@ -36,6 +38,11 @@ namespace wiwa
 			return Handle<T>(ref, acquire(ref, asset_type_of<T>()));
 		}
 
+		// Starts loading all of them, plus everything they depend on, and returns a progress object for a loading bar: it
+		// finishes when every one has either loaded or failed (Succeeded only if none failed). The total grows as dependencies
+		// are found. The assets stay cached until unload_unused(); load<T>() them afterwards to get at the data.
+		Ref<JobProgress> preload(std::span<const AssetRef> refs);
+
 		LoadState get_state(AssetGuid resolvedGuid) const;
 
 		// Replaces the source; assets already loaded stay.
@@ -55,6 +62,18 @@ namespace wiwa
 		void wait_idle() const;
 
 	private:
+		// A preload() in progress: the assets it waits for, and every asset it has counted so far.
+		struct LoadBatch
+		{
+			Ref<JobProgress> Progress{};
+			std::unordered_set<AssetGuid> Remaining{};
+			std::unordered_set<AssetGuid> Seen{};
+			bool Failed = false;
+		};
+
+		void settle(LoadBatch& batch, AssetSlot& slot);
+		void on_slot_finished(const Ref<AssetSlot>& slot);
+
 		Ref<AssetSlot> acquire(AssetRef ref, AssetType expected);
 		Ref<AssetSlot> acquire_resolved(AssetGuid guid, AssetType expected, bool& created);
 		void run_load(Ref<AssetSlot> slot);
@@ -67,5 +86,6 @@ namespace wiwa
 		std::unordered_map<AssetGuid, Ref<AssetSlot>> m_Cache{};
 		std::atomic<u32> m_Pending{ 0 };
 		std::vector<std::function<void(AssetGuid)>> m_ReloadListeners{};
+		std::vector<Ref<LoadBatch>> m_Batches{};
 	};
 }

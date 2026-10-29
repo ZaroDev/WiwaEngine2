@@ -10,8 +10,9 @@
 
 namespace wiwa
 {
-	// Shared between a background job (import, packaging) and whoever shows it: the job reports into it from its thread,
-	// a progress bar reads it from any thread. Nothing here blocks the reader except wait().
+	// Shared between a background job (an import, a pack, loading a level's assets) and whoever shows it: the job reports
+	// into it from its thread, a progress bar reads it from any thread, in the editor and in a game alike. Nothing here
+	// blocks the reader except wait().
 	class JobProgress
 	{
 	public:
@@ -28,6 +29,9 @@ namespace wiwa
 			m_Total = total;
 			m_Done = 0;
 		}
+
+		// More work was found while running (a loaded asset names dependencies): the total grows, the bar must cope.
+		void add_total(u32 count) { m_Total += count; }
 
 		// One more item is done; item names the one that just finished (shown under the bar).
 		void advance(std::string item = {})

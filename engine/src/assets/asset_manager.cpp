@@ -75,6 +75,12 @@ namespace wiwa
 				slot->State.compare_exchange_strong(expected, LoadState::Failed);
 			}
 			m_Cache.clear();
+
+			for (const Ref<LoadBatch>& batch : m_Batches)
+			{
+				batch->Progress->finish(false); // nobody is left to finish them
+			}
+			m_Batches.clear();
 		}
 
 		m_Source.reset();
@@ -102,6 +108,118 @@ namespace wiwa
 			if (it->second.use_count() == 1 && it->second->State.load() != LoadState::Loading)
 			{
 				it = m_Cache.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+	}
+
+	Ref<JobProgress> AssetManager::preload(std::span<const AssetRef> refs)
+	{
+		auto batch = CreateRef<LoadBatch>();
+		batch->Progress = CreateRef<JobProgress>();
+		batch->Progress->begin("Loading assets", 0);
+
+		std::vector<Ref<AssetSlot>> slots;
+		for (const AssetRef& ref : refs)
+		{
+			if (ref.valid())
+			{
+				bool created = false;
+				slots.push_back(acquire_resolved(ref.resolved(), AssetType::None, created));
+			}
+		}
+
+		// Registered under the lock, after the loads were started: an asset that finished in between is counted here, one
+		// that finishes later is counted by on_slot_finished.
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (const Ref<AssetSlot>& slot : slots)
+		{
+			if (batch->Seen.insert(slot->Guid).second)
+			{
+				batch->Progress->add_total(1);
+				if (slot->State.load() == LoadState::Loading)
+				{
+					batch->Remaining.insert(slot->Guid);
+				}
+				else
+				{
+					settle(*batch, *slot);
+				}
+			}
+		}
+
+		if (batch->Remaining.empty())
+		{
+			batch->Progress->finish(!batch->Failed);
+		}
+		else
+		{
+			m_Batches.push_back(batch);
+		}
+
+		return batch->Progress;
+	}
+
+	// Counts a finished slot as done and starts following its dependencies. Called with m_Mutex held.
+	void AssetManager::settle(LoadBatch& batch, AssetSlot& slot)
+	{
+		std::vector<AssetSlot*> work{ &slot };
+		while (!work.empty())
+		{
+			AssetSlot* current = work.back();
+			work.pop_back();
+
+			batch.Progress->advance(std::string(asset_type_name(current->Type.load())) + " " + current->Guid.to_string().substr(0, 8));
+
+			if (current->State.load() == LoadState::Failed)
+			{
+				batch.Failed = true;
+				continue;
+			}
+
+			for (AssetGuid dependency : current->Dependencies)
+			{
+				if (!batch.Seen.insert(dependency).second)
+				{
+					continue;
+				}
+
+				batch.Progress->add_total(1);
+				auto found = m_Cache.find(dependency);
+				if (found == m_Cache.end())
+				{
+					batch.Progress->advance(); // dropped from the cache already, so it had finished
+				}
+				else if (found->second->State.load() == LoadState::Loading)
+				{
+					batch.Remaining.insert(dependency);
+				}
+				else
+				{
+					work.push_back(found->second.get());
+				}
+			}
+		}
+	}
+
+	void AssetManager::on_slot_finished(const Ref<AssetSlot>& slot)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto it = m_Batches.begin(); it != m_Batches.end();)
+		{
+			LoadBatch& batch = **it;
+			if (batch.Remaining.erase(slot->Guid) > 0)
+			{
+				settle(batch, *slot);
+			}
+
+			if (batch.Remaining.empty())
+			{
+				batch.Progress->finish(!batch.Failed);
+				it = m_Batches.erase(it);
 			}
 			else
 			{
@@ -216,6 +334,13 @@ namespace wiwa
 			~PendingGuard() { Counter.fetch_sub(1); }
 		} guard{ m_Pending };
 
+		struct FinishGuard
+		{
+			AssetManager& Manager;
+			const Ref<AssetSlot>& Slot;
+			~FinishGuard() { Manager.on_slot_finished(Slot); }
+		} finished{ *this, slot };
+
 		try
 		{
 			std::optional<std::vector<std::byte>> blob = m_Source->read(slot->Guid);
@@ -261,6 +386,7 @@ namespace wiwa
 			}
 
 			slot->Data = std::move(data);
+			slot->Dependencies = header->Dependencies;
 			slot->State.store(LoadState::Ready, std::memory_order_release);
 		}
 		catch (const std::exception& exception)
