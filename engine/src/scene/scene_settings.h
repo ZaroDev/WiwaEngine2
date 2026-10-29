@@ -38,6 +38,62 @@ namespace wiwa
 		bool operator==(const AtmosphereParameters&) const = default;
 	};
 
+	// Only append: the values are saved.
+	enum class TonemapOperator : u32
+	{
+		ACES,
+		Reinhard,
+		Neutral,
+		None,
+	};
+
+	// Automatic exposure (eye adaptation). Off: SceneSettings::ExposureEv applies.
+	struct ExposureSettings
+	{
+		bool Auto = false;
+		float CompensationEv = 0.0f; // stops added to what the automatic exposure chose
+		float Key = 0.3f;            // the brightness the average of the scene is brought to (before tone mapping)
+		float MinEv = -4.0f;         // the exposure is kept within 2^MinEv .. 2^MaxEv
+		float MaxEv = 4.0f;
+		float AdaptSpeed = 1.5f;     // how fast it follows a change of brightness, per second
+		float LowPercent = 0.1f;     // the darkest and brightest pixels outside these shares do not count
+		float HighPercent = 0.9f;
+
+		bool operator==(const ExposureSettings&) const = default;
+	};
+
+	struct BloomSettings
+	{
+		bool Enabled = true;
+		float Threshold = 1.0f; // luminance above which a pixel starts to glow
+		float Knee = 0.5f;      // width of the soft transition below the threshold
+		float Intensity = 0.04f;
+
+		bool operator==(const BloomSettings&) const = default;
+	};
+
+	// The tone mapping operator and the color grading applied with it. The neutral values change nothing.
+	struct TonemapSettings
+	{
+		TonemapOperator Operator = TonemapOperator::ACES;
+		float Contrast = 1.0f;
+		float Saturation = 1.0f;
+		float Temperature = 0.0f; // -1 cool .. +1 warm
+		float Tint = 0.0f;        // -1 green .. +1 magenta
+		float Vignette = 0.0f;    // 0 none .. 1 strong darkening towards the corners
+
+		bool operator==(const TonemapSettings&) const = default;
+	};
+
+	struct AoSettings
+	{
+		bool Enabled = true;
+		float Radius = 1.0f; // world units: occluders farther than this do not darken a point
+		float Power = 1.5f;  // the final contrast: occlusion is raised to this power
+
+		bool operator==(const AoSettings&) const = default;
+	};
+
 	struct SceneSettings
 	{
 		EnvironmentSource Source = EnvironmentSource::None;
@@ -56,6 +112,11 @@ namespace wiwa
 		glm::vec3 BackgroundColor{ 0.05f, 0.06f, 0.08f };
 
 		float ExposureEv = 0.0f;          // the image is multiplied by 2^ExposureEv
+
+		ExposureSettings Exposure{};
+		BloomSettings Bloom{};
+		TonemapSettings Tonemap{};
+		AoSettings Ao{};
 
 		bool operator==(const SceneSettings&) const = default;
 	};

@@ -175,6 +175,31 @@ namespace wiwa
 			archive_enum_value(ar, s.Background, 2);
 			ar.value(s.BackgroundColor);
 			ar.value(s.ExposureEv);
+			ExposureSettings& e = s.Exposure;
+			ar.value(e.Auto);
+			ar.value(e.CompensationEv);
+			ar.value(e.Key);
+			ar.value(e.MinEv);
+			ar.value(e.MaxEv);
+			ar.value(e.AdaptSpeed);
+			ar.value(e.LowPercent);
+			ar.value(e.HighPercent);
+			BloomSettings& b = s.Bloom;
+			ar.value(b.Enabled);
+			ar.value(b.Threshold);
+			ar.value(b.Knee);
+			ar.value(b.Intensity);
+			TonemapSettings& t = s.Tonemap;
+			archive_enum_value(ar, t.Operator, 4);
+			ar.value(t.Contrast);
+			ar.value(t.Saturation);
+			ar.value(t.Temperature);
+			ar.value(t.Tint);
+			ar.value(t.Vignette);
+			AoSettings& ao = s.Ao;
+			ar.value(ao.Enabled);
+			ar.value(ao.Radius);
+			ar.value(ao.Power);
 		}
 	}
 

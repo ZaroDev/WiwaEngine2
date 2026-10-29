@@ -699,6 +699,58 @@ namespace wiwa
 			}
 			put_vec3_if_different(json, "backgroundColor", s.BackgroundColor, d.BackgroundColor);
 			put_float_if_different(json, "exposureEv", s.ExposureEv, d.ExposureEv);
+
+			auto put_bool = [](SceneJson& object, const char* key, bool value, bool defaultValue)
+			{
+				if (value != defaultValue)
+				{
+					object[key] = value;
+				}
+			};
+			auto put_group = [&](const char* key, SceneJson& group)
+			{
+				if (!group.empty())
+				{
+					json[key] = std::move(group);
+				}
+			};
+
+			SceneJson exposure = SceneJson::object();
+			put_bool(exposure, "auto", s.Exposure.Auto, d.Exposure.Auto);
+			put_float_if_different(exposure, "compensation", s.Exposure.CompensationEv, d.Exposure.CompensationEv);
+			put_float_if_different(exposure, "key", s.Exposure.Key, d.Exposure.Key);
+			put_float_if_different(exposure, "minEv", s.Exposure.MinEv, d.Exposure.MinEv);
+			put_float_if_different(exposure, "maxEv", s.Exposure.MaxEv, d.Exposure.MaxEv);
+			put_float_if_different(exposure, "adaptSpeed", s.Exposure.AdaptSpeed, d.Exposure.AdaptSpeed);
+			put_float_if_different(exposure, "lowPercent", s.Exposure.LowPercent, d.Exposure.LowPercent);
+			put_float_if_different(exposure, "highPercent", s.Exposure.HighPercent, d.Exposure.HighPercent);
+			put_group("exposure", exposure);
+
+			SceneJson bloom = SceneJson::object();
+			put_bool(bloom, "enabled", s.Bloom.Enabled, d.Bloom.Enabled);
+			put_float_if_different(bloom, "threshold", s.Bloom.Threshold, d.Bloom.Threshold);
+			put_float_if_different(bloom, "knee", s.Bloom.Knee, d.Bloom.Knee);
+			put_float_if_different(bloom, "intensity", s.Bloom.Intensity, d.Bloom.Intensity);
+			put_group("bloom", bloom);
+
+			SceneJson tonemap = SceneJson::object();
+			if (s.Tonemap.Operator != d.Tonemap.Operator)
+			{
+				static const char* const names[] = { "aces", "reinhard", "neutral", "none" };
+				tonemap["operator"] = names[std::min<u32>(static_cast<u32>(s.Tonemap.Operator), 3)];
+			}
+			put_float_if_different(tonemap, "contrast", s.Tonemap.Contrast, d.Tonemap.Contrast);
+			put_float_if_different(tonemap, "saturation", s.Tonemap.Saturation, d.Tonemap.Saturation);
+			put_float_if_different(tonemap, "temperature", s.Tonemap.Temperature, d.Tonemap.Temperature);
+			put_float_if_different(tonemap, "tint", s.Tonemap.Tint, d.Tonemap.Tint);
+			put_float_if_different(tonemap, "vignette", s.Tonemap.Vignette, d.Tonemap.Vignette);
+			put_group("tonemap", tonemap);
+
+			SceneJson ao = SceneJson::object();
+			put_bool(ao, "enabled", s.Ao.Enabled, d.Ao.Enabled);
+			put_float_if_different(ao, "radius", s.Ao.Radius, d.Ao.Radius);
+			put_float_if_different(ao, "power", s.Ao.Power, d.Ao.Power);
+			put_group("ao", ao);
 			return json;
 		}
 
@@ -715,6 +767,37 @@ namespace wiwa
 			}
 			out = json[key].get<float>();
 			return true;
+		}
+
+		bool read_bool(const SceneJson& json, const char* key, const std::string& path, bool& out, std::string& error)
+		{
+			if (!json.contains(key))
+			{
+				return true;
+			}
+			if (!json[key].is_boolean())
+			{
+				error = path + "." + key + ": not a boolean";
+				return false;
+			}
+			out = json[key].get<bool>();
+			return true;
+		}
+
+		// A group (an object) that may be missing; calls read with the object when it is there.
+		template<typename F>
+		bool read_group(const SceneJson& json, const char* key, const std::string& path, std::string& error, F read)
+		{
+			if (!json.contains(key))
+			{
+				return true;
+			}
+			if (!json[key].is_object())
+			{
+				error = path + "." + key + ": not an object";
+				return false;
+			}
+			return read(json[key], path + "." + key);
 		}
 
 		bool read_vec3(const SceneJson& json, const char* key, const std::string& path, glm::vec3& out, std::string& error)
@@ -808,6 +891,37 @@ namespace wiwa
 					return false;
 				}
 			}
+
+			ExposureSettings& e = s.Exposure;
+			BloomSettings& b = s.Bloom;
+			TonemapSettings& t = s.Tonemap;
+			AoSettings& ao = s.Ao;
+			u32 tonemapOperator = static_cast<u32>(t.Operator);
+			if (!read_group(json, "exposure", path, error, [&](const SceneJson& g, const std::string& p)
+					{
+						return read_bool(g, "auto", p, e.Auto, error) && read_float(g, "compensation", p, e.CompensationEv, error) && read_float(g, "key", p, e.Key, error)
+							&& read_float(g, "minEv", p, e.MinEv, error) && read_float(g, "maxEv", p, e.MaxEv, error) && read_float(g, "adaptSpeed", p, e.AdaptSpeed, error)
+							&& read_float(g, "lowPercent", p, e.LowPercent, error) && read_float(g, "highPercent", p, e.HighPercent, error);
+					})
+				|| !read_group(json, "bloom", path, error, [&](const SceneJson& g, const std::string& p)
+					{
+						return read_bool(g, "enabled", p, b.Enabled, error) && read_float(g, "threshold", p, b.Threshold, error) && read_float(g, "knee", p, b.Knee, error)
+							&& read_float(g, "intensity", p, b.Intensity, error);
+					})
+				|| !read_group(json, "tonemap", path, error, [&](const SceneJson& g, const std::string& p)
+					{
+						return read_choice(g, "operator", p, { "aces", "reinhard", "neutral", "none" }, tonemapOperator, error) && read_float(g, "contrast", p, t.Contrast, error)
+							&& read_float(g, "saturation", p, t.Saturation, error) && read_float(g, "temperature", p, t.Temperature, error) && read_float(g, "tint", p, t.Tint, error)
+							&& read_float(g, "vignette", p, t.Vignette, error);
+					})
+				|| !read_group(json, "ao", path, error, [&](const SceneJson& g, const std::string& p)
+					{
+						return read_bool(g, "enabled", p, ao.Enabled, error) && read_float(g, "radius", p, ao.Radius, error) && read_float(g, "power", p, ao.Power, error);
+					}))
+			{
+				return false;
+			}
+			t.Operator = static_cast<TonemapOperator>(tonemapOperator);
 			return true;
 		}
 	}

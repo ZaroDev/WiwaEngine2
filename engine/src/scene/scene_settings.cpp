@@ -70,6 +70,40 @@ namespace wiwa
 		changed = fix(a.SunDiscBoost, d.SunDiscBoost, 0.0f, 10000.0f) || changed;
 		changed = fix(a.GroundAlbedo, d.GroundAlbedo, 0.0f, 1.0f) || changed;
 
+		ExposureSettings& e = s.Exposure;
+		const ExposureSettings& de = defaults.Exposure;
+		changed = fix(e.CompensationEv, de.CompensationEv, -6.0f, 6.0f) || changed;
+		changed = fix(e.Key, de.Key, 0.02f, 2.0f) || changed;
+		changed = fix(e.MinEv, de.MinEv, -10.0f, 10.0f) || changed;
+		changed = fix(e.MaxEv, de.MaxEv, e.MinEv, 10.0f) || changed;
+		changed = fix(e.AdaptSpeed, de.AdaptSpeed, 0.0f, 20.0f) || changed;
+		changed = fix(e.LowPercent, de.LowPercent, 0.0f, 0.9f) || changed;
+		changed = fix(e.HighPercent, de.HighPercent, e.LowPercent + 0.05f, 1.0f) || changed;
+
+		BloomSettings& b = s.Bloom;
+		const BloomSettings& db = defaults.Bloom;
+		changed = fix(b.Threshold, db.Threshold, 0.0f, 4.0f) || changed;
+		changed = fix(b.Knee, db.Knee, 0.0f, 1.0f) || changed;
+		changed = fix(b.Intensity, db.Intensity, 0.0f, 0.3f) || changed;
+
+		TonemapSettings& t = s.Tonemap;
+		const TonemapSettings& dt = defaults.Tonemap;
+		changed = fix(t.Contrast, dt.Contrast, 0.2f, 2.5f) || changed;
+		changed = fix(t.Saturation, dt.Saturation, 0.0f, 2.5f) || changed;
+		changed = fix(t.Temperature, dt.Temperature, -1.0f, 1.0f) || changed;
+		changed = fix(t.Tint, dt.Tint, -1.0f, 1.0f) || changed;
+		changed = fix(t.Vignette, dt.Vignette, 0.0f, 1.0f) || changed;
+		if (static_cast<u32>(t.Operator) > static_cast<u32>(TonemapOperator::None))
+		{
+			t.Operator = TonemapOperator::ACES;
+			changed = true;
+		}
+
+		AoSettings& ao = s.Ao;
+		const AoSettings& dao = defaults.Ao;
+		changed = fix(ao.Radius, dao.Radius, 0.01f, 10.0f) || changed;
+		changed = fix(ao.Power, dao.Power, 0.1f, 8.0f) || changed;
+
 		if (static_cast<u32>(s.Source) > static_cast<u32>(EnvironmentSource::Atmosphere))
 		{
 			s.Source = EnvironmentSource::None;

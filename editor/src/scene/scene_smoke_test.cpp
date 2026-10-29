@@ -785,6 +785,13 @@ namespace wiwa
 			s.Background = BackgroundMode::SolidColor;
 			s.BackgroundColor = glm::vec3(0.5f, 0.25f, 0.125f);
 			s.ExposureEv = 1.5f;
+			s.Exposure.Auto = true;
+			s.Exposure.MaxEv = 6.0f;
+			s.Bloom.Enabled = false;
+			s.Bloom.Intensity = 0.1f;
+			s.Tonemap.Operator = TonemapOperator::Reinhard;
+			s.Tonemap.Vignette = 0.5f;
+			s.Ao.Radius = 2.0f;
 			return s;
 		}
 
@@ -819,6 +826,10 @@ namespace wiwa
 			check(contains(error, "settings.source"), "an unknown source is rejected with its path (" + error + ")");
 			error = error_of([](SceneJson& j) { j["settings"]["brightness"] = "x"; });
 			check(contains(error, "settings.brightness"), "a value of the wrong type is rejected with its path (" + error + ")");
+			error = error_of([](SceneJson& j) { j["settings"]["tonemap"]["operator"] = "bogus"; });
+			check(contains(error, "settings.tonemap.operator"), "an unknown tonemap operator is rejected with its path (" + error + ")");
+			error = error_of([](SceneJson& j) { j["settings"]["bloom"]["enabled"] = 3; });
+			check(contains(error, "settings.bloom.enabled"), "a bloom flag of the wrong type is rejected (" + error + ")");
 			error = error_of([](SceneJson& j) { j["settings"]["atmosphere"]["mie"] = true; });
 			check(contains(error, "settings.atmosphere.mie"), "so is one inside the atmosphere block (" + error + ")");
 			SceneJson extra = doc;

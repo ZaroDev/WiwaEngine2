@@ -38,6 +38,10 @@ namespace wiwa
 			s.Background = BackgroundMode::SolidColor;
 			s.BackgroundColor = glm::vec3(0.9f, 0.8f, 0.7f);
 			s.ExposureEv = -1.5f;
+			s.Exposure = { true, 0.5f, 0.4f, -3.0f, 5.0f, 2.0f, 0.2f, 0.8f };
+			s.Bloom = { false, 2.0f, 0.25f, 0.1f };
+			s.Tonemap = { TonemapOperator::Neutral, 1.2f, 0.8f, 0.3f, -0.3f, 0.5f };
+			s.Ao = { false, 2.5f, 3.0f };
 			return s;
 		}
 	}
@@ -62,6 +66,55 @@ namespace wiwa
 				const std::optional<RenderQuality> back = load_render_quality(path, error);
 				context.check(back && *back == quality && error.empty(), "load gives what was saved");
 				std::filesystem::remove(path);
+			});
+
+		register_render_check("quality_post_fields", [](RenderCheckContext& context)
+			{
+				RenderQuality quality;
+				quality.BloomMips = 3;
+				quality.AoSlices = 4;
+				quality.AoSteps = 12;
+				quality.Fxaa = false;
+				const std::filesystem::path path = "Library/quality_post.json";
+				std::filesystem::create_directories("Library");
+				context.check(save_render_quality(path, quality), "save");
+				std::string error;
+				const std::optional<RenderQuality> back = load_render_quality(path, error);
+				context.check(back && *back == quality, "the post fields survive");
+
+				{
+					std::ofstream file(path, std::ios::trunc);
+					file << "{\"vsync\": false}";
+				}
+				const std::optional<RenderQuality> legacy = load_render_quality(path, error);
+				context.check(legacy && legacy->BloomMips == 6 && legacy->AoSlices == 2 && legacy->AoSteps == 8 && legacy->Fxaa && !legacy->Vsync, "an old file keeps the defaults of the new keys");
+
+				RenderQuality wild;
+				wild.BloomMips = 99;
+				wild.AoSlices = 0;
+				wild.AoSteps = 0;
+				const RenderQuality fixed = sanitized(wild);
+				context.check(fixed.BloomMips == 6 && fixed.AoSlices == 1 && fixed.AoSteps == 4, "values out of range are clamped");
+				std::filesystem::remove(path);
+			});
+
+		register_render_check("settings_post_sanitized", [](RenderCheckContext& context)
+			{
+				const float nan = std::numeric_limits<float>::quiet_NaN();
+				SceneSettings bad;
+				bad.Bloom.Threshold = nan;
+				bad.Exposure.MinEv = 5.0f;
+				bad.Exposure.MaxEv = -5.0f;
+				bad.Exposure.HighPercent = 0.0f;
+				bad.Tonemap.Operator = static_cast<TonemapOperator>(99);
+				bad.Tonemap.Contrast = 100.0f;
+				bad.Ao.Radius = -1.0f;
+				const SceneSettings fixed = sanitized(bad);
+				context.check(fixed.Bloom.Threshold == 1.0f, "NaN threshold becomes the default");
+				context.check(fixed.Exposure.MaxEv >= fixed.Exposure.MinEv, "max EV is not below min EV");
+				context.check(fixed.Exposure.HighPercent > fixed.Exposure.LowPercent, "the percentile range is ordered");
+				context.check(fixed.Tonemap.Operator == TonemapOperator::ACES && fixed.Tonemap.Contrast == 2.5f, "unknown operator and contrast");
+				context.check(fixed.Ao.Radius == 0.01f, "negative radius is clamped");
 			});
 
 		register_render_check("quality_missing_file", [](RenderCheckContext& context)
