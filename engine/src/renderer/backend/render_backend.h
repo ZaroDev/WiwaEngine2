@@ -13,6 +13,8 @@ struct GLFWwindow;
 
 namespace wiwa
 {
+	class AssetManager;
+
 	enum class GraphicsApi
 	{
 		Vulkan,
@@ -30,6 +32,7 @@ namespace wiwa
 		GLFWwindow* Window = nullptr;
 		u32 Width = 1280;  // the framebuffer size at start; read on the main thread, GLFW's window queries are main-thread only
 		u32 Height = 720;
+		AssetManager* Assets = nullptr; // where the renderer loads shaders and, later, models and textures from
 		std::string ApplicationName = "Wiwa";
 		bool EnableValidation = false;
 		bool EnableVsync = false;

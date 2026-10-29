@@ -1,5 +1,6 @@
 #pragma once
 #include <editor_common.h>
+#include <assets/asset_manager.h>
 #include <core/engine.h>
 
 #include "editor_module.h"
@@ -12,6 +13,9 @@ class Editor final : public wiwa::Engine
 public:
 	Editor(int argc, char** argv) : wiwa::Engine(argc, argv)
 	{
+		// The editor reads the Library it imports into, never a pack.
+		wiwa::AssetManager::set_prefer_pack(false);
+
 		for (int i = 1; i < argc; i++)
 		{
 			m_Args.emplace_back(argv[i]);

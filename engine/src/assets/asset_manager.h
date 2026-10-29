@@ -45,6 +45,11 @@ namespace wiwa
 
 		LoadState get_state(AssetGuid resolvedGuid) const;
 
+		// Whether init() reads an assets.wpak next to the program when there is one (a game: yes, the default). A tool that
+		// has a Library of its own and imports live, like the editor, turns it off before the engine initializes, so a
+		// leftover pack never shadows the Library.
+		static void set_prefer_pack(bool prefer) { s_PreferPack = prefer; }
+
 		// Replaces the source; assets already loaded stay.
 		void set_source(Scope<IAssetSource> source);
 		IAssetSource* get_source() const { return m_Source.get(); }
@@ -62,6 +67,8 @@ namespace wiwa
 		void wait_idle() const;
 
 	private:
+		inline static bool s_PreferPack = true;
+
 		// A preload() in progress: the assets it waits for, and every asset it has counted so far.
 		struct LoadBatch
 		{

@@ -45,7 +45,7 @@ namespace wiwa
 
 		const std::filesystem::path pack = "assets.wpak";
 		std::error_code error;
-		if (std::filesystem::exists(pack, error))
+		if (s_PreferPack && std::filesystem::exists(pack, error))
 		{
 			auto source = CreateScope<PakSource>(pack);
 			if (source->valid())

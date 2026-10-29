@@ -14,12 +14,14 @@
 
 namespace wiwa
 {
+	class ShaderLibrary;
+
 	// The render thread's renderer: owns the backend and the passes, and turns a batch into a presented frame.
 	// Everything here runs on the render thread.
 	class Renderer
 	{
 	public:
-		Renderer() = default;
+		Renderer();
 		~Renderer();
 
 		Renderer(const Renderer&) = delete;
@@ -35,6 +37,7 @@ namespace wiwa
 		bool render_frame(const RenderBatch& batch);
 
 		nvrhi::IDevice* get_device() const { return m_Backend ? m_Backend->get_device() : nullptr; }
+		ShaderLibrary* get_shader_library() const { return m_Shaders.get(); }
 		GraphicsApi get_api() const { return m_Description.Api; }
 		std::string get_adapter_name() const { return m_Backend ? m_Backend->get_adapter_name() : std::string{}; }
 		u32 get_width() const { return m_Backend ? m_Backend->get_width() : 0; }
@@ -70,6 +73,7 @@ namespace wiwa
 		u32 m_PresentResizeStreak = 0; // consecutive frames whose present asked for a resize at an unchanged size
 
 		Scope<IRenderBackend> m_Backend{};
+		Scope<ShaderLibrary> m_Shaders{};
 		nvrhi::CommandListHandle m_CommandList{};
 		std::vector<Scope<IRenderPass>> m_Passes{};
 		PassProfiler m_Profiler{};

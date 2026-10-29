@@ -3,6 +3,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include <assets/asset_manager.h>
 #include <core/engine.h>
 
 #include "render_world.h"
@@ -22,6 +23,7 @@ namespace wiwa
 		Window* window = Engine::get().get_module<Window>();
 		m_Description.Window = window->get_window();
 		m_Description.EnableVsync = true;
+		m_Description.Assets = Engine::get().get_module<AssetManager>(); // looked up here: the render thread must not touch the module map
 
 		int width = 0;
 		int height = 0;

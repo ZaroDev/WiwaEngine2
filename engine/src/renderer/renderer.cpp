@@ -5,12 +5,16 @@
 
 #include <nvrhi/utils.h>
 
+#include "shader_library.h"
+
 #define WI_RENDER_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
 
 namespace wiwa
 {
 	// A present that keeps asking for a resize at the size we already have is ignored after this many frames in a row.
 	constexpr u32 MAX_PRESENT_RESIZE_STREAK = 2;
+
+	Renderer::Renderer() = default;
 
 	Renderer::~Renderer()
 	{
@@ -43,6 +47,15 @@ namespace wiwa
 
 		m_CommandList = m_Backend->get_device()->createCommandList();
 
+		if (m_Description.Assets == nullptr)
+		{
+			WI_RENDER_LOG(Error, "RendererDescription::Assets is null");
+			m_Backend->shutdown();
+			m_Backend.reset();
+			return false;
+		}
+		m_Shaders = CreateScope<ShaderLibrary>(m_Backend->get_device(), m_Description.Api, m_Description.Assets);
+
 		WI_RENDER_LOG(Info, "Using {0} on {1}", graphics_api_name(m_Description.Api), m_Backend->get_adapter_name());
 		m_Initialized = true;
 		return true;
@@ -61,6 +74,7 @@ namespace wiwa
 		}
 
 		m_Passes.clear();
+		m_Shaders.reset();
 		m_Profiler = PassProfiler{}; // its timer queries belong to the device
 		m_CommandList = nullptr;
 		m_FramesInFlight.clear();
@@ -108,6 +122,8 @@ namespace wiwa
 		}
 
 		nvrhi::IDevice* device = m_Backend->get_device();
+
+		m_Shaders->update();
 
 		// Finish asynchronous work (pipeline creation, shaders that became ready) and check whether every pass can render yet.
 		bool allPassesReady = true;
@@ -199,6 +215,7 @@ namespace wiwa
 		PassInitializationDescription description;
 		description.Device = m_Backend->get_device();
 		description.Backbuffer = m_Backend->get_reference_framebuffer();
+		description.Shaders = m_Shaders.get();
 		return description;
 	}
 
