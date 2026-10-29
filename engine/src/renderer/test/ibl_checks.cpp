@@ -1,6 +1,9 @@
 #include <pch.h>
 #include "render_test.h"
 
+#include <assets/wasset_io.h>
+
+#include "../ibl/environment_pack.h"
 #include "../ibl/ibl_math.h"
 
 // Checks of the image-based lighting math. Plain logic, no GPU.
@@ -153,6 +156,47 @@ namespace wiwa
 				const CubeMap cube = equirect_to_cube(image.data(), W, H, 16);
 				context.check(cube.Size == 16 && finite(cube), "the cube is finite even with NaN and negative input");
 				context.check(face_mean(cube, 2) > 4.0f * face_mean(cube, 3), "the bright upper half of the image ends up on +Y");
+			});
+
+		register_render_check("environment_archive_roundtrip", [](RenderCheckContext& context)
+			{
+				const CubeMap source = make_cube(16, [](const glm::vec3& d) { return glm::vec3(1.0f + d.x, 0.5f, 0.25f); });
+				const EnvironmentData data = pack_environment(build_environment(source, 1, 8));
+				const std::vector<std::byte> bytes = serialize(data);
+				const std::optional<EnvironmentData> back = deserialize<EnvironmentData>(bytes);
+				context.check(back && back->FaceSize == 16 && back->Mips == data.Mips && back->SH == data.SH, "a cooked environment round-trips");
+
+				EnvironmentData truncated = data;
+				truncated.Mips.back().pop_back();
+				context.check(!deserialize<EnvironmentData>(serialize(truncated)).has_value(), "a mip of the wrong length is refused");
+				EnvironmentData broken = data;
+				broken.SH[3].y = std::numeric_limits<float>::quiet_NaN();
+				context.check(!deserialize<EnvironmentData>(serialize(broken)).has_value(), "a NaN in the SH is refused");
+				EnvironmentData odd = data;
+				odd.FaceSize = 15;
+				context.check(!deserialize<EnvironmentData>(serialize(odd)).has_value(), "a face size that is not a power of two is refused");
+			});
+
+		register_render_check("environment_pack_roundtrip", [](RenderCheckContext& context)
+			{
+				const CubeMap source = make_cube(16, [](const glm::vec3& d) { return glm::vec3(2.0f + d.x, 0.5f + 0.25f * d.y, 0.125f); });
+				const IblResult result = build_environment(source, 1, 8);
+				const IblResult back = unpack_environment(pack_environment(result));
+				bool close = back.Mips.size() == result.Mips.size();
+				for (size_t mip = 0; close && mip < result.Mips.size(); mip++)
+				{
+					for (u32 face = 0; close && face < 6; face++)
+					{
+						for (size_t i = 0; close && i < result.Mips[mip].Faces[face].size(); i++)
+						{
+							const glm::vec3 a = result.Mips[mip].Faces[face][i];
+							const glm::vec3 b = back.Mips[mip].Faces[face][i];
+							close = glm::all(glm::lessThanEqual(glm::abs(a - b), glm::abs(a) * 1e-3f + 1e-4f));
+						}
+					}
+				}
+				context.check(close, "half floats keep the radiance within 0.1%");
+				context.check(back.SH == result.SH, "the SH are kept exactly");
 			});
 
 		register_render_check("ibl_thread_independent", [](RenderCheckContext& context)

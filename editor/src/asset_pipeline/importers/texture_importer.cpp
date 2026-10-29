@@ -48,7 +48,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "EnvironmentImporter"; }
-			virtual u32 version() const override { return 1; }
+			virtual u32 version() const override { return 2; } // 2: cooked into a cube with prefiltered mips and SH
 			virtual std::vector<std::string> extensions() const override { return { ".hdr" }; }
 
 			virtual bool import(ImportContext& ctx) override
@@ -61,10 +61,11 @@ namespace wiwa
 				}
 
 				std::string error;
-				std::optional<EnvironmentData> environment = decode_environment(*bytes, ctx.source().filename().string(), error);
+				std::optional<EquirectImage> image = decode_environment(*bytes, ctx.source().filename().string(), error);
+				std::optional<EnvironmentData> environment = image ? cook_environment(*image, error) : std::nullopt;
 				if (!environment)
 				{
-					WI_ASSET_LOG(Error, "{0}", error);
+					WI_ASSET_LOG(Error, "{0}: {1}", ctx.source().filename().string(), error);
 					return false;
 				}
 

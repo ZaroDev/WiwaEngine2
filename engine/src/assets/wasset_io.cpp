@@ -217,13 +217,29 @@ namespace wiwa
 
 	void archive(BinaryArchive& ar, EnvironmentData& v)
 	{
-		ar.value(v.Width);
-		ar.value(v.Height);
-		ar.pod_vector(v.Pixels);
-
-		if (ar.reading() && ar.ok() && v.Pixels.size() != static_cast<u64>(v.Width) * v.Height * 3)
+		ar.value(v.FaceSize);
+		ar.list(v.Mips, [&](std::vector<u16>& mip) { ar.pod_vector(mip); });
+		for (glm::vec4& coefficient : v.SH)
 		{
-			ar.fail();
+			ar.value(coefficient);
+		}
+
+		if (ar.reading() && ar.ok())
+		{
+			bool valid = v.FaceSize >= 8 && v.FaceSize <= 2048 && (v.FaceSize & (v.FaceSize - 1)) == 0 && !v.Mips.empty() && v.Mips.size() <= 12;
+			for (size_t mip = 0; valid && mip < v.Mips.size(); mip++)
+			{
+				const u64 size = std::max<u32>(1, v.FaceSize >> mip);
+				valid = v.Mips[mip].size() == 6 * size * size * 4;
+			}
+			for (const glm::vec4& coefficient : v.SH)
+			{
+				valid = valid && std::isfinite(coefficient.x) && std::isfinite(coefficient.y) && std::isfinite(coefficient.z);
+			}
+			if (!valid)
+			{
+				ar.fail();
+			}
 		}
 	}
 

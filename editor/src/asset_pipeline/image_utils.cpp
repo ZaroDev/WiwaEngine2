@@ -1,6 +1,10 @@
 #include <editor_common.h>
 #include "image_utils.h"
 
+#include <thread>
+
+#include <renderer/ibl/environment_pack.h>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -201,7 +205,7 @@ namespace wiwa
 		return texture;
 	}
 
-	std::optional<EnvironmentData> decode_environment(std::span<const std::byte> bytes, const std::string& name, std::string& error)
+	std::optional<EquirectImage> decode_environment(std::span<const std::byte> bytes, const std::string& name, std::string& error)
 	{
 		constexpr int MIN_WIDTH = 16;
 
@@ -233,12 +237,25 @@ namespace wiwa
 			return std::nullopt;
 		}
 
-		EnvironmentData environment;
+		EquirectImage environment;
 		environment.Width = static_cast<u32>(width);
 		environment.Height = static_cast<u32>(height);
 		environment.Pixels.assign(pixels, pixels + static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
 		stbi_image_free(pixels);
 		return environment;
+	}
+
+	std::optional<EnvironmentData> cook_environment(const EquirectImage& image, std::string& error)
+	{
+		if (image.Width == 0 || image.Height == 0 || image.Pixels.size() != static_cast<size_t>(image.Width) * image.Height * 3)
+		{
+			error = "the image has no pixels";
+			return std::nullopt;
+		}
+
+		const CubeMap source = equirect_to_cube(image.Pixels.data(), image.Width, image.Height, ENV_FACE_SIZE);
+		const u32 threads = std::max(1u, std::thread::hardware_concurrency() > 1 ? std::thread::hardware_concurrency() - 1 : 1u);
+		return pack_environment(build_environment(source, threads, 8)); // the BRDF table is built by the renderer, once
 	}
 
 	TextureKind texture_kind_from_string(const std::string& name)

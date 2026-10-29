@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -39,12 +40,13 @@ namespace wiwa
 		std::vector<std::vector<u8>> Mips{}; // RGBA8, [0] is full size, each next one half the size (min 1x1)
 	};
 
-	// A Radiance .hdr file: linear float RGB, equirectangular.
+	// An environment as the GPU wants it, cooked from a Radiance .hdr file: the sky as a cube with its roughness-prefiltered mips, and
+	// the diffuse light as spherical harmonics. Nothing of the source image is kept.
 	struct EnvironmentData
 	{
-		u32 Width = 0;
-		u32 Height = 0;
-		std::vector<float> Pixels{}; // Width * Height * 3
+		u32 FaceSize = 0;                     // of mip 0; mip k is max(1, FaceSize >> k)
+		std::vector<std::vector<u16>> Mips{}; // per mip: 6 faces (+X -X +Y -Y +Z -Z) x size x size x RGBA half floats, face-major, row-major
+		std::array<glm::vec4, 9> SH{};        // rgb in xyz, order and meaning as project_sh9
 	};
 
 	// A .cube color grading table.

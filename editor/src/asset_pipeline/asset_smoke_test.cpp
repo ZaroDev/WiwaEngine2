@@ -154,6 +154,25 @@ namespace wiwa
 			check(!truncatedAccepted, "a truncated shader payload is rejected");
 		}
 
+		// The sample environment is cooked into a cube with prefiltered mips and SH.
+		if (const std::optional<AssetRef> sample = manager.find_asset("Assets/environments/kloofendal_48d_partly_cloudy_puresky_1k.hdr"))
+		{
+			Handle<EnvironmentData> handle = manager.load<EnvironmentData>(*sample);
+			manager.wait_idle();
+			const EnvironmentData* environment = handle.get();
+			check(environment != nullptr, "the sample .hdr loads as a cooked environment");
+			if (environment != nullptr)
+			{
+				check(environment->FaceSize == 512 && environment->Mips.size() == 7, "its cube has the face size and the mips of the prefilter chain");
+				bool finite = true;
+				for (const glm::vec4& coefficient : environment->SH)
+				{
+					finite = finite && std::isfinite(coefficient.x) && std::isfinite(coefficient.y) && std::isfinite(coefficient.z);
+				}
+				check(finite && environment->SH[0].x > 0.0f && environment->SH[0].y > 0.0f && environment->SH[0].z > 0.0f, "its SH are finite and the first coefficient is positive");
+			}
+		}
+
 		// The catalog survives a round trip, and no truncated copy of it is accepted.
 		{
 			AssetCatalog catalog;
