@@ -369,6 +369,7 @@ namespace wiwa
 			{
 				ar.string(n.Name);
 				ar.value(n.Parent);
+				ar.value(n.StableId);
 				ar.value(n.Translation);
 				ar.value(n.Rotation);
 				ar.value(n.Scale);
@@ -384,7 +385,7 @@ namespace wiwa
 		{
 			for (const PrefabNode& n : v.Nodes)
 			{
-				if (n.Parent < -1 || n.Parent >= static_cast<i32>(v.Nodes.size()))
+				if (n.StableId == 0 || n.Parent < -1 || n.Parent >= static_cast<i32>(v.Nodes.size()))
 				{
 					ar.fail();
 					return;

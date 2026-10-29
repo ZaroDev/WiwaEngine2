@@ -5,6 +5,8 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <scene/prefab_node_id.h>
+
 #include "../image_utils.h"
 #include "model_import.h"
 
@@ -88,7 +90,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "ModelImporter"; }
-			virtual u32 version() const override { return 1; }
+			virtual u32 version() const override { return 2; } // 2: prefab nodes have stable ids
 			virtual bool imports_dependencies() const override { return true; }
 			virtual std::vector<std::string> extensions() const override { return { ".gltf", ".glb", ".fbx" }; }
 
@@ -227,6 +229,7 @@ namespace wiwa
 						prefab.Nodes[i].Skeleton = skeletonRefs[model.NodeSkin[i]];
 					}
 				}
+				assign_stable_ids(prefab.Nodes);
 				prefab.Animations = clipRefs;
 				compute_bounds(model, prefab.BoundsMin, prefab.BoundsMax);
 

@@ -3,7 +3,10 @@
 
 #include <scene/components.h>
 #include <assets/wasset_io.h>
+#include <assets/asset_manager.h>
+#include <core/engine.h>
 #include <scene/entity_guid.h>
+#include <scene/prefab_node_id.h>
 #include <scene/reflection/component_registry.h>
 #include <scene/reflection/value_bag.h>
 #include <scene/scene.h>
@@ -354,6 +357,148 @@ namespace wiwa
 			const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
 			check(!hostileAccepted && elapsed.count() < 100, "a payload that claims four billion entities is rejected at once");
 		}
+
+		// A source folder inside Assets/ for files the checks write. Removing it re-scans, so the cooked files and the catalog
+		// entries of the test files go away too.
+		class SmokeAssets
+		{
+		public:
+			explicit SmokeAssets(AssetPipelineModule& pipeline)
+				: m_Pipeline(pipeline), m_Folder(pipeline.get_database().get_assets_root() / "_scene_smoke")
+			{
+				std::error_code error;
+				std::filesystem::remove_all(m_Folder, error);
+				std::filesystem::create_directories(m_Folder, error);
+			}
+
+			~SmokeAssets()
+			{
+				std::error_code error;
+				std::filesystem::remove_all(m_Folder, error);
+				m_Pipeline.scan_async()->wait();
+			}
+
+			const std::filesystem::path& folder() const { return m_Folder; }
+
+			std::filesystem::path write(const std::string& name, const std::string& text) const
+			{
+				const std::filesystem::path path = m_Folder / name;
+				std::ofstream out(path, std::ios::binary | std::ios::trunc);
+				out << text;
+				return path;
+			}
+
+		private:
+			AssetPipelineModule& m_Pipeline;
+			std::filesystem::path m_Folder;
+		};
+
+		// A glTF with a root "Body" and the children "Wheel", "Wheel" and "Door" (the door holds one triangle).
+		std::string test_model_gltf()
+		{
+			return R"({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+"nodes":[{"name":"Body","children":[1,2,3]},{"name":"Wheel"},{"name":"Wheel"},{"name":"Door","mesh":0}],
+"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],
+"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},{"bufferView":1,"componentType":5123,"count":3,"type":"SCALAR"}],
+"bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":6}],
+"buffers":[{"byteLength":44,"uri":"data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAABAAIAAAA="}]})";
+		}
+
+		PrefabNode make_node(const std::string& name, i32 parent)
+		{
+			PrefabNode node;
+			node.Name = name;
+			node.Parent = parent;
+			return node;
+		}
+
+		void check_node_ids(Check& check, AssetPipelineModule& pipeline)
+		{
+			// the rule, on nodes made by hand
+			std::vector<PrefabNode> nodes{ make_node("Body", -1), make_node("Wheel", 0), make_node("Wheel", 0), make_node("Door", 0) };
+			assign_stable_ids(nodes);
+			std::unordered_set<u64> unique;
+			for (const PrefabNode& node : nodes)
+			{
+				unique.insert(node.StableId);
+			}
+			check(unique.size() == nodes.size() && !unique.contains(0), "every node gets its own id, and none is 0");
+
+			std::vector<PrefabNode> grown = nodes;
+			for (PrefabNode& node : grown)
+			{
+				node.StableId = 0;
+			}
+			grown.push_back(make_node("Wheel", 0));
+			assign_stable_ids(grown);
+			check(grown[0].StableId == nodes[0].StableId && grown[1].StableId == nodes[1].StableId && grown[2].StableId == nodes[2].StableId && grown[3].StableId == nodes[3].StableId, "adding a later sibling with the same name does not change the ids of the earlier nodes");
+			check(grown[4].StableId != grown[1].StableId && grown[4].StableId != grown[2].StableId, "the new sibling has an id of its own");
+
+			std::vector<PrefabNode> hubs{ make_node("Body", -1), make_node("Wheel", 0), make_node("Door", 0), make_node("Hub", 1), make_node("Hub", 2) };
+			assign_stable_ids(hubs);
+			check(hubs[3].StableId != hubs[4].StableId, "same-named nodes under different parents get different ids");
+
+			std::vector<PrefabNode> loop{ make_node("A", 1), make_node("B", 0) };
+			assign_stable_ids(loop);
+			check(loop[0].StableId != 0 && loop[1].StableId != 0 && loop[0].StableId != loop[1].StableId, "a parent loop does not hang the id assignment");
+
+			PrefabData prefab;
+			prefab.Name = "ids";
+			prefab.Nodes = nodes;
+			const std::vector<std::byte> bytes = serialize(prefab);
+			std::optional<PrefabData> back = deserialize<PrefabData>(bytes);
+			check(back && back->Nodes.size() == nodes.size() && back->Nodes[2].StableId == nodes[2].StableId, "stable ids survive the cooked format");
+			prefab.Nodes[1].StableId = 0;
+			check(!deserialize<PrefabData>(serialize(prefab)).has_value(), "a prefab with a node id of 0 is rejected");
+
+			// the same, through the real importer
+			SmokeAssets assets(pipeline);
+			AssetDatabase& database = pipeline.get_database();
+			AssetManager& manager = *Engine::get().get_module<AssetManager>();
+			const std::filesystem::path model = assets.write("ids_model.gltf", test_model_gltf());
+			const std::optional<AssetRef> ref = database.ensure_imported(model);
+			check(ref.has_value(), "the test model imports");
+			if (!ref)
+			{
+				return;
+			}
+
+			auto load_nodes = [&]() -> std::vector<PrefabNode>
+			{
+				Handle<PrefabData> handle = manager.load<PrefabData>(*ref);
+				manager.wait_idle();
+				return handle.get() ? handle.get()->Nodes : std::vector<PrefabNode>{};
+			};
+
+			const std::vector<PrefabNode> imported = load_nodes();
+			check(imported.size() == 4, "the imported prefab has the four nodes of the model");
+			if (imported.size() == 4)
+			{
+				std::vector<PrefabNode> expected = imported;
+				for (PrefabNode& node : expected)
+				{
+					node.StableId = 0;
+				}
+				assign_stable_ids(expected);
+				bool same = true;
+				for (size_t i = 0; i < 4; i++)
+				{
+					same = same && imported[i].StableId == expected[i].StableId && imported[i].StableId != 0;
+				}
+				check(same, "the importer gives the nodes the ids the rule gives");
+				check(imported[1].StableId != imported[2].StableId, "the two wheels of the model have different ids");
+			}
+
+			manager.unload_unused();
+			database.reimport(model, true);
+			const std::vector<PrefabNode> again = load_nodes();
+			bool stable = again.size() == imported.size();
+			for (size_t i = 0; stable && i < again.size(); i++)
+			{
+				stable = again[i].StableId == imported[i].StableId;
+			}
+			check(stable, "a forced re-import gives the same node ids");
+		}
 	}
 
 	bool run_scene_smoke_test(AssetPipelineModule& pipeline)
@@ -364,6 +509,7 @@ namespace wiwa
 		check_reflection(check);
 		check_render_components(check);
 		check_scene_data(check);
+		check_node_ids(check, pipeline);
 
 		if (check.Failures == 0)
 		{

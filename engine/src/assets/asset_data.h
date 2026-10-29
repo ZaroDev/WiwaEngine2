@@ -213,6 +213,7 @@ namespace wiwa
 	{
 		std::string Name{};
 		i32 Parent = -1;
+		u64 StableId = 0;    // never 0 in a cooked prefab; does not change when the model is imported again (see scene/prefab_node_id.h)
 		glm::vec3 Translation{ 0.0f };
 		glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
 		glm::vec3 Scale{ 1.0f };
