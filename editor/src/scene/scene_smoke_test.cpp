@@ -12,6 +12,8 @@
 #include <scene/reflection/value_bag.h>
 #include <scene/scene.h>
 #include <scene/scene_components.h>
+#include <scene/scene_loader.h>
+#include <scene/scene_module.h>
 #include <scene/scene_records.h>
 
 #include "scene_json.h"
@@ -794,7 +796,7 @@ namespace wiwa
 			SmokeAssets assets(pipeline);
 			AssetDatabase& database = pipeline.get_database();
 			AssetManager& manager = *Engine::get().get_module<AssetManager>();
-			const std::filesystem::path path = assets.write("level.wscene", doc.dump(2));
+			const std::filesystem::path path = assets.write("json_level.wscene", doc.dump(2));
 			const std::optional<AssetRef> ref = database.ensure_imported(path);
 			check(ref.has_value(), "a .wscene imports (its references to assets that do not exist are fine)");
 			if (!ref)
@@ -813,9 +815,228 @@ namespace wiwa
 			// a broken edit fails the import and the last good cooked scene stays
 			WI_SCENE_LOG(Info, "Smoke test: the next import error is expected");
 			manager.unload_unused();
-			assets.write("level.wscene", "{ \"entities\": [ { \"id\": \"nope\" } ] }");
+			assets.write("json_level.wscene", "{ \"entities\": [ { \"id\": \"nope\" } ] }");
 			database.reimport(path);
 			check(load_bytes() == sampleBytes, "after a failed re-import the previous cooked scene is still the one in use");
+		}
+
+		EntityRecord plain_entity(const std::string& name, glm::vec3 position)
+		{
+			EntityRecord record;
+			record.Id = EntityGuid::generate();
+			record.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(name) } } });
+			record.Components.push_back(ComponentRecord{ "Transform", { FieldRecord{ "Position", FieldValue(position) } } });
+			return record;
+		}
+
+		std::vector<EntityGuid> guids_of(Scene& scene)
+		{
+			std::vector<EntityGuid> guids;
+			for (const entt::entity entity : scene.registry().view<Id>())
+			{
+				guids.push_back(scene.registry().get<Id>(entity).Guid);
+			}
+			std::sort(guids.begin(), guids.end());
+			return guids;
+		}
+
+		size_t entity_count(const Ref<Scene>& scene)
+		{
+			return scene ? scene->registry().view<Id>().size() : 0;
+		}
+
+		void check_blueprint(Check& check)
+		{
+			const AssetRef prefabRef{ AssetGuid::generate(), 0 };
+			const AssetRef meshRef{ AssetGuid::generate(), 1 };
+			PrefabData prefab;
+			prefab.Nodes = { make_node("Body", -1), make_node("Door", 0) };
+			prefab.Nodes[1].Mesh = meshRef;
+			assign_stable_ids(prefab.Nodes);
+
+			SceneData data;
+			data.Entities.push_back(plain_entity("Before", glm::vec3(0)));
+			data.Entities.push_back(make_instance(EntityGuid::generate(), prefabRef));
+			data.Entities.push_back(plain_entity("After", glm::vec3(0)));
+
+			SceneBlueprint blueprint = build_blueprint(data, [&](const AssetRef& ref) { return ref == prefabRef ? &prefab : nullptr; });
+			check(blueprint.Entities.size() == 5 && blueprint.Origins.size() == 5, "a blueprint has the scene's entities plus the nodes of each instance");
+			check(blueprint.Origins[0].Instance == EntityGuid{} && blueprint.Origins[2].Instance == data.Entities[1].Id && blueprint.Origins[2].NodeId == prefab.Nodes[0].StableId, "the entities of an instance are marked with their instance and node");
+			check(std::find(blueprint.References.begin(), blueprint.References.end(), meshRef) != blueprint.References.end() && std::find(blueprint.References.begin(), blueprint.References.end(), prefabRef) != blueprint.References.end(), "the references include the prefab and what its nodes use");
+
+			SceneBlueprint noPrefab = build_blueprint(data, [](const AssetRef&) { return nullptr; });
+			check(noPrefab.Entities.size() == 3 && !noPrefab.Warnings.empty(), "an instance whose prefab did not load stays as the root alone, with a warning");
+		}
+
+		void check_scene_loading(Check& check, AssetPipelineModule& pipeline)
+		{
+			register_scene_components();
+			check_blueprint(check);
+
+			SmokeAssets assets(pipeline);
+			AssetDatabase& database = pipeline.get_database();
+			AssetManager& manager = *Engine::get().get_module<AssetManager>();
+			SceneModule& module = *Engine::get().get_module<SceneModule>();
+
+			auto write_scene = [&](const std::string& name, const SceneData& data)
+			{
+				const std::filesystem::path path = assets.write(name, scene_to_json(data).dump());
+				return database.ensure_imported(path);
+			};
+
+			const std::optional<AssetRef> prefabRef = database.ensure_imported(assets.write("load_model.gltf", test_model_gltf()));
+			check(prefabRef.has_value(), "the model for the scene imports");
+			if (!prefabRef)
+			{
+				return;
+			}
+
+			u64 doorNode = 0;
+			{
+				Handle<PrefabData> prefab = manager.load<PrefabData>(*prefabRef);
+				manager.wait_idle();
+				for (const PrefabNode& node : prefab.get() ? prefab.get()->Nodes : std::vector<PrefabNode>{})
+				{
+					if (node.Name == "Door")
+					{
+						doorNode = node.StableId;
+					}
+				}
+			}
+			check(doorNode != 0, "the model has a Door node");
+
+			SceneData level;
+			level.Name = "level";
+			EntityRecord camera = plain_entity("Camera", glm::vec3(0, 1, 5));
+			camera.Components.push_back(ComponentRecord{ "Camera", { FieldRecord{ "Primary", FieldValue(true) } } });
+			EntityRecord light = plain_entity("Sun", glm::vec3(0));
+			light.Components.push_back(ComponentRecord{ "Light", { FieldRecord{ "Kind", FieldValue(i32(0)) } } });
+			EntityRecord instance = make_instance(EntityGuid::generate(), *prefabRef);
+			instance.Overrides = { set_field_override(doorNode, "Transform", "Position", FieldValue(glm::vec3(9, 8, 7))) };
+			level.Entities = { camera, light, instance };
+			const std::optional<AssetRef> levelRef = write_scene("level.wscene", level);
+			check(levelRef.has_value(), "the level imports");
+			if (!levelRef)
+			{
+				return;
+			}
+
+			const Ref<Scene> initial = module.get_active();
+			check(initial != nullptr && entity_count(initial) == 0, "there is an empty scene before the first load");
+
+			Ref<JobProgress> progress = module.load_async(*levelRef);
+			progress->wait();
+			check(progress->succeeded(), "a scene loads (" + progress->stage() + ")");
+			Ref<Scene> first = module.get_active();
+			check(first != initial && entity_count(first) == 7, "the loaded scene has the scene's entities plus the four nodes (found " + std::to_string(entity_count(first)) + ")");
+			if (first && entity_count(first) == 7)
+			{
+				const entt::entity door = first->find(EntityGuid::derive(instance.Id, doorNode));
+				check(door != entt::null && first->registry().get<Transform>(door).Position == glm::vec3(9, 8, 7), "an override of the instance is applied");
+				const PrefabChild* tag = door != entt::null ? first->registry().try_get<PrefabChild>(door) : nullptr;
+				check(tag && tag->Instance == instance.Id && tag->NodeId == doorNode, "an entity of an instance knows its instance and node");
+				check(door != entt::null && first->registry().all_of<MeshRenderer>(door) && first->registry().get<MeshRenderer>(door).Mesh.valid(), "the door has its mesh");
+				const entt::entity root = first->find(instance.Id);
+				check(root != entt::null && !first->registry().all_of<PrefabChild>(root), "the instance root itself is an authored entity");
+			}
+
+			Ref<JobProgress> again = module.load_async(*levelRef);
+			again->wait();
+			check(again->succeeded() && first && module.get_active() && guids_of(*module.get_active()) == guids_of(*first), "loading again gives the same entity ids");
+
+			// a reference to an asset that does not exist does not fail the load
+			WI_SCENE_LOG(Info, "Smoke test: the next asset load errors are expected");
+			SceneData dangling;
+			EntityRecord broken = plain_entity("Broken", glm::vec3(0));
+			const AssetRef missing{ AssetGuid::generate(), 0 };
+			broken.Components.push_back(ComponentRecord{ "MeshRenderer", { FieldRecord{ "Mesh", FieldValue(missing) } } });
+			dangling.Entities.push_back(broken);
+			const std::optional<AssetRef> danglingRef = write_scene("dangling.wscene", dangling);
+			check(danglingRef.has_value(), "a scene with a reference to a missing asset imports");
+			if (danglingRef)
+			{
+				Ref<JobProgress> p = module.load_async(*danglingRef);
+				p->wait();
+				const Ref<Scene> active = module.get_active();
+				const entt::entity entity = active ? active->find(broken.Id) : entt::entity{ entt::null };
+				check(p->succeeded() && entity != entt::null && active->registry().get<MeshRenderer>(entity).Mesh == missing, "a missing asset does not fail the load and the entity keeps its reference");
+			}
+
+			// a scene that cannot be loaded leaves the current one alone
+			{
+				const Ref<Scene> before = module.get_active();
+				const size_t countBefore = entity_count(before);
+				Ref<JobProgress> p = module.load_async(AssetRef{ AssetGuid::generate(), 0 });
+				p->wait();
+				check(p->state() == JobProgress::State::Failed && module.get_active() == before && entity_count(before) == countBefore, "a scene that is missing fails and the current scene is untouched");
+				Ref<JobProgress> wrong = module.load_async(*prefabRef);
+				wrong->wait();
+				check(wrong->state() == JobProgress::State::Failed && module.get_active() == before, "an asset of another type fails to load as a scene");
+			}
+
+			// a big scene, loaded under a frame budget
+			SceneData big;
+			big.Name = "big";
+			for (u32 i = 0; i < 20000; i++)
+			{
+				big.Entities.push_back(plain_entity("E" + std::to_string(i), glm::vec3(static_cast<float>(i), 0, 0)));
+			}
+			const std::optional<AssetRef> bigRef = write_scene("big.wscene", big);
+			check(bigRef.has_value(), "the big scene imports");
+			if (!bigRef)
+			{
+				return;
+			}
+
+			{
+				module.set_commit_budget_ms(2.0f);
+				Ref<JobProgress> p = module.load_async(*bigRef);
+				p->wait();
+				const SceneLoadStats stats = module.get_last_load_stats();
+				WI_SCENE_LOG(Info, "Smoke test: 20000 entities created over {0} updates, the longest took {1} ms", stats.CommitTicks, stats.LongestCommitMs);
+				check(p->succeeded() && entity_count(module.get_active()) == 20000, "a big scene loads (found " + std::to_string(entity_count(module.get_active())) + " entities)");
+				check(stats.CommitTicks > 1, "the entities were created over several frames (" + std::to_string(stats.CommitTicks) + " ticks)");
+				check(stats.LongestCommitMs < 8.0f, "no frame spent more than the budget plus slack creating entities (longest " + std::to_string(stats.LongestCommitMs) + " ms)");
+			}
+
+			// a second load cancels the first
+			{
+				Ref<JobProgress> first_load = module.load_async(*bigRef);
+				Ref<JobProgress> second_load = module.load_async(*levelRef);
+				first_load->wait();
+				second_load->wait();
+				check(first_load->state() == JobProgress::State::Failed, "a load that was replaced by another one is cancelled");
+				check(second_load->succeeded() && entity_count(module.get_active()) == 7, "the second load completes and its scene is the active one");
+			}
+
+			// replacing never leaves a frame without a scene
+			{
+				Ref<JobProgress> p = module.load_async(*bigRef);
+				bool neverEmpty = true;
+				while (!p->finished())
+				{
+					neverEmpty = neverEmpty && module.get_active() != nullptr;
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
+				check(neverEmpty && p->succeeded(), "the active scene is never null while another one loads");
+			}
+
+			// additive: the entities join the active scene
+			{
+				SceneData extra;
+				EntityRecord extraEntity = plain_entity("Extra", glm::vec3(0));
+				extra.Entities.push_back(extraEntity);
+				const std::optional<AssetRef> extraRef = write_scene("extra.wscene", extra);
+				const Ref<Scene> active = module.get_active();
+				const size_t countBefore = entity_count(active);
+				Ref<JobProgress> p = extraRef ? module.load_async(*extraRef, LoadMode::Additive) : Ref<JobProgress>{};
+				if (p)
+				{
+					p->wait();
+				}
+				check(p && p->succeeded() && module.get_active() == active && entity_count(active) == countBefore + 1 && active->find(extraEntity.Id) != entt::null, "an additive load adds to the active scene");
+			}
+			module.set_commit_budget_ms(2.0f);
 		}
 	}
 
@@ -830,6 +1051,7 @@ namespace wiwa
 		check_node_ids(check, pipeline);
 		check_prefab(check);
 		check_scene_json(check, pipeline);
+		check_scene_loading(check, pipeline);
 
 		if (check.Failures == 0)
 		{

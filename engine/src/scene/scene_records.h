@@ -30,4 +30,5 @@ namespace wiwa
 
 	// Every asset the scene refers to, once each (the prefab of an instance, meshes, materials, and the ones inside overrides).
 	std::vector<AssetRef> collect_references(const SceneData& data);
+	std::vector<AssetRef> collect_references(const std::vector<EntityRecord>& entities);
 }

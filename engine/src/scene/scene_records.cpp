@@ -271,14 +271,19 @@ namespace wiwa
 		return report;
 	}
 
-	std::vector<AssetRef> collect_references(const SceneData& data)
+	std::vector<AssetRef> collect_references(const std::vector<EntityRecord>& entities)
 	{
 		std::unordered_set<AssetGuid> seen;
 		std::vector<AssetRef> references;
-		for (const EntityRecord& entity : data.Entities)
+		for (const EntityRecord& entity : entities)
 		{
 			collect_entity(entity, seen, references);
 		}
 		return references;
+	}
+
+	std::vector<AssetRef> collect_references(const SceneData& data)
+	{
+		return collect_references(data.Entities);
 	}
 }

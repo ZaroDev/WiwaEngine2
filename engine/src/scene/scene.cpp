@@ -158,6 +158,22 @@ namespace wiwa
 		}
 	}
 
+	size_t Scene::destroy_some(size_t maxEntities)
+	{
+		std::vector<entt::entity> doomed;
+		for (const entt::entity entity : m_Registry.view<Id>())
+		{
+			if (doomed.size() >= maxEntities)
+			{
+				break;
+			}
+			doomed.push_back(entity);
+		}
+
+		m_Registry.destroy(doomed.begin(), doomed.end());
+		return m_Registry.view<Id>().size();
+	}
+
 	void Scene::on_id_destroyed(entt::registry& registry, entt::entity entity)
 	{
 		m_ByGuid.erase(registry.get<Id>(entity).Guid);

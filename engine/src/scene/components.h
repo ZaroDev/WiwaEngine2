@@ -46,6 +46,14 @@ namespace wiwa
 		glm::mat4 Matrix{ 1.0f };
 	};
 
+	// On an entity that a prefab instance generated (or that one of its AddChild overrides made): which instance, and which node
+	// of its prefab (ADDED_CHILD_NODE for an added child). Not saved: the instance's record is what the scene file holds.
+	struct PrefabChild
+	{
+		EntityGuid Instance{};
+		u64 NodeId = 0;
+	};
+
 	// Components and fields that were in the scene file but that this engine does not know. They are kept so that saving the
 	// scene does not lose data written by a newer engine. A record that names a known component holds only its unknown fields.
 	struct UnknownComponents

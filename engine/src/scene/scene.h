@@ -33,6 +33,10 @@ namespace wiwa
 		// Recomputes every WorldTransform from the local ones.
 		void update_world_transforms();
 
+		// Destroys up to maxEntities entities in no particular order (the hierarchy is not kept consistent: the scene is being thrown
+		// away). Returns how many entities are left. For taking a big scene down over several frames.
+		size_t destroy_some(size_t maxEntities);
+
 		entt::registry& registry() { return m_Registry; }
 		const entt::registry& registry() const { return m_Registry; }
 
