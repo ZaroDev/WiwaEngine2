@@ -355,6 +355,17 @@ namespace wiwa
 			const ApplyReport wrongReport = apply_scene_data(wrongScene, wrong);
 			check(!wrongReport.Warnings.empty() && wrongScene.registry().get<Transform>(wrongScene.find(wrongEntity.Id)).Position == glm::vec3(0.0f), "a field of the wrong type is reported and not applied");
 
+			// The smallest record there is, an entity with nothing but an id, is not mistaken for damaged data.
+			SceneData bare;
+			for (u32 i = 0; i < 10; i++)
+			{
+				EntityRecord bareEntity;
+				bareEntity.Id = EntityGuid::generate();
+				bare.Entities.push_back(bareEntity);
+			}
+			const std::optional<SceneData> bareBack = deserialize<SceneData>(serialize(bare));
+			check(bareBack.has_value() && bareBack->Entities.size() == 10, "a scene of entities that have no components reads back");
+
 			// Damaged data is rejected without a crash or a huge allocation.
 			bool truncatedAccepted = false;
 			for (size_t length = 0; length < bytes.size(); length += 7)
@@ -1031,6 +1042,39 @@ namespace wiwa
 					std::this_thread::sleep_for(std::chrono::milliseconds(1));
 				}
 				check(neverEmpty && p->succeeded(), "the active scene is never null while another one loads");
+			}
+
+			// loads asked for from another thread while the main thread updates: every progress object ends, the last load wins, and
+			// nothing is left loading (this thread is not the main thread, which is the case load_async promises to handle)
+			{
+				module.set_commit_budget_ms(0.2f); // many small slices, so the loads overlap the updates
+				std::vector<Ref<JobProgress>> loads;
+				for (u32 i = 0; i < 60; i++)
+				{
+					loads.push_back(module.load_async(i % 3 == 0 ? *bigRef : *levelRef));
+					if (i % 4 == 0)
+					{
+						std::this_thread::sleep_for(std::chrono::milliseconds(3));
+					}
+				}
+
+				bool allFinished = true;
+				for (const Ref<JobProgress>& load : loads)
+				{
+					load->wait();
+					allFinished = allFinished && load->finished();
+				}
+				check(allFinished && loads.back()->succeeded(), "60 loads in a row from another thread all end, and the last one succeeds");
+				check(entity_count(module.get_active()) == 7, "the scene of the last load is the active one");
+
+				bool idle = false;
+				for (u32 i = 0; i < 500 && !idle; i++)
+				{
+					idle = !module.is_loading();
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+				check(idle, "nothing is left loading afterwards");
+				module.set_commit_budget_ms(2.0f);
 			}
 
 			// additive: the entities join the active scene

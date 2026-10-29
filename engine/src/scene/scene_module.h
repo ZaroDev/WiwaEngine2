@@ -88,7 +88,7 @@ namespace wiwa
 		std::vector<Ref<LoadOp>> m_Running{}; // every op whose worker has not finished (cancelled ones too)
 		SceneLoadStats m_Stats{};
 
-		// main thread only
+		// main thread only (nothing else may touch m_Current: load_async runs on any thread and works through m_Pending and m_Running)
 		Ref<LoadOp> m_Current{};
 		std::vector<Ref<Scene>> m_Retired{};
 		std::atomic<float> m_CommitBudgetMs{ 2.0f };

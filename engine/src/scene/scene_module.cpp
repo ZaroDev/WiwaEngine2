@@ -127,8 +127,9 @@ namespace wiwa
 
 	bool SceneModule::is_loading() const
 	{
+		// every op that has not ended is in m_Running, from the moment it is asked for (m_Current belongs to the main thread)
 		std::lock_guard<std::mutex> lock(m_Mutex);
-		return m_Pending != nullptr || m_Current != nullptr;
+		return std::any_of(m_Running.begin(), m_Running.end(), [](const Ref<LoadOp>& op) { return !op->Progress->finished(); });
 	}
 
 	SceneLoadStats SceneModule::get_last_load_stats() const
@@ -158,13 +159,10 @@ namespace wiwa
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex);
 			// one load at a time: everything before this one is cancelled
+			// (the op being created is in m_Running until it ends, so this reaches m_Current too; m_Current itself belongs to the main thread)
 			for (const Ref<LoadOp>& other : m_Running)
 			{
 				other->Progress->request_cancel();
-			}
-			if (m_Current != nullptr)
-			{
-				m_Current->Progress->request_cancel();
 			}
 			if (m_Pending != nullptr)
 			{

@@ -138,6 +138,7 @@ namespace wiwa
 	void archive(BinaryArchive& ar, SceneData& v)
 	{
 		ar.string(v.Name);
-		bounded_list(ar, v.Entities, SCENE_MAX_ENTITIES, 56, [&](EntityRecord& entity) { archive_entity(ar, entity, 0); });
+		// the smallest entity: two guids (32 bytes) and the counts of its components and overrides (16 bytes)
+		bounded_list(ar, v.Entities, SCENE_MAX_ENTITIES, 48, [&](EntityRecord& entity) { archive_entity(ar, entity, 0); });
 	}
 }
