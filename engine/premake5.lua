@@ -66,6 +66,7 @@ project "wiwa"
 		{
 			"WI_PLATFORM_WINDOWS",
 			"GLFW_INCLUDE_NONE",
+			"NOMINMAX",
 			"_CRT_SECURE_NO_WARNINGS"
 		}
 
