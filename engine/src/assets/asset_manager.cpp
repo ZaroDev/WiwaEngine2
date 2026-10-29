@@ -4,6 +4,10 @@
 #include "library_source.h"
 #include "pak_source.h"
 
+#if !WI_SHIPPING
+#include "editor/builtin_importers.h"
+#endif
+
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
 namespace wiwa
@@ -62,12 +66,19 @@ namespace wiwa
 #else
 			m_Source = CreateScope<LibrarySource>("Library");
 			WI_ASSET_LOG(Info, "Loading assets from Library/ with {0} workers", m_Jobs->get_worker_count());
+
+			m_Database = CreateScope<AssetDatabase>("Assets", "Library");
+			register_builtin_importers(*m_Database);
+			m_Database->scan();
 #endif
 		}
 	}
 
 	void AssetManager::shutdown()
 	{
+#if !WI_SHIPPING
+		m_Database.reset();
+#endif
 		m_Jobs.reset(); // joins the workers; queued loads are dropped
 
 		{
