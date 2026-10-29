@@ -46,6 +46,13 @@ namespace wiwa
 		glm::mat4 Matrix{ 1.0f };
 	};
 
+	// Components and fields that were in the scene file but that this engine does not know. They are kept so that saving the
+	// scene does not lose data written by a newer engine. A record that names a known component holds only its unknown fields.
+	struct UnknownComponents
+	{
+		std::vector<ComponentRecord> Records{};
+	};
+
 	enum class ProjectionKind : u32
 	{
 		Perspective,

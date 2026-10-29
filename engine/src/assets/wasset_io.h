@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <vector>
 
+#include <scene/scene_data.h>
 #include "asset_data.h"
 #include "asset_types.h"
 
@@ -44,6 +45,8 @@ namespace wiwa
 		bool reading() const { return !m_Writing; }
 		bool ok() const { return m_Ok; }
 		void fail() { m_Ok = false; }
+		// Bytes not read yet (reading only): a count that claims more elements than could fit is corrupt.
+		size_t remaining() const { return m_Bytes.size() - m_Cursor; }
 
 		void raw(void* data, size_t size);
 
@@ -103,7 +106,6 @@ namespace wiwa
 
 	private:
 		BinaryArchive(bool writing, std::span<const std::byte> bytes);
-		size_t remaining() const { return m_Bytes.size() - m_Cursor; }
 
 		bool m_Writing;
 		bool m_Ok = true;
@@ -120,6 +122,7 @@ namespace wiwa
 	void archive(BinaryArchive& ar, SkeletonData& v);
 	void archive(BinaryArchive& ar, AnimationClipData& v);
 	void archive(BinaryArchive& ar, PrefabData& v);
+	void archive(BinaryArchive& ar, SceneData& v);
 
 	template<typename T>
 	constexpr AssetType asset_type_of();
@@ -132,6 +135,7 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<SkeletonData>() { return AssetType::Skeleton; }
 	template<> constexpr AssetType asset_type_of<AnimationClipData>() { return AssetType::AnimationClip; }
 	template<> constexpr AssetType asset_type_of<PrefabData>() { return AssetType::Prefab; }
+	template<> constexpr AssetType asset_type_of<SceneData>() { return AssetType::Scene; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)

@@ -11,6 +11,13 @@
 // C++ component types.
 namespace wiwa
 {
+	// What a cooked scene may hold. A count above these is a corrupt or hostile file and fails the read.
+	constexpr u32 SCENE_MAX_ENTITIES = 1u << 20;
+	constexpr u32 SCENE_MAX_OVERRIDES = 1u << 16;
+	constexpr u32 SCENE_MAX_COMPONENTS_PER_ENTITY = 256;
+	constexpr u32 SCENE_MAX_FIELDS_PER_COMPONENT = 256;
+	constexpr u32 SCENE_MAX_CHILD_DEPTH = 8; // AddChild overrides nest an entity record inside an override
+
 	struct FieldRecord
 	{
 		std::string Name{};

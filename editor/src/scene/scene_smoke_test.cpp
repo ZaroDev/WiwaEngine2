@@ -2,11 +2,13 @@
 #include "scene_smoke_test.h"
 
 #include <scene/components.h>
+#include <assets/wasset_io.h>
 #include <scene/entity_guid.h>
 #include <scene/reflection/component_registry.h>
 #include <scene/reflection/value_bag.h>
 #include <scene/scene.h>
 #include <scene/scene_components.h>
+#include <scene/scene_records.h>
 
 #define WI_SCENE_LOG(level, ...) WI_LOG(level, "Scene", __VA_ARGS__)
 
@@ -210,6 +212,148 @@ namespace wiwa
 				check(prefab->Fields[0].Meta.Asset == AssetType::Prefab, "PrefabInstance.Prefab accepts a Prefab asset");
 			}
 		}
+
+		const FieldRecord* find_field(const ComponentRecord& component, const std::string& name)
+		{
+			for (const FieldRecord& field : component.Fields)
+			{
+				if (field.Name == name)
+				{
+					return &field;
+				}
+			}
+			return nullptr;
+		}
+
+		const ComponentRecord* find_component(const EntityRecord& entity, const std::string& name)
+		{
+			for (const ComponentRecord& component : entity.Components)
+			{
+				if (component.Name == name)
+				{
+					return &component;
+				}
+			}
+			return nullptr;
+		}
+
+		void check_scene_data(Check& check)
+		{
+			register_scene_components();
+			const AssetRef mesh{ AssetGuid::generate(), 0 };
+			const AssetRef materialA{ AssetGuid::generate(), 2 };
+			const AssetRef materialB{ AssetGuid::generate(), 0 };
+			const AssetRef prefab{ AssetGuid::generate(), 0 };
+			const AssetRef texture{ AssetGuid::generate(), 0 };
+
+			Scene source;
+			const EntityGuid rootId = EntityGuid::generate();
+			const entt::entity root = source.create(rootId, "Root");
+			source.registry().get<Transform>(root).Position = glm::vec3(1, 2, 3);
+			source.registry().emplace<Camera>(root, Camera{ ProjectionKind::Orthographic, 45.0f, 0.5f, 200.0f, 7.0f, true });
+			Light light;
+			light.Kind = LightKind::Spot;
+			light.Color = glm::vec4(0.1f, 0.2f, 0.3f, 1.0f);
+			light.CastsShadows = true;
+			source.registry().emplace<Light>(root, light);
+			source.registry().emplace<MeshRenderer>(root, MeshRenderer{ mesh, {} });
+
+			const entt::entity child = source.create(EntityGuid::generate(), "Child", root);
+			source.registry().emplace<MeshRenderer>(child, MeshRenderer{ mesh, { materialA, materialB } });
+			PrefabInstance instance;
+			instance.Prefab = prefab;
+			PrefabOverride set;
+			set.Kind = OverrideKind::SetField;
+			set.NodeId = 5;
+			set.Component = "Transform";
+			set.Field = "Position";
+			set.Value = glm::vec3(9, 8, 7);
+			PrefabOverride add;
+			add.Kind = OverrideKind::AddChild;
+			add.NodeId = 5;
+			add.Child.Id = EntityGuid::generate();
+			add.Child.Parent = EntityGuid::derive(rootId, 5);
+			add.Child.Components.push_back(ComponentRecord{ "MeshRenderer", { FieldRecord{ "Mesh", FieldValue(texture) } } });
+			instance.Overrides = { set, add };
+			source.registry().emplace<PrefabInstance>(child, instance);
+
+			const SceneData first = data_from_scene(source, "test");
+			check(first.Entities.size() == 2 && first.Entities[0].Id == rootId && first.Entities[1].Parent == rootId, "a scene becomes records with parents before children");
+
+			const std::vector<std::byte> bytes = serialize(first);
+			std::optional<SceneData> back = deserialize<SceneData>(bytes);
+			check(back.has_value(), "a scene payload reads back");
+			if (!back)
+			{
+				return;
+			}
+
+			Scene copy;
+			const ApplyReport report = apply_scene_data(copy, *back);
+			check(report.UnknownComponents == 0 && report.UnknownFields == 0, "nothing in a saved scene is unknown");
+			const SceneData second = data_from_scene(copy, "test");
+			check(serialize(second) == bytes, "save, load, save gives the same bytes");
+
+			const entt::entity copyRoot = copy.find(rootId);
+			check(copyRoot != entt::null && copy.registry().get<Camera>(copyRoot).Primary && copy.registry().get<Camera>(copyRoot).Projection == ProjectionKind::Orthographic, "a camera survives");
+			check(copy.registry().get<Light>(copyRoot).Kind == LightKind::Spot && copy.registry().get<Light>(copyRoot).Color == glm::vec4(0.1f, 0.2f, 0.3f, 1.0f) && copy.registry().get<Light>(copyRoot).CastsShadows, "a light survives");
+			check(copy.registry().get<Transform>(copyRoot).Position == glm::vec3(1, 2, 3), "a transform survives");
+			const entt::entity copyChild = copy.find(first.Entities[1].Id);
+			check(copyChild != entt::null && copy.registry().get<Hierarchy>(copyChild).Parent == copyRoot, "the hierarchy survives");
+			check(copy.registry().get<MeshRenderer>(copyChild).Materials == std::vector<AssetRef>({ materialA, materialB }), "a material list survives");
+			check(copy.registry().get<PrefabInstance>(copyChild).Overrides.size() == 2 && copy.registry().get<PrefabInstance>(copyChild).Overrides[0].Value == FieldValue(glm::vec3(9, 8, 7)), "prefab overrides survive");
+
+			const std::vector<AssetRef> references = collect_references(first);
+			check(references.size() == 5, "collect_references finds each referenced asset once (found " + std::to_string(references.size()) + ")");
+			auto has_reference = [&](const AssetRef& ref) { return std::find(references.begin(), references.end(), ref) != references.end(); };
+			check(has_reference(mesh) && has_reference(materialA) && has_reference(materialB) && has_reference(prefab) && has_reference(texture), "collect_references names the mesh, materials, prefab and the ref inside an override");
+
+			// Things this engine does not know are kept, not dropped.
+			SceneData unknown;
+			EntityRecord entity;
+			entity.Id = EntityGuid::generate();
+			entity.Components.push_back(ComponentRecord{ "Spin", { FieldRecord{ "rate", FieldValue(2.0f) } } });
+			entity.Components.push_back(ComponentRecord{ "Transform", { FieldRecord{ "Position", FieldValue(glm::vec3(4, 5, 6)) }, FieldRecord{ "wobble", FieldValue(1.0f) } } });
+			unknown.Entities.push_back(entity);
+			Scene unknownScene;
+			const ApplyReport unknownReport = apply_scene_data(unknownScene, unknown);
+			check(unknownReport.UnknownComponents == 1 && unknownReport.UnknownFields == 1, "an unknown component and an unknown field are counted");
+			check(unknownScene.registry().get<Transform>(unknownScene.find(entity.Id)).Position == glm::vec3(4, 5, 6), "the known fields next to unknown ones are applied");
+			const SceneData unknownOut = data_from_scene(unknownScene, "unknown");
+			const ComponentRecord* spin = unknownOut.Entities.empty() ? nullptr : find_component(unknownOut.Entities[0], "Spin");
+			const ComponentRecord* transformRecord = unknownOut.Entities.empty() ? nullptr : find_component(unknownOut.Entities[0], "Transform");
+			check(spin != nullptr && find_field(*spin, "rate") != nullptr && std::get<float>(find_field(*spin, "rate")->Value) == 2.0f, "an unknown component is saved again");
+			check(transformRecord != nullptr && find_field(*transformRecord, "wobble") != nullptr && find_field(*transformRecord, "Position") != nullptr, "an unknown field of a known component is saved again next to the known ones");
+
+			// A field of the wrong type is reported and leaves the default.
+			SceneData wrong;
+			EntityRecord wrongEntity;
+			wrongEntity.Id = EntityGuid::generate();
+			wrongEntity.Components.push_back(ComponentRecord{ "Transform", { FieldRecord{ "Position", FieldValue(1.0f) } } });
+			wrong.Entities.push_back(wrongEntity);
+			Scene wrongScene;
+			const ApplyReport wrongReport = apply_scene_data(wrongScene, wrong);
+			check(!wrongReport.Warnings.empty() && wrongScene.registry().get<Transform>(wrongScene.find(wrongEntity.Id)).Position == glm::vec3(0.0f), "a field of the wrong type is reported and not applied");
+
+			// Damaged data is rejected without a crash or a huge allocation.
+			bool truncatedAccepted = false;
+			for (size_t length = 0; length < bytes.size(); length += 7)
+			{
+				truncatedAccepted = truncatedAccepted || deserialize<SceneData>(std::span<const std::byte>(bytes.data(), length)).has_value();
+			}
+			check(!truncatedAccepted, "a truncated scene payload is rejected");
+
+			BinaryArchive hostile = BinaryArchive::writer();
+			std::string emptyName;
+			u64 hugeCount = 0xFFFFFFFFull;
+			hostile.string(emptyName);
+			hostile.value(hugeCount);
+			const std::vector<std::byte> hostileBytes = hostile.take();
+			const auto start = std::chrono::steady_clock::now();
+			const bool hostileAccepted = deserialize<SceneData>(hostileBytes).has_value();
+			const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+			check(!hostileAccepted && elapsed.count() < 100, "a payload that claims four billion entities is rejected at once");
+		}
 	}
 
 	bool run_scene_smoke_test(AssetPipelineModule& pipeline)
@@ -219,6 +363,7 @@ namespace wiwa
 		check_scene_basics(check);
 		check_reflection(check);
 		check_render_components(check);
+		check_scene_data(check);
 
 		if (check.Failures == 0)
 		{

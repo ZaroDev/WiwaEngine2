@@ -16,6 +16,7 @@ namespace wiwa
 		Environment,
 		Lut,
 		Shader,
+		Scene,
 
 		Last
 	};
@@ -33,6 +34,7 @@ namespace wiwa
 		case AssetType::Environment: return "Environment";
 		case AssetType::Lut: return "Lut";
 		case AssetType::Shader: return "Shader";
+		case AssetType::Scene: return "Scene";
 		default: return "None";
 		}
 	}
