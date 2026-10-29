@@ -164,12 +164,15 @@ namespace wiwa
 			return read();
 		}
 
+		// The frame time that the next frames report (a sixtieth of a second to begin with).
+		void set_delta(float seconds) { m_Delta = seconds; }
+
 		// One frame, and no more.
 		bool frame()
 		{
 			RenderBatch batch;
 			batch.FrameIndex = m_Frame++;
-			batch.DeltaTime = 1.0f / 60.0f;
+			batch.DeltaTime = m_Delta;
 			batch.Width = m_Renderer.get_width();
 			batch.Height = m_Renderer.get_height();
 			return m_Renderer.render_frame(batch);
@@ -223,6 +226,7 @@ namespace wiwa
 		RenderCamera m_Camera{};
 		std::vector<u8> m_Pixels{};
 		u64 m_Frame = 0;
+		float m_Delta = 1.0f / 60.0f;
 		u64 m_NextGuid = 0;
 	};
 }

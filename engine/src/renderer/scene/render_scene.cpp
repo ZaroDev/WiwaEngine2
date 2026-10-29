@@ -54,6 +54,7 @@ namespace wiwa
 
 		if (delta.Reset)
 		{
+			m_ResetCount++;
 			m_Instances.clear();
 			m_InstanceIndex.clear();
 			m_FreeInstances.clear();

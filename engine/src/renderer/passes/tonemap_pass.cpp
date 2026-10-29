@@ -24,7 +24,7 @@ namespace wiwa
 		const nvrhi::SamplerDesc samplerDescription = nvrhi::SamplerDesc().setAllFilters(false).setAllAddressModes(nvrhi::SamplerAddressMode::Clamp);
 		m_Sampler = m_Device->createSampler(samplerDescription);
 
-		// Slots match engine/shaders/tonemap.hlsl: SRV 0, sampler 1, push constants 2.
+		// Slots match engine/shaders/tonemap.hlsl: SRV 0, sampler 1, push constants 2, SRV 3 (the exposure).
 		nvrhi::VulkanBindingOffsets offsets;
 		offsets.shaderResource = 0;
 		offsets.sampler = 0;
@@ -36,6 +36,7 @@ namespace wiwa
 		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(0));
 		layout.addItem(nvrhi::BindingLayoutItem::Sampler(1));
 		layout.addItem(nvrhi::BindingLayoutItem::PushConstants(2, sizeof(PushConstants)));
+		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(3));
 		m_BindingLayout = m_Device->createBindingLayout(layout);
 		return m_Sampler && m_BindingLayout;
 	}
@@ -81,6 +82,7 @@ namespace wiwa
 			set.addItem(nvrhi::BindingSetItem::Texture_SRV(0, viewport.hdr()));
 			set.addItem(nvrhi::BindingSetItem::Sampler(1, m_Sampler));
 			set.addItem(nvrhi::BindingSetItem::PushConstants(2, sizeof(PushConstants)));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(3, viewport.exposure_buffer()));
 			m_BindingSet = m_Device->createBindingSet(set, m_BindingLayout);
 
 			if (m_Pipeline == nullptr || m_BindingSet == nullptr)
@@ -101,6 +103,7 @@ namespace wiwa
 		PushConstants constants;
 		const SceneSettings& settings = frame.Scene->settings();
 		constants.Exposure = std::exp2(settings.ExposureEv);
+		constants.AutoExposure = settings.Exposure.Auto ? 1.0f : 0.0f;
 		constants.Operator = static_cast<u32>(settings.Tonemap.Operator);
 		constants.Contrast = settings.Tonemap.Contrast;
 		constants.Saturation = settings.Tonemap.Saturation;

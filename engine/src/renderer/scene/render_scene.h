@@ -94,8 +94,11 @@ namespace wiwa
 
 		// Counts up on every apply that changed something.
 		u64 revision() const { return m_Revision; }
+		// Counts up when another scene becomes the active one (a Reset).
+		u32 reset_count() const { return m_ResetCount; }
 
 	private:
+		u32 m_ResetCount = 0;
 		template<typename T>
 		struct Slots
 		{

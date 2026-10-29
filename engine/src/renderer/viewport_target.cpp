@@ -53,10 +53,24 @@ namespace wiwa
 		ldr.clearValue = nvrhi::Color(0.0f, 0.0f, 0.0f, 1.0f);
 		ldr.debugName = "Viewport LDR";
 
+		auto make_buffer = [&](u32 elements, const char* name)
+		{
+			nvrhi::BufferDesc description;
+			description.byteSize = elements * sizeof(u32);
+			description.structStride = sizeof(u32);
+			description.canHaveUAVs = true;
+			description.initialState = nvrhi::ResourceStates::ShaderResource;
+			description.keepInitialState = true;
+			description.debugName = name;
+			return device->createBuffer(description);
+		};
+		m_Exposure = make_buffer(1, "Viewport exposure");
+		m_Histogram = make_buffer(256, "Viewport luminance histogram");
+
 		m_Hdr = device->createTexture(hdr);
 		m_Depth = device->createTexture(depth);
 		m_Ldr = device->createTexture(ldr);
-		if (!m_Hdr || !m_Depth || !m_Ldr)
+		if (!m_Hdr || !m_Depth || !m_Ldr || !m_Exposure || !m_Histogram)
 		{
 			WI_LOG(Error, "Renderer", "could not create the {0}x{1} viewport targets", width, height);
 			destroy();
@@ -94,6 +108,8 @@ namespace wiwa
 		m_HdrFramebuffer = nullptr;
 		m_DepthFramebuffer = nullptr;
 		m_LdrFramebuffer = nullptr;
+		m_Exposure = nullptr;
+		m_Histogram = nullptr;
 		m_Hdr = nullptr;
 		m_Depth = nullptr;
 		m_Ldr = nullptr;

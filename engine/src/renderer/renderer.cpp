@@ -270,6 +270,7 @@ namespace wiwa
 		frame.Width = m_Backend->get_width();
 		frame.Height = m_Backend->get_height();
 		frame.Time = m_Time;
+		frame.DeltaTime = batch.DeltaTime;
 		frame.FrameIndex = m_FrameIndex;
 		frame.ImGui = &batch.ImGui;
 		frame.Scene = &m_SceneData;

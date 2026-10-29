@@ -27,6 +27,10 @@ namespace wiwa
 		nvrhi::ITexture* hdr() const { return m_Hdr; }     // RGBA16F
 		nvrhi::ITexture* depth() const { return m_Depth; } // D32
 		nvrhi::ITexture* ldr() const { return m_Ldr; }     // RGBA8, sRGB encoded by the resolve shader
+		// Automatic exposure: one float (the current exposure multiplier, 0 until the exposure pass has written it) and the 256-bin
+		// luminance histogram it is measured from.
+		nvrhi::IBuffer* exposure_buffer() const { return m_Exposure; }
+		nvrhi::IBuffer* histogram_buffer() const { return m_Histogram; }
 		nvrhi::IFramebuffer* hdr_framebuffer() const { return m_HdrFramebuffer; }     // HDR + depth
 		nvrhi::IFramebuffer* depth_framebuffer() const { return m_DepthFramebuffer; } // depth only
 		nvrhi::IFramebuffer* ldr_framebuffer() const { return m_LdrFramebuffer; }
@@ -38,6 +42,8 @@ namespace wiwa
 		nvrhi::TextureHandle m_Hdr{};
 		nvrhi::TextureHandle m_Depth{};
 		nvrhi::TextureHandle m_Ldr{};
+		nvrhi::BufferHandle m_Exposure{};
+		nvrhi::BufferHandle m_Histogram{};
 		nvrhi::FramebufferHandle m_HdrFramebuffer{};
 		nvrhi::FramebufferHandle m_DepthFramebuffer{};
 		nvrhi::FramebufferHandle m_LdrFramebuffer{};

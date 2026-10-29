@@ -11,13 +11,14 @@ struct TonemapConstantsData
 	float Temperature;
 	float Tint;
 	float Vignette;
-	float Padding;
+	float AutoExposure; // 1: the exposure is in uExposure[0]
 };
 
 PUSH_CONSTANTS(TonemapConstantsData, Constants, b2);
 
 Texture2D uHdr : register(t0);
 SamplerState uSampler : register(s1);
+StructuredBuffer<float> uExposure : register(t3); // written by the exposure pass
 
 struct VertexOutput
 {
@@ -93,7 +94,16 @@ float3 Grade(float3 color)
 
 float4 PSMain(VertexOutput input) : SV_Target0
 {
-	float3 hdr = uHdr.SampleLevel(uSampler, input.Uv, 0).rgb * Constants.Exposure;
+	float exposure = Constants.Exposure;
+	if (Constants.AutoExposure > 0.5)
+	{
+		float measured = uExposure[0];
+		if (measured > 0.0 && measured < 1e6) // not yet measured (0) or broken (NaN, huge): the manual exposure stays
+		{
+			exposure = measured;
+		}
+	}
+	float3 hdr = uHdr.SampleLevel(uSampler, input.Uv, 0).rgb * exposure;
 	float3 mapped = ApplyOperator(Grade(hdr), Constants.Operator);
 	float2 fromCenter = input.Uv - 0.5;
 	mapped *= 1.0 - Constants.Vignette * smoothstep(0.25, 0.75, length(fromCenter));

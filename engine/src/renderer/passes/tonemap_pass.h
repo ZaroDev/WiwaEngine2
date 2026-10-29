@@ -28,7 +28,7 @@ namespace wiwa
 			float Temperature = 0.0f;
 			float Tint = 0.0f;
 			float Vignette = 0.0f;
-			float Padding = 0.0f;
+			float AutoExposure = 0.0f; // 1: the exposure comes from the viewport's exposure buffer
 		};
 
 		nvrhi::IDevice* m_Device = nullptr;

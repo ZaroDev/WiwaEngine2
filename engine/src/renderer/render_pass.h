@@ -19,6 +19,7 @@ namespace wiwa
 		u32 Width = 0;
 		u32 Height = 0;
 		float Time = 0.0f;
+		float DeltaTime = 0.0f; // seconds since the last rendered frame
 		u64 FrameIndex = 0; // counts rendered frames
 		const OwnedDrawData* ImGui = nullptr; // the UI of this frame, built on the main thread
 		bool SceneInViewport = false; // the UI shows the scene in a panel; otherwise it fills the window (the blit pass draws it)

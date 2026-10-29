@@ -52,6 +52,27 @@ namespace wiwa
 			}
 		}
 
+		float read_exposure(RenderCheckContext& context, SceneTester& test)
+		{
+			std::vector<u8> bytes;
+			float exposure = -1.0f;
+			if (read_buffer_bytes(context.Device, test.renderer().get_viewport().exposure_buffer(), sizeof(float), bytes) && bytes.size() >= sizeof(float))
+			{
+				std::memcpy(&exposure, bytes.data(), sizeof(float));
+			}
+			return exposure;
+		}
+
+		SceneSettings auto_exposure_settings(float speed = 20.0f)
+		{
+			SceneSettings settings = dark();
+			settings.Exposure.Auto = true;
+			settings.Exposure.AdaptSpeed = speed;
+			settings.Exposure.MinEv = -8.0f;
+			settings.Exposure.MaxEv = 8.0f;
+			return settings;
+		}
+
 		// Renders an emissive gray cube with the tonemap settings and returns the linear value that was displayed.
 		bool render_gray(RenderCheckContext& context, SceneTester& test, const TonemapSettings& tonemap, float exposureEv, int& pixelValue)
 		{
@@ -110,6 +131,78 @@ namespace wiwa
 				const glm::ivec3 gray = test.pixel(32, 32);
 				context.check(std::abs(gray.r - gray.g) <= 1 && std::abs(gray.g - gray.b) <= 1, "saturation 0 gives a gray pixel");
 				context.check(std::abs(plain.r - plain.b) > 8, "the neutral grading keeps the color");
+			});
+
+		register_render_check("exposure_converges_equal", [](RenderCheckContext& context)
+			{
+				int luma[2]{};
+				const float values[2] = { 0.05f, 2.0f };
+				for (int i = 0; i < 2; i++)
+				{
+					SceneTester test(context);
+					test.add_instance(test.add_mesh(make_test_cube(test.add_material(emissive_material(glm::vec3(values[i]))))), glm::mat4(1.0f));
+					test.scene().set_settings(auto_exposure_settings());
+					context.check(test.render(90), "render with automatic exposure");
+					luma[i] = SceneTester::luma(test.pixel(32, 32));
+					WI_LOG(Info, "RenderTest", "exposure_converges_equal {0}: luma {1}, exposure {2}", values[i], luma[i], read_exposure(context, test));
+				}
+				context.check(luma[0] > 20 && std::abs(luma[0] - luma[1]) <= std::max(luma[0], luma[1]) / 10, "a dark and a bright scene end up equally bright");
+			});
+
+		register_render_check("exposure_auto_off_ignores_measurement", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(test.add_mesh(make_test_cube(test.add_material(emissive_material(glm::vec3(0.05f))))), glm::mat4(1.0f));
+				test.scene().set_settings(auto_exposure_settings());
+				context.check(test.render(60), "render with automatic exposure");
+				const int automatic = SceneTester::luma(test.pixel(32, 32));
+
+				test.scene().set_settings(dark());
+				context.check(test.render(3), "render with manual exposure");
+				const int manual = SceneTester::luma(test.pixel(32, 32));
+				context.check(manual < automatic - 20, "switching it off gives the manual exposure back (" + std::to_string(manual) + " < " + std::to_string(automatic) + ")");
+			});
+
+		register_render_check("exposure_empty_scene_finite", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.scene().set_settings(auto_exposure_settings());
+				context.check(test.render(30), "render an empty scene with automatic exposure");
+				const float exposure = read_exposure(context, test);
+				context.check(std::isfinite(exposure) && exposure >= 0.0f && exposure <= std::exp2(8.0f), "the exposure is finite and inside its bounds");
+				const glm::ivec3 corner = test.pixel(2, 2);
+				context.check(corner.r == 0 && corner.g == 0 && corner.b == 0, "the empty image stays black");
+			});
+
+		register_render_check("exposure_dt_spike", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(test.add_mesh(make_test_cube(test.add_material(emissive_material(glm::vec3(0.5f))))), glm::mat4(1.0f));
+				test.scene().set_settings(auto_exposure_settings(1.5f));
+				context.check(test.render(60), "render with automatic exposure");
+				test.set_delta(5.0f);
+				context.check(test.frame() && test.frame(), "render frames that report five seconds");
+				const float exposure = read_exposure(context, test);
+				context.check(std::isfinite(exposure) && exposure > std::exp2(-8.0f) && exposure < std::exp2(8.0f), "the exposure stays finite and inside its bounds");
+			});
+
+		register_render_check("exposure_scene_swap_resets", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(test.add_mesh(make_test_cube(test.add_material(emissive_material(glm::vec3(4.0f))))), glm::mat4(1.0f));
+				test.scene().set_settings(auto_exposure_settings(0.0f)); // no adaptation: only a jump can move the exposure
+				context.check(test.render(10), "render the bright scene");
+				const float bright = read_exposure(context, test);
+
+				SceneDelta reset;
+				reset.Reset = true;
+				reset.Settings = auto_exposure_settings(0.0f);
+				test.scene().apply(std::move(reset));
+				test.add_instance(test.add_mesh(make_test_cube(test.add_material(emissive_material(glm::vec3(0.05f))))), glm::mat4(1.0f));
+				context.check(test.render(10), "render the dark scene");
+				const float dark = read_exposure(context, test);
+				WI_LOG(Info, "RenderTest", "exposure_scene_swap_resets {0} -> {1}", bright, dark);
+				context.check(dark > bright * 4.0f, "another scene starts from its own measurement, not the old exposure");
 			});
 	}
 }
