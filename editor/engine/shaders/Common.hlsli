@@ -23,6 +23,14 @@
 	#define PUSH_CONSTANTS(type, name, slot) cbuffer name##Buffer : register(slot) { type name; }
 #endif
 
+// Puts a resource in a given descriptor set on Vulkan (layouts after the first are further sets); D3D has no equivalent and
+// relies on unique register numbers.
+#ifdef VULKAN
+	#define VK_BINDING(slot, setIndex) [[vk::binding(slot, setIndex)]]
+#else
+	#define VK_BINDING(slot, setIndex)
+#endif
+
 // Storage image format. Vulkan needs it spelled out (otherwise the device needs the
 // shaderStorageImageWriteWithoutFormat feature); D3D11 takes it from the view.
 #ifdef VULKAN

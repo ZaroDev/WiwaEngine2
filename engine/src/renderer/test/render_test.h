@@ -41,6 +41,8 @@ namespace wiwa
 	void register_viewport_checks();
 	// The camera and editor camera checks (camera_checks.cpp).
 	void register_camera_checks();
+	// The depth prepass and forward pass checks (forward_checks.cpp).
+	void register_forward_checks();
 
 	// `--render-test`: runs every check once on the render thread. True when all passed.
 	bool run_render_checks(RenderWorld& world);

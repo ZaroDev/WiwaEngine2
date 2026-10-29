@@ -44,6 +44,8 @@ namespace wiwa
 		u32 get_material_slot(const AssetRef& material);
 		// The material's textures as one binding set (layout: material_layout()). Never null: fallback textures stand in.
 		nvrhi::IBindingSet* get_material_bindings(u32 slot);
+		// The record of a slot as the shaders will see it (the default one for a slot that does not exist).
+		const GpuMaterialRecord& material_record(u32 slot) const { return slot < m_Records.size() ? m_Records[slot] : m_Records[0]; }
 		nvrhi::IBindingLayout* material_layout() const { return m_MaterialLayout; }
 
 		// The uploaded texture, null until it is (and for good if it failed). Asking starts the load.

@@ -61,6 +61,13 @@ namespace wiwa
 			m_Uploads.force_graphics_queue(true);
 		}
 		m_Cache = CreateScope<GpuResourceCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads);
+		if (!m_SceneData.initialize(m_Backend->get_device()))
+		{
+			WI_RENDER_LOG(Error, "Could not create the scene render data");
+			m_Backend->shutdown();
+			m_Backend.reset();
+			return false;
+		}
 
 		if (m_Description.Assets == nullptr)
 		{
@@ -89,6 +96,7 @@ namespace wiwa
 		}
 
 		m_Passes.clear();
+		m_SceneData.shutdown();
 		m_Textures = TextureRegistry{};
 		m_Viewport.destroy();
 		m_Cache.reset();
@@ -179,8 +187,10 @@ namespace wiwa
 		m_Uploads.submit();
 
 		update_viewport();
+		m_SceneData.build(m_Scene, *m_Cache, m_Viewport);
 
 		m_CommandList->open();
+		m_SceneData.write(m_CommandList, *m_Cache);
 
 		// Forces the next state to be applied from scratch. D3D11's flip-model swapchain
 		// unbinds the backbuffer on Present, so cached bindings can't be trusted across frames.
@@ -188,12 +198,6 @@ namespace wiwa
 
 		// The passes draw over this; until they are ready (or when there are none) it is what the window shows.
 		nvrhi::utils::ClearColorAttachment(m_CommandList, backbuffer, 0, nvrhi::Color(0.02f, 0.02f, 0.05f, 1.0f));
-
-		// Until the scene passes exist (and the resolve pass writes this target), the viewport shows a plain color.
-		if (m_Viewport.valid())
-		{
-			nvrhi::utils::ClearColorAttachment(m_CommandList, m_Viewport.ldr_framebuffer(), 0, nvrhi::Color(0.1f, 0.2f, 0.3f, 1.0f));
-		}
 
 		if (allPassesReady && !m_Passes.empty())
 		{
@@ -262,6 +266,7 @@ namespace wiwa
 		frame.Time = m_Time;
 		frame.FrameIndex = m_FrameIndex;
 		frame.ImGui = &batch.ImGui;
+		frame.Scene = &m_SceneData;
 		return frame;
 	}
 

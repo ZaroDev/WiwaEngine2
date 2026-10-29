@@ -10,6 +10,7 @@ namespace wiwa
 {
 	class ShaderLibrary;
 	class TextureRegistry;
+	class SceneRenderData;
 
 	// Everything a pass needs to know about the current frame.
 	struct FrameDescription
@@ -20,6 +21,7 @@ namespace wiwa
 		float Time = 0.0f;
 		u64 FrameIndex = 0; // counts rendered frames
 		const OwnedDrawData* ImGui = nullptr; // the UI of this frame, built on the main thread
+		const SceneRenderData* Scene = nullptr; // the scene's draw lists and buffers for this frame (null when there is nothing to draw)
 	};
 
 	struct PassInitializationDescription

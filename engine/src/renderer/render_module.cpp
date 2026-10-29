@@ -7,7 +7,10 @@
 #include <core/engine.h>
 #include <scene/scene_module.h>
 
+#include "passes/depth_prepass.h"
+#include "passes/forward_pass.h"
 #include "passes/imgui_pass.h"
+#include "passes/resolve_pass.h"
 #include "shader_library.h"
 #include "render_world.h"
 #include "test/render_test.h"
@@ -45,10 +48,13 @@ namespace wiwa
 					return false;
 				}
 
-				// The UI goes over everything else, so its pass is the last one.
+				// The scene first (depth, shading, the 8-bit image); the UI goes over everything else, so its pass is the last one.
 				Scope<ImGuiRenderPass> imguiPass = CreateScope<ImGuiRenderPass>();
 				m_ImGuiPass = imguiPass.get();
-				return m_Renderer->add_pass(std::move(imguiPass));
+				return m_Renderer->add_pass(CreateScope<DepthPrepass>())
+					&& m_Renderer->add_pass(CreateScope<ForwardPass>())
+					&& m_Renderer->add_pass(CreateScope<ResolvePass>())
+					&& m_Renderer->add_pass(std::move(imguiPass));
 			},
 			[this](RenderBatch& batch)
 			{
@@ -171,6 +177,14 @@ namespace wiwa
 		submit([width, height](RenderWorld& world)
 			{
 				world.get_renderer().set_viewport_size(width, height);
+			});
+	}
+
+	void RenderModule::set_scene_settings(const SceneSettings& settings)
+	{
+		submit([settings](RenderWorld& world)
+			{
+				world.get_scene().set_settings(settings);
 			});
 	}
 

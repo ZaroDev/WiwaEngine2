@@ -83,10 +83,10 @@ namespace wiwa
 			{
 				ViewportTarget target;
 				context.check(target.create(context.Device, 64, 48), "create");
-				nvrhi::ITexture* first = target.ldr();
+				nvrhi::TextureHandle first = target.ldr(); // kept alive, so the next one cannot take its address
 				const u32 generation = target.generation();
 				context.check(target.create(context.Device, 32, 32), "create again");
-				context.check(target.ldr() != first && target.width() == 32 && target.height() == 32, "replaced at the new size");
+				context.check(target.ldr() != first.Get() && target.width() == 32 && target.height() == 32, "replaced at the new size");
 				context.check(target.generation() != generation, "the generation moved on");
 			});
 

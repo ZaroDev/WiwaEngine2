@@ -57,6 +57,9 @@ namespace wiwa
 		// Draws the scene with this camera instead of the scene's primary one (the editor's fly camera); an empty one goes back to the
 		// scene's camera. Sends a command only when it changed.
 		void set_camera_override(const std::optional<RenderCamera>& camera);
+
+		// Ambient light, background and exposure of the scene.
+		void set_scene_settings(const SceneSettings& settings);
 		static constexpr u32 get_viewport_texture_id() { return VIEWPORT_TEXTURE_ID; }
 
 		GraphicsApi get_api() const { return m_Description.Api; }

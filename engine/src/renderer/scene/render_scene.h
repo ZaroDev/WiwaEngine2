@@ -46,6 +46,16 @@ namespace wiwa
 		float Far = 1000.0f;
 	};
 
+	// How the scene as a whole is lit and shown; later the panels of the post-processing chain edit it.
+	struct SceneSettings
+	{
+		glm::vec3 SkyColor{ 0.5f, 0.6f, 0.8f };   // hemisphere ambient: color of the light from above
+		glm::vec3 GroundColor{ 0.15f };           // and from below
+		float AmbientIntensity = 0.3f;
+		glm::vec3 Background{ 0.05f, 0.06f, 0.08f }; // what is behind the geometry
+		float Exposure = 1.0f;
+	};
+
 	// Everything that changed on the main thread since the last frame.
 	struct SceneDelta
 	{
@@ -87,6 +97,9 @@ namespace wiwa
 		// What the frame is drawn with: the override if there is one, else the scene's camera.
 		const std::optional<RenderCamera>& effective_camera() const { return m_CameraOverride ? m_CameraOverride : m_Camera; }
 
+		const SceneSettings& settings() const { return m_Settings; }
+		void set_settings(const SceneSettings& settings) { m_Settings = settings; }
+
 		// Counts up on every apply that changed something.
 		u64 revision() const { return m_Revision; }
 
@@ -117,6 +130,7 @@ namespace wiwa
 
 		std::optional<RenderCamera> m_Camera{};
 		std::optional<RenderCamera> m_CameraOverride{};
+		SceneSettings m_Settings{};
 		u64 m_Revision = 0;
 	};
 }

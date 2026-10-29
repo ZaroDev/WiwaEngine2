@@ -13,6 +13,7 @@
 #include "render_queue.h"
 #include "resources/gpu_resource_cache.h"
 #include "scene/render_scene.h"
+#include "scene/scene_render_data.h"
 #include "texture_registry.h"
 #include "upload_queue.h"
 #include "viewport_target.h"
@@ -46,6 +47,7 @@ namespace wiwa
 		UploadQueue& get_upload_queue() { return m_Uploads; }
 		RenderScene& get_scene() { return m_Scene; }
 		GpuResourceCache& get_cache() { return *m_Cache; }
+		SceneRenderData& get_scene_data() { return m_SceneData; }
 		AssetManager* get_assets() const { return m_Description.Assets; }
 		TextureRegistry& get_textures() { return m_Textures; }
 		ViewportTarget& get_viewport() { return m_Viewport; }
@@ -95,6 +97,7 @@ namespace wiwa
 		UploadQueue m_Uploads{};
 		RenderScene m_Scene{};
 		Scope<GpuResourceCache> m_Cache{};
+		SceneRenderData m_SceneData{};
 		TextureRegistry m_Textures{};
 		ViewportTarget m_Viewport{};
 		u32 m_RequestedViewportWidth = 0;
