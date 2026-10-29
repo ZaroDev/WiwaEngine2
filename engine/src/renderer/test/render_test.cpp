@@ -112,6 +112,7 @@ namespace wiwa
 			register_environment_checks();
 			register_sky_checks();
 			register_atmosphere_checks();
+			register_environment_scene_checks();
 
 			register_render_check("copy_queue_roundtrip", [](RenderCheckContext& context)
 				{
