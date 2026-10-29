@@ -1,4 +1,7 @@
 #include <pch.h>
+#include <filesystem>
+#include <fstream>
+
 #include "../passes/bloom_math.h"
 #include "scene_tester.h"
 
@@ -158,6 +161,40 @@ namespace wiwa
 			settings.Ao.Radius = 1.5f;
 			settings.Ao.Power = 2.5f;
 			return settings;
+		}
+
+		// A corner with a bright lamp and a sunlit box: something for every effect to act on.
+		void build_chain_scene(SceneTester& test)
+		{
+			add_corner(test);
+			test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.3f), test.add_material(emissive_material(glm::vec3(6.0f, 5.0f, 3.0f))))), glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, -0.6f, 0.0f)));
+			test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.4f), test.add_material(test.color_material(glm::vec3(0.9f, 0.2f, 0.1f), 0.4f)))),
+				glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, -0.5f, 0.0f)), glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
+			test.add_light(test.sun(glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)), 2.0f));
+		}
+
+		SceneSettings chain_settings(bool effects)
+		{
+			SceneSettings settings = ao_settings(effects);
+			settings.AmbientIntensity = 0.6f;
+			settings.Bloom.Enabled = effects;
+			settings.Bloom.Threshold = 0.8f;
+			settings.Bloom.Intensity = 0.2f;
+			settings.Exposure.Auto = effects;
+			settings.Exposure.AdaptSpeed = 20.0f;
+			settings.Exposure.MinEv = -4.0f;
+			settings.Exposure.MaxEv = 4.0f;
+			settings.Tonemap.Operator = effects ? TonemapOperator::Neutral : TonemapOperator::ACES;
+			settings.Tonemap.Saturation = effects ? 1.2f : 1.0f;
+			settings.Tonemap.Vignette = effects ? 0.3f : 0.0f;
+			return settings;
+		}
+
+		void set_fxaa(SceneTester& test, bool on)
+		{
+			RenderQuality quality = test.renderer().get_quality();
+			quality.Fxaa = on;
+			test.renderer().set_quality(quality);
 		}
 
 		// Renders an emissive gray cube with the tonemap settings and returns the linear value that was displayed.
@@ -565,6 +602,148 @@ namespace wiwa
 				add_corner(test);
 				context.check(test.render(), "render the other scene");
 				context.check(SceneTester::max_difference(baseline, test.pixels()) == 0, "the new scene shows no occlusion from the old one");
+			});
+
+		register_render_check("post_chain_scene", [](RenderCheckContext& context)
+			{
+				SceneTester test(context, 96);
+				build_chain_scene(test);
+				test.scene().set_settings(chain_settings(false));
+				context.check(test.render(), "render without the effects");
+				const std::vector<u8> plain = test.pixels();
+
+				test.scene().set_settings(chain_settings(true));
+				set_fxaa(test, true);
+				context.check(test.render(60), "render with every effect");
+				const std::vector<u8> pixels = test.pixels();
+				context.check(SceneTester::max_difference(plain, pixels) > 20, "the effects change the image");
+
+				namespace fs = std::filesystem;
+				const std::string own = std::string(graphics_api_name(context.Api));
+				std::error_code error;
+				fs::create_directories("Library", error);
+				{
+					std::ofstream file("Library/render_test_post_" + own + ".rgba", std::ios::binary | std::ios::trunc);
+					file.write(reinterpret_cast<const char*>(pixels.data()), static_cast<std::streamsize>(pixels.size()));
+				}
+
+				u32 compared = 0;
+				for (const char* other : { "vulkan", "d3d11", "d3d12" })
+				{
+					if (own == other)
+					{
+						continue;
+					}
+					std::ifstream file(std::string("Library/render_test_post_") + other + ".rgba", std::ios::binary);
+					if (!file)
+					{
+						continue;
+					}
+					std::vector<u8> theirs((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+					if (theirs.size() != pixels.size())
+					{
+						continue;
+					}
+					u64 total = 0;
+					int worst = 0;
+					for (size_t i = 0; i < pixels.size(); i++)
+					{
+						if ((i & 3) == 3)
+						{
+							continue;
+						}
+						const int difference = std::abs(static_cast<int>(pixels[i]) - static_cast<int>(theirs[i]));
+						total += static_cast<u64>(difference);
+						worst = std::max(worst, difference);
+					}
+					const double mean = static_cast<double>(total) / (static_cast<double>(pixels.size()) * 0.75);
+					WI_LOG(Info, "RenderTest", "post_chain_scene: {0} against {1}: mean difference {2:.3f}, largest {3}", own, other, mean, worst);
+					context.check(mean < 3.0 && worst <= 40, std::string("the image matches ") + other);
+					compared++;
+				}
+				if (compared == 0)
+				{
+					WI_LOG(Info, "RenderTest", "post_chain_scene: the cross-backend comparison needs the other APIs' output (run --render-test on each API)");
+				}
+				set_fxaa(test, false);
+			});
+
+		register_render_check("post_chain_resize", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				build_chain_scene(test);
+				test.scene().set_settings(chain_settings(true));
+				set_fxaa(test, true);
+				const u32 errorsBefore = get_error_message_count();
+				for (const u32 size : { 64u, 128u, 1u, 2u, 7u, 64u })
+				{
+					test.set_size(size);
+					context.check(test.render(3), "render at the new size");
+					context.check(test.renderer().get_viewport().width() == size, "the target has the new size");
+				}
+				context.check(get_error_message_count() == errorsBefore, "no GPU error while resizing with every effect on");
+				context.check(test.pixels().size() == 64 * 64 * 4 && SceneTester::luma(test.pixel(32, 32)) > 0, "the last image is a normal one");
+				set_fxaa(test, false);
+			});
+
+		register_render_check("post_chain_live_changes", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				build_chain_scene(test);
+				test.scene().set_settings(chain_settings(false));
+				context.check(test.render(), "render the baseline");
+				const std::vector<u8> baseline = test.pixels();
+
+				// every effect on its own: it changes the image, and turning it off gives the baseline back bit for bit
+				struct Effect
+				{
+					const char* Name;
+					std::function<void(SceneSettings&, bool)> Settings;
+					bool Fxaa;
+				};
+				const Effect effects[] = {
+					{ "bloom", [](SceneSettings& s, bool on) { s.Bloom.Enabled = on; }, false },
+					{ "AO", [](SceneSettings& s, bool on) { s.Ao.Enabled = on; }, false },
+					{ "automatic exposure", [](SceneSettings& s, bool on) { s.Exposure.Auto = on; }, false },
+					{ "tonemap operator", [](SceneSettings& s, bool on) { s.Tonemap.Operator = on ? TonemapOperator::Reinhard : TonemapOperator::ACES; }, false },
+					{ "FXAA", [](SceneSettings&, bool) {}, true },
+				};
+				for (const Effect& effect : effects)
+				{
+					SceneSettings on = chain_settings(false);
+					effect.Settings(on, true);
+					test.scene().set_settings(on);
+					set_fxaa(test, effect.Fxaa);
+					context.check(test.render(30), std::string("render with ") + effect.Name);
+					context.check(SceneTester::max_difference(baseline, test.pixels()) > 4, std::string(effect.Name) + " changes the image");
+
+					test.scene().set_settings(chain_settings(false));
+					set_fxaa(test, false);
+					context.check(test.render(3), std::string("render without ") + effect.Name);
+					context.check(SceneTester::max_difference(baseline, test.pixels()) == 0, std::string("turning ") + effect.Name + " off gives the baseline back");
+				}
+			});
+
+		register_render_check("post_chain_minimized", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				build_chain_scene(test);
+				test.scene().set_settings(chain_settings(true));
+				set_fxaa(test, true);
+				context.check(test.render(40), "render with every effect");
+				const std::vector<u8> before = test.pixels();
+
+				RenderBatch minimized;
+				minimized.Minimized = true;
+				minimized.Width = test.renderer().get_width();
+				minimized.Height = test.renderer().get_height();
+				context.check(test.renderer().render_frame(minimized), "a minimized batch is accepted");
+				RenderBatch empty;
+				context.check(test.renderer().render_frame(empty), "so is a batch of size 0");
+
+				context.check(test.render(3), "a normal batch renders again");
+				context.check(SceneTester::max_difference(before, test.pixels()) <= 2, "and gives the same image");
+				set_fxaa(test, false);
 			});
 	}
 }

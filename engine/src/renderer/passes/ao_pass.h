@@ -41,6 +41,9 @@ namespace wiwa
 		bool m_Failed = false;
 
 		nvrhi::BufferHandle m_ConstantBuffer{};
+		// A viewport too small for all the levels of the distances binds these to the slots of the missing ones: D3D11 does not allow two
+		// unordered access views of the same subresource at once.
+		nvrhi::TextureHandle m_UnusedLevels[ViewportTarget::MAX_AO_DEPTH_LEVELS - 1]{};
 		nvrhi::BindingLayoutHandle m_DepthLayout{};
 		nvrhi::BindingLayoutHandle m_AoLayout{};
 		nvrhi::BindingLayoutHandle m_BlurLayout{};

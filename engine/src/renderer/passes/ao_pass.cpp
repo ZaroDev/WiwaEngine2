@@ -39,6 +39,23 @@ namespace wiwa
 		constants.debugName = "AO constants";
 		m_ConstantBuffer = m_Device->createBuffer(constants);
 
+		for (nvrhi::TextureHandle& texture : m_UnusedLevels)
+		{
+			nvrhi::TextureDesc unused;
+			unused.width = 1;
+			unused.height = 1;
+			unused.format = nvrhi::Format::R32_FLOAT;
+			unused.isUAV = true;
+			unused.initialState = nvrhi::ResourceStates::ShaderResource;
+			unused.keepInitialState = true;
+			unused.debugName = "AO unused distance level";
+			texture = m_Device->createTexture(unused);
+			if (texture == nullptr)
+			{
+				return false;
+			}
+		}
+
 		nvrhi::VulkanBindingOffsets offsets;
 		offsets.shaderResource = 0;
 		offsets.sampler = 0;
@@ -102,9 +119,15 @@ namespace wiwa
 		depth.addItem(nvrhi::BindingSetItem::Texture_SRV(1, viewport.depth()));
 		for (u32 level = 0; level < ViewportTarget::MAX_AO_DEPTH_LEVELS; level++)
 		{
-			// The levels past the last one the texture has are bound to the last one (the shader does not write them).
-			const u32 mip = std::min(level, viewport.ao_depth_levels() - 1);
-			depth.addItem(nvrhi::BindingSetItem::Texture_UAV(3 + level, viewport.ao_distance(), nvrhi::Format::UNKNOWN, nvrhi::TextureSubresourceSet(mip, 1, 0, 1)));
+			if (level < viewport.ao_depth_levels())
+			{
+				depth.addItem(nvrhi::BindingSetItem::Texture_UAV(3 + level, viewport.ao_distance(), nvrhi::Format::UNKNOWN, nvrhi::TextureSubresourceSet(level, 1, 0, 1)));
+			}
+			else
+			{
+				// The shader does not write the levels the texture does not have.
+				depth.addItem(nvrhi::BindingSetItem::Texture_UAV(3 + level, m_UnusedLevels[level - viewport.ao_depth_levels()]));
+			}
 		}
 		m_DepthSet = m_Device->createBindingSet(depth, m_DepthLayout);
 
