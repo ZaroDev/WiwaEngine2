@@ -50,6 +50,9 @@ void EditorModule::update(float deltaTime)
 	main_bar();
 	dock_space();
 
+	// Adopts the scene the SceneModule loaded (or opened), and expands prefab instances once their prefab is there.
+	m_SceneEditor->update();
+
 	for (auto& panel : m_Panels)
 	{
 		panel->on_update();

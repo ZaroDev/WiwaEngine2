@@ -13,6 +13,7 @@ namespace wiwa
 	{
 		constexpr float MARKER_PIXELS = 7.0f;   // half the size of the cross that marks a light or camera
 		constexpr float ICON_PIXELS = 12.0f;    // the radius of the click target of a marker
+		constexpr float AXES_PIXELS = 70.0f;    // the length of the world axes at the origin
 		constexpr float ARROW_PIXELS = 60.0f;   // the length of a directional light's arrow
 		constexpr float DISPLAY_FAR = 5.0f;     // a camera's frustum is shown no deeper than this (its far plane is usually far away)
 		constexpr float DISPLAY_ASPECT = 16.0f / 9.0f;
@@ -20,6 +21,9 @@ namespace wiwa
 		const glm::vec4 LIGHT_COLOR(1.0f, 0.85f, 0.3f, 1.0f);
 		const glm::vec4 CAMERA_COLOR(0.6f, 0.85f, 1.0f, 1.0f);
 		const glm::vec4 BOUNDS_COLOR(0.5f, 1.0f, 0.5f, 1.0f);
+		const glm::vec4 GRID_COLOR(0.6f, 0.6f, 0.6f, 0.6f);
+		constexpr float GRID_CELL = 1.0f;
+		constexpr u32 GRID_HALF_COUNT = 10;
 
 		bool finite(const glm::vec3& v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
 
@@ -75,6 +79,16 @@ namespace wiwa
 			draw.line(position - glm::vec3(0.0f, r, 0.0f), position + glm::vec3(0.0f, r, 0.0f), color, DebugDepth::AlwaysOnTop, 2.0f);
 			draw.line(position - glm::vec3(0.0f, 0.0f, r), position + glm::vec3(0.0f, 0.0f, r), color, DebugDepth::AlwaysOnTop, 2.0f);
 		};
+
+		if (settings.Grid)
+		{
+			draw.grid(glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f), GRID_CELL, GRID_HALF_COUNT, GRID_COLOR, DebugDepth::Faded, 1.0f);
+		}
+
+		if (settings.Axes)
+		{
+			draw.axes(glm::mat4(1.0f), size_at(glm::vec3(0.0f), AXES_PIXELS), DebugDepth::Faded, 2.0f);
+		}
 
 		if (settings.Lights)
 		{

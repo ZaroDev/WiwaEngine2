@@ -22,7 +22,7 @@ namespace wiwa
 		float ViewportHeight = 0.0f;
 	};
 
-	// The overlays of the scene, drawn through DebugDraw every frame: a marker and a pick icon for every light and camera, the arrow of a
+	// The overlays of the scene, drawn through DebugDraw every frame: a grid on the ground, the world axes, a marker and a pick icon for every light and camera, the arrow of a
 	// directional light, the frustum of a camera, and for the selected entity the range sphere or cone of a light and the world bounds of a
 	// mesh. Each category is switched on or off in GizmoSettings. Main thread.
 	class SceneGizmos

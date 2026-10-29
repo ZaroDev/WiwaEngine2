@@ -4,11 +4,23 @@
 #include <optional>
 
 #include <imgui.h>
+#include <ImGuizmo.h>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <gizmo/viewport_selection.h>
 #include <renderer/render_module.h>
+#include <scene/components.h>
+
+using wiwa::LogLevel; // for WI_LOG
+
+namespace
+{
+	constexpr float TRANSLATE_SNAP = 0.5f;      // world units, with Ctrl
+	constexpr float ROTATE_SNAP_DEGREES = 15.0f;
+	constexpr float SCALE_SNAP = 0.1f;
+}
 
 namespace
 {
@@ -32,6 +44,7 @@ void ViewportPanel::on_draw()
 	}
 
 	render->set_scene_in_viewport(true); // the scene goes to this panel, not over the window
+	ImGuizmo::BeginFrame();
 
 	ImGui::SetNextWindowPos(ImVec2(376.0f, 12.0f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(ImVec2(600.0f, 540.0f), ImGuiCond_FirstUseEver);
@@ -83,14 +96,13 @@ void ViewportPanel::on_draw()
 			ImGui::SetCursorPos(ImVec2(8.0f, 26.0f));
 			ImGui::Checkbox("Editor camera", &m_UseEditorCamera);
 			ImGui::SameLine();
-			if (ImGui::RadioButton("Move (W)", m_Gizmo.mode == wiwa::gizmo::Mode::Translate)) { m_Gizmo.mode = wiwa::gizmo::Mode::Translate; }
+			if (ImGui::RadioButton("Move (W)", m_Operation == wiwa::GizmoOperation::Translate)) { m_Operation = wiwa::GizmoOperation::Translate; }
 			ImGui::SameLine();
-			if (ImGui::RadioButton("Rotate (E)", m_Gizmo.mode == wiwa::gizmo::Mode::Rotate)) { m_Gizmo.mode = wiwa::gizmo::Mode::Rotate; }
+			if (ImGui::RadioButton("Rotate (E)", m_Operation == wiwa::GizmoOperation::Rotate)) { m_Operation = wiwa::GizmoOperation::Rotate; }
 			ImGui::SameLine();
-			if (ImGui::RadioButton("Scale (R)", m_Gizmo.mode == wiwa::gizmo::Mode::Scale)) { m_Gizmo.mode = wiwa::gizmo::Mode::Scale; }
+			if (ImGui::RadioButton("Scale (R)", m_Operation == wiwa::GizmoOperation::Scale)) { m_Operation = wiwa::GizmoOperation::Scale; }
 			ImGui::SameLine();
-			bool local = m_Gizmo.space == wiwa::gizmo::Space::Local;
-			if (ImGui::Checkbox("Local", &local)) { m_Gizmo.space = local ? wiwa::gizmo::Space::Local : wiwa::gizmo::Space::World; }
+			ImGui::Checkbox("Local", &m_LocalSpace);
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Gizmos"))
 			{
@@ -100,6 +112,9 @@ void ViewportPanel::on_draw()
 			{
 				wiwa::GizmoSettings& settings = m_GizmoSettings;
 				bool changed = false;
+				changed |= ImGui::Checkbox("Transform handles of the selection", &settings.TransformHandles);
+				changed |= ImGui::Checkbox("Grid", &settings.Grid);
+				changed |= ImGui::Checkbox("World axes", &settings.Axes);
 				changed |= ImGui::Checkbox("Lights", &settings.Lights);
 				changed |= ImGui::Checkbox("Cameras", &settings.Cameras);
 				changed |= ImGui::Checkbox("Bounds of the selection", &settings.Bounds);
@@ -127,6 +142,7 @@ void ViewportPanel::on_draw()
 			render->set_selection(wiwa::selected_guid(m_Editor));
 			if (const std::optional<wiwa::PickResult> result = render->take_pick_result())
 			{
+				WI_LOG(Info, "Viewport", "the renderer answered request {0}: {1}", result->RequestId, result->Guid ? result->Guid->to_string() : std::string("nothing there"));
 				wiwa::apply_pick(m_Editor, *result);
 			}
 
@@ -137,9 +153,9 @@ void ViewportPanel::on_draw()
 
 			if (overImage && !ImGui::IsAnyItemActive())
 			{
-				if (ImGui::IsKeyPressed(ImGuiKey_W, false)) { m_Gizmo.mode = wiwa::gizmo::Mode::Translate; }
-				if (ImGui::IsKeyPressed(ImGuiKey_E, false)) { m_Gizmo.mode = wiwa::gizmo::Mode::Rotate; }
-				if (ImGui::IsKeyPressed(ImGuiKey_R, false)) { m_Gizmo.mode = wiwa::gizmo::Mode::Scale; }
+				if (ImGui::IsKeyPressed(ImGuiKey_W, false)) { m_Operation = wiwa::GizmoOperation::Translate; }
+				if (ImGui::IsKeyPressed(ImGuiKey_E, false)) { m_Operation = wiwa::GizmoOperation::Rotate; }
+				if (ImGui::IsKeyPressed(ImGuiKey_R, false)) { m_Operation = wiwa::GizmoOperation::Scale; }
 			}
 
 			const bool clicked = overImage && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
@@ -151,22 +167,46 @@ void ViewportPanel::on_draw()
 				sceneView.View = camera.View;
 				sceneView.Projection = camera.Projection;
 				sceneView.ViewportHeight = size.y;
-				wiwa::GizmoInput input;
-				input.MousePixel = glm::vec2(io.MousePos.x - imageMin.x, io.MousePos.y - imageMin.y);
-				input.ViewportSize = glm::vec2(size.x, size.y);
-				input.Hovered = overImage;
-				input.LeftPressed = clicked;
-				input.LeftDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-				input.Ctrl = io.KeyCtrl;
-				input.View = camera.View;
-				input.Projection = camera.Projection;
-				gizmoHasMouse = m_Gizmo.update(render->get_debug_draw(), input, m_Editor);
+
+				// The move / rotate / scale gizmo of the selected entity: ImGuizmo draws it and does the mouse math, on the entity's world matrix.
+				const entt::entity selected = m_Editor.selected();
+				entt::registry& registry = m_Editor.scene().registry();
+				if (m_GizmoSettings.TransformHandles && registry.valid(selected) && registry.all_of<wiwa::WorldTransform>(selected))
+				{
+					ImGuizmo::SetOrthographic(false);
+					ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
+					ImGuizmo::SetRect(imageMin.x, imageMin.y, size.x, size.y);
+					ImGuizmo::Enable(!flying);
+
+					const glm::mat4 display = wiwa::gizmo_display_matrix(registry.get<wiwa::WorldTransform>(selected).Matrix);
+					glm::mat4 model = display;
+					const ImGuizmo::OPERATION operation = m_Operation == wiwa::GizmoOperation::Translate ? ImGuizmo::TRANSLATE : (m_Operation == wiwa::GizmoOperation::Rotate ? ImGuizmo::ROTATE : ImGuizmo::SCALE);
+					float snap[3] = { 0.0f, 0.0f, 0.0f };
+					if (io.KeyCtrl)
+					{
+						const float step = m_Operation == wiwa::GizmoOperation::Translate ? TRANSLATE_SNAP : (m_Operation == wiwa::GizmoOperation::Rotate ? ROTATE_SNAP_DEGREES : SCALE_SNAP);
+						snap[0] = snap[1] = snap[2] = step;
+					}
+					const bool changed = ImGuizmo::Manipulate(glm::value_ptr(camera.View), glm::value_ptr(camera.Projection), operation, m_LocalSpace ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
+						glm::value_ptr(model), nullptr, io.KeyCtrl ? snap : nullptr);
+					if (changed)
+					{
+						wiwa::apply_gizmo_result(m_Editor, selected, m_Operation, display, model);
+					}
+					gizmoHasMouse = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
+				}
 			}
 
 			m_SceneGizmos.draw(render->get_debug_draw(), m_Editor.scene(), m_Editor.selected(), m_GizmoSettings, sceneView);
 
+			if (m_ClickTestRequested)
+			{
+				m_ClickTest.update(*render, m_Editor, imageMin, size, m_Camera.get(size.x / std::max(size.y, 1.0f)));
+			}
+
 			if (clicked && !gizmoHasMouse)
 			{
+				WI_LOG(Info, "Viewport", "click at ({0:.0f}, {1:.0f}): asking the renderer what is there", io.MousePos.x - imageMin.x, io.MousePos.y - imageMin.y);
 				const float x = std::max(io.MousePos.x - imageMin.x, 0.0f) * scale;
 				const float y = std::max(io.MousePos.y - imageMin.y, 0.0f) * scale;
 				render->request_pick(static_cast<wiwa::u32>(x), static_cast<wiwa::u32>(y));
@@ -174,4 +214,9 @@ void ViewportPanel::on_draw()
 		}
 	}
 	ImGui::End();
+
+	if (!open)
+	{
+		(void)render->take_pick_result(); // a click answered while the panel is hidden must not change the selection when it comes back
+	}
 }

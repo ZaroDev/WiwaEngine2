@@ -43,6 +43,9 @@ namespace wiwa
 		flag(json, "lights", settings.Lights);
 		flag(json, "cameras", settings.Cameras);
 		flag(json, "bounds", settings.Bounds);
+		flag(json, "grid", settings.Grid);
+		flag(json, "axes", settings.Axes);
+		flag(json, "transform", settings.TransformHandles);
 
 		if (json.contains("outline") && json["outline"].is_object())
 		{
@@ -76,6 +79,9 @@ namespace wiwa
 		json["lights"] = Lights;
 		json["cameras"] = Cameras;
 		json["bounds"] = Bounds;
+		json["grid"] = Grid;
+		json["axes"] = Axes;
+		json["transform"] = TransformHandles;
 		nlohmann::ordered_json outline = nlohmann::ordered_json::object();
 		outline["enabled"] = Outline.Enabled;
 		outline["width"] = Outline.WidthPx;

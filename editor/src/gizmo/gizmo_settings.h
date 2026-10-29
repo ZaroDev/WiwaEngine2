@@ -12,6 +12,9 @@ namespace wiwa
 		bool Lights = true;   // markers for every light, the sun's arrow, and the range or cone of the selected light
 		bool Cameras = true;  // markers and the frustum of every camera
 		bool Bounds = true;   // the world bounds of the selected mesh
+		bool Grid = true;     // a grid on the ground (y = 0) around the origin
+		bool Axes = true;     // the world axes at the origin: X red, Y green, Z blue
+		bool TransformHandles = true; // the move / rotate / scale gizmo of the selected entity
 		SelectionOutlineStyle Outline{};
 
 		bool operator==(const GizmoSettings&) const = default;

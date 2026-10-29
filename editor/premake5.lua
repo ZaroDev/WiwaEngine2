@@ -10,12 +10,15 @@ project "wiwa_editor"
 		-- "resource.h",
 		-- "WiwaEditor.rc",
 		"src/**.h",
-		"src/**.cpp"
+		"src/**.cpp",
+		"vendor/ImGuizmo/ImGuizmo.h",
+		"vendor/ImGuizmo/ImGuizmo.cpp"
 	}
 
 	includedirs
 	{
 		"src",
+		"vendor/ImGuizmo",
 		"%{IncludeDirs.ImGui}",
 		"%{IncludeDirs.nvrhi}", -- render_module.h exposes NVRHI types
 		"%{IncludeDirs.NJSON}",
