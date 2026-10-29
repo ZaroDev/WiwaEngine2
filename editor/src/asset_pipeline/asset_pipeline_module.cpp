@@ -19,9 +19,11 @@ namespace wiwa
 		m_Database->scan();
 
 		// Re-cooked assets: tell the AssetManager so loaded copies can be refreshed.
-		m_Database->add_reimport_listener([](AssetGuid guid)
+		// (Looked up once here: the listener runs on worker threads, which must not touch the module map.)
+		AssetManager* manager = Engine::get().get_module<AssetManager>();
+		m_Database->add_reimport_listener([manager](AssetGuid guid)
 		{
-			Engine::get().get_module<AssetManager>()->notify_reimported(guid);
+			manager->notify_reimported(guid);
 		});
 
 		// Live re-import while the editor runs.
