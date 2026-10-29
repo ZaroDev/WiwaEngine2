@@ -16,6 +16,7 @@ namespace wiwa
 	public:
 		~D3D11Backend() override;
 
+		bool has_copy_queue() const override { return false; } // one immediate context: uploads share it with drawing
 		std::string get_adapter_name() const override { return m_AdapterName; }
 
 		bool initialize(const RendererDescription& description, u32 width, u32 height) override;

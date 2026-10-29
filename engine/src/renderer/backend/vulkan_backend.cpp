@@ -288,6 +288,21 @@ namespace wiwa
 		m_GraphicsQueueIndex = graphicsQueueIndex.value();
 		m_PresentQueue = presentQueue.value();
 
+		if (m_Description.EnableCopyQueue)
+		{
+			auto transferQueue = m_VkbDevice.get_dedicated_queue(vkb::QueueType::transfer);
+			auto transferQueueIndex = m_VkbDevice.get_dedicated_queue_index(vkb::QueueType::transfer);
+			if (transferQueue && transferQueueIndex && transferQueueIndex.value() != m_GraphicsQueueIndex)
+			{
+				m_TransferQueue = transferQueue.value();
+				m_TransferQueueIndex = transferQueueIndex.value();
+			}
+			else
+			{
+				WI_LOG(Info, "Vulkan", "no dedicated transfer queue family, uploads use the graphics queue");
+			}
+		}
+
 		return true;
 	}
 
@@ -314,6 +329,11 @@ namespace wiwa
 		deviceDescription.device = m_VkbDevice.device;
 		deviceDescription.graphicsQueue = m_GraphicsQueue;
 		deviceDescription.graphicsQueueIndex = static_cast<int>(m_GraphicsQueueIndex);
+		if (m_TransferQueue != VK_NULL_HANDLE)
+		{
+			deviceDescription.transferQueue = m_TransferQueue;
+			deviceDescription.transferQueueIndex = static_cast<int>(m_TransferQueueIndex);
+		}
 		deviceDescription.instanceExtensions = instanceExtensions.data();
 		deviceDescription.numInstanceExtensions = instanceExtensions.size();
 		deviceDescription.deviceExtensions = deviceExtensions.data();

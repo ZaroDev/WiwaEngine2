@@ -117,6 +117,12 @@ namespace nvrhi::vulkan
             .setUsage(usageFlags)
             .setSharingMode(vk::SharingMode::eExclusive);
 
+        // Wiwa: shared between the graphics and the transfer family (see VulkanContext::sharedQueueFamilies)
+        if (m_Context.sharedQueueFamilyCount > 1 && !desc.canHaveUAVs)
+            bufferInfo.setSharingMode(vk::SharingMode::eConcurrent)
+                .setQueueFamilyIndexCount(m_Context.sharedQueueFamilyCount)
+                .setPQueueFamilyIndices(m_Context.sharedQueueFamilies);
+
 #if _WIN32
         const auto handleType = vk::ExternalMemoryHandleTypeFlagBits::eOpaqueWin32;
 #else

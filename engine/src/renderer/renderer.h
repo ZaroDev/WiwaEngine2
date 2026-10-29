@@ -42,6 +42,7 @@ namespace wiwa
 		std::string get_adapter_name() const { return m_Backend ? m_Backend->get_adapter_name() : std::string{}; }
 		u32 get_width() const { return m_Backend ? m_Backend->get_width() : 0; }
 		u32 get_height() const { return m_Backend ? m_Backend->get_height() : 0; }
+		bool has_copy_queue() const { return m_Backend && m_Backend->has_copy_queue(); }
 
 		// Takes effect at the start of the next frame.
 		void set_vsync(bool enabled) { m_RequestedVsync = enabled; }

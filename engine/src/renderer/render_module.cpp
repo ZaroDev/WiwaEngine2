@@ -9,6 +9,7 @@
 #include "passes/imgui_pass.h"
 #include "shader_library.h"
 #include "render_world.h"
+#include "test/render_test.h"
 #include "window.h"
 
 #define WI_RENDER_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
@@ -63,6 +64,8 @@ namespace wiwa
 				{
 					m_Failed = true;
 				}
+
+				run_render_test(world);
 
 				publish_snapshot();
 			},
@@ -250,6 +253,12 @@ namespace wiwa
 			Engine::get().request_quit();
 		}
 
+		if (m_RenderTestResult != 0)
+		{
+			Engine::get().set_exit_code(m_RenderTestResult == 1 ? 0 : 1);
+			Engine::get().request_quit();
+		}
+
 		// Blocks while the render thread is two frames behind.
 		if (!m_Thread.submit(std::move(batch)))
 		{
@@ -279,6 +288,14 @@ namespace wiwa
 			{
 				m_Description.EnableValidation = true;
 			}
+			else if (argument == "--render-test")
+			{
+				m_RenderTest = true;
+			}
+			else if (argument == "--no-copy-queue")
+			{
+				m_Description.EnableCopyQueue = false;
+			}
 		}
 
 		// --render-smoke <frames>
@@ -298,6 +315,32 @@ namespace wiwa
 		}
 
 		return true;
+	}
+
+	// Render thread: --render-test runs its checks once, as soon as every pass can render (or after a wait that gives up).
+	void RenderModule::run_render_test(RenderWorld& world)
+	{
+		if (!m_RenderTest || m_RenderTestResult != 0 || m_Failed)
+		{
+			return;
+		}
+
+		constexpr u32 MAX_WAIT_FRAMES = 1200;
+		if (!m_Renderer->are_passes_ready() && ++m_RenderTestWaitFrames < MAX_WAIT_FRAMES)
+		{
+			return;
+		}
+
+		const bool passed = run_render_checks(world) && m_Renderer->are_passes_ready() && get_error_message_count() == 0;
+		if (passed)
+		{
+			WI_RENDER_LOG(Info, "Render test passed ({0})", graphics_api_name(m_Description.Api));
+		}
+		else
+		{
+			WI_RENDER_LOG(Error, "Render test FAILED ({0}, {1} GPU error message(s))", graphics_api_name(m_Description.Api), get_error_message_count());
+		}
+		m_RenderTestResult = passed ? 1 : 2;
 	}
 
 	void RenderModule::fail_and_quit(const char* reason)

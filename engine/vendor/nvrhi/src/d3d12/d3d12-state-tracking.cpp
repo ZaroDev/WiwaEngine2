@@ -187,7 +187,10 @@ namespace nvrhi::d3d12
             }
         }
 
-        if (m_D3DBarriers.size() > 0)
+        // Wiwa: copy queue lists record no barriers: resources are in COMMON there and a copy promotes them implicitly (explicit
+        // COPY_DEST transitions on a copy queue make the debug layer report a layout mismatch). The tracker's states still move on,
+        // so a resource used on the copy queue is created in COMMON with keepInitialState and goes back to COMMON at the end of the list.
+        if (m_D3DBarriers.size() > 0 && m_Desc.queueType != CommandQueue::Copy)
             m_ActiveCommandList->commandList->ResourceBarrier(uint32_t(m_D3DBarriers.size()), m_D3DBarriers.data());
 
         m_StateTracker.clearBarriers();

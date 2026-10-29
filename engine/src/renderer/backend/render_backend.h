@@ -40,6 +40,9 @@ namespace wiwa
 		// waits for each frame to finish), 2 is the usual choice, clamped to 1..8.
 		u32 MaxFramesInFlight = 3;
 		GraphicsApi Api = GraphicsApi::Vulkan;
+		// Ask the backend for a copy queue for uploads (D3D12: a copy command queue; Vulkan: a dedicated transfer family).
+		// Not every backend or GPU has one: IRenderBackend::has_copy_queue() tells.
+		bool EnableCopyQueue = true;
 	};
 
 	enum class FrameStatus
@@ -64,6 +67,8 @@ namespace wiwa
 		virtual u32 get_width() const = 0;
 		virtual u32 get_height() const = 0;
 		virtual std::string get_adapter_name() const = 0;
+		// True when the NVRHI device has a queue for nvrhi::CommandQueue::Copy.
+		virtual bool has_copy_queue() const = 0;
 
 		// Any backbuffer framebuffer: pipelines are created against it, and all of them share a layout.
 		virtual nvrhi::IFramebuffer* get_reference_framebuffer() const = 0;

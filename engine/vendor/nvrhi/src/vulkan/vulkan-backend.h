@@ -159,6 +159,11 @@ namespace nvrhi::vulkan
         vk::AllocationCallbacks *allocationCallbacks;
         vk::PipelineCache pipelineCache;
 
+        // Wiwa: when a dedicated transfer queue exists, resources that are not render targets or UAVs are created CONCURRENT across
+        // the graphics and transfer families (NVRHI does no queue family ownership transfers). Count 0 = exclusive, as upstream.
+        uint32_t sharedQueueFamilies[2] = {};
+        uint32_t sharedQueueFamilyCount = 0;
+
         struct {
             bool KHR_synchronization2 = false;
             bool KHR_maintenance1 = false;

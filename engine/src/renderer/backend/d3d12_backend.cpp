@@ -95,6 +95,7 @@ namespace wiwa
 		deviceDescription.errorCB = get_nvrhi_message_callback();
 		deviceDescription.pDevice = m_D3DDevice.Get();
 		deviceDescription.pGraphicsCommandQueue = m_Queue.Get();
+		deviceDescription.pCopyCommandQueue = m_CopyQueue.Get();
 
 		m_NvrhiDevice = nvrhi::d3d12::createDevice(deviceDescription);
 		if (!m_NvrhiDevice)
@@ -136,6 +137,7 @@ namespace wiwa
 			m_FenceEvent = nullptr;
 		}
 		m_Queue.Reset();
+		m_CopyQueue.Reset();
 		m_D3DDevice.Reset();
 	}
 
@@ -266,6 +268,17 @@ namespace wiwa
 			return false;
 		}
 		m_FenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+
+		if (description.EnableCopyQueue)
+		{
+			D3D12_COMMAND_QUEUE_DESC copyDescription{};
+			copyDescription.Type = D3D12_COMMAND_LIST_TYPE_COPY;
+			if (FAILED(m_D3DDevice->CreateCommandQueue(&copyDescription, IID_PPV_ARGS(&m_CopyQueue))))
+			{
+				WI_LOG(Warning, "D3D12", "no copy queue, uploads use the graphics queue");
+				m_CopyQueue.Reset();
+			}
+		}
 
 		// Windows 10+ with a recent driver: without it, presenting with vsync off is still capped by the compositor.
 		ComPtr<IDXGIFactory5> factory5;

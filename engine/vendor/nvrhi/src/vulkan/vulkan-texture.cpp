@@ -219,7 +219,7 @@ namespace nvrhi::vulkan
     }
 
     // fills out all info fields in Texture based on a TextureDesc
-    static void fillTextureInfo(Texture *texture, const TextureDesc& desc)
+    static void fillTextureInfo(const VulkanContext& context, Texture *texture, const TextureDesc& desc)
     {
         texture->desc = desc;
 
@@ -242,6 +242,12 @@ namespace nvrhi::vulkan
                                 .setSharingMode(vk::SharingMode::eExclusive)
                                 .setSamples(sampleCount)
                                 .setFlags(flags);
+
+        // Wiwa: shared between the graphics and the transfer family (see VulkanContext::sharedQueueFamilies)
+        if (context.sharedQueueFamilyCount > 1 && !desc.isRenderTarget && !desc.isUAV)
+            texture->imageInfo.setSharingMode(vk::SharingMode::eConcurrent)
+                .setQueueFamilyIndexCount(context.sharedQueueFamilyCount)
+                .setPQueueFamilyIndices(context.sharedQueueFamilies);
         
 #if _WIN32
         const auto handleType = vk::ExternalMemoryHandleTypeFlagBits::eOpaqueWin32;
@@ -330,7 +336,7 @@ namespace nvrhi::vulkan
     {
         Texture *texture = new Texture(m_Context, m_Allocator);
         assert(texture);
-        fillTextureInfo(texture, desc);
+        fillTextureInfo(m_Context, texture, desc);
 
         vk::Result res = m_Context.device.createImage(&texture->imageInfo, m_Context.allocationCallbacks, &texture->image);
         ASSERT_VK_OK(res);
@@ -782,7 +788,7 @@ namespace nvrhi::vulkan
         vk::Image image(VkImage(_texture.integer));
 
         Texture *texture = new Texture(m_Context, m_Allocator);
-        fillTextureInfo(texture, desc);
+        fillTextureInfo(m_Context, texture, desc);
 
         texture->image = image;
         texture->managed = false;

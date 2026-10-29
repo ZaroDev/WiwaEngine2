@@ -21,6 +21,7 @@ namespace wiwa
 		~D3D12Backend() override;
 
 		std::string get_adapter_name() const override { return m_AdapterName; }
+		bool has_copy_queue() const override { return m_CopyQueue != nullptr; }
 
 		bool initialize(const RendererDescription& description, u32 width, u32 height) override;
 		void shutdown() override;
@@ -46,6 +47,7 @@ namespace wiwa
 	private:
 		Microsoft::WRL::ComPtr<ID3D12Device> m_D3DDevice{};
 		Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_Queue{};
+		Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_CopyQueue{}; // null when the copy queue is off or could not be created
 		Microsoft::WRL::ComPtr<IDXGISwapChain3> m_Swapchain{};
 
 		// Waits for everything on the queue, the Present included (NVRHI only knows its own command lists).

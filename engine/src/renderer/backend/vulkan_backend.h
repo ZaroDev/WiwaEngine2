@@ -19,6 +19,7 @@ namespace wiwa
 		~VulkanBackend() override;
 
 		std::string get_adapter_name() const override { return m_VkbDevice.physical_device.name; }
+		bool has_copy_queue() const override { return m_TransferQueue != VK_NULL_HANDLE; }
 
 		bool initialize(const RendererDescription& description, u32 width, u32 height) override;
 		void shutdown() override;
@@ -53,6 +54,8 @@ namespace wiwa
 		VkQueue m_GraphicsQueue{ VK_NULL_HANDLE };
 		VkQueue m_PresentQueue{ VK_NULL_HANDLE };
 		u32 m_GraphicsQueueIndex{};
+		VkQueue m_TransferQueue{ VK_NULL_HANDLE }; // a dedicated transfer family, when the GPU has one and the copy queue is on
+		u32 m_TransferQueueIndex{};
 
 		std::vector<std::string> m_InstanceExtensions{};
 		std::vector<std::string> m_DeviceExtensions{};

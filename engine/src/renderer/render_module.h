@@ -16,6 +16,7 @@
 namespace wiwa
 {
 	class ImGuiRenderPass;
+	class RenderWorld;
 
 	// The main-thread face of the renderer: the only thing the rest of the engine talks to. It owns the render thread and
 	// hands it one batch per frame; the Renderer, the backend and every GPU object live on that thread.
@@ -57,6 +58,7 @@ namespace wiwa
 		void apply_reloads();
 		void publish_snapshot();
 		void fail_and_quit(const char* reason);
+		void run_render_test(RenderWorld& world);
 
 		RendererDescription m_Description{};
 		ImGuiLayer m_ImGui{};
@@ -72,6 +74,9 @@ namespace wiwa
 		u32 m_ReloadListenerId = 0;
 		u64 m_FrameIndex = 0;
 		u64 m_SmokeFrames = 0; // --render-smoke: quit after this many frames, with exit code 1 if the GPU layers reported an error
+		bool m_RenderTest = false;                // --render-test: run the render checks once the passes are ready, then quit
+		u32 m_RenderTestWaitFrames = 0;           // render thread: frames waited for the passes
+		std::atomic<int> m_RenderTestResult{ 0 }; // 0 running, 1 passed, 2 failed
 
 		// Render thread only: the frame rate, averaged over a window.
 		std::chrono::steady_clock::time_point m_StatsLast{};

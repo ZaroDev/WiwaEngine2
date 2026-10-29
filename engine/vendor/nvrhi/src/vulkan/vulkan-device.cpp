@@ -71,6 +71,13 @@ namespace nvrhi::vulkan
         {
             m_Queues[uint32_t(CommandQueue::Copy)] = std::make_unique<Queue>(m_Context,
                 CommandQueue::Copy, desc.transferQueue, desc.transferQueueIndex);
+
+            if (desc.graphicsQueue && desc.graphicsQueueIndex >= 0 && desc.transferQueueIndex >= 0 && desc.graphicsQueueIndex != desc.transferQueueIndex)
+            {
+                m_Context.sharedQueueFamilies[0] = uint32_t(desc.graphicsQueueIndex);
+                m_Context.sharedQueueFamilies[1] = uint32_t(desc.transferQueueIndex);
+                m_Context.sharedQueueFamilyCount = 2;
+            }
         }
 
         // maps Vulkan extension strings into the corresponding boolean flags in Device
