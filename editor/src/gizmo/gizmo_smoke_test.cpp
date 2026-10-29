@@ -11,6 +11,8 @@
 #include <scene/scene_editor.h>
 #include <scene/scene_module.h>
 
+#include "gizmo_settings.h"
+#include "scene_gizmos.h"
 #include "transform_gizmo.h"
 #include "viewport_selection.h"
 
@@ -380,6 +382,185 @@ namespace wiwa
 				check(finite(inside.position(close)) && finite(inside.scale(close)) && finite(inside.rotation(close)), "a camera inside the gizmo writes no NaN");
 			}
 		}
+
+		size_t line_count(const DebugDrawData& data) { return data.Lines[0].size() + data.Lines[1].size(); }
+
+		entt::entity make_light(Rig& rig, glm::vec3 position, LightKind kind, float range = 10.0f)
+		{
+			const entt::entity entity = rig.make(position);
+			rig.Editor.add_component(entity, "Light");
+			rig.Editor.set_field(entity, "Light", "Kind", FieldValue(static_cast<i32>(kind)));
+			rig.Editor.set_field(entity, "Light", "Range", FieldValue(range));
+			return entity;
+		}
+
+		void check_scene_gizmos(Check& check)
+		{
+			Rig rig;
+			const entt::entity point = make_light(rig, glm::vec3(1.0f, 0.0f, 0.0f), LightKind::Point);
+			const entt::entity spot = make_light(rig, glm::vec3(2.0f, 0.0f, 0.0f), LightKind::Spot);
+			const entt::entity sun = make_light(rig, glm::vec3(3.0f, 0.0f, 0.0f), LightKind::Directional);
+			const entt::entity camera = rig.make(glm::vec3(0.0f, 0.0f, 5.0f));
+			rig.Editor.add_component(camera, "Camera");
+			const entt::entity mesh = rig.make(glm::vec3(0.0f, 2.0f, 0.0f));
+			rig.Editor.add_component(mesh, "MeshRenderer");
+			rig.Editor.scene().update_world_transforms();
+
+			SceneGizmos gizmos([](const AssetRef&) { return std::optional<std::pair<glm::vec3, glm::vec3>>(std::pair<glm::vec3, glm::vec3>(glm::vec3(-1.0f), glm::vec3(1.0f))); });
+			SceneGizmoView view;
+			view.View = rig.Cam.View;
+			view.Projection = rig.Cam.Projection;
+			view.ViewportHeight = VIEWPORT.y;
+			Scene& scene = rig.Editor.scene();
+			DebugDraw draw;
+			GizmoSettings settings;
+
+			// Nothing selected: a marker for every light (3 lines), the sun's arrow (5), the camera's marker (3) and frustum (12).
+			gizmos.draw(draw, scene, entt::null, settings, view);
+			DebugDrawData data = draw.seal(0.0f);
+			check(line_count(data) == 3 * 3 + 5 + 3 + 12, "nothing selected: light markers, the sun's arrow, the camera's marker and frustum (" + std::to_string(line_count(data)) + " lines)");
+			check(data.PickIcons.size() == 4, "every light and camera can be picked");
+			check(data.Triangles[0].empty() && data.Triangles[1].empty(), "no triangles are drawn");
+
+			// A selected point light also shows its range: a sphere (3 circles of 32 segments).
+			gizmos.draw(draw, scene, point, settings, view);
+			data = draw.seal(0.0f);
+			check(line_count(data) == 3 * 3 + 5 + 3 + 12 + 96, "a selected point light adds its range sphere (" + std::to_string(line_count(data)) + " lines)");
+
+			// A selected spot light shows its cone (a base circle of 32 segments and 8 side lines).
+			gizmos.draw(draw, scene, spot, settings, view);
+			data = draw.seal(0.0f);
+			check(line_count(data) == 3 * 3 + 5 + 3 + 12 + 40, "a selected spot light adds its cone (" + std::to_string(line_count(data)) + " lines)");
+
+			// The light points down -Z (its forward axis): the 8 lines from the apex reach the base, a range of 10 away.
+			const glm::vec3 apex(2.0f, 0.0f, 0.0f);
+			u32 sides = 0;
+			for (const std::vector<DebugLine>& lines : data.Lines)
+			{
+				for (const DebugLine& line : lines)
+				{
+					const bool fromApex = near_to(line.A, apex, 1e-4f);
+					const glm::vec3& other = fromApex ? line.B : line.A;
+					if ((fromApex || near_to(line.B, apex, 1e-4f)) && near_to(other.z, -10.0f, 1e-3f))
+					{
+						sides++;
+					}
+				}
+			}
+			check(sides == 8, "the spot light's cone opens along its forward axis, 10 units deep (" + std::to_string(sides) + " side lines)");
+
+			// A selected sun has nothing more than every sun has.
+			gizmos.draw(draw, scene, sun, settings, view);
+			check(line_count(draw.seal(0.0f)) == 3 * 3 + 5 + 3 + 12, "a selected sun adds nothing");
+
+			// A selected mesh shows its world bounds (12 lines).
+			gizmos.draw(draw, scene, mesh, settings, view);
+			data = draw.seal(0.0f);
+			check(line_count(data) == 3 * 3 + 5 + 3 + 12 + 12, "a selected mesh adds its bounds (" + std::to_string(line_count(data)) + " lines)");
+
+			// A mesh that has not loaded has no bounds to show.
+			SceneGizmos unloaded([](const AssetRef&) { return std::optional<std::pair<glm::vec3, glm::vec3>>(); });
+			unloaded.draw(draw, scene, mesh, settings, view);
+			check(line_count(draw.seal(0.0f)) == 3 * 3 + 5 + 3 + 12, "a mesh that has not loaded shows no bounds");
+
+			// The categories switch off separately.
+			GizmoSettings noLights = settings;
+			noLights.Lights = false;
+			gizmos.draw(draw, scene, point, noLights, view);
+			data = draw.seal(0.0f);
+			check(line_count(data) == 3 + 12 && data.PickIcons.size() == 1, "lights off: only the camera is left, with its icon (" + std::to_string(line_count(data)) + " lines)");
+
+			GizmoSettings noCameras = settings;
+			noCameras.Cameras = false;
+			gizmos.draw(draw, scene, entt::null, noCameras, view);
+			data = draw.seal(0.0f);
+			check(line_count(data) == 3 * 3 + 5 && data.PickIcons.size() == 3, "cameras off: only the lights are left");
+
+			GizmoSettings noBounds = settings;
+			noBounds.Bounds = false;
+			gizmos.draw(draw, scene, mesh, noBounds, view);
+			check(line_count(draw.seal(0.0f)) == 3 * 3 + 5 + 3 + 12, "bounds off: a selected mesh shows nothing extra");
+
+			// Values that cannot be drawn are dropped, not drawn.
+			rig.Editor.set_field(point, "Light", "Range", FieldValue(0.0f));
+			rig.Editor.set_field(spot, "Light", "Range", FieldValue(-1.0f));
+			gizmos.draw(draw, scene, point, settings, view);
+			gizmos.draw(draw, scene, spot, settings, view);
+			data = draw.seal(0.0f);
+			check(line_count(data) == 2 * (3 * 3 + 5 + 3 + 12), "a light with no range shows no sphere or cone");
+
+			// A view that cannot size the markers falls back to a size, and nothing is NaN.
+			SceneGizmoView broken;
+			broken.View = glm::mat4(std::numeric_limits<float>::quiet_NaN());
+			gizmos.draw(draw, scene, entt::null, settings, broken);
+			data = draw.seal(0.0f);
+			bool allFinite = true;
+			for (const std::vector<DebugLine>& lines : data.Lines)
+			{
+				for (const DebugLine& line : lines)
+				{
+					allFinite = allFinite && finite(line.A) && finite(line.B);
+				}
+			}
+			check(allFinite && line_count(data) > 0, "a view that cannot be used still gives finite markers");
+
+			// An entity that was deleted, as the selection.
+			const entt::entity gone = rig.make(glm::vec3(0.0f));
+			rig.Editor.delete_entity(gone);
+			gizmos.draw(draw, scene, gone, settings, view);
+			check(line_count(draw.seal(0.0f)) > 0, "a stale selection is ignored");
+		}
+
+		void check_gizmo_settings(Check& check)
+		{
+			namespace fs = std::filesystem;
+			const fs::path file = fs::temp_directory_path() / "wiwa_gizmo_settings_smoke.json";
+			std::error_code error;
+			fs::remove(file, error);
+
+			check(GizmoSettings::load(file) == GizmoSettings{}, "a missing file gives the defaults");
+
+			GizmoSettings changed;
+			changed.Lights = false;
+			changed.Cameras = false;
+			changed.Bounds = false;
+			changed.Outline.Color = glm::vec3(0.1f, 0.2f, 0.3f);
+			changed.Outline.WidthPx = 3.0f;
+			changed.Outline.OccludedAlpha = 0.6f;
+			changed.Outline.Enabled = false;
+			check(changed.save(file), "the settings can be saved");
+			check(GizmoSettings::load(file) == changed, "and load back as they were");
+
+			auto write = [&](const std::string& text)
+			{
+				std::ofstream out(file, std::ios::binary | std::ios::trunc);
+				out << text;
+			};
+
+			write("this is not json {{{");
+			check(GizmoSettings::load(file) == GizmoSettings{}, "a corrupt file gives the defaults");
+			write("");
+			check(GizmoSettings::load(file) == GizmoSettings{}, "an empty file gives the defaults");
+			write("[1, 2, 3]");
+			check(GizmoSettings::load(file) == GizmoSettings{}, "json of the wrong shape gives the defaults");
+
+			write(R"({"lights": false})");
+			GizmoSettings partial = GizmoSettings::load(file);
+			check(!partial.Lights && partial.Cameras && partial.Bounds && partial.Outline == SelectionOutlineStyle{}, "keys that are missing keep their defaults");
+
+			write(R"({"lights": "yes", "outline": {"width": "wide", "color": [1, 2], "occludedAlpha": null}})");
+			check(GizmoSettings::load(file) == GizmoSettings{}, "values of the wrong type are ignored");
+
+			write(R"({"outline": {"width": 100, "occludedAlpha": 7, "color": [5, -5, 0.5]}})");
+			const GizmoSettings clamped = GizmoSettings::load(file);
+			check(clamped.Outline.WidthPx == 8.0f && clamped.Outline.OccludedAlpha == 1.0f && clamped.Outline.Color == glm::vec3(1.0f, 0.0f, 0.5f), "out-of-range values are clamped");
+
+			write(R"({"outline": {"width": 0}})");
+			check(GizmoSettings::load(file).Outline.WidthPx == 1.0f, "a width of 0 becomes the smallest width");
+
+			fs::remove(file, error);
+			check(!changed.save(fs::temp_directory_path() / "wiwa_no_such_folder_xyz" / "settings.json"), "saving where it cannot fails without a crash");
+		}
 	}
 
 	bool run_gizmo_smoke_test(AssetPipelineModule& pipeline)
@@ -393,6 +574,8 @@ namespace wiwa
 		check_hierarchy_and_space(check);
 		check_rotate_and_scale(check);
 		check_bad_input(check);
+		check_scene_gizmos(check);
+		check_gizmo_settings(check);
 
 		if (check.Failures == 0)
 		{

@@ -32,6 +32,8 @@ namespace wiwa
 		float WidthPx = 2.0f;        // 1..8
 		float OccludedAlpha = 0.35f; // strength of the parts that something in front of the selection hides
 		bool Enabled = true;
+
+		bool operator==(const SelectionOutlineStyle&) const = default;
 	};
 
 	struct RenderLight

@@ -5,6 +5,7 @@
 
 #include <imgui.h>
 
+#include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <gizmo/viewport_selection.h>
 #include <renderer/render_module.h>
@@ -15,6 +16,11 @@ namespace
 	{
 		return (ImGui::IsKeyDown(positive) ? 1.0f : 0.0f) - (ImGui::IsKeyDown(negative) ? 1.0f : 0.0f);
 	}
+}
+
+ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor)
+	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>()), m_GizmoSettings(wiwa::GizmoSettings::load())
+{
 }
 
 void ViewportPanel::on_draw()
@@ -85,6 +91,32 @@ void ViewportPanel::on_draw()
 			ImGui::SameLine();
 			bool local = m_Gizmo.space == wiwa::gizmo::Space::Local;
 			if (ImGui::Checkbox("Local", &local)) { m_Gizmo.space = local ? wiwa::gizmo::Space::Local : wiwa::gizmo::Space::World; }
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Gizmos"))
+			{
+				ImGui::OpenPopup("##gizmo_settings");
+			}
+			if (ImGui::BeginPopup("##gizmo_settings"))
+			{
+				wiwa::GizmoSettings& settings = m_GizmoSettings;
+				bool changed = false;
+				changed |= ImGui::Checkbox("Lights", &settings.Lights);
+				changed |= ImGui::Checkbox("Cameras", &settings.Cameras);
+				changed |= ImGui::Checkbox("Bounds of the selection", &settings.Bounds);
+				ImGui::Separator();
+				changed |= ImGui::Checkbox("Outline the selection", &settings.Outline.Enabled);
+				changed |= ImGui::ColorEdit3("Outline color", &settings.Outline.Color.x, ImGuiColorEditFlags_NoInputs);
+				changed |= ImGui::SliderFloat("Outline width", &settings.Outline.WidthPx, 1.0f, 8.0f, "%.0f px");
+				changed |= ImGui::SliderFloat("Hidden part", &settings.Outline.OccludedAlpha, 0.0f, 1.0f, "%.2f");
+				m_GizmoSettingsChanged |= changed;
+				ImGui::EndPopup();
+			}
+			if (m_GizmoSettingsChanged && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+			{
+				m_GizmoSettings.save();
+				m_GizmoSettingsChanged = false;
+			}
+			render->set_outline_style(m_GizmoSettings.Outline);
 			if (!render->get_snapshot().HasCamera)
 			{
 				ImGui::SetCursorPos(ImVec2(8.0f, 50.0f));
@@ -112,9 +144,13 @@ void ViewportPanel::on_draw()
 
 			const bool clicked = overImage && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 			bool gizmoHasMouse = false;
+			wiwa::SceneGizmoView sceneView; // without the editor camera the markers cannot be sized for the screen
 			if (m_UseEditorCamera)
 			{
 				const wiwa::RenderCamera camera = m_Camera.get(size.x / std::max(size.y, 1.0f));
+				sceneView.View = camera.View;
+				sceneView.Projection = camera.Projection;
+				sceneView.ViewportHeight = size.y;
 				wiwa::GizmoInput input;
 				input.MousePixel = glm::vec2(io.MousePos.x - imageMin.x, io.MousePos.y - imageMin.y);
 				input.ViewportSize = glm::vec2(size.x, size.y);
@@ -126,6 +162,8 @@ void ViewportPanel::on_draw()
 				input.Projection = camera.Projection;
 				gizmoHasMouse = m_Gizmo.update(render->get_debug_draw(), input, m_Editor);
 			}
+
+			m_SceneGizmos.draw(render->get_debug_draw(), m_Editor.scene(), m_Editor.selected(), m_GizmoSettings, sceneView);
 
 			if (clicked && !gizmoHasMouse)
 			{
