@@ -2,8 +2,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <mutex>
 #include <vector>
 
+#include <assets/asset_guid.h>
 #include <core/module.h>
 
 #include "imgui_layer.h"
@@ -52,6 +54,7 @@ namespace wiwa
 
 	private:
 		bool read_arguments();
+		void apply_reloads();
 		void publish_snapshot();
 		void fail_and_quit(const char* reason);
 
@@ -62,6 +65,11 @@ namespace wiwa
 		Scope<Renderer> m_Renderer{}; // created, used and destroyed on the render thread
 		ImGuiRenderPass* m_ImGuiPass = nullptr; // owned by the renderer; set on the render thread during start
 		std::vector<RenderCommand> m_PendingCommands{};
+
+		// Assets the editor cooked again, noted by whichever thread reports it and taken by the render thread each frame.
+		std::mutex m_ReloadMutex{};
+		std::vector<AssetGuid> m_ReloadedAssets{};
+		u32 m_ReloadListenerId = 0;
 		u64 m_FrameIndex = 0;
 
 		// Render thread only: the frame rate, averaged over a window.

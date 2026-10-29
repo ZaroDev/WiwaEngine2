@@ -228,10 +228,18 @@ namespace wiwa
 		}
 	}
 
-	void AssetManager::add_reload_listener(std::function<void(AssetGuid)> listener)
+	u32 AssetManager::add_reload_listener(std::function<void(AssetGuid)> listener)
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);
-		m_ReloadListeners.push_back(std::move(listener));
+		const u32 id = m_NextListenerId++;
+		m_ReloadListeners.emplace_back(id, std::move(listener));
+		return id;
+	}
+
+	void AssetManager::remove_reload_listener(u32 id)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		std::erase_if(m_ReloadListeners, [id](const auto& entry) { return entry.first == id; });
 	}
 
 	void AssetManager::notify_reimported(AssetGuid resolvedGuid)
@@ -240,7 +248,10 @@ namespace wiwa
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex);
 			m_Cache.erase(resolvedGuid);
-			listeners = m_ReloadListeners;
+			for (const auto& entry : m_ReloadListeners)
+			{
+				listeners.push_back(entry.second);
+			}
 		}
 
 		for (auto& listener : listeners)

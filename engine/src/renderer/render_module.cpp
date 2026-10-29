@@ -50,6 +50,8 @@ namespace wiwa
 			},
 			[this](RenderBatch& batch)
 			{
+				apply_reloads();
+
 				// The commands first (they change the render-side state), then the frame.
 				RenderWorld world(*m_Renderer);
 				for (const RenderCommand& command : batch.Commands)
@@ -81,6 +83,13 @@ namespace wiwa
 
 		m_Started = true;
 
+		// Hot reload: an asset cooked again is reported from the importer's thread; the render thread picks it up next frame.
+		m_ReloadListenerId = m_Description.Assets->add_reload_listener([this](AssetGuid guid)
+			{
+				std::lock_guard<std::mutex> lock(m_ReloadMutex);
+				m_ReloadedAssets.push_back(guid);
+			});
+
 		if (!m_ImGui.init(m_Description.Window))
 		{
 			fail_and_quit("Could not start the UI");
@@ -91,12 +100,33 @@ namespace wiwa
 	{
 		// Closes the queue, so a frame that is waiting to be submitted does not block the quit, and lets the render thread
 		// finish its frame, wait for the GPU and destroy everything before the window goes away.
+		if (m_ReloadListenerId != 0)
+		{
+			m_Description.Assets->remove_reload_listener(m_ReloadListenerId);
+			m_ReloadListenerId = 0;
+		}
+
 		m_Thread.stop();
 		m_Renderer.reset();
 		m_ImGuiPass = nullptr;
 		m_ImGui.shutdown();
 		m_Started = false;
 		WI_RENDER_LOG(Info, "Shutdown");
+	}
+
+	// Render thread: shaders that were cooked again are loaded again; the old ones stay in use until the new ones are ready.
+	void RenderModule::apply_reloads()
+	{
+		std::vector<AssetGuid> reloaded;
+		{
+			std::lock_guard<std::mutex> lock(m_ReloadMutex);
+			reloaded.swap(m_ReloadedAssets);
+		}
+
+		for (AssetGuid guid : reloaded)
+		{
+			m_Renderer->get_shader_library()->invalidate(guid);
+		}
 	}
 
 	void RenderModule::set_vsync(bool enabled)

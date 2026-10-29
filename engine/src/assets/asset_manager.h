@@ -61,7 +61,9 @@ namespace wiwa
 		// already exist keep the old data) and tells the listeners, which can load it again. May be called from any thread;
 		// the listeners run on the calling thread.
 		void notify_reimported(AssetGuid resolvedGuid);
-		void add_reload_listener(std::function<void(AssetGuid)> listener);
+		// Returns an id for remove_reload_listener; the owner of a listener removes it before it is destroyed.
+		u32 add_reload_listener(std::function<void(AssetGuid)> listener);
+		void remove_reload_listener(u32 id);
 
 		// Blocks until no load is pending. For tools and tests; the game polls the handles.
 		void wait_idle() const;
@@ -92,7 +94,8 @@ namespace wiwa
 		mutable std::mutex m_Mutex{};
 		std::unordered_map<AssetGuid, Ref<AssetSlot>> m_Cache{};
 		std::atomic<u32> m_Pending{ 0 };
-		std::vector<std::function<void(AssetGuid)>> m_ReloadListeners{};
+		std::vector<std::pair<u32, std::function<void(AssetGuid)>>> m_ReloadListeners{};
+		u32 m_NextListenerId = 1;
 		std::vector<Ref<LoadBatch>> m_Batches{};
 	};
 }
