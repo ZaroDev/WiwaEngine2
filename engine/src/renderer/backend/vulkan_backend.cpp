@@ -20,15 +20,19 @@ namespace wiwa
 
 	namespace
 	{
-		// The validation layer's messages go to the log; errors are counted for the render smoke test.
+		// The validation layer's messages go to the log. Validation errors (wrong use of the API) are counted for the render
+		// smoke test; errors of the loader itself (a broken third-party layer manifest, say) are logged but are not ours.
 		VKAPI_ATTR VkBool32 VKAPI_CALL vulkan_debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-			VkDebugUtilsMessageTypeFlagsEXT, const VkDebugUtilsMessengerCallbackDataEXT* data, void*)
+			VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT* data, void*)
 		{
 			switch (severity)
 			{
 			case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
 				WI_LOG(Error, "Vulkan", "{0}", data->pMessage);
-				report_backend_error();
+				if (type & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
+				{
+					report_backend_error();
+				}
 				break;
 			case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
 				WI_LOG(Warning, "Vulkan", "{0}", data->pMessage);

@@ -71,6 +71,7 @@ namespace wiwa
 		std::vector<AssetGuid> m_ReloadedAssets{};
 		u32 m_ReloadListenerId = 0;
 		u64 m_FrameIndex = 0;
+		u64 m_SmokeFrames = 0; // --render-smoke: quit after this many frames, with exit code 1 if the GPU layers reported an error
 
 		// Render thread only: the frame rate, averaged over a window.
 		std::chrono::steady_clock::time_point m_StatsLast{};

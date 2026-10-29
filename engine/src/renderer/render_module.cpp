@@ -106,11 +106,29 @@ namespace wiwa
 			m_ReloadListenerId = 0;
 		}
 
+		const bool wasStarted = m_Started;
+
 		m_Thread.stop();
 		m_Renderer.reset();
 		m_ImGuiPass = nullptr;
 		m_ImGui.shutdown();
 		m_Started = false;
+
+		if (m_SmokeFrames > 0 && wasStarted)
+		{
+			// Decided here, after the thread has stopped and the backend is gone: the last frames and the teardown count too.
+			const u32 errors = get_error_message_count();
+			if (errors == 0 && !m_Failed)
+			{
+				WI_RENDER_LOG(Info, "Render smoke test passed ({0} frames on {1})", m_FrameIndex, graphics_api_name(m_Description.Api));
+			}
+			else
+			{
+				WI_RENDER_LOG(Error, "Render smoke test FAILED ({0} GPU error message(s){1})", errors, m_Failed ? ", the renderer failed" : "");
+				Engine::get().set_exit_code(1);
+			}
+		}
+
 		WI_RENDER_LOG(Info, "Shutdown");
 	}
 
@@ -227,6 +245,11 @@ namespace wiwa
 				});
 		}
 
+		if (m_SmokeFrames > 0 && m_FrameIndex >= m_SmokeFrames)
+		{
+			Engine::get().request_quit();
+		}
+
 		// Blocks while the render thread is two frames behind.
 		if (!m_Thread.submit(std::move(batch)))
 		{
@@ -255,6 +278,22 @@ namespace wiwa
 			else if (argument == "--gpu-validation")
 			{
 				m_Description.EnableValidation = true;
+			}
+		}
+
+		// --render-smoke <frames>
+		const std::vector<std::string>& arguments = Engine::get().get_arguments();
+		for (size_t i = 0; i < arguments.size(); i++)
+		{
+			if (arguments[i] == "--render-smoke")
+			{
+				m_SmokeFrames = (i + 1 < arguments.size()) ? std::strtoull(arguments[i + 1].c_str(), nullptr, 10) : 0;
+				if (m_SmokeFrames == 0)
+				{
+					WI_RENDER_LOG(Error, "--render-smoke needs a number of frames");
+					fail_and_quit("Invalid command line");
+					return false;
+				}
 			}
 		}
 
