@@ -71,3 +71,8 @@ Editor/game_assembly/build
 # Rider files
 .idea/
 *sln.DotSettings.user
+
+# Asset system
+Library/
+*.wpak
+.superpowers/

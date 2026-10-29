@@ -30,11 +30,19 @@ project "wiwa"
 		"%{IncludeDirs.nvrhi}",
 		"%{IncludeDirs.VulkanSDK}",
 		"%{IncludeDirs.vkbootstrap}",
-		"%{IncludeDirs.ImGui}"
+		"%{IncludeDirs.ImGui}",
+		"%{IncludeDirs.NJSON}",
+		"%{IncludeDirs.STB}",
+		"%{IncludeDirs.CGLTF}",
+		"%{IncludeDirs.UFBX}",
+		"%{IncludeDirs.LZ4}",
+		"%{IncludeDirs.filewatch}"
 	}
 
 	links
 	{
+		"LZ4",
+		"ufbx",
 		"GLFW",
 		"nvrhi",
 		"%{LibraryDirs.VulkanSDK}/vulkan-1.lib",
