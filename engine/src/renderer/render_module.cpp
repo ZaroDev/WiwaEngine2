@@ -12,6 +12,7 @@
 #include "passes/imgui_pass.h"
 #include "passes/light_cull_pass.h"
 #include "passes/resolve_pass.h"
+#include "passes/shadow_pass.h"
 #include "shader_library.h"
 #include "render_world.h"
 #include "test/render_test.h"
@@ -52,7 +53,8 @@ namespace wiwa
 				// The scene first (depth, shading, the 8-bit image); the UI goes over everything else, so its pass is the last one.
 				Scope<ImGuiRenderPass> imguiPass = CreateScope<ImGuiRenderPass>();
 				m_ImGuiPass = imguiPass.get();
-				return m_Renderer->add_pass(CreateScope<DepthPrepass>())
+				return m_Renderer->add_pass(CreateScope<ShadowPass>())
+					&& m_Renderer->add_pass(CreateScope<DepthPrepass>())
 					&& m_Renderer->add_pass(CreateScope<LightCullPass>())
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>())
 					&& m_Renderer->add_pass(CreateScope<ResolvePass>())

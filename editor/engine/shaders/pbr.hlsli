@@ -120,6 +120,84 @@ float3 DirectLight(SurfaceData surface, float3 toTheLight, float3 radiance)
 	return (diffuse + specular) * radiance * (PI * nDotL);
 }
 
+// How much of the sun reaches a point (1 = all, 0 = none): the cascade is chosen by view depth, the receiver is moved along its normal,
+// and 3x3 hardware-filtered comparisons soften the edge.
+float SunShadow(float3 worldPosition, float3 normal, float nDotL)
+{
+	if (ShadowParams.x < 0.5)
+	{
+		return 1.0;
+	}
+
+	float viewDepth = -mul(View, float4(worldPosition, 1.0)).z;
+	uint count = (uint)ShadowParams.y;
+	if (viewDepth > CascadeSplits[count - 1])
+	{
+		return 1.0; // beyond the shadow distance
+	}
+	uint cascade = 0;
+	for (uint c = 0; c + 1 < count; c++)
+	{
+		if (viewDepth > CascadeSplits[c])
+		{
+			cascade = c + 1;
+		}
+	}
+
+	float3 receiver = worldPosition + normal * (CascadeTexels[cascade] * ShadowParams.w);
+	float4 clip = mul(ShadowMatrices[cascade], float4(receiver, 1.0));
+	float2 uv = float2(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
+	if (any(uv < 0.0) || any(uv > 1.0) || clip.z > 1.0)
+	{
+		return 1.0;
+	}
+
+	float reference = clip.z - ShadowParams.z * (1.0 + 2.0 * (1.0 - nDotL));
+	float lit = 0.0;
+	for (int y = -1; y <= 1; y++)
+	{
+		for (int x = -1; x <= 1; x++)
+		{
+			float2 offset = float2(x, y) / CASCADE_MAP_SIZE;
+			lit += uShadowCascades.SampleCmpLevelZero(uShadowSampler, float3(uv + offset, cascade), reference);
+		}
+	}
+	return lit / 9.0;
+}
+
+// The same for a spot light's tile of the atlas (perspective depth).
+float SpotShadow(GpuLight light, float3 worldPosition, float3 normal)
+{
+	uint slot = light.ShadowIndex - 1;
+	float distanceToLight = length(light.Position - worldPosition);
+	float texelWorld = 2.0 * distanceToLight * SpotShadowInfo[slot].x / SPOT_TILE_SIZE;
+	float3 receiver = worldPosition + normal * (texelWorld * ShadowParams.w);
+
+	float4 clip = mul(ShadowMatrices[4 + slot], float4(receiver, 1.0));
+	if (clip.w <= 0.0)
+	{
+		return 1.0;
+	}
+	clip.xyz /= clip.w;
+	float2 tile = float2(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
+	if (any(tile < 0.0) || any(tile > 1.0) || clip.z > 1.0)
+	{
+		return 1.0;
+	}
+
+	float2 uv = SpotShadowRects[slot].xy + tile * SpotShadowRects[slot].zw;
+	float reference = clip.z - ShadowParams2.x;
+	float lit = 0.0;
+	for (int y = -1; y <= 1; y++)
+	{
+		for (int x = -1; x <= 1; x++)
+		{
+			lit += uSpotAtlas.SampleCmpLevelZero(uShadowSampler, uv + float2(x, y) / SPOT_ATLAS_SIZE, reference);
+		}
+	}
+	return lit / 9.0;
+}
+
 // A point or spot light: inverse-square falloff with a smooth cut at its range, and the cone for a spot.
 float3 LocalLight(SurfaceData surface, GpuLight light)
 {
@@ -139,6 +217,10 @@ float3 LocalLight(SurfaceData surface, GpuLight light)
 		float angle = dot(-direction, light.Direction);
 		float cone = saturate((angle - light.OuterCos) / max(light.InnerCos - light.OuterCos, 1e-4));
 		attenuation *= cone * cone;
+		if (light.ShadowIndex > 0)
+		{
+			attenuation *= SpotShadow(light, surface.Position, surface.Normal);
+		}
 	}
 	return DirectLight(surface, direction, light.Color * (light.Intensity * attenuation));
 }

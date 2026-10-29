@@ -54,6 +54,14 @@ namespace wiwa
 		float AmbientIntensity = 0.3f;
 		glm::vec3 Background{ 0.05f, 0.06f, 0.08f }; // what is behind the geometry
 		float Exposure = 1.0f;
+
+		// Shadows: the sun's cascades reach ShadowDistance in front of the camera.
+		float ShadowDistance = 60.0f;
+		u32 ShadowCascades = 4;           // 1..4
+		float ShadowSplitLambda = 0.8f;   // 0 = even splits, 1 = logarithmic
+		float ShadowDepthBias = 0.0006f;  // in depth units of the shadow map, scaled up on surfaces turned away from the light
+		float ShadowNormalBias = 1.5f;    // texels: receivers are moved along their normal by this much before they are looked up
+		float SpotShadowBias = 0.0004f;
 	};
 
 	// Everything that changed on the main thread since the last frame.

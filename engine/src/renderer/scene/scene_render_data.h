@@ -21,6 +21,10 @@ namespace wiwa
 	constexpr u32 MAX_LIGHTS_PER_CLUSTER = 64;
 	constexpr u32 MAX_LIGHTS = 1024;
 
+	constexpr u32 MAX_SPOT_SHADOWS = 4;
+	constexpr u32 SPOT_TILE_SIZE = 1024;
+	constexpr u32 SPOT_ATLAS_SIZE = 4096;
+
 	// One point or spot light as the shaders read it (GpuLight in scene_common.hlsli).
 	struct GpuLight
 	{
@@ -74,8 +78,25 @@ namespace wiwa
 		glm::vec4 ViewportSize{ 1.0f };   // width, height, 1 / width, 1 / height
 		glm::vec4 ClusterParams{ 0.0f };  // x = slice scale, y = slice bias, z = 1 when the camera is orthographic
 		glm::uvec4 LightInfo{ 0 };        // x = number of lights
+		glm::mat4 ShadowMatrices[8]{};    // 0..3 the sun's cascades, 4..7 the shadowed spot lights
+		glm::vec4 CascadeSplits{ 0.0f };  // view depth at which each cascade ends
+		glm::vec4 CascadeTexels{ 0.0f };  // world size of a texel of each cascade
+		glm::vec4 ShadowParams{ 0.0f };   // x = 1 when the sun casts shadows, y = cascade count, z = depth bias, w = normal bias (texels)
+		glm::vec4 ShadowParams2{ 0.0f };  // x = spot depth bias
+		glm::vec4 SpotShadowRects[4]{};   // atlas tile of each shadowed spot light: offset xy, scale zw
+		glm::vec4 SpotShadowInfo[4]{};    // x = tan(half the cone angle)
 	};
 	static_assert(sizeof(FrameConstants) % 16 == 0);
+
+	// One shadow map to render this frame and the casters in it.
+	struct ShadowView
+	{
+		glm::mat4 ViewProjection{ 1.0f };
+		u32 MatrixIndex = 0;  // index into FrameConstants::ShadowMatrices, also what the draws carry as their "material"
+		bool Atlas = false;   // a tile of the spot atlas, else a slice of the cascade array
+		u32 Slice = 0;        // cascade, or tile
+		std::vector<DrawItem> Items{};
+	};
 
 	// What the scene passes share for one frame: the draw lists (culled against the camera), the buffers they read and the binding
 	// set that carries them. Built on the render thread once per frame, after the GPU resource cache has been updated.
@@ -114,12 +135,21 @@ namespace wiwa
 		const std::vector<GpuLight>& lights() const { return m_Lights; }
 		u32 dropped_lights() const { return m_DroppedLights; }
 
+		// The shadow maps to draw this frame; they are made when the first view needs them (and are 1x1 stand-ins until then).
+		const std::vector<ShadowView>& shadow_views() const { return m_ShadowViews; }
+		nvrhi::ITexture* cascade_map() const { return m_CascadeMap; }
+		nvrhi::ITexture* spot_atlas() const { return m_SpotAtlas; }
+		u32 shadow_generation() const { return m_ShadowGeneration; } // changes when a shadow map is made
+		nvrhi::IBuffer* instance_buffer() const { return m_InstanceBuffer; }
+
 		nvrhi::IBuffer* constant_buffer() const { return m_ConstantBuffer; }
 		nvrhi::IBuffer* light_buffer() const { return m_LightBuffer; }
 		nvrhi::IBuffer* cluster_counts() const { return m_ClusterCounts; }   // CLUSTER_COUNT uints, written by the light culling pass
 		nvrhi::IBuffer* cluster_indices() const { return m_ClusterIndices; } // CLUSTER_COUNT * MAX_LIGHTS_PER_CLUSTER uints
 
 	private:
+		nvrhi::TextureHandle make_shadow_texture(u32 width, u32 height, u32 slices, const char* name);
+
 		nvrhi::IDevice* m_Device = nullptr;
 		bool m_Active = false;
 		bool m_HasCamera = false;
@@ -132,9 +162,23 @@ namespace wiwa
 		std::vector<DrawItem> m_Masked{};
 		std::vector<DrawItem> m_Blended{};
 		u32 m_VisibleInstances = 0;
+		void collect_casters(const glm::mat4& viewProjection, u32 matrixIndex, std::vector<DrawItem>& items);
 		std::vector<GpuLight> m_Lights{};
 		u32 m_DroppedLights = 0;
 		std::chrono::steady_clock::time_point m_LastLightWarning{};
+
+		std::vector<ShadowView> m_ShadowViews{};
+		bool m_NeedCascades = false;
+		bool m_NeedSpotAtlas = false;
+		nvrhi::TextureHandle m_CascadeMap{};
+		nvrhi::TextureHandle m_SpotAtlas{};
+		nvrhi::TextureHandle m_DummyCascadeMap{};
+		nvrhi::TextureHandle m_DummySpotAtlas{};
+		nvrhi::SamplerHandle m_ShadowSampler{};
+		bool m_DummiesCleared = false;
+		u32 m_ShadowGeneration = 0;
+		const nvrhi::ITexture* m_BoundCascades = nullptr;
+		const nvrhi::ITexture* m_BoundAtlas = nullptr;
 
 		nvrhi::BufferHandle m_LightBuffer{};
 		nvrhi::BufferHandle m_ClusterCounts{};

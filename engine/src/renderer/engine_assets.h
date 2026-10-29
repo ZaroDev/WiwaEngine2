@@ -8,6 +8,7 @@ namespace wiwa::engine_assets
 	inline constexpr const char* DEPTH_SHADER = "engine/shaders/depth.hlsl";
 	inline constexpr const char* DEPTH_MASK_SHADER = "engine/shaders/depth_mask.hlsl";
 	inline constexpr const char* LIGHT_CULL_SHADER = "engine/shaders/light_cull.hlsl";
+	inline constexpr const char* SHADOW_SHADER = "engine/shaders/shadow.hlsl";
 	inline constexpr const char* FORWARD_SHADER = "engine/shaders/forward.hlsl";
 	inline constexpr const char* RESOLVE_SHADER = "engine/shaders/resolve.hlsl";
 }

@@ -31,7 +31,9 @@ float4 PSMain(ForwardVertexOutput input, bool frontFace : SV_IsFrontFace) : SV_T
 	float3 color = AmbientLight(surface) + surface.Emissive;
 	if (SunDirection.w > 0.5)
 	{
-		color += DirectLight(surface, -SunDirection.xyz, SunColor.rgb);
+		float3 toTheSun = -SunDirection.xyz;
+		float shadow = SunShadow(surface.Position, surface.Normal, saturate(dot(surface.Normal, toTheSun)));
+		color += DirectLight(surface, toTheSun, SunColor.rgb) * shadow;
 	}
 	color += ClusteredLights(surface, input.Position.xy);
 	return float4(color, surface.Alpha);

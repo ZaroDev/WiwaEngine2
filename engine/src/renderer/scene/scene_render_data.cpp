@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "cascade_math.h"
 #include "frustum_culler.h"
 
 namespace wiwa
@@ -40,6 +41,25 @@ namespace wiwa
 		}
 	}
 
+	nvrhi::TextureHandle SceneRenderData::make_shadow_texture(u32 width, u32 height, u32 slices, const char* name)
+	{
+		nvrhi::TextureDesc description;
+		description.width = width;
+		description.height = height;
+		description.arraySize = slices;
+		description.dimension = slices > 1 ? nvrhi::TextureDimension::Texture2DArray : nvrhi::TextureDimension::Texture2D;
+		description.format = nvrhi::Format::D32;
+		description.isRenderTarget = true;
+		description.isShaderResource = true;
+		description.isTypeless = true;
+		description.initialState = nvrhi::ResourceStates::DepthWrite;
+		description.keepInitialState = true; // NVRHI needs a known state to start from; the frame ends with the map back in it
+		description.useClearValue = true;
+		description.clearValue = nvrhi::Color(1.0f, 0.0f, 0.0f, 0.0f);
+		description.debugName = name;
+		return m_Device->createTexture(description);
+	}
+
 	bool SceneRenderData::initialize(nvrhi::IDevice* device)
 	{
 		m_Device = device;
@@ -54,6 +74,9 @@ namespace wiwa
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(3));
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(4));
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(5));
+		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(6));
+		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(7));
+		layout.addItem(nvrhi::BindingLayoutItem::Sampler(14));
 		layout.addItem(nvrhi::BindingLayoutItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
 		m_FrameLayout = device->createBindingLayout(layout);
 
@@ -80,12 +103,27 @@ namespace wiwa
 		m_ClusterCounts = make_structured(CLUSTER_COUNT, sizeof(u32), true, "Cluster light counts");
 		m_ClusterIndices = make_structured(static_cast<u64>(CLUSTER_COUNT) * MAX_LIGHTS_PER_CLUSTER, sizeof(u32), true, "Cluster light indices");
 
-		return m_FrameLayout && m_ConstantBuffer && m_LightBuffer && m_ClusterCounts && m_ClusterIndices;
+		// Shadow maps are depth textures compared against by a hardware sampler. The real ones are made when something casts shadows;
+		// until then 1x1 stand-ins keep the bindings valid.
+		const nvrhi::SamplerDesc samplerDescription = nvrhi::SamplerDesc()
+			.setAllFilters(true)
+			.setAllAddressModes(nvrhi::SamplerAddressMode::Clamp)
+			.setReductionType(nvrhi::SamplerReductionType::Comparison);
+		m_ShadowSampler = device->createSampler(samplerDescription);
+		m_DummyCascadeMap = make_shadow_texture(1, 1, MAX_CASCADES, "Cascade stand-in");
+		m_DummySpotAtlas = make_shadow_texture(1, 1, 1, "Spot atlas stand-in");
+
+		return m_FrameLayout && m_ConstantBuffer && m_LightBuffer && m_ClusterCounts && m_ClusterIndices && m_ShadowSampler && m_DummyCascadeMap && m_DummySpotAtlas;
 	}
 
 	void SceneRenderData::shutdown()
 	{
 		m_FrameBindings = nullptr;
+		m_CascadeMap = nullptr;
+		m_SpotAtlas = nullptr;
+		m_DummyCascadeMap = nullptr;
+		m_DummySpotAtlas = nullptr;
+		m_ShadowSampler = nullptr;
 		m_LightBuffer = nullptr;
 		m_ClusterCounts = nullptr;
 		m_ClusterIndices = nullptr;
@@ -101,6 +139,9 @@ namespace wiwa
 		m_Masked.clear();
 		m_Blended.clear();
 		m_Lights.clear();
+		m_ShadowViews.clear();
+		m_NeedCascades = false;
+		m_NeedSpotAtlas = false;
 		m_VisibleInstances = 0;
 		m_DroppedLights = 0;
 		m_Active = viewport.valid();
@@ -123,6 +164,8 @@ namespace wiwa
 
 		// The sun is the first directional light; the point and spot lights go to the cluster grid.
 		bool haveSun = false;
+		const RenderLight* sunLight = nullptr;
+		std::vector<const RenderLight*> sources; // parallel to m_Lights
 		for (const RenderLight& light : scene.lights())
 		{
 			if (!light.Alive)
@@ -136,6 +179,7 @@ namespace wiwa
 				{
 					constants.SunDirection = glm::vec4(light.Direction, 1.0f);
 					constants.SunColor = glm::vec4(light.Color * light.Intensity, 0.0f);
+					sunLight = &light;
 					haveSun = true;
 				}
 				continue;
@@ -157,6 +201,7 @@ namespace wiwa
 			gpu.OuterCos = std::cos(glm::radians(std::clamp(light.OuterAngle, 0.0f, 89.5f)));
 			gpu.Type = light.Kind == LightKind::Spot ? 1u : 0u;
 			m_Lights.push_back(gpu);
+			sources.push_back(&light);
 		}
 
 		if (m_DroppedLights > 0)
@@ -242,11 +287,116 @@ namespace wiwa
 				m_VisibleInstances += any ? 1 : 0;
 			}
 
+			// Shadows: the sun's cascades fitted to the camera, and up to four spot lights with a tile of the atlas each.
+			if (sunLight != nullptr && sunLight->CastsShadows)
+			{
+				const u32 cascades = std::clamp(m_Settings.ShadowCascades, 1u, MAX_CASCADES);
+				const CascadeSet set = compute_cascades(*camera, sunLight->Direction, cascades, m_Settings.ShadowDistance, m_Settings.ShadowSplitLambda);
+				constants.ShadowParams = glm::vec4(1.0f, static_cast<float>(cascades), m_Settings.ShadowDepthBias, m_Settings.ShadowNormalBias);
+				for (u32 i = 0; i < MAX_CASCADES; i++)
+				{
+					constants.ShadowMatrices[i] = set.ViewProjection[i];
+					constants.CascadeSplits[i] = set.SplitDepths[i];
+					constants.CascadeTexels[i] = set.TexelWorldSize[i];
+				}
+				for (u32 i = 0; i < cascades; i++)
+				{
+					ShadowView view;
+					view.ViewProjection = set.ViewProjection[i];
+					view.MatrixIndex = i;
+					view.Slice = i;
+					collect_casters(view.ViewProjection, i, view.Items);
+					m_ShadowViews.push_back(std::move(view));
+				}
+				m_NeedCascades = true;
+			}
+
+			constants.ShadowParams2 = glm::vec4(m_Settings.SpotShadowBias, 0.0f, 0.0f, 0.0f);
+			if (constants.ShadowParams.w == 0.0f)
+			{
+				constants.ShadowParams.w = m_Settings.ShadowNormalBias; // the spot lights use it too
+			}
+			u32 spotShadows = 0;
+			for (size_t i = 0; i < m_Lights.size() && spotShadows < MAX_SPOT_SHADOWS; i++)
+			{
+				if (m_Lights[i].Type != 1u || !sources[i]->CastsShadows)
+				{
+					continue;
+				}
+
+				float tanHalf = 1.0f;
+				const u32 tile = spotShadows++;
+				const glm::mat4 matrix = compute_spot_shadow_matrix(*sources[i], tanHalf);
+				constants.ShadowMatrices[MAX_CASCADES + tile] = matrix;
+				constants.SpotShadowRects[tile] = glm::vec4(static_cast<float>((tile % 4) * SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE,
+					static_cast<float>((tile / 4) * SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE, static_cast<float>(SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE,
+					static_cast<float>(SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE);
+				constants.SpotShadowInfo[tile] = glm::vec4(tanHalf, 0.0f, 0.0f, 0.0f);
+				m_Lights[i].ShadowIndex = tile + 1;
+
+				ShadowView view;
+				view.ViewProjection = matrix;
+				view.MatrixIndex = MAX_CASCADES + tile;
+				view.Atlas = true;
+				view.Slice = tile;
+				collect_casters(matrix, view.MatrixIndex, view.Items);
+				m_ShadowViews.push_back(std::move(view));
+				m_NeedSpotAtlas = true;
+			}
+
 			std::sort(m_Opaque.begin(), m_Opaque.end(), draw_order);
 			std::sort(m_Masked.begin(), m_Masked.end(), draw_order);
 			std::sort(m_Blended.begin(), m_Blended.end(), [](const DrawItem& a, const DrawItem& b) { return a.Depth > b.Depth; });
 		}
 		m_Constants = constants;
+	}
+
+	// The draws of everything that can cast a shadow into the view: every instance whose bounds touch it, blended materials excepted.
+	void SceneRenderData::collect_casters(const glm::mat4& viewProjection, u32 matrixIndex, std::vector<DrawItem>& items)
+	{
+		const Frustum frustum(viewProjection);
+		const std::vector<RenderInstance>& instances = m_Scene->instances();
+		for (u32 slot = 0; slot < instances.size(); slot++)
+		{
+			const RenderInstance& instance = instances[slot];
+			if (!instance.Alive)
+			{
+				continue;
+			}
+
+			const GpuMesh* mesh = m_Cache->get_mesh(instance.Mesh);
+			if (mesh == nullptr || !frustum.intersects(instance.World, mesh->BoundsMin, mesh->BoundsMax))
+			{
+				continue;
+			}
+
+			for (size_t p = 0; p < mesh->Primitives.size(); p++)
+			{
+				const GpuPrimitive& primitive = mesh->Primitives[p];
+				if (!frustum.intersects(instance.World, primitive.BoundsMin, primitive.BoundsMax))
+				{
+					continue;
+				}
+
+				const bool overridden = p < instance.Materials.size() && instance.Materials[p].valid();
+				const u32 material = overridden ? m_Cache->get_material_slot(instance.Materials[p]) : primitive.MaterialSlot;
+				if (m_Cache->material_record(material).Flags & MATERIAL_ALPHA_BLEND_BIT)
+				{
+					continue;
+				}
+
+				DrawItem item;
+				item.Instance = slot;
+				item.Material = matrixIndex; // the shadow shader reads this as the matrix index
+				item.Page = mesh->Page;
+				item.FirstIndex = primitive.FirstIndex;
+				item.IndexCount = primitive.IndexCount;
+				item.BaseVertex = primitive.BaseVertex;
+				item.DoubleSided = true;
+				items.push_back(item);
+			}
+		}
+		std::sort(items.begin(), items.end(), [](const DrawItem& a, const DrawItem& b) { return a.Page < b.Page; });
 	}
 
 	void SceneRenderData::write(nvrhi::ICommandList* commandList, GpuResourceCache& cache)
@@ -287,6 +437,24 @@ namespace wiwa
 			m_WrittenRevision = m_Scene->revision();
 		}
 
+		// The shadow maps, once something needs them; the stand-ins are given a value before they are first read.
+		if (m_NeedCascades && m_CascadeMap == nullptr)
+		{
+			m_CascadeMap = make_shadow_texture(CASCADE_MAP_SIZE, CASCADE_MAP_SIZE, MAX_CASCADES, "Sun shadow cascades");
+			m_ShadowGeneration++;
+		}
+		if (m_NeedSpotAtlas && m_SpotAtlas == nullptr)
+		{
+			m_SpotAtlas = make_shadow_texture(SPOT_ATLAS_SIZE, SPOT_ATLAS_SIZE, 1, "Spot shadow atlas");
+			m_ShadowGeneration++;
+		}
+		if (!m_DummiesCleared)
+		{
+			commandList->clearDepthStencilTexture(m_DummyCascadeMap, nvrhi::AllSubresources, true, 1.0f, false, 0);
+			commandList->clearDepthStencilTexture(m_DummySpotAtlas, nvrhi::AllSubresources, true, 1.0f, false, 0);
+			m_DummiesCleared = true;
+		}
+
 		commandList->writeBuffer(m_ConstantBuffer, &m_Constants, sizeof(m_Constants));
 		if (!m_Lights.empty())
 		{
@@ -295,7 +463,10 @@ namespace wiwa
 
 		// The binding set follows its buffers: both can be replaced when they have to grow.
 		nvrhi::IBuffer* materials = cache.material_buffer();
-		if (m_FrameBindings == nullptr || m_BoundInstanceBuffer != m_InstanceBuffer.Get() || m_BoundMaterialBuffer != materials)
+		nvrhi::ITexture* cascades = m_CascadeMap ? m_CascadeMap.Get() : m_DummyCascadeMap.Get();
+		nvrhi::ITexture* atlas = m_SpotAtlas ? m_SpotAtlas.Get() : m_DummySpotAtlas.Get();
+		if (m_FrameBindings == nullptr || m_BoundInstanceBuffer != m_InstanceBuffer.Get() || m_BoundMaterialBuffer != materials
+			|| m_BoundCascades != cascades || m_BoundAtlas != atlas)
 		{
 			nvrhi::BindingSetDesc set;
 			set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
@@ -304,10 +475,15 @@ namespace wiwa
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(3, m_LightBuffer));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(4, m_ClusterCounts));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(5, m_ClusterIndices));
+			set.addItem(nvrhi::BindingSetItem::Texture_SRV(6, cascades));
+			set.addItem(nvrhi::BindingSetItem::Texture_SRV(7, atlas));
+			set.addItem(nvrhi::BindingSetItem::Sampler(14, m_ShadowSampler));
 			set.addItem(nvrhi::BindingSetItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
 			m_FrameBindings = m_Device->createBindingSet(set, m_FrameLayout);
 			m_BoundInstanceBuffer = m_InstanceBuffer;
 			m_BoundMaterialBuffer = materials;
+			m_BoundCascades = cascades;
+			m_BoundAtlas = atlas;
 		}
 	}
 }

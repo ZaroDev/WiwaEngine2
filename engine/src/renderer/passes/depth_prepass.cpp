@@ -99,7 +99,8 @@ namespace wiwa
 		}
 
 		nvrhi::IFramebuffer* framebuffer = data.viewport()->depth_framebuffer();
-		scene_pass::draw_items(commandList, data, framebuffer, data.opaque(), m_Opaque[0], m_Opaque[1], false);
-		scene_pass::draw_items(commandList, data, framebuffer, data.masked(), m_Masked[0], m_Masked[1], true);
+		const nvrhi::Viewport viewport(static_cast<float>(data.viewport()->width()), static_cast<float>(data.viewport()->height()));
+		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Opaque[0], m_Opaque[1], false);
+		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Masked[0], m_Masked[1], true);
 	}
 }

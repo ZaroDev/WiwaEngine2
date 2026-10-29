@@ -57,16 +57,16 @@ namespace wiwa::scene_pass
 		return device->createGraphicsPipeline(description, framebuffer);
 	}
 
-	void draw_items(nvrhi::ICommandList* commandList, const SceneRenderData& data, nvrhi::IFramebuffer* framebuffer, const std::vector<DrawItem>& items,
-		nvrhi::IGraphicsPipeline* singleSided, nvrhi::IGraphicsPipeline* doubleSided, bool bindMaterial)
+	void draw_items(nvrhi::ICommandList* commandList, const SceneRenderData& data, nvrhi::IFramebuffer* framebuffer, const nvrhi::Viewport& viewport,
+		nvrhi::IBindingSet* frameBindings, const std::vector<DrawItem>& items, nvrhi::IGraphicsPipeline* singleSided, nvrhi::IGraphicsPipeline* doubleSided,
+		bool bindMaterial)
 	{
-		if (items.empty() || data.frame_bindings() == nullptr)
+		if (items.empty() || frameBindings == nullptr)
 		{
 			return;
 		}
 
 		GpuResourceCache& cache = *data.cache();
-		const ViewportTarget& viewport = *data.viewport();
 
 		struct DrawConstants
 		{
@@ -91,8 +91,8 @@ namespace wiwa::scene_pass
 				nvrhi::GraphicsState state;
 				state.pipeline = pipeline;
 				state.framebuffer = framebuffer;
-				state.viewport.addViewportAndScissorRect(nvrhi::Viewport(static_cast<float>(viewport.width()), static_cast<float>(viewport.height())));
-				state.addBindingSet(data.frame_bindings());
+				state.viewport.addViewportAndScissorRect(viewport);
+				state.addBindingSet(frameBindings);
 				if (bindMaterial)
 				{
 					state.addBindingSet(cache.get_material_bindings(item.Material));
