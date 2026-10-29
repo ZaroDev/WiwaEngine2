@@ -75,6 +75,7 @@ namespace wiwa
 		}
 		for (auto& [guid, instance] : delta.InstanceUpserts)
 		{
+			instance.Guid = guid;
 			upsert(instances, guid, std::move(instance));
 		}
 		for (const EntityGuid& guid : delta.LightRemovals)

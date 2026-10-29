@@ -19,6 +19,7 @@ namespace wiwa
 	struct RenderInstance
 	{
 		bool Alive = false;
+		EntityGuid Guid{}; // set when the instance is added: what picking answers with
 		glm::mat4 World{ 1.0f };
 		AssetRef Mesh{};
 		std::vector<AssetRef> Materials{}; // overrides per primitive; empty means the mesh's own materials

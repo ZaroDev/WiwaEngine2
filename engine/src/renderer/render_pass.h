@@ -12,6 +12,7 @@ namespace wiwa
 	class TextureRegistry;
 	class SceneRenderData;
 	struct DebugDrawData;
+	struct PickState;
 
 	// Everything a pass needs to know about the current frame.
 	struct FrameDescription
@@ -24,6 +25,7 @@ namespace wiwa
 		u64 FrameIndex = 0; // counts rendered frames
 		const OwnedDrawData* ImGui = nullptr; // the UI of this frame, built on the main thread
 		bool SceneInViewport = false; // the UI shows the scene in a panel; otherwise it fills the window (the blit pass draws it)
+		PickState* Pick = nullptr; // the click waiting to be answered, and where its answer goes
 		const DebugDrawData* Debug = nullptr; // the debug shapes of this frame (null when there are none)
 		const SceneRenderData* Scene = nullptr; // the scene's draw lists and buffers for this frame (null when there is nothing to draw)
 	};
@@ -59,5 +61,8 @@ namespace wiwa
 		virtual void on_resize(nvrhi::IDevice* device, u32 width, u32 height) {}
 
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) = 0;
+
+		// Render thread, after the frame was submitted (only for frames whose passes ran): for work that needs the GPU to have run it.
+		virtual void on_frame_submitted(nvrhi::IDevice* device, const FrameDescription& frame) {}
 	};
 }

@@ -201,6 +201,7 @@ namespace wiwa
 		// Forces the next state to be applied from scratch. D3D11's flip-model swapchain
 		// unbinds the backbuffer on Present, so cached bindings can't be trusted across frames.
 		m_CommandList->clearState();
+		std::optional<FrameDescription> frame; // set when the passes run: they hear about the submitted frame
 
 		// The passes draw over this; until they are ready (or when there are none) it is what the window shows.
 		nvrhi::utils::ClearColorAttachment(m_CommandList, backbuffer, 0, nvrhi::Color(0.02f, 0.02f, 0.05f, 1.0f));
@@ -217,12 +218,12 @@ namespace wiwa
 				m_Profiler.initialize(device, std::move(names), m_Description.MaxFramesInFlight + 1);
 			}
 
-			const FrameDescription frame = make_frame_description(backbuffer, batch);
-			m_Profiler.begin_frame(device, frame.FrameIndex);
+			frame = make_frame_description(backbuffer, batch);
+			m_Profiler.begin_frame(device, frame->FrameIndex);
 			for (size_t i = 0; i < m_Passes.size(); i++)
 			{
 				m_Profiler.begin_pass(m_CommandList, i);
-				m_Passes[i]->render(m_CommandList, frame);
+				m_Passes[i]->render(m_CommandList, *frame);
 				m_Profiler.end_pass(m_CommandList, i);
 			}
 			m_Profiler.end_frame(m_Time);
@@ -235,6 +236,13 @@ namespace wiwa
 		{
 			mark_frame_submitted(); // also true for ResizeNeeded: the frame was submitted and presented
 			m_FrameIndex++;
+			if (frame)
+			{
+				for (const Scope<IRenderPass>& pass : m_Passes)
+				{
+					pass->on_frame_submitted(device, *frame);
+				}
+			}
 		}
 
 		if (status == FrameStatus::ResizeNeeded)
@@ -274,6 +282,7 @@ namespace wiwa
 		frame.FrameIndex = m_FrameIndex;
 		frame.ImGui = &batch.ImGui;
 		frame.Debug = &batch.Debug;
+		frame.Pick = &m_Pick;
 		frame.Scene = &m_SceneData;
 		frame.SceneInViewport = m_SceneInViewport;
 		return frame;

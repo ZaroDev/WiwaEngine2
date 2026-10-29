@@ -23,6 +23,8 @@ namespace wiwa::engine_assets
 	inline constexpr const char* GTAO_BLUR_SHADER = "engine/shaders/gtao_blur.hlsl";
 	inline constexpr const char* TONEMAP_SHADER = "engine/shaders/tonemap.hlsl";
 	inline constexpr const char* SELECTION_OUTLINE_SHADER = "engine/shaders/selection_outline.hlsl";
+	inline constexpr const char* PICK_SHADER = "engine/shaders/pick.hlsl";
+	inline constexpr const char* PICK_ICON_SHADER = "engine/shaders/pick_icon.hlsl";
 	inline constexpr const char* DEBUG_LINE_SHADER = "engine/shaders/debug_line.hlsl";
 	inline constexpr const char* DEBUG_TRIANGLE_SHADER = "engine/shaders/debug_triangle.hlsl";
 	// Only the render checks use it: draws 1 where the stencil of a depth texture is 1, to prove the stencil can be sampled.

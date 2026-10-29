@@ -11,6 +11,7 @@
 #include "debug/debug_draw.h"
 #include "imgui_layer.h"
 #include "renderer.h"
+#include "render_pick.h"
 #include "render_quality.h"
 #include "render_snapshot.h"
 #include "render_thread.h"
@@ -73,6 +74,12 @@ namespace wiwa
 		void set_selection(std::optional<EntityGuid> guid);
 		void set_outline_style(const SelectionOutlineStyle& style);
 
+		// Asks which entity is drawn at a pixel of the viewport image ((0, 0) is the top left). The answer comes a frame or two later through
+		// take_pick_result(); asking again before it arrives replaces the question. Returns the id the answer carries.
+		u64 request_pick(u32 x, u32 y);
+		// The answer to the latest request, once; an answer to an older one is dropped.
+		std::optional<PickResult> take_pick_result() { return m_Picks.take(m_LastPickId); }
+
 		// Draws the scene with this camera instead of the scene's primary one (the editor's fly camera); an empty one goes back to the
 		// scene's camera. Sends a command only when it changed.
 		void set_camera_override(const std::optional<RenderCamera>& camera);
@@ -110,6 +117,8 @@ namespace wiwa
 		bool m_SentSceneInViewport = false;
 		RenderQuality m_Quality{};
 		std::optional<RenderCamera> m_SentCameraOverride{};
+		PickChannel m_Picks{};
+		u64 m_LastPickId = 0;
 		std::optional<EntityGuid> m_SentSelection{};
 		SelectionOutlineStyle m_SentOutlineStyle{};
 		u64 m_FrameIndex = 0;

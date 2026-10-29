@@ -10,6 +10,7 @@
 #include "backend/render_backend.h"
 #include "pass_profiler.h"
 #include "render_pass.h"
+#include "render_pick.h"
 #include "render_queue.h"
 #include "environment/environment_cache.h"
 #include "resources/gpu_resource_cache.h"
@@ -52,6 +53,11 @@ namespace wiwa
 		SceneRenderData& get_scene_data() { return m_SceneData; }
 		AssetManager* get_assets() const { return m_Description.Assets; }
 		TextureRegistry& get_textures() { return m_Textures; }
+
+		// Picking: the click to answer on the next frame (a newer one replaces it) and where the answer goes (null: nowhere).
+		PickState& get_pick() { return m_Pick; }
+		void set_pick_request(const PickRequest& request) { m_Pick.Pending = request; }
+		void set_pick_channel(PickChannel* channel) { m_Pick.Channel = channel; }
 		ViewportTarget& get_viewport() { return m_Viewport; }
 		nvrhi::IFramebuffer* get_reference_framebuffer() const { return m_Backend ? m_Backend->get_reference_framebuffer() : nullptr; }
 
@@ -119,6 +125,7 @@ namespace wiwa
 		nvrhi::CommandListHandle m_CommandList{};
 		std::vector<Scope<IRenderPass>> m_Passes{};
 		PassProfiler m_Profiler{};
+		PickState m_Pick{};
 
 		// One event query per submitted frame that has not been waited on yet, oldest first.
 		std::deque<nvrhi::EventQueryHandle> m_FramesInFlight{};

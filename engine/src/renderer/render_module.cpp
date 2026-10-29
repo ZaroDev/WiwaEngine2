@@ -16,6 +16,7 @@
 #include "passes/ao_pass.h"
 #include "passes/bloom_pass.h"
 #include "passes/exposure_pass.h"
+#include "passes/pick_pass.h"
 #include "passes/selection_outline_pass.h"
 #include "passes/fxaa_pass.h"
 #include "passes/tonemap_pass.h"
@@ -73,6 +74,8 @@ namespace wiwa
 					return false;
 				}
 
+				m_Renderer->set_pick_channel(&m_Picks);
+
 				// The scene first (depth, shading, the 8-bit image); the UI goes over everything else, so its pass is the last one.
 				Scope<ImGuiRenderPass> imguiPass = CreateScope<ImGuiRenderPass>();
 				m_ImGuiPass = imguiPass.get();
@@ -89,6 +92,7 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<FxaaPass>())
 					&& m_Renderer->add_pass(CreateScope<SelectionOutlinePass>())
 					&& m_Renderer->add_pass(CreateScope<DebugPass>())
+					&& m_Renderer->add_pass(CreateScope<PickPass>())
 					&& m_Renderer->add_pass(CreateScope<BlitPass>())
 					&& m_Renderer->add_pass(std::move(imguiPass));
 			},
@@ -290,6 +294,16 @@ namespace wiwa
 			{
 				world.get_scene().set_camera_override(camera);
 			});
+	}
+
+	u64 RenderModule::request_pick(u32 x, u32 y)
+	{
+		const PickRequest request{ ++m_LastPickId, x, y };
+		submit([request](RenderWorld& world)
+			{
+				world.get_renderer().set_pick_request(request);
+			});
+		return request.Id;
 	}
 
 	void RenderModule::set_selection(std::optional<EntityGuid> guid)
