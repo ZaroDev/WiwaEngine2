@@ -11,15 +11,31 @@ namespace wiwa
 		return m_Root / name.substr(0, 2) / (name + ".wasset");
 	}
 
+	std::filesystem::path LibrarySource::locate(AssetGuid guid) const
+	{
+		const std::string name = guid.to_string();
+		const std::filesystem::path relative = std::filesystem::path(name.substr(0, 2)) / (name + ".wasset");
+
+		std::error_code error;
+		for (const std::filesystem::path& folder : { m_Root, m_Root / "engine" })
+		{
+			if (std::filesystem::is_regular_file(folder / relative, error))
+			{
+				return folder / relative;
+			}
+		}
+		return path_of(guid);
+	}
+
 	bool LibrarySource::contains(AssetGuid guid) const
 	{
 		std::error_code error;
-		return std::filesystem::is_regular_file(path_of(guid), error);
+		return std::filesystem::is_regular_file(locate(guid), error);
 	}
 
 	std::optional<std::vector<std::byte>> LibrarySource::read(AssetGuid guid)
 	{
-		std::ifstream file(path_of(guid), std::ios::binary | std::ios::ate);
+		std::ifstream file(locate(guid), std::ios::binary | std::ios::ate);
 		if (!file)
 		{
 			return std::nullopt;

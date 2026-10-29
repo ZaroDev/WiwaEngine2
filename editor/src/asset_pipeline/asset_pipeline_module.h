@@ -26,6 +26,6 @@ namespace wiwa
 
 	private:
 		Scope<AssetDatabase> m_Database{};
-		Scope<FileWatcher> m_Watcher{};
+		std::vector<Scope<FileWatcher>> m_Watchers{};
 	};
 }

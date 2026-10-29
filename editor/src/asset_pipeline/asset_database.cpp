@@ -49,6 +49,7 @@ namespace wiwa
 	AssetDatabase::AssetDatabase(std::filesystem::path assetsRoot, std::filesystem::path libraryRoot)
 		: m_AssetsRoot(std::move(assetsRoot)), m_LibraryRoot(std::move(libraryRoot))
 	{
+		m_Roots.push_back({ m_AssetsRoot, m_LibraryRoot });
 		load_cache();
 	}
 
@@ -91,9 +92,30 @@ namespace wiwa
 		return std::filesystem::path(found->second);
 	}
 
-	std::filesystem::path AssetDatabase::cooked_path(AssetGuid guid) const
+	void AssetDatabase::add_root(std::filesystem::path sourceRoot, std::filesystem::path libraryFolder)
 	{
-		return LibrarySource(m_LibraryRoot).path_of(guid);
+		m_Roots.push_back({ std::move(sourceRoot), std::move(libraryFolder) });
+	}
+
+	std::filesystem::path AssetDatabase::cooked_path(AssetGuid guid, const std::filesystem::path& libraryFolder) const
+	{
+		const std::string name = guid.to_string();
+		return libraryFolder / name.substr(0, 2) / (name + ".wasset");
+	}
+
+	// The Library folder of the source root a file is under (the first root's for anything outside all of them).
+	std::filesystem::path AssetDatabase::library_folder_for(const std::filesystem::path& source) const
+	{
+		const std::string key = key_of(source);
+		for (const SourceRoot& root : m_Roots)
+		{
+			const std::string prefix = key_of(root.Source) + "/";
+			if (key.starts_with(prefix))
+			{
+				return root.Library;
+			}
+		}
+		return m_Roots.front().Library;
 	}
 
 	void AssetDatabase::load_cache()
@@ -135,22 +157,25 @@ namespace wiwa
 
 	void AssetDatabase::scan()
 	{
-		std::error_code error;
-		std::filesystem::create_directories(m_AssetsRoot, error);
-
 		std::vector<std::filesystem::path> sources;
-		auto it = std::filesystem::recursive_directory_iterator(m_AssetsRoot, std::filesystem::directory_options::skip_permission_denied, error);
-		for (; !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error))
+		for (const SourceRoot& root : m_Roots)
 		{
-			if (it->is_directory() && it->path().filename().string().starts_with("."))
-			{
-				it.disable_recursion_pending();
-				continue;
-			}
+			std::error_code error;
+			std::filesystem::create_directories(root.Source, error);
 
-			if (it->is_regular_file() && find_importer(it->path()))
+			auto it = std::filesystem::recursive_directory_iterator(root.Source, std::filesystem::directory_options::skip_permission_denied, error);
+			for (; !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error))
 			{
-				sources.push_back(it->path());
+				if (it->is_directory() && it->path().filename().string().starts_with("."))
+				{
+					it.disable_recursion_pending();
+					continue;
+				}
+
+				if (it->is_regular_file() && find_importer(it->path()))
+				{
+					sources.push_back(it->path());
+				}
 			}
 		}
 
@@ -175,20 +200,20 @@ namespace wiwa
 		WI_ASSET_LOG(Info, "Asset scan: {0} imported, {1} up to date, {2} failed", m_Imported.exchange(0), m_UpToDate.exchange(0), m_Failed.exchange(0));
 	}
 
-	void AssetDatabase::reimport(const std::filesystem::path& source)
+	void AssetDatabase::reimport(const std::filesystem::path& source, bool force)
 	{
 		if (find_importer(source))
 		{
-			import_source(source, true, nullptr);
+			import_source(source, true, force, nullptr);
 		}
 	}
 
 	std::optional<AssetRef> AssetDatabase::ensure_imported(const std::filesystem::path& source, const nlohmann::json* defaultSettings)
 	{
-		return import_source(source, false, defaultSettings);
+		return import_source(source, false, false, defaultSettings);
 	}
 
-	std::optional<AssetRef> AssetDatabase::import_source(const std::filesystem::path& source, bool recheck, const nlohmann::json* defaultSettings)
+	std::optional<AssetRef> AssetDatabase::import_source(const std::filesystem::path& source, bool recheck, bool force, const nlohmann::json* defaultSettings)
 	{
 		if (!find_importer(source))
 		{
@@ -211,7 +236,7 @@ namespace wiwa
 		}
 
 		bool failed = false;
-		std::optional<AssetRef> result = do_import(source, key, defaultSettings, failed);
+		std::optional<AssetRef> result = do_import(source, key, force, defaultSettings, failed);
 
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex);
@@ -227,9 +252,10 @@ namespace wiwa
 		return result;
 	}
 
-	std::optional<AssetRef> AssetDatabase::do_import(const std::filesystem::path& source, const std::string& key, const nlohmann::json* defaultSettings, bool& failed)
+	std::optional<AssetRef> AssetDatabase::do_import(const std::filesystem::path& source, const std::string& key, bool force, const nlohmann::json* defaultSettings, bool& failed)
 	{
 		IImporter* importer = find_importer(source);
+		const std::filesystem::path libraryFolder = library_folder_for(source);
 		const std::filesystem::path metaPath = MetaFile::meta_path_for(source);
 
 		MetaFile meta;
@@ -305,7 +331,7 @@ namespace wiwa
 			previous = m_ImportCache.value(guidText, nlohmann::json::object());
 		}
 
-		bool upToDate = previous.is_object() && previous.value("sourceHash", "") == sourceHash && previous.value("settingsHash", "") == settingsHash
+		bool upToDate = !force && previous.is_object() && previous.value("sourceHash", "") == sourceHash && previous.value("settingsHash", "") == settingsHash
 			&& previous.value("version", 0u) == importer->version() && previous.contains("assets");
 		if (upToDate)
 		{
@@ -313,7 +339,7 @@ namespace wiwa
 			{
 				std::optional<AssetGuid> cooked = AssetGuid::from_string(asset.get<std::string>());
 				std::error_code error;
-				if (!cooked || !std::filesystem::exists(cooked_path(*cooked), error))
+				if (!cooked || !std::filesystem::exists(cooked_path(*cooked, libraryFolder), error))
 				{
 					upToDate = false;
 					break;
@@ -352,7 +378,7 @@ namespace wiwa
 		{
 			const AssetGuid cooked = asset.Ref.resolved();
 			WAssetHeader header{ asset.Type, cooked, asset.Dependencies, asset.Payload.size() };
-			if (!write_wasset(cooked_path(cooked), header, asset.Payload))
+			if (!write_wasset(cooked_path(cooked, libraryFolder), header, asset.Payload))
 			{
 				WI_ASSET_LOG(Error, "Cannot write {0} for {1}", cooked.to_string(), source.generic_string());
 				m_Failed++;
@@ -372,7 +398,7 @@ namespace wiwa
 				if (std::optional<AssetGuid> stale = AssetGuid::from_string(old.get<std::string>()))
 				{
 					std::error_code error;
-					std::filesystem::remove(cooked_path(*stale), error);
+					std::filesystem::remove(cooked_path(*stale, libraryFolder), error);
 				}
 			}
 		}

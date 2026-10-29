@@ -11,7 +11,7 @@ int wiwa_main(int argc, char** argv)
 	engine->update();
 	engine->shutdown();
 
-	return 0;
+	return engine->get_exit_code();
 }
 #if USE_WIN_MAIN
 #include <shellapi.h>

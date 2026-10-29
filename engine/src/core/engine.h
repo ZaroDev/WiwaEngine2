@@ -22,6 +22,10 @@ namespace wiwa {
 
 		void request_quit();
 
+		// What main returns; a command-line run (--pack, ...) sets it to 1 when it fails.
+		void set_exit_code(int code) { m_ExitCode = code; }
+		int get_exit_code() const { return m_ExitCode; }
+
 		template<typename T>
 		T* get_module()
 		{
@@ -39,6 +43,7 @@ namespace wiwa {
 		Time m_Time{};
 		ModuleManager m_ModuleManager{};
 		bool m_Running = true;
+		int m_ExitCode = 0;
 	};
 
 	extern Engine* create_engine(int argc, char** argv);

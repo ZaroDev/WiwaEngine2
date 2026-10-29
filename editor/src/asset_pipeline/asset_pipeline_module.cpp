@@ -12,7 +12,9 @@ namespace wiwa
 {
 	void AssetPipelineModule::init()
 	{
+		// Assets/ is the user's; engine/ holds the engine's own assets (its shaders, ...) and is cooked into Library/engine.
 		m_Database = CreateScope<AssetDatabase>("Assets", "Library");
+		m_Database->add_root("engine", "Library/engine");
 		register_builtin_importers(*m_Database);
 		m_Database->scan();
 
@@ -24,15 +26,18 @@ namespace wiwa
 
 		// Live re-import while the editor runs.
 		AssetDatabase* database = m_Database.get();
-		m_Watcher = CreateScope<FileWatcher>(database->get_assets_root(), [database](const std::filesystem::path& file)
+		for (const AssetDatabase::SourceRoot& root : database->get_roots())
 		{
-			database->reimport(file);
-		});
+			m_Watchers.push_back(CreateScope<FileWatcher>(root.Source, [database](const std::filesystem::path& file)
+			{
+				database->reimport(file);
+			}));
+		}
 	}
 
 	void AssetPipelineModule::shutdown()
 	{
-		m_Watcher.reset(); // before the database it calls into
+		m_Watchers.clear(); // before the database they call into
 		m_Database.reset();
 		WI_ASSET_LOG(Info, "Asset pipeline shutdown");
 	}
