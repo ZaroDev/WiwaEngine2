@@ -24,6 +24,15 @@ namespace wiwa
 		std::vector<AssetRef> Materials{}; // overrides per primitive; empty means the mesh's own materials
 	};
 
+	// How the selected entity is outlined. The color is in display (sRGB) space, as the LDR image holds it.
+	struct SelectionOutlineStyle
+	{
+		glm::vec3 Color{ 1.0f, 0.55f, 0.1f };
+		float WidthPx = 2.0f;        // 1..8
+		float OccludedAlpha = 0.35f; // strength of the parts that something in front of the selection hides
+		bool Enabled = true;
+	};
+
 	struct RenderLight
 	{
 		bool Alive = false;
@@ -89,6 +98,13 @@ namespace wiwa
 		// What the frame is drawn with: the override if there is one, else the scene's camera.
 		const std::optional<RenderCamera>& effective_camera() const { return m_CameraOverride ? m_CameraOverride : m_Camera; }
 
+		// The entity whose meshes get the outline (the editor's selection). Not part of the scene: a Reset does not clear it, and a guid
+		// that is not an instance of the scene (a light, a removed entity) outlines nothing.
+		void set_selection(std::optional<EntityGuid> guid) { m_Selection = guid; }
+		const std::optional<EntityGuid>& selection() const { return m_Selection; }
+		void set_outline_style(const SelectionOutlineStyle& style) { m_OutlineStyle = style; }
+		const SelectionOutlineStyle& outline_style() const { return m_OutlineStyle; }
+
 		const SceneSettings& settings() const { return m_Settings; }
 		void set_settings(const SceneSettings& settings) { m_Settings = settings; }
 
@@ -125,6 +141,8 @@ namespace wiwa
 
 		std::optional<RenderCamera> m_Camera{};
 		std::optional<RenderCamera> m_CameraOverride{};
+		std::optional<EntityGuid> m_Selection{};
+		SelectionOutlineStyle m_OutlineStyle{};
 		SceneSettings m_Settings{};
 		u64 m_Revision = 0;
 	};

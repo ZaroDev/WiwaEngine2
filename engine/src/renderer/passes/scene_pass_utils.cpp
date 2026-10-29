@@ -38,7 +38,16 @@ namespace wiwa::scene_pass
 		state.depthStencilState.depthTestEnable = options.DepthTest;
 		state.depthStencilState.depthWriteEnable = options.DepthWrite;
 		state.depthStencilState.depthFunc = options.DepthFunc;
-		state.depthStencilState.stencilEnable = false;
+		state.depthStencilState.stencilEnable = options.StencilWrite;
+		if (options.StencilWrite)
+		{
+			state.depthStencilState.stencilReadMask = 0xFF;
+			state.depthStencilState.stencilWriteMask = options.StencilMask;
+			state.depthStencilState.stencilRefValue = options.StencilRef;
+			state.depthStencilState.frontFaceStencil.stencilFunc = nvrhi::ComparisonFunc::Always;
+			state.depthStencilState.frontFaceStencil.passOp = nvrhi::StencilOp::Replace;
+			state.depthStencilState.backFaceStencil = state.depthStencilState.frontFaceStencil;
+		}
 		state.rasterState.cullMode = options.DoubleSided ? nvrhi::RasterCullMode::None : nvrhi::RasterCullMode::Back;
 		state.rasterState.frontCounterClockwise = true;
 
@@ -52,6 +61,11 @@ namespace wiwa::scene_pass
 			blend.srcBlendAlpha = nvrhi::BlendFactor::One;
 			blend.destBlendAlpha = nvrhi::BlendFactor::InvSrcAlpha;
 			blend.blendOpAlpha = nvrhi::BlendOp::Add;
+		}
+
+		if (options.NoColorWrite)
+		{
+			state.blendState.targets[0].colorWriteMask = static_cast<nvrhi::ColorMask>(0);
 		}
 
 		return device->createGraphicsPipeline(description, framebuffer);

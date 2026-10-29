@@ -16,6 +16,7 @@
 #include "passes/ao_pass.h"
 #include "passes/bloom_pass.h"
 #include "passes/exposure_pass.h"
+#include "passes/selection_outline_pass.h"
 #include "passes/fxaa_pass.h"
 #include "passes/tonemap_pass.h"
 #include "passes/shadow_pass.h"
@@ -86,6 +87,7 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<BloomPass>())
 					&& m_Renderer->add_pass(CreateScope<TonemapPass>())
 					&& m_Renderer->add_pass(CreateScope<FxaaPass>())
+					&& m_Renderer->add_pass(CreateScope<SelectionOutlinePass>())
 					&& m_Renderer->add_pass(CreateScope<DebugPass>())
 					&& m_Renderer->add_pass(CreateScope<BlitPass>())
 					&& m_Renderer->add_pass(std::move(imguiPass));
@@ -287,6 +289,33 @@ namespace wiwa
 		submit([camera](RenderWorld& world)
 			{
 				world.get_scene().set_camera_override(camera);
+			});
+	}
+
+	void RenderModule::set_selection(std::optional<EntityGuid> guid)
+	{
+		if (guid == m_SentSelection)
+		{
+			return;
+		}
+		m_SentSelection = guid;
+		submit([guid](RenderWorld& world)
+			{
+				world.get_scene().set_selection(guid);
+			});
+	}
+
+	void RenderModule::set_outline_style(const SelectionOutlineStyle& style)
+	{
+		const SelectionOutlineStyle& sent = m_SentOutlineStyle;
+		if (style.Color == sent.Color && style.WidthPx == sent.WidthPx && style.OccludedAlpha == sent.OccludedAlpha && style.Enabled == sent.Enabled)
+		{
+			return;
+		}
+		m_SentOutlineStyle = style;
+		submit([style](RenderWorld& world)
+			{
+				world.get_scene().set_outline_style(style);
 			});
 	}
 

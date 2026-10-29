@@ -16,6 +16,10 @@ namespace wiwa::scene_pass
 		bool DepthTest = true;
 		bool DepthWrite = false;
 		bool Blend = false;          // premultiplied-free alpha blending of color target 0
+		bool StencilWrite = false;   // every pixel that passes writes StencilRef (only the bits of StencilMask) to the stencil
+		u8 StencilRef = 0;
+		u8 StencilMask = 0xFF;
+		bool NoColorWrite = false;   // color target 0 is left alone (a mask pass)
 		nvrhi::ComparisonFunc DepthFunc = nvrhi::ComparisonFunc::LessOrEqual;
 	};
 

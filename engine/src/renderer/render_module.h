@@ -69,6 +69,10 @@ namespace wiwa
 		// whole window (a game). Takes effect on the render thread a frame or two later.
 		void set_scene_in_viewport(bool inViewport);
 
+		// The entity to outline in the viewport (an empty one clears it), and how. Each sends a command only when it changed.
+		void set_selection(std::optional<EntityGuid> guid);
+		void set_outline_style(const SelectionOutlineStyle& style);
+
 		// Draws the scene with this camera instead of the scene's primary one (the editor's fly camera); an empty one goes back to the
 		// scene's camera. Sends a command only when it changed.
 		void set_camera_override(const std::optional<RenderCamera>& camera);
@@ -106,6 +110,8 @@ namespace wiwa
 		bool m_SentSceneInViewport = false;
 		RenderQuality m_Quality{};
 		std::optional<RenderCamera> m_SentCameraOverride{};
+		std::optional<EntityGuid> m_SentSelection{};
+		SelectionOutlineStyle m_SentOutlineStyle{};
 		u64 m_FrameIndex = 0;
 		u64 m_SmokeCounted = 0;        // frames counted so far (they start once the scene of --scene has loaded)
 		u64 m_SmokeAssetWait = 0;      // frames waited for the scene's assets to reach the GPU
