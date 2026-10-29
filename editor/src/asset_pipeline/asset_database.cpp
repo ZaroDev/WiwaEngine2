@@ -247,11 +247,103 @@ namespace wiwa
 			}
 		}
 
+		if (!progress.cancel_requested())
+		{
+			progress.set_stage("Removing deleted assets");
+			const u32 removed = remove_orphans();
+			if (removed > 0)
+			{
+				WI_ASSET_LOG(Info, "Removed {0} cooked file(s) of deleted or unknown sources", removed);
+			}
+		}
+
 		const u32 imported = m_Imported.exchange(0);
 		const u32 upToDate = m_UpToDate.exchange(0);
 		const u32 failed = m_Failed.exchange(0);
 		WI_ASSET_LOG(Info, "Asset scan: {0} imported, {1} up to date, {2} failed{3}", imported, upToDate, failed, progress.cancel_requested() ? " (cancelled)" : "");
 		progress.finish(failed == 0 && !progress.cancel_requested());
+	}
+
+	// Cooked files whose source file is gone are deleted, so they do not pile up in the Library or end up in a pack.
+	u32 AssetDatabase::remove_orphans()
+	{
+		std::vector<std::string> orphans;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			for (auto& [guid, entry] : m_ImportCache.items())
+			{
+				const std::string source = entry.value("source", std::string{});
+				std::error_code error;
+				if (!source.empty() && !std::filesystem::exists(source, error) && !error)
+				{
+					orphans.push_back(guid);
+				}
+			}
+		}
+
+		for (const std::string& guidText : orphans)
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			const nlohmann::json entry = m_ImportCache[guidText];
+			const std::filesystem::path library = library_folder_for(entry.value("source", std::string{}));
+			for (const nlohmann::json& asset : entry.value("assets", nlohmann::json::array()))
+			{
+				if (std::optional<AssetGuid> cooked = AssetGuid::from_string(asset.get<std::string>()))
+				{
+					std::error_code error;
+					std::filesystem::remove(cooked_path(*cooked, library), error);
+				}
+			}
+
+			if (std::optional<AssetGuid> guid = AssetGuid::from_string(guidText))
+			{
+				m_PathByGuid.erase(*guid);
+			}
+			m_ImportCache.erase(guidText);
+		}
+
+		if (!orphans.empty())
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			save_cache_locked();
+		}
+
+		// Cooked files no import record owns (the cache was lost, or an import was interrupted). A file written in the last
+		// moments may belong to an import that has not recorded itself yet, so those are left alone.
+		std::unordered_set<std::string> known;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			for (auto& [guid, entry] : m_ImportCache.items())
+			{
+				for (const nlohmann::json& asset : entry.value("assets", nlohmann::json::array()))
+				{
+					known.insert(asset.get<std::string>());
+				}
+			}
+		}
+
+		u32 strays = 0;
+		std::error_code error;
+		for (auto it = std::filesystem::recursive_directory_iterator(m_LibraryRoot, error); !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error))
+		{
+			if (!it->is_regular_file() || it->path().extension() != ".wasset" || known.contains(it->path().stem().string()))
+			{
+				continue;
+			}
+
+			std::error_code timeError;
+			const auto age = std::filesystem::file_time_type::clock::now() - std::filesystem::last_write_time(it->path(), timeError);
+			if (!timeError && age > std::chrono::seconds(10))
+			{
+				std::error_code removeError;
+				if (std::filesystem::remove(it->path(), removeError))
+				{
+					strays++;
+				}
+			}
+		}
+
+		return static_cast<u32>(orphans.size()) + strays;
 	}
 
 	void AssetDatabase::reimport(const std::filesystem::path& source, bool force)
@@ -407,7 +499,8 @@ namespace wiwa
 			return mainAsset;
 		}
 
-		ImportContext context(*this, source, meta);
+		// Absolute, so that paths an importer builds from it (a model's textures) are not resolved against the source's folder twice.
+		ImportContext context(*this, std::filesystem::absolute(source), meta);
 		bool imported = false;
 		try
 		{

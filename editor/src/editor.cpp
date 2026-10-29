@@ -23,41 +23,61 @@ public:
 
 	virtual ~Editor() override
 	{
-
+		if (m_CommandThread.joinable())
+		{
+			m_CommandThread.join();
+		}
 	}
 
 protected:
 	std::vector<std::string> m_Args{};
+	std::thread m_CommandThread{};
+	std::atomic<int> m_CommandResult{ -1 }; // -1 while a command-line job runs, else its exit code
 
 	virtual void on_init() override
 	{
 		wiwa::AssetPipelineModule* assets = m_ModuleManager.add_module<wiwa::AssetPipelineModule>();
 		m_ModuleManager.add_module<EditorModule>();
 
-		// Command-line runs: do the job, set the exit code, and leave without opening the editor loop.
+		// Command-line runs (--pack <folder>, --asset-smoke): the work runs on its own thread and the editor loop keeps
+		// going, so the window stays responsive; on_update quits with the result once the work is done.
 		for (size_t i = 0; i < m_Args.size(); i++)
 		{
 			if (m_Args[i] == "--pack")
 			{
-				bool ok = false;
-				if (i + 1 < m_Args.size())
-				{
-					Ref<wiwa::JobProgress> progress = assets->pack_async(m_Args[i + 1]);
-					progress->wait();
-					ok = progress->succeeded();
-				}
 				if (i + 1 >= m_Args.size())
 				{
 					WI_ERROR("Assets", "--pack needs an output folder");
+					set_exit_code(1);
+					request_quit();
+					continue;
 				}
-				set_exit_code(ok ? 0 : 1);
-				request_quit();
+
+				const std::filesystem::path outDirectory = m_Args[i + 1];
+				m_CommandThread = std::thread([this, assets, outDirectory]()
+				{
+					Ref<wiwa::JobProgress> progress = assets->pack_async(outDirectory);
+					progress->wait();
+					m_CommandResult = progress->succeeded() ? 0 : 1;
+				});
 			}
 			else if (m_Args[i] == "--asset-smoke")
 			{
-				set_exit_code(wiwa::run_asset_smoke_test(*assets) ? 0 : 1);
-				request_quit();
+				m_CommandThread = std::thread([this, assets]()
+				{
+					m_CommandResult = wiwa::run_asset_smoke_test(*assets) ? 0 : 1;
+				});
 			}
+		}
+	}
+
+	virtual void on_update(float deltaTime) override
+	{
+		const int result = m_CommandResult;
+		if (result >= 0)
+		{
+			set_exit_code(result);
+			request_quit();
 		}
 	}
 };

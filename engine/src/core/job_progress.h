@@ -30,6 +30,13 @@ namespace wiwa
 			m_Done = 0;
 		}
 
+		// Names the stage that is running without touching the counts (a short last step of a job that is otherwise counted).
+		void set_stage(std::string stage)
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			m_Stage = std::move(stage);
+		}
+
 		// More work was found while running (a loaded asset names dependencies): the total grows, the bar must cope.
 		void add_total(u32 count) { m_Total += count; }
 
