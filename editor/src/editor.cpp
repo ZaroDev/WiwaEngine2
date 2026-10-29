@@ -7,6 +7,7 @@
 #include "asset_pipeline/asset_pipeline_module.h"
 #include "asset_pipeline/asset_smoke_test.h"
 #include "asset_pipeline/packager.h"
+#include "scene/scene_smoke_test.h"
 
 class Editor final : public wiwa::Engine
 {
@@ -63,6 +64,13 @@ protected:
 					Ref<wiwa::JobProgress> progress = assets->pack_async(outDirectory);
 					progress->wait();
 					m_CommandResult = progress->succeeded() ? 0 : 1;
+				});
+			}
+			else if (m_Args[i] == "--scene-smoke")
+			{
+				m_CommandThread = std::thread([this, assets]()
+				{
+					m_CommandResult = wiwa::run_scene_smoke_test(*assets) ? 0 : 1;
 				});
 			}
 			else if (m_Args[i] == "--asset-smoke")

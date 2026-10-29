@@ -23,6 +23,7 @@ project "wiwa_editor"
 		"%{IncludeDirs.CGLTF}",
 		"%{IncludeDirs.UFBX}",
 		"%{IncludeDirs.LZ4}",
+		"%{IncludeDirs.ENTT}",
 		"%{IncludeDirs.filewatch}",
 		"%{IncludeDirs.SPDLOG}",
 		--"%{IncludeDirs.ImGui}",

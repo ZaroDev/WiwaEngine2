@@ -27,6 +27,7 @@ IncludeDirs["DirectXHeaders"] = "%{wks.location}/engine/vendor/nvrhi/thirdparty/
 IncludeDirs["vkbootstrap"] = "%{wks.location}/engine/vendor/vk-bootstrap/src"
 IncludeDirs["ImGui"] = "%{wks.location}/engine/vendor/imgui"
 IncludeDirs["GLM"] = "%{wks.location}/engine/vendor/glm"
+IncludeDirs["ENTT"] = "%{wks.location}/engine/vendor/entt"
 IncludeDirs["PCG"] = "%{wks.location}/engine/vendor/PCG/include"
 IncludeDirs["JSON"] = "%{wks.location}/Wiwa/vendor/rapidjson"
 IncludeDirs["NJSON"] = "%{wks.location}/engine/vendor/nlohmann/include"

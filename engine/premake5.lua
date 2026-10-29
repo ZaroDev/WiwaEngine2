@@ -32,7 +32,8 @@ project "wiwa"
 		"%{IncludeDirs.VulkanSDK}",
 		"%{IncludeDirs.vkbootstrap}",
 		"%{IncludeDirs.ImGui}",
-		"%{IncludeDirs.LZ4}"
+		"%{IncludeDirs.LZ4}",
+		"%{IncludeDirs.ENTT}"
 	}
 
 	links
