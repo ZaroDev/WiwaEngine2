@@ -11,6 +11,7 @@
 #include "pass_profiler.h"
 #include "render_pass.h"
 #include "render_queue.h"
+#include "upload_queue.h"
 
 namespace wiwa
 {
@@ -38,6 +39,7 @@ namespace wiwa
 
 		nvrhi::IDevice* get_device() const { return m_Backend ? m_Backend->get_device() : nullptr; }
 		ShaderLibrary* get_shader_library() const { return m_Shaders.get(); }
+		UploadQueue& get_upload_queue() { return m_Uploads; }
 		GraphicsApi get_api() const { return m_Description.Api; }
 		std::string get_adapter_name() const { return m_Backend ? m_Backend->get_adapter_name() : std::string{}; }
 		u32 get_width() const { return m_Backend ? m_Backend->get_width() : 0; }
@@ -75,6 +77,7 @@ namespace wiwa
 
 		Scope<IRenderBackend> m_Backend{};
 		Scope<ShaderLibrary> m_Shaders{};
+		UploadQueue m_Uploads{};
 		nvrhi::CommandListHandle m_CommandList{};
 		std::vector<Scope<IRenderPass>> m_Passes{};
 		PassProfiler m_Profiler{};

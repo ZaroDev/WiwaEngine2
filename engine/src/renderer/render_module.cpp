@@ -185,6 +185,14 @@ namespace wiwa
 		snapshot.ShaderStatus = m_Renderer->get_shader_library()->get_status();
 		snapshot.Vsync = m_Renderer->is_vsync_enabled();
 		snapshot.ErrorCount = get_error_message_count();
+		const UploadQueue& uploads = m_Renderer->get_upload_queue();
+		snapshot.UploadQueueName = uploads.is_using_copy_queue() ? "copy queue" : "graphics queue";
+		snapshot.UploadBytesTotal = uploads.bytes_total();
+		if (uploads.last_submit_ms() > 0.0)
+		{
+			m_UploadMs = uploads.last_submit_ms();
+		}
+		snapshot.UploadMs = m_UploadMs;
 
 		const bool gpu = m_Renderer->are_gpu_timings_available();
 		for (const PassTiming& timing : m_Renderer->get_pass_timings())

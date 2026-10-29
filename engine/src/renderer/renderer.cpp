@@ -14,6 +14,9 @@ namespace wiwa
 	// A present that keeps asking for a resize at the size we already have is ignored after this many frames in a row.
 	constexpr u32 MAX_PRESENT_RESIZE_STREAK = 2;
 
+	// How much the GPU resource cache may upload in one frame.
+	constexpr size_t UPLOAD_BYTES_PER_FRAME = 16 * 1024 * 1024;
+
 	Renderer::Renderer() = default;
 
 	Renderer::~Renderer()
@@ -47,6 +50,17 @@ namespace wiwa
 
 		m_CommandList = m_Backend->get_device()->createCommandList();
 
+		if (!m_Uploads.initialize(m_Backend->get_device(), m_Backend->has_copy_queue(), UPLOAD_BYTES_PER_FRAME))
+		{
+			m_Backend->shutdown();
+			m_Backend.reset();
+			return false;
+		}
+		if (!m_Description.EnableCopyQueue)
+		{
+			m_Uploads.force_graphics_queue(true);
+		}
+
 		if (m_Description.Assets == nullptr)
 		{
 			WI_RENDER_LOG(Error, "RendererDescription::Assets is null");
@@ -74,6 +88,7 @@ namespace wiwa
 		}
 
 		m_Passes.clear();
+		m_Uploads.shutdown();
 		m_Shaders.reset();
 		m_Profiler = PassProfiler{}; // its timer queries belong to the device
 		m_CommandList = nullptr;
@@ -153,6 +168,8 @@ namespace wiwa
 			return false;
 		}
 
+		m_Uploads.begin_frame();
+
 		m_CommandList->open();
 
 		// Forces the next state to be applied from scratch. D3D11's flip-model swapchain
@@ -186,6 +203,8 @@ namespace wiwa
 		}
 
 		m_CommandList->close();
+
+		m_Uploads.submit(); // before the frame list: the graphics queue waits for it
 
 		status = m_Backend->submit_and_present(m_CommandList);
 		if (status != FrameStatus::Failed)

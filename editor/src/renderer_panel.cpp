@@ -28,6 +28,9 @@ void RendererPanel::draw()
 		const ImVec4 shaderColor = shadersFailed ? ImVec4(1.0f, 0.35f, 0.35f, 1.0f) : (shadersReady ? ImVec4(0.45f, 0.9f, 0.45f, 1.0f) : ImVec4(1.0f, 0.85f, 0.3f, 1.0f));
 		ImGui::TextColored(shaderColor, "Shaders: %s", snapshot.ShaderStatus.c_str());
 
+		ImGui::Text("Uploads: %s, %.2f MiB total, last %.2f ms", snapshot.UploadQueueName.c_str(),
+			static_cast<double>(snapshot.UploadBytesTotal) / (1024.0 * 1024.0), snapshot.UploadMs);
+
 		if (snapshot.ErrorCount > 0)
 		{
 			ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "GPU errors: %u (see the log)", snapshot.ErrorCount);

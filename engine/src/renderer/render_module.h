@@ -84,6 +84,7 @@ namespace wiwa
 		u32 m_StatsFrames = 0;
 		double m_Fps = 0.0;
 		double m_FrameMs = 0.0;
+		double m_UploadMs = 0.0;
 		bool m_Started = false;
 		std::atomic<bool> m_Failed{ false };
 	};
