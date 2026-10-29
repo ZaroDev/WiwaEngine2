@@ -56,6 +56,9 @@ namespace wiwa
 		// not catalogued yet is looked for again for a while (the editor writes the catalog when its import has finished).
 		Ref<JobProgress> load_async(std::string_view sourcePath, LoadMode mode = LoadMode::Replace);
 
+		// The load that `--scene <path>` started when the module did; null if there was no such argument.
+		Ref<JobProgress> get_startup_load() const { return m_StartupLoad; }
+
 		// How long one update() may spend creating entities. At least one entity is created per update, whatever the budget.
 		void set_commit_budget_ms(float milliseconds) { m_CommitBudgetMs = milliseconds; }
 		bool is_loading() const;
@@ -73,6 +76,7 @@ namespace wiwa
 
 		AssetManager* m_Assets = nullptr;
 		Scope<JobSystem> m_Jobs{};
+		Ref<JobProgress> m_StartupLoad{};
 
 		mutable std::mutex m_Mutex{};
 		Ref<Scene> m_Active{};

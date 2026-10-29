@@ -5,6 +5,7 @@
 #include <future>
 #include <thread>
 
+#include <assets/pak_source.h>
 #include <core/engine.h>
 
 #include "scene_components.h"
@@ -73,7 +74,7 @@ namespace wiwa
 			if (arguments[i] == "--scene")
 			{
 				WI_SCENE_LOG(Info, "Loading scene {0}", arguments[i + 1]);
-				load_async(std::string_view(arguments[i + 1]));
+				m_StartupLoad = load_async(std::string_view(arguments[i + 1]));
 			}
 		}
 	}
@@ -183,7 +184,9 @@ namespace wiwa
 		AssetRef ref = op->SceneRef;
 		if (!op->Path.empty())
 		{
-			const auto deadline = std::chrono::steady_clock::now() + PATH_LOOKUP_TIMEOUT;
+			// the catalog of a pack is complete from the start: a path that is not in it is not coming
+			const bool packed = dynamic_cast<PakSource*>(m_Assets->get_source()) != nullptr;
+			const auto deadline = std::chrono::steady_clock::now() + (packed ? std::chrono::seconds(0) : PATH_LOOKUP_TIMEOUT);
 			std::optional<AssetRef> found;
 			while (!(found = m_Assets->find_asset(op->Path)) && !progress.cancel_requested() && std::chrono::steady_clock::now() < deadline)
 			{
