@@ -55,11 +55,15 @@ namespace wiwa
 	void register_ibl_checks();
 	// The scene and quality settings checks (settings_checks.cpp).
 	void register_settings_checks();
+	// The environment cache checks (environment_checks.cpp).
+	void register_environment_checks();
 
 	// `--render-test`: runs every check once on the render thread. True when all passed.
 	bool run_render_checks(RenderWorld& world);
 
 	// Copies a mip of an RGBA8 texture to the CPU (a staging texture and a wait for the GPU): width * height * 4 bytes.
+	// One array slice and mip of a texture of any format as raw bytes (bytesPerPixel of them per texel, rows packed).
+	bool read_texture_slice_bytes(nvrhi::IDevice* device, nvrhi::ITexture* texture, u32 arraySlice, u32 mip, std::vector<u8>& bytes, u32& width, u32& height, u32 bytesPerPixel);
 	bool read_texture_rgba8(nvrhi::IDevice* device, nvrhi::ITexture* texture, std::vector<u8>& pixels, u32& width, u32& height, u32 mip = 0);
 	// Copies a range of a buffer to the CPU.
 	bool read_buffer_bytes(nvrhi::IDevice* device, nvrhi::IBuffer* buffer, u64 byteCount, std::vector<u8>& bytes);

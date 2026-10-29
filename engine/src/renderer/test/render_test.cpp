@@ -109,6 +109,7 @@ namespace wiwa
 			register_scale_checks();
 			register_ibl_checks();
 			register_settings_checks();
+			register_environment_checks();
 
 			register_render_check("copy_queue_roundtrip", [](RenderCheckContext& context)
 				{
@@ -287,6 +288,56 @@ namespace wiwa
 		}
 		bytes.assign(static_cast<const u8*>(mapped), static_cast<const u8*>(mapped) + byteCount);
 		device->unmapBuffer(staging);
+		return true;
+	}
+
+	bool read_texture_slice_bytes(nvrhi::IDevice* device, nvrhi::ITexture* texture, u32 arraySlice, u32 mip, std::vector<u8>& bytes, u32& width, u32& height, u32 bytesPerPixel)
+	{
+		const nvrhi::TextureDesc& description = texture->getDesc();
+		width = std::max(description.width >> mip, 1u);
+		height = std::max(description.height >> mip, 1u);
+
+		nvrhi::TextureDesc stagingDescription;
+		stagingDescription.width = width;
+		stagingDescription.height = height;
+		stagingDescription.format = description.format;
+		stagingDescription.debugName = "read_texture_slice_bytes staging";
+		nvrhi::StagingTextureHandle staging = device->createStagingTexture(stagingDescription, nvrhi::CpuAccessMode::Read);
+		nvrhi::CommandListHandle commandList = device->createCommandList();
+		if (!staging || !commandList)
+		{
+			return false;
+		}
+
+		nvrhi::TextureSlice source;
+		source.mipLevel = mip;
+		source.arraySlice = arraySlice;
+		source.width = width;
+		source.height = height;
+		source.depth = 1;
+		nvrhi::TextureSlice destination;
+		destination.width = width;
+		destination.height = height;
+		destination.depth = 1;
+
+		commandList->open();
+		commandList->copyTexture(staging, destination, texture, source);
+		commandList->close();
+		device->executeCommandList(commandList);
+		device->waitForIdle();
+
+		size_t rowPitch = 0;
+		const u8* mapped = static_cast<const u8*>(device->mapStagingTexture(staging, destination, nvrhi::CpuAccessMode::Read, &rowPitch));
+		if (mapped == nullptr)
+		{
+			return false;
+		}
+		bytes.resize(static_cast<size_t>(width) * height * bytesPerPixel);
+		for (u32 y = 0; y < height; y++)
+		{
+			std::memcpy(bytes.data() + static_cast<size_t>(y) * width * bytesPerPixel, mapped + y * rowPitch, static_cast<size_t>(width) * bytesPerPixel);
+		}
+		device->unmapStagingTexture(staging);
 		return true;
 	}
 

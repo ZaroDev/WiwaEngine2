@@ -180,6 +180,7 @@ namespace wiwa
 		{
 			m_Renderer->get_shader_library()->invalidate(guid);
 			m_Renderer->get_cache().invalidate(guid);
+			m_Renderer->get_environments().invalidate(guid);
 		}
 	}
 

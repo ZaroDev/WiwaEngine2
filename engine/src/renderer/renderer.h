@@ -11,6 +11,7 @@
 #include "pass_profiler.h"
 #include "render_pass.h"
 #include "render_queue.h"
+#include "environment/environment_cache.h"
 #include "resources/gpu_resource_cache.h"
 #include "scene/render_scene.h"
 #include "scene/scene_render_data.h"
@@ -47,6 +48,7 @@ namespace wiwa
 		UploadQueue& get_upload_queue() { return m_Uploads; }
 		RenderScene& get_scene() { return m_Scene; }
 		GpuResourceCache& get_cache() { return *m_Cache; }
+		EnvironmentCache& get_environments() { return *m_Environments; }
 		SceneRenderData& get_scene_data() { return m_SceneData; }
 		AssetManager* get_assets() const { return m_Description.Assets; }
 		TextureRegistry& get_textures() { return m_Textures; }
@@ -103,7 +105,9 @@ namespace wiwa
 		Scope<ShaderLibrary> m_Shaders{};
 		UploadQueue m_Uploads{};
 		RenderScene m_Scene{};
+		Scope<JobSystem> m_Jobs{};                 // background work of the renderer (the BRDF table, atmosphere builds)
 		Scope<GpuResourceCache> m_Cache{};
+		Scope<EnvironmentCache> m_Environments{};
 		SceneRenderData m_SceneData{};
 		TextureRegistry m_Textures{};
 		ViewportTarget m_Viewport{};

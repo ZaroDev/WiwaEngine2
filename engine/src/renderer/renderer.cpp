@@ -61,6 +61,8 @@ namespace wiwa
 			m_Uploads.force_graphics_queue(true);
 		}
 		m_Cache = CreateScope<GpuResourceCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads);
+		m_Jobs = CreateScope<JobSystem>(2);
+		m_Environments = CreateScope<EnvironmentCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads, m_Jobs.get());
 		if (!m_SceneData.initialize(m_Backend->get_device()))
 		{
 			WI_RENDER_LOG(Error, "Could not create the scene render data");
@@ -99,6 +101,8 @@ namespace wiwa
 		m_SceneData.shutdown();
 		m_Textures = TextureRegistry{};
 		m_Viewport.destroy();
+		m_Environments.reset();
+		m_Jobs.reset();
 		m_Cache.reset();
 		m_Uploads.shutdown();
 		m_Shaders.reset();
@@ -184,6 +188,7 @@ namespace wiwa
 		// context: two lists cannot be open at once). The graphics queue waits for the copy queue before the frame list runs.
 		m_Uploads.begin_frame();
 		m_Cache->update();
+		m_Environments->update();
 		m_Uploads.submit(m_Backend->get_last_graphics_instance());
 
 		update_viewport();
