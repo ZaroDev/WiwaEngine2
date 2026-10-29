@@ -88,12 +88,25 @@ namespace wiwa
 			}
 		}
 
+		nvrhi::TextureDesc normal;
+		normal.width = width;
+		normal.height = height;
+		normal.format = nvrhi::Format::RG16_FLOAT;
+		normal.isRenderTarget = true;
+		normal.isShaderResource = true;
+		normal.initialState = nvrhi::ResourceStates::ShaderResource;
+		normal.keepInitialState = true;
+		normal.useClearValue = true;
+		normal.clearValue = nvrhi::Color(0.0f, 0.0f, 0.0f, 0.0f); // the encoding of +Z
+		normal.debugName = "Viewport normals";
+		m_Normal = device->createTexture(normal);
+
 		m_Hdr = device->createTexture(hdr);
 		m_Depth = device->createTexture(depth);
 		m_Ldr = device->createTexture(ldr);
 		ldr.debugName = "Viewport tonemapped (before FXAA)";
 		m_PreFxaa = device->createTexture(ldr);
-		if (!m_Hdr || !m_Depth || !m_Ldr || !m_PreFxaa || !m_Exposure || !m_Histogram || !bloomOk)
+		if (!m_Hdr || !m_Depth || !m_Ldr || !m_PreFxaa || !m_Normal || !m_Exposure || !m_Histogram || !bloomOk)
 		{
 			WI_LOG(Error, "Renderer", "could not create the {0}x{1} viewport targets", width, height);
 			destroy();
@@ -113,11 +126,16 @@ namespace wiwa
 		ldrFramebuffer.addColorAttachment(m_Ldr);
 		m_LdrFramebuffer = device->createFramebuffer(ldrFramebuffer);
 
+		nvrhi::FramebufferDesc prepassFramebuffer;
+		prepassFramebuffer.addColorAttachment(m_Normal);
+		prepassFramebuffer.setDepthAttachment(m_Depth);
+		m_PrepassFramebuffer = device->createFramebuffer(prepassFramebuffer);
+
 		nvrhi::FramebufferDesc preFxaaFramebuffer;
 		preFxaaFramebuffer.addColorAttachment(m_PreFxaa);
 		m_PreFxaaFramebuffer = device->createFramebuffer(preFxaaFramebuffer);
 
-		if (!m_HdrFramebuffer || !m_DepthFramebuffer || !m_LdrFramebuffer || !m_PreFxaaFramebuffer)
+		if (!m_HdrFramebuffer || !m_DepthFramebuffer || !m_LdrFramebuffer || !m_PreFxaaFramebuffer || !m_PrepassFramebuffer)
 		{
 			WI_LOG(Error, "Renderer", "could not create the viewport framebuffers");
 			destroy();
@@ -136,6 +154,8 @@ namespace wiwa
 		m_DepthFramebuffer = nullptr;
 		m_LdrFramebuffer = nullptr;
 		m_PreFxaaFramebuffer = nullptr;
+		m_PrepassFramebuffer = nullptr;
+		m_Normal = nullptr;
 		for (nvrhi::TextureHandle& texture : m_BloomDown)
 		{
 			texture = nullptr;

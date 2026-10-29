@@ -155,6 +155,29 @@ float3 TransformNormal(SceneInstance instance, float3 normal)
 	return normalize(instance.NormalC0.xyz * normal.x + instance.NormalC1.xyz * normal.y + instance.NormalC2.xyz * normal.z);
 }
 
+// Unit vectors in two numbers (octahedral mapping): the depth prepass writes the surface normals with them. Mirrored by
+// octahedral_encode / octahedral_decode in the render checks.
+float2 EncodeOctahedral(float3 n)
+{
+	n /= abs(n.x) + abs(n.y) + abs(n.z);
+	float2 encoded = n.xy;
+	if (n.z < 0.0)
+	{
+		encoded = (1.0 - abs(n.yx)) * float2(n.x >= 0.0 ? 1.0 : -1.0, n.y >= 0.0 ? 1.0 : -1.0);
+	}
+	return encoded;
+}
+
+float3 DecodeOctahedral(float2 e)
+{
+	float3 n = float3(e.x, e.y, 1.0 - abs(e.x) - abs(e.y));
+	if (n.z < 0.0)
+	{
+		n.xy = (1.0 - abs(n.yx)) * float2(n.x >= 0.0 ? 1.0 : -1.0, n.y >= 0.0 ? 1.0 : -1.0);
+	}
+	return normalize(n);
+}
+
 struct MeshVertexInput
 {
 	float3 Position : POSITION;

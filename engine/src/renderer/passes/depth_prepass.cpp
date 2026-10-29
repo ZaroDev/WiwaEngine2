@@ -18,6 +18,7 @@ namespace wiwa
 		}
 
 		m_Shaders->request(engine_assets::DEPTH_SHADER, ShaderStage::Vertex);
+		m_Shaders->request(engine_assets::DEPTH_SHADER, ShaderStage::Pixel);
 		m_Shaders->request(engine_assets::DEPTH_MASK_SHADER, ShaderStage::Vertex);
 		m_Shaders->request(engine_assets::DEPTH_MASK_SHADER, ShaderStage::Pixel);
 		return true;
@@ -26,13 +27,14 @@ namespace wiwa
 	bool DepthPrepass::is_ready() const
 	{
 		return m_Shaders->get(engine_assets::DEPTH_SHADER, ShaderStage::Vertex) != nullptr
+			&& m_Shaders->get(engine_assets::DEPTH_SHADER, ShaderStage::Pixel) != nullptr
 			&& m_Shaders->get(engine_assets::DEPTH_MASK_SHADER, ShaderStage::Vertex) != nullptr
 			&& m_Shaders->get(engine_assets::DEPTH_MASK_SHADER, ShaderStage::Pixel) != nullptr;
 	}
 
 	void DepthPrepass::update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer)
 	{
-		if (m_Shaders->has_failed(engine_assets::DEPTH_SHADER, ShaderStage::Vertex) || m_Shaders->has_failed(engine_assets::DEPTH_MASK_SHADER, ShaderStage::Vertex)
+		if (m_Shaders->has_failed(engine_assets::DEPTH_SHADER, ShaderStage::Vertex) || m_Shaders->has_failed(engine_assets::DEPTH_SHADER, ShaderStage::Pixel) || m_Shaders->has_failed(engine_assets::DEPTH_MASK_SHADER, ShaderStage::Vertex)
 			|| m_Shaders->has_failed(engine_assets::DEPTH_MASK_SHADER, ShaderStage::Pixel))
 		{
 			m_Failed = true;
@@ -52,9 +54,10 @@ namespace wiwa
 		m_BuiltViewportGeneration = data.viewport()->generation();
 
 		nvrhi::IShader* opaqueVertex = m_Shaders->get(engine_assets::DEPTH_SHADER, ShaderStage::Vertex);
+		nvrhi::IShader* opaquePixel = m_Shaders->get(engine_assets::DEPTH_SHADER, ShaderStage::Pixel);
 		nvrhi::IShader* maskedVertex = m_Shaders->get(engine_assets::DEPTH_MASK_SHADER, ShaderStage::Vertex);
 		nvrhi::IShader* maskedPixel = m_Shaders->get(engine_assets::DEPTH_MASK_SHADER, ShaderStage::Pixel);
-		nvrhi::IFramebuffer* framebuffer = data.viewport()->depth_framebuffer();
+		nvrhi::IFramebuffer* framebuffer = data.viewport()->prepass_framebuffer();
 
 		m_OpaqueInputLayout = scene_pass::make_mesh_input_layout(m_Device, opaqueVertex);
 		m_MaskedInputLayout = scene_pass::make_mesh_input_layout(m_Device, maskedVertex);
@@ -67,7 +70,7 @@ namespace wiwa
 			options.DoubleSided = doubleSided != 0;
 			options.DepthTest = true;
 			options.DepthWrite = true;
-			m_Opaque[doubleSided] = scene_pass::make_pipeline(m_Device, m_OpaqueInputLayout, opaqueVertex, nullptr, opaqueLayouts, framebuffer, options);
+			m_Opaque[doubleSided] = scene_pass::make_pipeline(m_Device, m_OpaqueInputLayout, opaqueVertex, opaquePixel, opaqueLayouts, framebuffer, options);
 			m_Masked[doubleSided] = scene_pass::make_pipeline(m_Device, m_MaskedInputLayout, maskedVertex, maskedPixel, maskedLayouts, framebuffer, options);
 			if (m_Opaque[doubleSided] == nullptr || m_Masked[doubleSided] == nullptr)
 			{
@@ -86,6 +89,7 @@ namespace wiwa
 
 		const SceneRenderData& data = *frame.Scene;
 		commandList->clearDepthStencilTexture(data.viewport()->depth(), nvrhi::AllSubresources, true, 1.0f, false, 0);
+		commandList->clearTextureFloat(data.viewport()->normal(), nvrhi::AllSubresources, nvrhi::Color(0.0f, 0.0f, 0.0f, 0.0f));
 
 		if (!data.has_camera() || (data.opaque().empty() && data.masked().empty()))
 		{
@@ -98,7 +102,7 @@ namespace wiwa
 			return;
 		}
 
-		nvrhi::IFramebuffer* framebuffer = data.viewport()->depth_framebuffer();
+		nvrhi::IFramebuffer* framebuffer = data.viewport()->prepass_framebuffer();
 		const nvrhi::Viewport viewport(static_cast<float>(data.viewport()->width()), static_cast<float>(data.viewport()->height()));
 		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Opaque[0], m_Opaque[1], false);
 		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Masked[0], m_Masked[1], true);

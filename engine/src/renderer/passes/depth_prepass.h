@@ -6,7 +6,7 @@
 
 namespace wiwa
 {
-	// Clears the viewport's depth and draws the opaque and alpha-masked geometry into it, depth only. The forward pass then shades
+	// Clears the viewport's depth and draws the opaque and alpha-masked geometry into it with their normals. The forward pass then shades
 	// each pixel once.
 	class DepthPrepass : public IRenderPass
 	{

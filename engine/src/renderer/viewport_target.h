@@ -43,6 +43,9 @@ namespace wiwa
 		u32 bloom_height(u32 level) const { return std::max(1u, m_Height >> (level + 1)); }
 		nvrhi::IFramebuffer* hdr_framebuffer() const { return m_HdrFramebuffer; }     // HDR + depth
 		nvrhi::IFramebuffer* depth_framebuffer() const { return m_DepthFramebuffer; } // depth only
+		// The world normal of the nearest surface, facing the viewer, octahedral encoded (RG16F), written by the depth prepass.
+		nvrhi::ITexture* normal() const { return m_Normal; }
+		nvrhi::IFramebuffer* prepass_framebuffer() const { return m_PrepassFramebuffer; } // normal + depth
 		nvrhi::IFramebuffer* ldr_framebuffer() const { return m_LdrFramebuffer; }
 		// Where the tonemap pass draws when FXAA runs: the image FXAA reads and writes to ldr(). Same format as ldr().
 		nvrhi::ITexture* pre_fxaa() const { return m_PreFxaa; }
@@ -62,6 +65,8 @@ namespace wiwa
 		nvrhi::FramebufferHandle m_HdrFramebuffer{};
 		nvrhi::FramebufferHandle m_DepthFramebuffer{};
 		nvrhi::FramebufferHandle m_LdrFramebuffer{};
+		nvrhi::TextureHandle m_Normal{};
+		nvrhi::FramebufferHandle m_PrepassFramebuffer{};
 		nvrhi::TextureHandle m_PreFxaa{};
 		nvrhi::FramebufferHandle m_PreFxaaFramebuffer{};
 		u32 m_Width = 0;

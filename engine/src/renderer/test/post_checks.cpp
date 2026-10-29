@@ -74,6 +74,73 @@ namespace wiwa
 			return settings;
 		}
 
+		// The octahedral mapping of scene_common.hlsli.
+		glm::vec2 octahedral_encode(glm::vec3 n)
+		{
+			n /= std::abs(n.x) + std::abs(n.y) + std::abs(n.z);
+			glm::vec2 encoded(n.x, n.y);
+			if (n.z < 0.0f)
+			{
+				encoded = (glm::vec2(1.0f) - glm::vec2(std::abs(n.y), std::abs(n.x))) * glm::vec2(n.x >= 0.0f ? 1.0f : -1.0f, n.y >= 0.0f ? 1.0f : -1.0f);
+			}
+			return encoded;
+		}
+
+		glm::vec3 octahedral_decode(glm::vec2 e)
+		{
+			glm::vec3 n(e.x, e.y, 1.0f - std::abs(e.x) - std::abs(e.y));
+			if (n.z < 0.0f)
+			{
+				const glm::vec2 xy = (glm::vec2(1.0f) - glm::vec2(std::abs(n.y), std::abs(n.x))) * glm::vec2(n.x >= 0.0f ? 1.0f : -1.0f, n.y >= 0.0f ? 1.0f : -1.0f);
+				n.x = xy.x;
+				n.y = xy.y;
+			}
+			return glm::normalize(n);
+		}
+
+		float half_to_float(u16 h)
+		{
+			const int sign = (h >> 15) & 1;
+			const int exponent = (h >> 10) & 31;
+			const int mantissa = h & 1023;
+			float value;
+			if (exponent == 0)
+			{
+				value = std::ldexp(static_cast<float>(mantissa), -24);
+			}
+			else if (exponent == 31)
+			{
+				value = std::numeric_limits<float>::infinity();
+			}
+			else
+			{
+				value = std::ldexp(static_cast<float>(mantissa + 1024), exponent - 25);
+			}
+			return sign ? -value : value;
+		}
+
+		// The normal the prepass wrote at a pixel, decoded.
+		bool read_normal(RenderCheckContext& context, SceneTester& test, int x, int y, glm::vec3& normal, glm::vec2* encoded = nullptr)
+		{
+			std::vector<u8> bytes;
+			u32 width = 0;
+			u32 height = 0;
+			if (!read_texture_slice_bytes(context.Device, test.renderer().get_viewport().normal(), 0, 0, bytes, width, height, 4))
+			{
+				return false;
+			}
+			const size_t offset = (static_cast<size_t>(y) * width + static_cast<size_t>(x)) * 4;
+			u16 raw[2];
+			std::memcpy(raw, bytes.data() + offset, sizeof(raw));
+			const glm::vec2 e(half_to_float(raw[0]), half_to_float(raw[1]));
+			normal = octahedral_decode(e);
+			if (encoded != nullptr)
+			{
+				*encoded = e;
+			}
+			return true;
+		}
+
 		// Renders an emissive gray cube with the tonemap settings and returns the linear value that was displayed.
 		bool render_gray(RenderCheckContext& context, SceneTester& test, const TonemapSettings& tonemap, float exposureEv, int& pixelValue)
 		{
@@ -321,6 +388,81 @@ namespace wiwa
 				renderer.set_quality(quality);
 				context.check(test.render(), "render it with FXAA");
 				context.check(SceneTester::max_difference(plain, test.pixels()) == 0, "a flat image is bit-identical");
+			});
+
+		register_render_check("octahedral_roundtrip", [](RenderCheckContext& context)
+			{
+				u32 state = 12345;
+				auto next = [&]() { state = state * 1664525u + 1013904223u; return static_cast<float>(state >> 8) / static_cast<float>(1 << 24) * 2.0f - 1.0f; };
+				float worst = 0.0f;
+				for (int i = 0; i < 1000; i++)
+				{
+					const glm::vec3 n = glm::normalize(glm::vec3(next(), next(), next()) + glm::vec3(0.001f));
+					worst = std::max(worst, glm::length(octahedral_decode(octahedral_encode(n)) - n));
+				}
+				context.check(worst < 0.001f, "decode(encode(n)) is n");
+				context.check(octahedral_encode(glm::vec3(0.0f, 0.0f, 1.0f)) == glm::vec2(0.0f), "+Z is the origin, the value the target is cleared to");
+			});
+
+		register_render_check("prepass_writes_normals", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				const MaterialData material = test.color_material(glm::vec3(0.5f));
+				test.add_instance(test.add_mesh(make_test_box(glm::vec3(1.0f, 1.0f, 0.02f), test.add_material(material))), glm::rotate(glm::mat4(1.0f), glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
+				test.scene().set_settings(dark());
+				context.check(test.render(), "render a quad turned 45 degrees about Y");
+				glm::vec3 turned(0.0f);
+				context.check(read_normal(context, test, 32, 32, turned), "read the normals");
+				WI_LOG(Info, "RenderTest", "prepass_writes_normals turned ({0}, {1}, {2})", turned.x, turned.y, turned.z);
+				context.check(glm::length(turned - glm::vec3(0.7071f, 0.0f, 0.7071f)) < 0.03f, "the face shows its world normal");
+
+				glm::vec3 corner(0.0f);
+				glm::vec2 encoded;
+				context.check(read_normal(context, test, 2, 2, corner, &encoded), "read a pixel with no geometry");
+				context.check(encoded == glm::vec2(0.0f), "no geometry leaves the cleared value");
+			});
+
+		register_render_check("prepass_back_face_normals", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				MaterialData material = test.color_material(glm::vec3(0.5f));
+				material.DoubleSided = true;
+				// turned away from the camera: only the back of the quad is seen
+				test.add_instance(test.add_mesh(make_test_box(glm::vec3(1.0f, 1.0f, 0.02f), test.add_material(material))), glm::rotate(glm::mat4(1.0f), glm::radians(180.0f + 45.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
+				test.scene().set_settings(dark());
+				context.check(test.render(), "render a double-sided quad seen from behind");
+				glm::vec3 seen(0.0f);
+				context.check(read_normal(context, test, 32, 32, seen), "read the normals");
+				context.check(glm::dot(seen, glm::normalize(glm::vec3(0.0f, 0.0f, 4.0f))) > 0.5f, "the normal faces the viewer");
+			});
+
+		register_render_check("prepass_masked_normals", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				TextureData texture;
+				texture.Width = 2;
+				texture.Height = 1;
+				texture.Mips.push_back({ 255, 255, 255, 0, 255, 255, 255, 255 });
+				texture.Mips.push_back({ 255, 255, 255, 128 });
+				MaterialData material;
+				material.BaseColorFactor = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+				material.Alpha = AlphaMode::Mask;
+				material.AlphaCutoff = 0.5f;
+				material.DoubleSided = false;
+				material.BaseColorTexture = test.add_texture(std::move(texture));
+				const glm::mat4 turned = glm::rotate(glm::mat4(1.0f), glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+				test.add_instance(test.add_mesh(make_test_box(glm::vec3(1.0f, 1.0f, 0.02f), test.add_material(material))), turned);
+				test.scene().set_settings(dark());
+				context.check(test.render(), "render a cut-out quad");
+
+				const glm::ivec2 cut = test.to_pixel(glm::vec3(turned * glm::vec4(-0.5f, 0.0f, 0.02f, 1.0f)));
+				const glm::ivec2 solid = test.to_pixel(glm::vec3(turned * glm::vec4(0.5f, 0.0f, 0.02f, 1.0f)));
+				glm::vec3 normal(0.0f);
+				glm::vec2 encoded;
+				context.check(read_normal(context, test, cut.x, cut.y, normal, &encoded), "read the cut-out half");
+				context.check(encoded == glm::vec2(0.0f), "the cut-out half writes no normal");
+				context.check(read_normal(context, test, solid.x, solid.y, normal, &encoded), "read the solid half");
+				context.check(glm::length(normal - glm::vec3(0.7071f, 0.0f, 0.7071f)) < 0.03f, "the solid half writes its normal");
 			});
 	}
 }
