@@ -246,7 +246,17 @@ namespace wiwa
 	void archive(BinaryArchive& ar, ShaderData& v)
 	{
 		ar.string(v.Name);
-		ar.string(v.Source);
+		ar.list(v.Binaries, [&](ShaderBinary& b)
+			{
+				archive_enum(ar, b.Stage, 3);
+				archive_enum(ar, b.Target, 2);
+				ar.string(b.Entry);
+				ar.pod_vector(b.Code);
+				if (ar.reading() && ar.ok() && b.Code.empty())
+				{
+					ar.fail();
+				}
+			});
 	}
 
 	void archive(BinaryArchive& ar, MeshData& v)

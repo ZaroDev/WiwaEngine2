@@ -145,33 +145,7 @@ namespace wiwa
 				return true;
 			}
 		};
-
-		class ShaderImporter final : public IImporter
-		{
-		public:
-			virtual const char* name() const override { return "ShaderImporter"; }
-			virtual u32 version() const override { return 1; }
-			virtual std::vector<std::string> extensions() const override { return { ".hlsl", ".hlsli" }; }
-
-			virtual bool import(ImportContext& ctx) override
-			{
-				std::optional<std::vector<std::byte>> bytes = read_binary_file(ctx.source());
-				if (!bytes)
-				{
-					WI_ASSET_LOG(Error, "Cannot read {0}", ctx.source().string());
-					return false;
-				}
-
-				ShaderData shader;
-				shader.Name = ctx.source().filename().string();
-				shader.Source.assign(reinterpret_cast<const char*>(bytes->data()), bytes->size());
-
-				ctx.emit(ctx.main_asset(), shader);
-				return true;
-			}
-		};
 	}
 
 	Scope<IImporter> create_lut_importer() { return CreateScope<LutImporter>(); }
-	Scope<IImporter> create_shader_importer() { return CreateScope<ShaderImporter>(); }
 }

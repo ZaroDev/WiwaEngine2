@@ -55,10 +55,46 @@ namespace wiwa
 		std::vector<float> Table{}; // Size^3 * 3, red fastest
 	};
 
+	enum class ShaderStage : u32
+	{
+		Vertex,
+		Pixel,
+		Compute,
+	};
+
+	// What the binary is: DXBC (shader model 5.0) for D3D11 and D3D12, SPIR-V for Vulkan.
+	enum class ShaderTarget : u32
+	{
+		Dxbc,
+		Spirv,
+	};
+
+	struct ShaderBinary
+	{
+		ShaderStage Stage = ShaderStage::Vertex;
+		ShaderTarget Target = ShaderTarget::Dxbc;
+		std::string Entry{}; // VSMain, PSMain or CSMain
+		std::vector<u8> Code{};
+	};
+
+	// A shader file cooked once into every binary a renderer backend can take. A game compiles nothing: it picks the
+	// binary of its backend. A file without entry points (an include) has no binaries.
 	struct ShaderData
 	{
 		std::string Name{};
-		std::string Source{};
+		std::vector<ShaderBinary> Binaries{};
+
+		const ShaderBinary* find(ShaderStage stage, ShaderTarget target) const
+		{
+			for (const ShaderBinary& binary : Binaries)
+			{
+				if (binary.Stage == stage && binary.Target == target)
+				{
+					return &binary;
+				}
+			}
+			return nullptr;
+		}
 	};
 
 	struct MeshVertex

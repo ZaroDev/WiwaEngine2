@@ -264,6 +264,22 @@ namespace wiwa
 		progress.finish(failed == 0 && !progress.cancel_requested());
 	}
 
+	// The sources whose last import read this file besides their own content.
+	std::vector<std::string> AssetDatabase::find_dependents(const std::string& sourceKey) const
+	{
+		std::vector<std::string> dependents;
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto& [guid, entry] : m_ImportCache.items())
+		{
+			auto extra = entry.find("extraSources");
+			if (extra != entry.end() && extra->is_object() && extra->contains(sourceKey))
+			{
+				dependents.push_back(entry.value("source", std::string{}));
+			}
+		}
+		return dependents;
+	}
+
 	// Cooked files whose source file is gone are deleted, so they do not pile up in the Library or end up in a pack.
 	u32 AssetDatabase::remove_orphans()
 	{
@@ -348,9 +364,22 @@ namespace wiwa
 
 	void AssetDatabase::reimport(const std::filesystem::path& source, bool force)
 	{
-		if (find_importer(source))
+		if (!find_importer(source))
 		{
-			import_source(source, true, force, nullptr);
+			return;
+		}
+
+		import_source(source, true, force, nullptr);
+
+		// Whatever was cooked with this file as an input (a shader that includes it) is checked again; its record holds the
+		// hash of this file, so it is cooked again only if the content really changed.
+		const std::string key = key_of(source);
+		for (const std::string& dependent : find_dependents(key))
+		{
+			if (dependent != key)
+			{
+				import_source(dependent, true, false, nullptr);
+			}
 		}
 	}
 
@@ -479,6 +508,20 @@ namespace wiwa
 
 		bool upToDate = !force && previous.is_object() && previous.value("sourceHash", "") == sourceHash && previous.value("settingsHash", "") == settingsHash
 			&& previous.value("version", 0u) == importer->version() && previous.contains("assets");
+		if (upToDate && previous.contains("extraSources"))
+		{
+			// the files the last import read besides the source (shader includes) must be unchanged too
+			for (auto& [file, storedHash] : previous["extraSources"].items())
+			{
+				std::vector<std::byte> bytes;
+				if (!read_file(file, bytes) || hex(hash64(bytes.data(), bytes.size())) != storedHash.get<std::string>())
+				{
+					upToDate = false;
+					break;
+				}
+			}
+		}
+
 		if (upToDate)
 		{
 			for (const nlohmann::json& asset : previous["assets"])
@@ -553,6 +596,16 @@ namespace wiwa
 		meta.Version = importer->version();
 		meta.save(metaPath);
 
+		nlohmann::json extraSources = nlohmann::json::object();
+		for (const std::filesystem::path& dependency : context.get_source_dependencies())
+		{
+			std::vector<std::byte> bytes;
+			if (read_file(dependency, bytes))
+			{
+				extraSources[key_of(dependency)] = hex(hash64(bytes.data(), bytes.size()));
+			}
+		}
+
 		std::vector<std::function<void(AssetGuid)>> listeners;
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex);
@@ -562,6 +615,7 @@ namespace wiwa
 			entry["settingsHash"] = settingsHash;
 			entry["version"] = importer->version();
 			entry["assets"] = cookedGuids;
+			entry["extraSources"] = extraSources;
 			m_ImportCache[guidText] = std::move(entry);
 			save_cache_locked();
 			listeners = m_Listeners;

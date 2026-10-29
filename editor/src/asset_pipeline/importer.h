@@ -61,15 +61,24 @@ namespace wiwa
 			m_Emitted.push_back(std::move(asset));
 		}
 
+		// A file the cooked output depends on besides the source itself (a shader's #includes). Its content is hashed into
+		// the import record, so the asset is cooked again when the file changes, even while the editor was closed.
+		void add_source_dependency(const std::filesystem::path& file) { m_SourceDependencies.push_back(file); }
+
+		// The folders of source assets (Assets/, engine/); shader includes are looked up in <root>/shaders.
+		std::vector<std::filesystem::path> get_source_roots() const;
+
 		void warn(const std::string& message);
 
 		std::vector<EmittedAsset>& emitted() { return m_Emitted; }
+		const std::vector<std::filesystem::path>& get_source_dependencies() const { return m_SourceDependencies; }
 
 	private:
 		AssetDatabase& m_Database;
 		std::filesystem::path m_Source;
 		MetaFile& m_Meta;
 		std::vector<EmittedAsset> m_Emitted{};
+		std::vector<std::filesystem::path> m_SourceDependencies{};
 	};
 
 	class IImporter

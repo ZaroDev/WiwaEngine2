@@ -132,6 +132,27 @@ namespace wiwa
 		std::error_code error;
 		std::filesystem::remove_all(temp, error);
 
+		// A shader payload survives a round trip, and no truncated copy of it is accepted.
+		{
+			ShaderData shader;
+			shader.Name = "smoke.hlsl";
+			shader.Binaries.push_back(ShaderBinary{ ShaderStage::Pixel, ShaderTarget::Spirv, "PSMain", { 1, 2, 3, 4 } });
+			shader.Binaries.push_back(ShaderBinary{ ShaderStage::Vertex, ShaderTarget::Dxbc, "VSMain", { 9 } });
+
+			const std::vector<std::byte> bytes = serialize(shader);
+			std::optional<ShaderData> back = deserialize<ShaderData>(bytes);
+			const ShaderBinary* pixel = back ? back->find(ShaderStage::Pixel, ShaderTarget::Spirv) : nullptr;
+			check(pixel != nullptr && pixel->Code == shader.Binaries[0].Code && back->find(ShaderStage::Vertex, ShaderTarget::Dxbc) != nullptr, "a shader payload round-trips");
+			check(back && back->find(ShaderStage::Compute, ShaderTarget::Dxbc) == nullptr, "find returns null for a binary that is not there");
+
+			bool truncatedAccepted = false;
+			for (size_t length = 0; length < bytes.size(); length++)
+			{
+				truncatedAccepted = truncatedAccepted || deserialize<ShaderData>(std::span<const std::byte>(bytes.data(), length)).has_value();
+			}
+			check(!truncatedAccepted, "a truncated shader payload is rejected");
+		}
+
 		// 0. an import reports its progress and ends with every item done
 		{
 			Ref<JobProgress> scan = pipeline.scan_async();

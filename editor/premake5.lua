@@ -41,6 +41,7 @@ project "wiwa_editor"
 		"wiwa",
 		"LZ4",
 		"ufbx",
+		"d3dcompiler",
 		--"ImGui",
 		-- "Optick",
 		-- "ImGuizmo"

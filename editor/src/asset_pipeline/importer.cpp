@@ -31,6 +31,16 @@ namespace wiwa
 		return m_Database.ensure_imported(path.lexically_normal(), defaultSettings);
 	}
 
+	std::vector<std::filesystem::path> ImportContext::get_source_roots() const
+	{
+		std::vector<std::filesystem::path> roots;
+		for (const AssetDatabase::SourceRoot& root : m_Database.get_roots())
+		{
+			roots.push_back(root.Source);
+		}
+		return roots;
+	}
+
 	void ImportContext::warn(const std::string& message)
 	{
 		WI_ASSET_LOG(Warning, "{0}: {1}", m_Source.filename().string(), message);
