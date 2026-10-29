@@ -38,6 +38,7 @@ namespace wiwa
 {
 	void RenderModule::init()
 	{
+		m_DebugDraw.set_enabled(false); // shapes are only collected while the renderer runs: until then nothing would send them
 		if (!read_arguments())
 		{
 			return;
@@ -132,6 +133,7 @@ namespace wiwa
 		}
 
 		m_Started = true;
+		m_DebugDraw.set_enabled(true);
 
 		set_quality(m_Quality); // the render thread starts with the defaults: tell it what the file said
 
@@ -165,6 +167,7 @@ namespace wiwa
 		m_ImGuiPass = nullptr;
 		m_ImGui.shutdown();
 		m_Started = false;
+		m_DebugDraw.set_enabled(false);
 
 		if (m_SmokeFrames > 0 && wasStarted)
 		{
@@ -575,6 +578,7 @@ namespace wiwa
 	void RenderModule::fail_and_quit(const char* reason)
 	{
 		WI_RENDER_LOG(Error, "{0}", reason);
+		m_DebugDraw.set_enabled(false);
 		Engine::get().set_exit_code(1);
 		Engine::get().request_quit();
 	}

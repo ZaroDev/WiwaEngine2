@@ -82,16 +82,17 @@ namespace wiwa
 
 	void DepthPrepass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
 	{
-		if (frame.Scene == nullptr || !frame.Scene->active() || m_Failed)
+		if (frame.Scene == nullptr || !frame.Scene->active())
 		{
 			return;
 		}
 
+		// Cleared even when this pass has failed: the outline pass reads the stencil, and a frame must not inherit the last one's.
 		const SceneRenderData& data = *frame.Scene;
 		commandList->clearDepthStencilTexture(data.viewport()->depth(), nvrhi::AllSubresources, true, 1.0f, true, 0);
 		commandList->clearTextureFloat(data.viewport()->normal(), nvrhi::AllSubresources, nvrhi::Color(0.0f, 0.0f, 0.0f, 0.0f));
 
-		if (!data.has_camera() || (data.opaque().empty() && data.masked().empty()))
+		if (m_Failed || !data.has_camera() || (data.opaque().empty() && data.masked().empty()))
 		{
 			return;
 		}

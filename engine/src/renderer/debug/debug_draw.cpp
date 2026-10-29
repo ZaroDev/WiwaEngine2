@@ -434,12 +434,13 @@ namespace wiwa
 		m_LineCount = static_cast<u32>(m_TimedLines.size());
 		m_TriangleCount = static_cast<u32>(m_TimedTriangles.size());
 
+		const bool wasDropping = m_DroppedLastSeal > 0;
 		m_DroppedLastSeal = m_Dropped;
-		if (m_Dropped > 0)
+		if (m_Dropped > 0 && !wasDropping) // once per overflow, not at the frame rate while it lasts
 		{
 			WI_LOG(Warning, "Renderer", "Debug draw dropped {0} shapes over the per-frame caps", m_Dropped);
-			m_Dropped = 0;
 		}
+		m_Dropped = 0;
 		return out;
 	}
 }
