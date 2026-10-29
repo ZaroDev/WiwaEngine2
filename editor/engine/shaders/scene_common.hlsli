@@ -8,6 +8,9 @@
 //   b1  push constants   per draw: which instance, which material
 //   t1  uInstances       one record per scene instance
 //   t2  uMaterials       one record per material slot
+//   t3  uLights          the point and spot lights
+//   t4  uClusterCounts   per cluster: how many lights reach it      (written by light_cull.hlsl as u6)
+//   t5  uClusterIndices  per cluster: MAX_LIGHTS_PER_CLUSTER light indices (written by light_cull.hlsl as u7)
 // Materials' textures are in set 1 (see material_common.hlsli). Mirrors FrameConstants / GpuInstance / GpuMaterialRecord in C++.
 
 static const float PI = 3.14159265359;
@@ -32,6 +35,31 @@ cbuffer FrameBuffer : register(b0)
 	float4 SkyColor;        // rgb * ambient intensity
 	float4 GroundColor;
 	float4 ViewportSize;    // width, height, 1 / width, 1 / height
+	float4 ClusterParams;   // x = slice scale, y = slice bias (slice = log2(viewDepth) * x + y), z = 1 for an orthographic camera
+	uint4 LightInfo;        // x = number of lights in uLights
+};
+
+// The cluster grid the lights are sorted into: screen tiles times exponential depth slices. Mirrors the constants in C++.
+static const uint CLUSTERS_X = 16;
+static const uint CLUSTERS_Y = 9;
+static const uint CLUSTERS_Z = 24;
+static const uint MAX_LIGHTS_PER_CLUSTER = 64;
+
+static const uint LIGHT_POINT = 0;
+static const uint LIGHT_SPOT = 1;
+
+struct GpuLight
+{
+	float3 Position;
+	float Range;
+	float3 Color;
+	float Intensity;
+	float3 Direction;  // the way a spot light points
+	float InnerCos;
+	float OuterCos;
+	uint Type;
+	uint ShadowIndex;
+	uint Padding;
 };
 
 struct SceneInstance
@@ -68,6 +96,19 @@ PUSH_CONSTANTS(DrawConstantsData, DrawConstants, b1);
 
 StructuredBuffer<SceneInstance> uInstances : register(t1);
 StructuredBuffer<MaterialRecord> uMaterials : register(t2);
+StructuredBuffer<GpuLight> uLights : register(t3);
+StructuredBuffer<uint> uClusterCounts : register(t4);
+StructuredBuffer<uint> uClusterIndices : register(t5);
+
+// The cluster of a pixel: its screen tile and the depth slice of its view-space distance.
+uint ClusterIndexOf(float2 pixel, float viewDepth)
+{
+	uint tileX = min((uint)(pixel.x / ViewportSize.x * CLUSTERS_X), CLUSTERS_X - 1);
+	uint tileY = min((uint)(pixel.y / ViewportSize.y * CLUSTERS_Y), CLUSTERS_Y - 1);
+	int slice = (int)floor(log2(max(viewDepth, 1e-4)) * ClusterParams.x + ClusterParams.y);
+	slice = clamp(slice, 0, (int)CLUSTERS_Z - 1);
+	return (uint)slice * (CLUSTERS_X * CLUSTERS_Y) + tileY * CLUSTERS_X + tileX;
+}
 
 float3 TransformPoint(SceneInstance instance, float3 position)
 {

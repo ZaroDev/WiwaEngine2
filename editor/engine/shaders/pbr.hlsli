@@ -120,6 +120,48 @@ float3 DirectLight(SurfaceData surface, float3 toTheLight, float3 radiance)
 	return (diffuse + specular) * radiance * (PI * nDotL);
 }
 
+// A point or spot light: inverse-square falloff with a smooth cut at its range, and the cone for a spot.
+float3 LocalLight(SurfaceData surface, GpuLight light)
+{
+	float3 toLight = light.Position - surface.Position;
+	float distance2 = dot(toLight, toLight);
+	float range2 = light.Range * light.Range;
+	if (distance2 >= range2)
+	{
+		return float3(0.0, 0.0, 0.0);
+	}
+
+	float3 direction = toLight * rsqrt(max(distance2, 1e-8));
+	float falloff = saturate(1.0 - distance2 * distance2 / (range2 * range2));
+	float attenuation = falloff * falloff / (distance2 + 0.01);
+	if (light.Type == LIGHT_SPOT)
+	{
+		float angle = dot(-direction, light.Direction);
+		float cone = saturate((angle - light.OuterCos) / max(light.InnerCos - light.OuterCos, 1e-4));
+		attenuation *= cone * cone;
+	}
+	return DirectLight(surface, direction, light.Color * (light.Intensity * attenuation));
+}
+
+// Every light of the pixel's cluster.
+float3 ClusteredLights(SurfaceData surface, float2 pixel)
+{
+	float3 result = float3(0.0, 0.0, 0.0);
+	if (LightInfo.x == 0)
+	{
+		return result;
+	}
+
+	float viewDepth = -mul(View, float4(surface.Position, 1.0)).z;
+	uint cluster = ClusterIndexOf(pixel, viewDepth);
+	uint count = min(uClusterCounts[cluster], MAX_LIGHTS_PER_CLUSTER);
+	for (uint i = 0; i < count; i++)
+	{
+		result += LocalLight(surface, uLights[uClusterIndices[cluster * MAX_LIGHTS_PER_CLUSTER + i]]);
+	}
+	return result;
+}
+
 float3 AmbientLight(SurfaceData surface)
 {
 	float3 hemisphere = lerp(GroundColor.rgb, SkyColor.rgb, surface.Normal.y * 0.5 + 0.5);

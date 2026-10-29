@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <vector>
 
 #include <nvrhi/nvrhi.h>
@@ -12,6 +13,30 @@
 
 namespace wiwa
 {
+	// The cluster grid lights are sorted into (mirrored in scene_common.hlsli).
+	constexpr u32 CLUSTERS_X = 16;
+	constexpr u32 CLUSTERS_Y = 9;
+	constexpr u32 CLUSTERS_Z = 24;
+	constexpr u32 CLUSTER_COUNT = CLUSTERS_X * CLUSTERS_Y * CLUSTERS_Z;
+	constexpr u32 MAX_LIGHTS_PER_CLUSTER = 64;
+	constexpr u32 MAX_LIGHTS = 1024;
+
+	// One point or spot light as the shaders read it (GpuLight in scene_common.hlsli).
+	struct GpuLight
+	{
+		glm::vec3 Position{ 0.0f };
+		float Range = 0.0f;
+		glm::vec3 Color{ 0.0f };
+		float Intensity = 0.0f;
+		glm::vec3 Direction{ 0.0f, 0.0f, -1.0f };
+		float InnerCos = 1.0f;
+		float OuterCos = 0.0f;
+		u32 Type = 0; // 0 point, 1 spot
+		u32 ShadowIndex = 0;
+		u32 Padding = 0;
+	};
+	static_assert(sizeof(GpuLight) == 64);
+
 	// One indexed draw of a mesh primitive.
 	struct DrawItem
 	{
@@ -47,6 +72,8 @@ namespace wiwa
 		glm::vec4 SkyColor{ 0.0f };       // rgb * ambient intensity
 		glm::vec4 GroundColor{ 0.0f };
 		glm::vec4 ViewportSize{ 1.0f };   // width, height, 1 / width, 1 / height
+		glm::vec4 ClusterParams{ 0.0f };  // x = slice scale, y = slice bias, z = 1 when the camera is orthographic
+		glm::uvec4 LightInfo{ 0 };        // x = number of lights
 	};
 	static_assert(sizeof(FrameConstants) % 16 == 0);
 
@@ -83,6 +110,15 @@ namespace wiwa
 		// Draw counts of the last build, for the stats.
 		u32 visible_instances() const { return m_VisibleInstances; }
 
+		// The point and spot lights of this frame (at most MAX_LIGHTS; the rest are counted in dropped_lights()).
+		const std::vector<GpuLight>& lights() const { return m_Lights; }
+		u32 dropped_lights() const { return m_DroppedLights; }
+
+		nvrhi::IBuffer* constant_buffer() const { return m_ConstantBuffer; }
+		nvrhi::IBuffer* light_buffer() const { return m_LightBuffer; }
+		nvrhi::IBuffer* cluster_counts() const { return m_ClusterCounts; }   // CLUSTER_COUNT uints, written by the light culling pass
+		nvrhi::IBuffer* cluster_indices() const { return m_ClusterIndices; } // CLUSTER_COUNT * MAX_LIGHTS_PER_CLUSTER uints
+
 	private:
 		nvrhi::IDevice* m_Device = nullptr;
 		bool m_Active = false;
@@ -96,7 +132,13 @@ namespace wiwa
 		std::vector<DrawItem> m_Masked{};
 		std::vector<DrawItem> m_Blended{};
 		u32 m_VisibleInstances = 0;
+		std::vector<GpuLight> m_Lights{};
+		u32 m_DroppedLights = 0;
+		std::chrono::steady_clock::time_point m_LastLightWarning{};
 
+		nvrhi::BufferHandle m_LightBuffer{};
+		nvrhi::BufferHandle m_ClusterCounts{};
+		nvrhi::BufferHandle m_ClusterIndices{};
 		nvrhi::BindingLayoutHandle m_FrameLayout{};
 		nvrhi::BindingSetHandle m_FrameBindings{};
 		nvrhi::BufferHandle m_ConstantBuffer{};

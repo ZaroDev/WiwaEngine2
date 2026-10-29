@@ -33,5 +33,6 @@ float4 PSMain(ForwardVertexOutput input, bool frontFace : SV_IsFrontFace) : SV_T
 	{
 		color += DirectLight(surface, -SunDirection.xyz, SunColor.rgb);
 	}
+	color += ClusteredLights(surface, input.Position.xy);
 	return float4(color, surface.Alpha);
 }

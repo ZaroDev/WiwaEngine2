@@ -2,6 +2,7 @@
 #include "scene_render_data.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "frustum_culler.h"
 
@@ -50,6 +51,9 @@ namespace wiwa
 		layout.addItem(nvrhi::BindingLayoutItem::VolatileConstantBuffer(0));
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(1));
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(2));
+		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(3));
+		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(4));
+		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(5));
 		layout.addItem(nvrhi::BindingLayoutItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
 		m_FrameLayout = device->createBindingLayout(layout);
 
@@ -61,12 +65,30 @@ namespace wiwa
 		constants.debugName = "Frame constants";
 		m_ConstantBuffer = device->createBuffer(constants);
 
-		return m_FrameLayout && m_ConstantBuffer;
+		auto make_structured = [&](u64 elements, u32 stride, bool unorderedAccess, const char* name)
+		{
+			nvrhi::BufferDesc description;
+			description.byteSize = elements * stride;
+			description.structStride = stride;
+			description.canHaveUAVs = unorderedAccess;
+			description.initialState = nvrhi::ResourceStates::ShaderResource;
+			description.keepInitialState = true;
+			description.debugName = name;
+			return device->createBuffer(description);
+		};
+		m_LightBuffer = make_structured(MAX_LIGHTS, sizeof(GpuLight), false, "Scene lights");
+		m_ClusterCounts = make_structured(CLUSTER_COUNT, sizeof(u32), true, "Cluster light counts");
+		m_ClusterIndices = make_structured(static_cast<u64>(CLUSTER_COUNT) * MAX_LIGHTS_PER_CLUSTER, sizeof(u32), true, "Cluster light indices");
+
+		return m_FrameLayout && m_ConstantBuffer && m_LightBuffer && m_ClusterCounts && m_ClusterIndices;
 	}
 
 	void SceneRenderData::shutdown()
 	{
 		m_FrameBindings = nullptr;
+		m_LightBuffer = nullptr;
+		m_ClusterCounts = nullptr;
+		m_ClusterIndices = nullptr;
 		m_InstanceBuffer = nullptr;
 		m_ConstantBuffer = nullptr;
 		m_FrameLayout = nullptr;
@@ -78,7 +100,9 @@ namespace wiwa
 		m_Opaque.clear();
 		m_Masked.clear();
 		m_Blended.clear();
+		m_Lights.clear();
 		m_VisibleInstances = 0;
+		m_DroppedLights = 0;
 		m_Active = viewport.valid();
 		m_Viewport = &viewport;
 		m_Cache = &cache;
@@ -97,16 +121,54 @@ namespace wiwa
 		const float height = static_cast<float>(viewport.height());
 		constants.ViewportSize = glm::vec4(width, height, 1.0f / width, 1.0f / height);
 
-		// The sun: the first directional light.
+		// The sun is the first directional light; the point and spot lights go to the cluster grid.
+		bool haveSun = false;
 		for (const RenderLight& light : scene.lights())
 		{
-			if (light.Alive && light.Kind == LightKind::Directional)
+			if (!light.Alive)
 			{
-				constants.SunDirection = glm::vec4(light.Direction, 1.0f);
-				constants.SunColor = glm::vec4(light.Color * light.Intensity, 0.0f);
-				break;
+				continue;
+			}
+
+			if (light.Kind == LightKind::Directional)
+			{
+				if (!haveSun)
+				{
+					constants.SunDirection = glm::vec4(light.Direction, 1.0f);
+					constants.SunColor = glm::vec4(light.Color * light.Intensity, 0.0f);
+					haveSun = true;
+				}
+				continue;
+			}
+
+			if (m_Lights.size() >= MAX_LIGHTS)
+			{
+				m_DroppedLights++;
+				continue;
+			}
+
+			GpuLight gpu;
+			gpu.Position = light.Position;
+			gpu.Range = std::max(light.Range, 0.0f);
+			gpu.Color = light.Color;
+			gpu.Intensity = light.Intensity;
+			gpu.Direction = light.Direction;
+			gpu.InnerCos = std::cos(glm::radians(std::clamp(light.InnerAngle, 0.0f, 89.0f)));
+			gpu.OuterCos = std::cos(glm::radians(std::clamp(light.OuterAngle, 0.0f, 89.5f)));
+			gpu.Type = light.Kind == LightKind::Spot ? 1u : 0u;
+			m_Lights.push_back(gpu);
+		}
+
+		if (m_DroppedLights > 0)
+		{
+			const auto now = std::chrono::steady_clock::now();
+			if (now - m_LastLightWarning > std::chrono::seconds(1))
+			{
+				m_LastLightWarning = now;
+				WI_LOG(Warning, "Renderer", "{0} lights over the limit of {1} are not used", m_DroppedLights, MAX_LIGHTS);
 			}
 		}
+		constants.LightInfo = glm::uvec4(static_cast<u32>(m_Lights.size()), 0, 0, 0);
 
 		const std::optional<RenderCamera>& camera = scene.effective_camera();
 		m_HasCamera = camera.has_value();
@@ -117,6 +179,11 @@ namespace wiwa
 			constants.ViewProjection = camera->Projection * camera->View;
 			constants.CameraPosition = glm::vec4(camera->Position, camera->Near);
 			constants.CameraParams = glm::vec4(camera->Far, 0.0f, 0.0f, 0.0f);
+
+			// Slices are exponential in view depth between near and far: slice = log2(depth) * scale + bias.
+			const float depthRatio = std::log2(std::max(camera->Far / camera->Near, 1.0001f));
+			const float sliceScale = static_cast<float>(CLUSTERS_Z) / depthRatio;
+			constants.ClusterParams = glm::vec4(sliceScale, -std::log2(camera->Near) * sliceScale, camera->Projection[3][3] == 1.0f ? 1.0f : 0.0f, 0.0f);
 
 			const Frustum frustum(constants.ViewProjection);
 			const std::vector<RenderInstance>& instances = scene.instances();
@@ -221,6 +288,10 @@ namespace wiwa
 		}
 
 		commandList->writeBuffer(m_ConstantBuffer, &m_Constants, sizeof(m_Constants));
+		if (!m_Lights.empty())
+		{
+			commandList->writeBuffer(m_LightBuffer, m_Lights.data(), m_Lights.size() * sizeof(GpuLight));
+		}
 
 		// The binding set follows its buffers: both can be replaced when they have to grow.
 		nvrhi::IBuffer* materials = cache.material_buffer();
@@ -230,6 +301,9 @@ namespace wiwa
 			set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, m_InstanceBuffer));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(2, materials));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(3, m_LightBuffer));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(4, m_ClusterCounts));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(5, m_ClusterIndices));
 			set.addItem(nvrhi::BindingSetItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
 			m_FrameBindings = m_Device->createBindingSet(set, m_FrameLayout);
 			m_BoundInstanceBuffer = m_InstanceBuffer;

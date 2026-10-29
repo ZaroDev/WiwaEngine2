@@ -43,6 +43,8 @@ namespace wiwa
 	void register_camera_checks();
 	// The depth prepass and forward pass checks (forward_checks.cpp).
 	void register_forward_checks();
+	// The clustered light checks (light_checks.cpp).
+	void register_light_checks();
 
 	// `--render-test`: runs every check once on the render thread. True when all passed.
 	bool run_render_checks(RenderWorld& world);
