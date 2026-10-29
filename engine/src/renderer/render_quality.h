@@ -22,7 +22,7 @@ namespace wiwa
 		u32 BloomMips = 6;                // 2..6: how many levels the glow spreads over
 		u32 AoSlices = 2;                 // 1..4: directions searched per pixel
 		u32 AoSteps = 8;                  // 4..16: samples per side of a slice
-		bool Fxaa = true;
+		bool Fxaa = false;                // off, like the other effects, until the project turns it on
 
 		bool operator==(const RenderQuality&) const = default;
 	};

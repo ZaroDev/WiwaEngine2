@@ -74,7 +74,7 @@ namespace wiwa
 				quality.BloomMips = 3;
 				quality.AoSlices = 4;
 				quality.AoSteps = 12;
-				quality.Fxaa = false;
+				quality.Fxaa = true;
 				const std::filesystem::path path = "Library/quality_post.json";
 				std::filesystem::create_directories("Library");
 				context.check(save_render_quality(path, quality), "save");
@@ -87,7 +87,7 @@ namespace wiwa
 					file << "{\"vsync\": false}";
 				}
 				const std::optional<RenderQuality> legacy = load_render_quality(path, error);
-				context.check(legacy && legacy->BloomMips == 6 && legacy->AoSlices == 2 && legacy->AoSteps == 8 && legacy->Fxaa && !legacy->Vsync, "an old file keeps the defaults of the new keys");
+				context.check(legacy && legacy->BloomMips == 6 && legacy->AoSlices == 2 && legacy->AoSteps == 8 && !legacy->Fxaa && !legacy->Vsync, "an old file keeps the defaults of the new keys");
 
 				RenderQuality wild;
 				wild.BloomMips = 99;
@@ -159,9 +159,9 @@ namespace wiwa
 				renderer.set_quality(changed);
 				context.check(renderer.get_scene_data().quality().ShadowDistance == 6.0f && renderer.get_quality().ShadowDistance == 6.0f, "the shadow reach reaches the scene data");
 				changed.BloomMips = 3;
-				changed.Fxaa = false;
+				changed.Fxaa = true;
 				renderer.set_quality(changed);
-				context.check(renderer.get_scene_data().quality().BloomMips == 3 && !renderer.get_scene_data().quality().Fxaa, "the post quality reaches the scene data");
+				context.check(renderer.get_scene_data().quality().BloomMips == 3 && renderer.get_scene_data().quality().Fxaa, "the post quality reaches the scene data");
 				changed.ShadowCascades = 99;
 				renderer.set_quality(changed);
 				context.check(renderer.get_quality().ShadowCascades == 4, "a value out of range is clamped on the way in");

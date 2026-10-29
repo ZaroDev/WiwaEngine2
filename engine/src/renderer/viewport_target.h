@@ -44,6 +44,9 @@ namespace wiwa
 		nvrhi::IFramebuffer* hdr_framebuffer() const { return m_HdrFramebuffer; }     // HDR + depth
 		nvrhi::IFramebuffer* depth_framebuffer() const { return m_DepthFramebuffer; } // depth only
 		nvrhi::IFramebuffer* ldr_framebuffer() const { return m_LdrFramebuffer; }
+		// Where the tonemap pass draws when FXAA runs: the image FXAA reads and writes to ldr(). Same format as ldr().
+		nvrhi::ITexture* pre_fxaa() const { return m_PreFxaa; }
+		nvrhi::IFramebuffer* pre_fxaa_framebuffer() const { return m_PreFxaaFramebuffer; }
 
 		// Where the pixels are: counts up on every create, so a pass that cached a framebuffer notices.
 		u32 generation() const { return m_Generation; }
@@ -59,6 +62,8 @@ namespace wiwa
 		nvrhi::FramebufferHandle m_HdrFramebuffer{};
 		nvrhi::FramebufferHandle m_DepthFramebuffer{};
 		nvrhi::FramebufferHandle m_LdrFramebuffer{};
+		nvrhi::TextureHandle m_PreFxaa{};
+		nvrhi::FramebufferHandle m_PreFxaaFramebuffer{};
 		u32 m_Width = 0;
 		u32 m_Height = 0;
 		u32 m_Generation = 0;

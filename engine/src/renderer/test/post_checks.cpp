@@ -7,11 +7,11 @@ namespace wiwa
 {
 	namespace
 	{
-		SceneSettings dark()
+		SceneSettings dark(glm::vec3 background = glm::vec3(0.0f))
 		{
 			SceneSettings settings;
 			settings.AmbientIntensity = 0.0f;
-			settings.BackgroundColor = glm::vec3(0.0f);
+			settings.BackgroundColor = background;
 			return settings;
 		}
 
@@ -272,6 +272,55 @@ namespace wiwa
 				const float inside = bloom_soft_knee_weight(1.0f, 1.0f, 0.5f);
 				context.check(inside > 0.0f && inside < 0.5f, "inside the knee it blends in");
 				context.check(bloom_mip_count(6, 1920, 1080) == 6 && bloom_mip_count(6, 1, 1) == 2 && bloom_mip_count(99, 64, 64) == 5 && bloom_mip_count(1, 1920, 1080) == 2, "the mip count follows the request and the size");
+			});
+
+		register_render_check("fxaa_softens_edge", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				// a diamond: its edges run diagonally, which stair-steps
+				const glm::mat4 turned = glm::rotate(glm::scale(glm::mat4(1.0f), glm::vec3(0.4f)), glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+				test.add_instance(test.add_mesh(make_test_cube(test.add_material(emissive_material(glm::vec3(0.8f))))), turned);
+				test.scene().set_settings(dark());
+				context.check(test.render(), "render without FXAA");
+				const std::vector<u8> plain = test.pixels();
+				const int plateau = SceneTester::luma(test.pixel(32, 32));
+
+				auto intermediate = [&](const std::vector<u8>& pixels)
+				{
+					int count = 0;
+					for (size_t i = 0; i + 3 < pixels.size(); i += 4)
+					{
+						const int luma = (pixels[i] * 3 + pixels[i + 1] * 6 + pixels[i + 2]) / 10;
+						count += (luma > plateau / 10 && luma < plateau * 9 / 10) ? 1 : 0;
+					}
+					return count;
+				};
+
+				Renderer& renderer = test.renderer();
+				RenderQuality quality = renderer.get_quality();
+				quality.Fxaa = true;
+				renderer.set_quality(quality);
+				context.check(test.render(), "render with FXAA");
+				const int without = intermediate(plain);
+				const int with = intermediate(test.pixels());
+				WI_LOG(Info, "RenderTest", "fxaa_softens_edge intermediate pixels {0} -> {1}", without, with);
+				context.check(with > without + 8, "FXAA adds in-between values along the edge");
+				context.check(SceneTester::luma(test.pixel(32, 32)) == plateau, "the inside of the shape is untouched");
+			});
+
+		register_render_check("fxaa_flat_unchanged", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.scene().set_settings(dark(glm::vec3(0.3f, 0.2f, 0.1f)));
+				context.check(test.render(), "render a flat image");
+				const std::vector<u8> plain = test.pixels();
+
+				Renderer& renderer = test.renderer();
+				RenderQuality quality = renderer.get_quality();
+				quality.Fxaa = true;
+				renderer.set_quality(quality);
+				context.check(test.render(), "render it with FXAA");
+				context.check(SceneTester::max_difference(plain, test.pixels()) == 0, "a flat image is bit-identical");
 			});
 	}
 }

@@ -14,6 +14,7 @@
 #include "passes/light_cull_pass.h"
 #include "passes/bloom_pass.h"
 #include "passes/exposure_pass.h"
+#include "passes/fxaa_pass.h"
 #include "passes/tonemap_pass.h"
 #include "passes/shadow_pass.h"
 #include "passes/sky_pass.h"
@@ -81,6 +82,7 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<ExposurePass>())
 					&& m_Renderer->add_pass(CreateScope<BloomPass>())
 					&& m_Renderer->add_pass(CreateScope<TonemapPass>())
+					&& m_Renderer->add_pass(CreateScope<FxaaPass>())
 					&& m_Renderer->add_pass(CreateScope<BlitPass>())
 					&& m_Renderer->add_pass(std::move(imguiPass));
 			},

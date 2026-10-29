@@ -100,7 +100,7 @@ namespace wiwa
 
 		nvrhi::GraphicsState state;
 		state.pipeline = m_Pipeline;
-		state.framebuffer = viewport.ldr_framebuffer();
+		state.framebuffer = frame.Scene->quality().Fxaa ? viewport.pre_fxaa_framebuffer() : viewport.ldr_framebuffer(); // FXAA then writes the final image
 		state.viewport.addViewportAndScissorRect(nvrhi::Viewport(static_cast<float>(viewport.width()), static_cast<float>(viewport.height())));
 		state.addBindingSet(m_BindingSet);
 		commandList->setGraphicsState(state);

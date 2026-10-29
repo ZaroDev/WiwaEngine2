@@ -1,0 +1,41 @@
+#pragma once
+
+#include "../render_pass.h"
+#include "../shader_library.h"
+
+namespace wiwa
+{
+	// FXAA on the tone-mapped image: reads ViewportTarget::pre_fxaa() (where the tonemap pass drew) and writes ldr(). Does nothing
+	// while the quality settings have FXAA off; the tonemap pass then drew into ldr() itself.
+	class FxaaPass : public IRenderPass
+	{
+	public:
+		virtual const char* get_name() const override { return "FXAA"; }
+
+		virtual bool initialize(const PassInitializationDescription& description) override;
+		virtual void update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer) override;
+		virtual bool is_ready() const override;
+		virtual bool has_failed() const override { return m_Failed; }
+		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
+
+	private:
+		// Mirrors FxaaData in fxaa.hlsl.
+		struct PushConstants
+		{
+			float RcpWidth = 1.0f;
+			float RcpHeight = 1.0f;
+			float Padding[2]{};
+		};
+
+		nvrhi::IDevice* m_Device = nullptr;
+		ShaderLibrary* m_Shaders = nullptr;
+		bool m_Failed = false;
+
+		nvrhi::SamplerHandle m_Sampler{};
+		nvrhi::BindingLayoutHandle m_BindingLayout{};
+		nvrhi::BindingSetHandle m_BindingSet{};
+		nvrhi::GraphicsPipelineHandle m_Pipeline{};
+		u32 m_BuiltShaderGeneration = ~0u;
+		u32 m_BuiltViewportGeneration = ~0u;
+	};
+}

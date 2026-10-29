@@ -6,7 +6,7 @@
 namespace wiwa
 {
 	// Turns the viewport's HDR color into its 8-bit image: exposure from the scene settings, the tone mapping operator, color grading
-	// and the sRGB encoding, drawn as one fullscreen triangle.
+	// and the sRGB encoding, drawn as one fullscreen triangle. With FXAA on it draws into ViewportTarget::pre_fxaa() instead of ldr().
 	class TonemapPass : public IRenderPass
 	{
 	public:

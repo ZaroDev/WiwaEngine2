@@ -91,7 +91,9 @@ namespace wiwa
 		m_Hdr = device->createTexture(hdr);
 		m_Depth = device->createTexture(depth);
 		m_Ldr = device->createTexture(ldr);
-		if (!m_Hdr || !m_Depth || !m_Ldr || !m_Exposure || !m_Histogram || !bloomOk)
+		ldr.debugName = "Viewport tonemapped (before FXAA)";
+		m_PreFxaa = device->createTexture(ldr);
+		if (!m_Hdr || !m_Depth || !m_Ldr || !m_PreFxaa || !m_Exposure || !m_Histogram || !bloomOk)
 		{
 			WI_LOG(Error, "Renderer", "could not create the {0}x{1} viewport targets", width, height);
 			destroy();
@@ -111,7 +113,11 @@ namespace wiwa
 		ldrFramebuffer.addColorAttachment(m_Ldr);
 		m_LdrFramebuffer = device->createFramebuffer(ldrFramebuffer);
 
-		if (!m_HdrFramebuffer || !m_DepthFramebuffer || !m_LdrFramebuffer)
+		nvrhi::FramebufferDesc preFxaaFramebuffer;
+		preFxaaFramebuffer.addColorAttachment(m_PreFxaa);
+		m_PreFxaaFramebuffer = device->createFramebuffer(preFxaaFramebuffer);
+
+		if (!m_HdrFramebuffer || !m_DepthFramebuffer || !m_LdrFramebuffer || !m_PreFxaaFramebuffer)
 		{
 			WI_LOG(Error, "Renderer", "could not create the viewport framebuffers");
 			destroy();
@@ -129,6 +135,7 @@ namespace wiwa
 		m_HdrFramebuffer = nullptr;
 		m_DepthFramebuffer = nullptr;
 		m_LdrFramebuffer = nullptr;
+		m_PreFxaaFramebuffer = nullptr;
 		for (nvrhi::TextureHandle& texture : m_BloomDown)
 		{
 			texture = nullptr;
@@ -142,6 +149,7 @@ namespace wiwa
 		m_Hdr = nullptr;
 		m_Depth = nullptr;
 		m_Ldr = nullptr;
+		m_PreFxaa = nullptr;
 		m_Width = 0;
 		m_Height = 0;
 	}

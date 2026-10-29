@@ -32,6 +32,10 @@ namespace wiwa
 			quality.ShadowDepthBias = defaults.ShadowDepthBias;
 			quality.ShadowNormalBias = defaults.ShadowNormalBias;
 			quality.SpotShadowBias = defaults.SpotShadowBias;
+			quality.BloomMips = defaults.BloomMips;
+			quality.AoSlices = defaults.AoSlices;
+			quality.AoSteps = defaults.AoSteps;
+			quality.Fxaa = defaults.Fxaa;
 			m_Renderer.set_quality(quality);
 			scene().set_camera_override(std::nullopt);
 			set_camera(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f));
