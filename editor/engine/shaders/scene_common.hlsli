@@ -57,6 +57,9 @@ cbuffer FrameBuffer : register(b0)
 	float4 AtmosphereGround;      // ground albedo, sun disc boost
 	float4 AtmosphereSun;         // towards the sun
 	float4 AtmosphereIrradiance;  // the sun outside the atmosphere, sky brightness
+	float4x4 UnjitteredViewProjection; // Projection and ViewProjection above carry the TAA jitter; this one does not
+	float4x4 PreviousViewProjection;   // the previous frame's unjittered view-projection (this frame's when there is no history)
+	float4 JitterInfo;            // xy = the jitter in pixels, z = 1 when TAA jitters the projection, w = 1 when the previous camera is a history
 };
 
 // The cluster grid the lights are sorted into: screen tiles times exponential depth slices. Mirrors the constants in C++.

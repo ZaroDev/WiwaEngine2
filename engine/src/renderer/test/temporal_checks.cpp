@@ -1,6 +1,7 @@
 #include <pch.h>
 
 #include "../passes/taa_math.h"
+#include "../render_pick.h"
 #include "scene_tester.h"
 
 // Checks of the temporal chain: the TAA maths, the velocity target, TAA and motion blur.
@@ -14,6 +15,32 @@ namespace wiwa
 			const glm::vec4 clip = projection * view * glm::vec4(point, 1.0f);
 			const glm::vec2 ndc = glm::vec2(clip) / clip.w;
 			return glm::vec2((ndc.x * 0.5f + 0.5f) * static_cast<float>(size), (1.0f - (ndc.y * 0.5f + 0.5f)) * static_cast<float>(size));
+		}
+	}
+
+	namespace
+	{
+		void set_taa(SceneTester& test, bool on)
+		{
+			RenderQuality quality = test.renderer().get_quality();
+			quality.Taa = on;
+			test.renderer().set_quality(quality);
+		}
+
+		const FrameConstants& frame_constants(SceneTester& test) { return test.renderer().get_scene_data().constants(); }
+
+		// How far, in pixels, the jittered matrices move a point away from the unjittered ones (x right, y down).
+		glm::vec2 jitter_offset(const FrameConstants& constants, glm::vec3 point, u32 size)
+		{
+			const glm::vec4 jittered = constants.ViewProjection * glm::vec4(point, 1.0f);
+			const glm::vec4 plain = constants.UnjitteredViewProjection * glm::vec4(point, 1.0f);
+			const glm::vec2 difference = glm::vec2(jittered) / jittered.w - glm::vec2(plain) / plain.w;
+			return glm::vec2(difference.x * 0.5f * static_cast<float>(size), -difference.y * 0.5f * static_cast<float>(size));
+		}
+
+		AssetRef cube_mesh(SceneTester& test, float half = 0.5f)
+		{
+			return test.add_mesh(make_test_box(glm::vec3(half), test.add_material(test.color_material(glm::vec3(0.8f)))));
 		}
 	}
 
@@ -155,6 +182,172 @@ namespace wiwa
 				context.check(test.frame(), "render the frame after the move");
 				context.check(read_x(0, world) && read_x(128, previous), "read the instance buffer again");
 				context.check(std::abs(world - 0.5f) < 1e-6f && std::abs(previous - 0.5f) < 1e-6f, "the frame after it sees no motion");
+			});
+
+		register_render_check("jitter_off_equals_unjittered", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				context.check(test.render(), "render with TAA off");
+				const FrameConstants& constants = frame_constants(test);
+				context.check(constants.ViewProjection == constants.UnjitteredViewProjection, "without TAA the matrices are not jittered");
+				context.check(constants.JitterInfo.z == 0.0f && constants.JitterInfo.x == 0.0f && constants.JitterInfo.y == 0.0f, "and the jitter says so");
+				context.check(constants.InverseViewProjection == glm::inverse(constants.UnjitteredViewProjection), "the inverse is the plain one");
+			});
+
+		register_render_check("jitter_on_constants", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				set_taa(test, true);
+				context.check(test.render(), "render with TAA on");
+
+				std::vector<glm::vec2> offsets;
+				for (int i = 0; i < 9; i++)
+				{
+					context.check(test.frame(), "render a frame");
+					const FrameConstants& constants = frame_constants(test);
+					const glm::vec2 offset = jitter_offset(constants, glm::vec3(0.3f, -0.2f, 1.0f), test.size());
+					const glm::vec2 distant = jitter_offset(constants, glm::vec3(-1.0f, 0.5f, -20.0f), test.size());
+					const glm::vec2 jitter = test.renderer().get_scene_data().jitter();
+					context.check(constants.JitterInfo.z == 1.0f && constants.JitterInfo.x == jitter.x && constants.JitterInfo.y == jitter.y, "the constants carry the jitter");
+					context.check(glm::distance(offset, jitter) < 1e-3f && glm::distance(distant, jitter) < 1e-3f, "a point moves by exactly the jitter, near or far");
+					context.check(glm::distance(constants.InverseViewProjection * constants.ViewProjection * glm::vec4(1.0f, 2.0f, 3.0f, 1.0f), glm::vec4(1.0f, 2.0f, 3.0f, 1.0f)) < 1e-3f, "the inverse matches the jittered matrix");
+					offsets.push_back(jitter);
+				}
+				context.check(offsets[0] != offsets[1] && offsets[1] != offsets[2], "the jitter changes from frame to frame");
+				context.check(offsets[0] == offsets[8], "and repeats after eight frames");
+			});
+
+		register_render_check("jitter_keeps_culling_and_picks", [](RenderCheckContext& context)
+			{
+				// A box that sits on the edge of the view is culled by the unjittered frustum, not by whatever the jitter makes of it.
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				test.add_instance(cube_mesh(test, 0.4f), glm::translate(glm::mat4(1.0f), glm::vec3(2.35f, 0.0f, 0.0f)));
+				test.add_instance(cube_mesh(test, 0.4f), glm::translate(glm::mat4(1.0f), glm::vec3(-3.2f, 0.0f, 0.0f)));
+				context.check(test.render(), "render with TAA off");
+				const u32 visibleOff = test.renderer().get_scene_data().visible_instances();
+
+				set_taa(test, true);
+				bool same = true;
+				for (int i = 0; i < 8; i++)
+				{
+					context.check(test.frame(), "render a frame with TAA on");
+					same = same && test.renderer().get_scene_data().visible_instances() == visibleOff;
+				}
+				context.check(same, "the same instances are drawn with and without the jitter");
+
+				// the pick of every pixel of a row across the cube edges is the same with the jitter moving
+				PickChannel channel;
+				test.renderer().set_pick_channel(&channel);
+				u64 id = 0;
+				// every pixel is picked in eight consecutive frames: one with each jitter of the sequence
+				auto row = [&](u32 y, u32 repeats)
+				{
+					std::vector<i32> picks;
+					for (u32 x = 0; x < test.size(); x++)
+					{
+						for (u32 r = 0; r < repeats; r++)
+						{
+							test.renderer().set_pick_request(PickRequest{ ++id, x, y });
+							test.frame();
+							const std::optional<PickResult> result = channel.take();
+							picks.push_back(result && result->RequestId == id && result->Guid ? static_cast<i32>(result->Guid->Lo) : -1);
+						}
+					}
+					return picks;
+				};
+				const std::vector<i32> with = row(32, 8);
+				set_taa(test, false);
+				test.frame();
+				const std::vector<i32> without = row(32, 1);
+				test.renderer().set_pick_channel(nullptr);
+				u32 differing = 0;
+				for (size_t i = 0; i < with.size(); i++)
+				{
+					if (with[i] != without[i / 8])
+					{
+						if (differing++ == 0)
+						{
+							WI_LOG(Info, "RenderTest", "jitter_keeps_culling_and_picks: pixel {0} picks {1} with the jitter and {2} without", i / 8, with[i], without[i / 8]);
+						}
+					}
+				}
+				context.check(differing == 0, "picking ignores the jitter");
+				context.check(std::count(without.begin(), without.end(), -1) < static_cast<std::ptrdiff_t>(test.size()), "and the row picks something");
+			});
+
+		register_render_check("jitter_orthographic_camera", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				RenderCamera camera;
+				camera.View = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+				camera.Projection = glm::orthoRH_ZO(-3.0f, 3.0f, -3.0f, 3.0f, 0.1f, 100.0f);
+				camera.Position = glm::vec3(0.0f, 0.0f, 4.0f);
+				test.scene().set_camera_override(camera);
+				set_taa(test, true);
+				context.check(test.render(), "render an orthographic scene with TAA on");
+				for (int i = 0; i < 4; i++)
+				{
+					context.check(test.frame(), "render a frame");
+					const FrameConstants& constants = frame_constants(test);
+					context.check(constants.Projection[3][3] == 1.0f, "the jittered projection is still orthographic");
+					context.check(glm::distance(jitter_offset(constants, glm::vec3(0.5f, 0.5f, 0.0f), test.size()), test.renderer().get_scene_data().jitter()) < 1e-3f, "a point moves by the jitter");
+				}
+			});
+
+		register_render_check("history_resets", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				SceneDelta delta;
+				RenderCamera sceneCamera;
+				sceneCamera.View = glm::lookAt(glm::vec3(0.0f, 1.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+				sceneCamera.Projection = glm::perspectiveRH_ZO(glm::radians(60.0f), 1.0f, 0.1f, 100.0f);
+				sceneCamera.Position = glm::vec3(0.0f, 1.0f, 5.0f);
+				delta.Camera = sceneCamera;
+				test.scene().apply(std::move(delta));
+				context.check(test.render(), "render with the override camera");
+				SceneRenderData& data = test.renderer().get_scene_data();
+
+				auto step = [&]() { return test.frame(); };
+				step();
+				context.check(data.history_valid(), "two still frames have a history");
+				const u32 resets = data.history_reset_count();
+
+				test.set_camera(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f));
+				step();
+				context.check(data.history_valid() && data.history_reset_count() == resets, "a small camera move keeps it");
+
+				test.set_size(48);
+				step();
+				context.check(!data.history_valid(), "a resize drops it");
+				step();
+				context.check(data.history_valid(), "and it is back one frame later");
+
+				test.scene().set_camera_override(std::nullopt); // the scene's camera takes over
+				step();
+				context.check(!data.history_valid(), "leaving the override camera drops it");
+				step();
+				context.check(data.history_valid(), "back one frame later");
+				test.set_camera(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f));
+				step();
+				context.check(!data.history_valid(), "entering the override camera drops it");
+				step();
+
+				test.set_camera(glm::vec3(0.0f, 0.0f, 65.0f), glm::vec3(0.0f, 0.0f, 60.0f));
+				step();
+				context.check(!data.history_valid(), "a camera jump of 60 units drops it");
+				step();
+				context.check(data.history_valid(), "and it is back one frame later");
+
+				data.request_history_reset();
+				step();
+				context.check(!data.history_valid(), "an explicit request drops it");
+				step();
+				context.check(data.history_valid() && data.history_reset_count() > resets, "and it is back one frame later; every drop was counted");
 			});
 	}
 }

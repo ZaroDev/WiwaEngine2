@@ -13,7 +13,7 @@ PickVertexOutput VSMain(MeshVertexInput input)
 {
 	SceneInstance instance = uInstances[DrawConstants.InstanceIndex];
 	PickVertexOutput output;
-	output.Position = mul(ViewProjection, float4(TransformPoint(instance, input.Position), 1.0));
+	output.Position = mul(UnjitteredViewProjection, float4(TransformPoint(instance, input.Position), 1.0));
 	output.Id = DrawConstants.InstanceIndex + 1u;
 	return output;
 }

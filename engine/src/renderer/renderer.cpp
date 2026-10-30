@@ -193,6 +193,7 @@ namespace wiwa
 		m_Uploads.submit(m_Backend->get_last_graphics_instance());
 
 		update_viewport();
+		m_SceneData.set_frame_index(m_FrameIndex);
 		m_SceneData.build(m_Scene, *m_Cache, m_Viewport);
 
 		m_CommandList->open();

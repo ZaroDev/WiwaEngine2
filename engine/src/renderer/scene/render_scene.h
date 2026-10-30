@@ -105,6 +105,7 @@ namespace wiwa
 		// A camera that replaces the scene's (the editor's fly camera); an empty one gives the scene's camera back. A Reset does not
 		// clear it.
 		void set_camera_override(std::optional<RenderCamera> camera) { m_CameraOverride = camera; }
+		bool has_camera_override() const { return m_CameraOverride.has_value(); }
 		// What the frame is drawn with: the override if there is one, else the scene's camera.
 		const std::optional<RenderCamera>& effective_camera() const { return m_CameraOverride ? m_CameraOverride : m_Camera; }
 

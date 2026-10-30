@@ -98,6 +98,9 @@ namespace wiwa
 		glm::vec4 AtmosphereGround{ 0.05f, 0.08f, 0.1f, 120.0f }; // ground albedo, sun disc boost
 		glm::vec4 AtmosphereSun{ 0.0f, 1.0f, 0.0f, 0.0f };        // towards the sun
 		glm::vec4 AtmosphereIrradiance{ 3.4f, 3.4f, 3.4f, 3.5f }; // the sun outside the atmosphere, sky brightness
+		glm::mat4 UnjitteredViewProjection{ 1.0f };  // what picking, debug shapes, culling and the velocity use; Projection and ViewProjection carry the TAA jitter
+		glm::mat4 PreviousViewProjection{ 1.0f };    // the previous frame's unjittered one (this frame's when there is no history)
+		glm::vec4 JitterInfo{ 0.0f };                // xy = the jitter in pixels, z = 1 when TAA jitters the projection, w = 1 when the previous camera is a history
 	};
 	static_assert(sizeof(FrameConstants) % 16 == 0);
 
@@ -122,6 +125,22 @@ namespace wiwa
 		// Culls the scene against the effective camera and fills the draw lists and the constants. Without a viewport target there
 		// is nothing to draw into and the data is inactive.
 		void build(RenderScene& scene, GpuResourceCache& cache, ViewportTarget& viewport);
+
+		// The index of the frame about to be built: it picks the jitter.
+		void set_frame_index(u64 index) { m_FrameIndex = index; }
+		// TAA jitters the projection of this frame (it is on and there is a camera).
+		bool temporal_active() const { return m_TemporalActive; }
+		// The camera of the previous frame is a usable history: not the first frame, no resize, scene reset, camera switch or cut in
+		// between, and nobody asked for a reset. Passes that reproject (TAA, motion blur) use the current frame alone otherwise.
+		bool history_valid() const { return m_HistoryValid; }
+		// Counts every frame in which the history was not valid.
+		u32 history_reset_count() const { return m_HistoryResetCount; }
+		// The jitter of this frame in pixels (zero without TAA).
+		glm::vec2 jitter() const { return glm::vec2(m_Constants.JitterInfo.x, m_Constants.JitterInfo.y); }
+		// The next frame starts without a history.
+		void request_history_reset() { m_HistoryResetRequested = true; }
+		// A camera that moves farther than this between two frames is a cut: there is no history across it.
+		static constexpr float CAMERA_CUT_DISTANCE = 50.0f;
 		// Writes the instance buffer (when the scene changed) and the constants; records into the frame's command list.
 		void write(nvrhi::ICommandList* commandList, GpuResourceCache& cache);
 
@@ -195,6 +214,18 @@ namespace wiwa
 		SceneSettings m_Settings{};
 		RenderQuality m_Quality{};
 		FrameConstants m_Constants{};
+		u64 m_FrameIndex = 0;
+		bool m_TemporalActive = false;
+		bool m_HistoryValid = false;
+		bool m_HistoryResetRequested = false;
+		u32 m_HistoryResetCount = 0;
+		// What the previous frame looked through, for the history checks and the previous matrix.
+		bool m_PreviousKnown = false;
+		glm::mat4 m_PreviousViewProjection{ 1.0f };
+		glm::vec3 m_PreviousCameraPosition{ 0.0f };
+		u32 m_PreviousViewportGeneration = 0;
+		u32 m_PreviousSceneResets = 0;
+		bool m_PreviousOverride = false;
 		std::vector<DrawItem> m_Opaque{};
 		std::vector<DrawItem> m_Masked{};
 		std::vector<DrawItem> m_Blended{};
