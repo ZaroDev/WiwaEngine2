@@ -463,5 +463,58 @@ namespace wiwa
 				glm::vec2 velocity(0.0f);
 				context.check(read_velocity(context, test, test.to_pixel(glm::vec3(0.5f, 0.0f, 0.5f)), velocity) && velocity.x > 0.1f, "an alpha-masked material writes its velocity too");
 			});
+
+		// A static opaque box and a small blended box (alpha as given) at the given depth that moves 0.3 to the right between two frames;
+		// reads the velocity at the front face of the blended box.
+		register_render_check("velocity_transparent_writes_own_motion", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				MaterialData glass = test.color_material(glm::vec3(0.2f, 0.4f, 1.0f));
+				glass.Alpha = AlphaMode::Blend;
+				glass.BaseColorFactor.a = 0.8f;
+				const EntityGuid pane = test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.3f), test.add_material(glass))), glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 1.5f)));
+				context.check(test.render(), "render the still scene");
+
+				test.set_instance_world(pane, glm::translate(glm::mat4(1.0f), glm::vec3(0.3f, 0.0f, 1.5f)));
+				context.check(test.frame(), "render the frame in which the pane moves");
+				const LookCamera camera = look(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f));
+				const glm::vec2 expected = project_uv(camera, glm::vec3(0.3f, 0.0f, 1.8f)) - project_uv(camera, glm::vec3(0.0f, 0.0f, 1.8f));
+				glm::vec2 velocity(0.0f);
+				context.check(read_velocity(context, test, test.to_pixel(glm::vec3(0.3f, 0.0f, 1.8f)), velocity), "read the velocity");
+				context.check(glm::distance(velocity, expected) < 1.5e-3f && expected.x > 0.05f, "a pane with alpha 0.8 has its own velocity, not that of the opaque box behind it");
+			});
+
+		register_render_check("velocity_transparent_low_alpha_ignored", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				MaterialData glass = test.color_material(glm::vec3(0.2f, 0.4f, 1.0f));
+				glass.Alpha = AlphaMode::Blend;
+				glass.BaseColorFactor.a = 0.3f;
+				const EntityGuid pane = test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.3f), test.add_material(glass))), glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 1.5f)));
+				context.check(test.render(), "render the still scene");
+
+				test.set_instance_world(pane, glm::translate(glm::mat4(1.0f), glm::vec3(0.3f, 0.0f, 1.5f)));
+				context.check(test.frame(), "render the frame in which the pane moves");
+				glm::vec2 velocity(1.0f);
+				context.check(read_velocity(context, test, test.to_pixel(glm::vec3(0.3f, 0.0f, 1.8f)), velocity) && glm::length(velocity) < 1e-4f, "a pane with alpha 0.3 leaves the velocity of what is behind it");
+			});
+
+		register_render_check("velocity_transparent_behind_opaque", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				MaterialData glass = test.color_material(glm::vec3(0.2f, 0.4f, 1.0f));
+				glass.Alpha = AlphaMode::Blend;
+				glass.BaseColorFactor.a = 0.8f;
+				const EntityGuid pane = test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.3f), test.add_material(glass))), glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -1.5f)));
+				context.check(test.render(), "render the still scene");
+
+				test.set_instance_world(pane, glm::translate(glm::mat4(1.0f), glm::vec3(0.3f, 0.0f, -1.5f)));
+				context.check(test.frame(), "render the frame in which the pane moves");
+				glm::vec2 velocity(1.0f);
+				context.check(read_velocity(context, test, test.to_pixel(glm::vec3(0.0f, 0.0f, 0.5f)), velocity) && glm::length(velocity) < 1e-4f, "a pane behind an opaque box does not overwrite its velocity");
+			});
 	}
 }

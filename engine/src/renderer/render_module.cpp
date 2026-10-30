@@ -19,6 +19,7 @@
 #include "passes/pick_pass.h"
 #include "passes/selection_outline_pass.h"
 #include "passes/fxaa_pass.h"
+#include "passes/velocity_pass.h"
 #include "passes/tonemap_pass.h"
 #include "passes/shadow_pass.h"
 #include "passes/sky_pass.h"
@@ -87,6 +88,7 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Opaque))
 					&& m_Renderer->add_pass(CreateScope<SkyPass>())
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Blended))
+					&& m_Renderer->add_pass(CreateScope<VelocityPass>())
 					&& m_Renderer->add_pass(CreateScope<ExposurePass>())
 					&& m_Renderer->add_pass(CreateScope<BloomPass>())
 					&& m_Renderer->add_pass(CreateScope<TonemapPass>())
