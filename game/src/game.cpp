@@ -4,7 +4,8 @@
 
 // A game on the engine. It has no editor in it: scenes and assets come from the pack (assets.wpak) next to the program.
 //
-//   wiwa_game --scene Assets/scenes/level.wscene     load that scene when the game starts
+//   wiwa_game                                        load the default scene of the pack (chosen in the editor's Build Settings)
+//   wiwa_game --scene Assets/scenes/level.wscene     load that scene instead (it must be in the pack)
 //   wiwa_game --scene <path> --scene-smoke-load      ...and quit when it is loaded: exit code 0 if it worked, 1 if not
 //   wiwa_game --debug-draw-demo                      draw the debug renderer's shapes over the scene every frame (axes, a grid, a box)
 class Game final : public wiwa::Engine
