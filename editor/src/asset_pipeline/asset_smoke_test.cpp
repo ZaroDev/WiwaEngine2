@@ -7,6 +7,7 @@
 #include <assets/pak_source.h>
 #include <core/engine.h>
 
+#include "build_settings.h"
 #include "file_utils.h"
 #include "packager.h"
 
@@ -210,6 +211,44 @@ namespace wiwa
 				truncatedAccepted = truncatedAccepted || deserialize<BuildInfo>(std::span<const std::byte>(bytes.data(), length)).has_value();
 			}
 			check(!truncatedAccepted, "a truncated build info is rejected");
+		}
+
+		// The build settings survive a round trip; a missing file, a damaged one and a bad guid are told apart.
+		{
+			std::filesystem::create_directories(temp, error);
+			const std::filesystem::path file = temp / "build_settings.json";
+
+			BuildSettings settings;
+			settings.Scenes = { AssetGuid::generate(), AssetGuid::generate() };
+			settings.DefaultScene = settings.Scenes[1];
+			settings.AlwaysInclude = { AssetGuid::generate() };
+			check(settings.save(file), "the build settings save");
+
+			std::string loadError;
+			std::optional<BuildSettings> back = BuildSettings::load(file, loadError);
+			check(back && back->DefaultScene == settings.DefaultScene && back->Scenes == settings.Scenes && back->AlwaysInclude == settings.AlwaysInclude, "the build settings round-trip");
+
+			std::optional<BuildSettings> missing = BuildSettings::load(temp / "no_such_settings.json", loadError);
+			check(!missing && loadError.empty(), "a missing settings file is nullopt without an error");
+
+			{
+				std::ofstream(file) << "{not json";
+			}
+			check(!BuildSettings::load(file, loadError) && !loadError.empty(), "a damaged settings file is an error");
+
+			{
+				std::ofstream(file) << R"({ "scenes": ["zz"] })";
+			}
+			loadError.clear();
+			check(!BuildSettings::load(file, loadError) && loadError.find("zz") != std::string::npos, "a bad guid is an error that names it");
+
+			BuildSettings empty;
+			check(empty.validate(loadError), "empty settings are valid");
+			BuildSettings stray;
+			stray.DefaultScene = AssetGuid::generate();
+			check(!stray.validate(loadError) && !loadError.empty(), "a default scene outside the scene list is invalid");
+			stray.Scenes = { stray.DefaultScene };
+			check(stray.validate(loadError), "a default scene in the scene list is valid");
 		}
 
 		// 0. an import reports its progress and ends with every item done
