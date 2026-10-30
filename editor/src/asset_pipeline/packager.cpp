@@ -5,8 +5,11 @@
 #include <lz4hc.h>
 
 #include <assets/asset_catalog.h>
+#include <assets/build_info.h>
 #include <assets/pak_format.h>
 #include <assets/wasset_io.h>
+
+#include <unordered_set>
 
 #include "file_utils.h"
 
@@ -14,7 +17,53 @@
 
 namespace wiwa
 {
-	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress)
+	std::unordered_set<AssetGuid> select_pack_set(const std::vector<PackCandidate>& candidates, const BuildSettings& settings, std::vector<AssetGuid>& missing)
+	{
+		missing.clear();
+
+		std::unordered_map<AssetGuid, const PackCandidate*> byGuid;
+		std::vector<AssetGuid> pending;
+		for (const PackCandidate& candidate : candidates)
+		{
+			byGuid[candidate.Guid] = &candidate;
+			if (candidate.IsEngine)
+			{
+				pending.push_back(candidate.Guid);
+			}
+		}
+
+		for (const std::vector<AssetGuid>* roots : { &settings.Scenes, &settings.AlwaysInclude })
+		{
+			for (AssetGuid guid : *roots)
+			{
+				if (byGuid.contains(guid))
+				{
+					pending.push_back(guid);
+				}
+				else if (std::find(missing.begin(), missing.end(), guid) == missing.end())
+				{
+					missing.push_back(guid);
+				}
+			}
+		}
+
+		std::unordered_set<AssetGuid> selected;
+		while (!pending.empty())
+		{
+			const AssetGuid current = pending.back();
+			pending.pop_back();
+
+			auto found = byGuid.find(current);
+			if (found == byGuid.end() || !selected.insert(current).second) // a cycle or a shared asset is met again
+			{
+				continue;
+			}
+			pending.insert(pending.end(), found->second->Dependencies.begin(), found->second->Dependencies.end());
+		}
+		return selected;
+	}
+
+	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings)
 	{
 		JobProgress local;
 		if (progress == nullptr)
@@ -37,6 +86,64 @@ namespace wiwa
 		}
 		std::sort(files.begin(), files.end()); // the same Library gives the same pack
 
+		size_t excluded = 0;
+		if (settings != nullptr)
+		{
+			std::string why;
+			if (!settings->validate(why))
+			{
+				WI_ASSET_LOG(Error, "Packing failed: {0}", why);
+				progress->finish(false);
+				return false;
+			}
+
+			// what each cooked file is and needs, to follow the settings through the dependencies
+			std::vector<PackCandidate> candidates;
+			std::unordered_map<AssetGuid, std::filesystem::path> fileOf;
+			for (const std::filesystem::path& file : files)
+			{
+				std::optional<std::vector<std::byte>> blob = read_binary_file(file);
+				std::span<const std::byte> payload;
+				std::optional<WAssetHeader> assetHeader = blob ? parse_wasset_header(*blob, payload) : std::nullopt;
+				if (!assetHeader)
+				{
+					continue; // reported below, when the file is packed
+				}
+
+				PackCandidate candidate;
+				candidate.Guid = assetHeader->Guid;
+				candidate.Dependencies = assetHeader->Dependencies;
+				for (size_t i = 1; i < database.get_roots().size() && !candidate.IsEngine; i++) // root 0 is Assets/, the others are the engine's
+				{
+					const std::filesystem::path relative = file.lexically_normal().lexically_relative(database.get_roots()[i].Library.lexically_normal());
+					candidate.IsEngine = !relative.empty() && *relative.begin() != "..";
+				}
+				candidates.push_back(std::move(candidate));
+				fileOf[assetHeader->Guid] = file;
+			}
+
+			std::vector<AssetGuid> missing;
+			const std::unordered_set<AssetGuid> selected = select_pack_set(candidates, *settings, missing);
+			if (!missing.empty())
+			{
+				for (AssetGuid guid : missing)
+				{
+					WI_ASSET_LOG(Error, "Packing failed: the build settings name {0}, which is not in the Library", guid.to_string());
+				}
+				progress->finish(false);
+				return false;
+			}
+
+			std::vector<std::filesystem::path> chosen;
+			for (AssetGuid guid : selected)
+			{
+				chosen.push_back(fileOf[guid]);
+			}
+			std::sort(chosen.begin(), chosen.end());
+			excluded = files.size() - chosen.size();
+			files = std::move(chosen);
+		}
+
 		progress->begin("Compressing assets", static_cast<u32>(files.size()) + 1); // + the catalog
 
 		std::filesystem::create_directories(outDirectory, error);
@@ -56,6 +163,7 @@ namespace wiwa
 		out.write(reinterpret_cast<const char*>(&header), sizeof(header)); // patched at the end
 
 		std::vector<PakEntry> index;
+		std::unordered_set<AssetGuid> packed; // the assets (not the catalog or the build info) that went in
 		u64 offset = sizeof(PakHeader);
 		u64 totalRaw = 0;
 		bool ok = true;
@@ -124,7 +232,14 @@ namespace wiwa
 				continue;
 			}
 
-			ok = add_blob(assetHeader->Guid, static_cast<u32>(assetHeader->Type), *blob, file) && ok;
+			if (add_blob(assetHeader->Guid, static_cast<u32>(assetHeader->Type), *blob, file))
+			{
+				packed.insert(assetHeader->Guid);
+			}
+			else
+			{
+				ok = false;
+			}
 		}
 
 		// The catalog: which path names which asset. Without it a game cannot find its assets by name.
@@ -132,12 +247,42 @@ namespace wiwa
 		if (std::optional<std::vector<std::byte>> catalog = read_binary_file(catalogPath))
 		{
 			progress->advance(CATALOG_FILE_NAME);
+			if (settings != nullptr)
+			{
+				// only the packed assets can be found by path
+				std::optional<AssetCatalog> whole = deserialize<AssetCatalog>(*catalog);
+				if (whole)
+				{
+					AssetCatalog kept;
+					for (const AssetCatalog::Entry& entry : whole->Entries)
+					{
+						if (packed.contains(entry.Guid))
+						{
+							kept.Entries.push_back(entry);
+						}
+					}
+					catalog = serialize(kept);
+				}
+				else
+				{
+					WI_ASSET_LOG(Error, "The asset catalog ({0}) is damaged", catalogPath.string());
+					ok = false;
+				}
+			}
 			ok = add_blob(CATALOG_GUID, 0, *catalog, catalogPath) && ok;
 		}
 		else
 		{
 			WI_ASSET_LOG(Error, "There is no asset catalog ({0}), the import did not finish?", catalogPath.string());
 			ok = false;
+		}
+
+		// Which scene a game starts with when it is not told one.
+		if (settings != nullptr && settings->DefaultScene.valid())
+		{
+			BuildInfo info;
+			info.DefaultScene = settings->DefaultScene;
+			ok = add_blob(BUILD_INFO_GUID, 0, serialize(info), "build info") && ok;
 		}
 
 		header.EntryCount = static_cast<u32>(index.size());
@@ -164,7 +309,11 @@ namespace wiwa
 			return false;
 		}
 
-		WI_ASSET_LOG(Info, "Packed {0} assets into {1} ({2} bytes, {3} before compression)", index.size() - 1, target.string(), offset + index.size() * sizeof(PakEntry), totalRaw);
+		WI_ASSET_LOG(Info, "Packed {0} assets into {1} ({2} bytes, {3} before compression)", packed.size(), target.string(), offset + index.size() * sizeof(PakEntry), totalRaw);
+		if (settings != nullptr)
+		{
+			WI_ASSET_LOG(Info, "Build settings: {0} scenes chosen, {1} assets left out", settings->Scenes.size(), excluded);
+		}
 		progress->finish(true);
 		return true;
 	}
