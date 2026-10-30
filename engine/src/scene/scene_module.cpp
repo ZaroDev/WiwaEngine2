@@ -5,6 +5,7 @@
 #include <future>
 #include <thread>
 
+#include <assets/build_info.h>
 #include <assets/pak_source.h>
 #include <core/engine.h>
 
@@ -75,6 +76,16 @@ namespace wiwa
 			{
 				WI_SCENE_LOG(Info, "Loading scene {0}", arguments[i + 1]);
 				m_StartupLoad = load_async(std::string_view(arguments[i + 1]));
+			}
+		}
+
+		// No --scene: a game starts with the scene its pack was built with.
+		if (m_StartupLoad == nullptr && m_Assets->get_source() != nullptr)
+		{
+			if (const std::optional<BuildInfo> info = read_build_info(*m_Assets->get_source()); info && info->DefaultScene != AssetGuid{})
+			{
+				WI_SCENE_LOG(Info, "Loading default scene {0}", info->DefaultScene.to_string());
+				m_StartupLoad = load_async(AssetRef{ info->DefaultScene, 0 });
 			}
 		}
 	}

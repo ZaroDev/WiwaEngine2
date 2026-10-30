@@ -2,6 +2,7 @@
 #include "asset_smoke_test.h"
 
 #include <assets/asset_manager.h>
+#include <assets/build_info.h>
 #include <assets/library_source.h>
 #include <assets/pak_source.h>
 #include <core/engine.h>
@@ -191,6 +192,24 @@ namespace wiwa
 				truncatedAccepted = truncatedAccepted || deserialize<AssetCatalog>(std::span<const std::byte>(bytes.data(), length)).has_value();
 			}
 			check(!truncatedAccepted, "a truncated catalog is rejected");
+		}
+
+		// The build info (which scene a pack starts with) survives a round trip, and no truncated copy of it is accepted.
+		{
+			const AssetGuid scene = AssetGuid::generate();
+			BuildInfo info;
+			info.DefaultScene = scene;
+
+			const std::vector<std::byte> bytes = serialize(info);
+			std::optional<BuildInfo> back = deserialize<BuildInfo>(bytes);
+			check(back && back->DefaultScene == scene, "build info round-trips");
+
+			bool truncatedAccepted = false;
+			for (size_t length = 0; length < bytes.size(); length++)
+			{
+				truncatedAccepted = truncatedAccepted || deserialize<BuildInfo>(std::span<const std::byte>(bytes.data(), length)).has_value();
+			}
+			check(!truncatedAccepted, "a truncated build info is rejected");
 		}
 
 		// 0. an import reports its progress and ends with every item done
