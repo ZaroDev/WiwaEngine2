@@ -29,6 +29,12 @@ namespace
 	{
 		return (ImGui::IsKeyDown(positive) ? 1.0f : 0.0f) - (ImGui::IsKeyDown(negative) ? 1.0f : 0.0f);
 	}
+
+	bool is_prefab_file(const std::filesystem::path& path)
+	{
+		const std::filesystem::path e = path.extension();
+		return e == ".glb" || e == ".gltf" || e == ".fbx" || e == ".FBX";
+	}
 }
 
 ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor)
@@ -109,6 +115,16 @@ void ViewportPanel::on_draw()
 					if (assetPath.extension() == ".wscene")
 					{
 						m_Editor.open(path);
+					}
+					else if (is_prefab_file(assetPath))
+					{
+						wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+						const std::optional<wiwa::AssetRef> found = assets != nullptr ? assets->find_asset(path) : std::nullopt;
+						if (found)
+						{
+							m_Editor.add_prefab(*found, entt::null);
+						}
+						
 					}
 				}
 				ImGui::EndDragDropTarget();

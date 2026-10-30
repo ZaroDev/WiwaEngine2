@@ -8,6 +8,10 @@
 
 #include <IconFontCppHeaders/FontIcons/IconsForkAwesome.h>
 
+#include <assets/asset_manager.h>
+#include <core/engine.h>
+#include <renderer/render_module.h>
+
 #ifdef WI_PLATFORM_WINDOWS
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -40,6 +44,12 @@ namespace
 #else
 		(void)path;
 #endif
+	}
+
+	bool is_texture_file(const std::filesystem::path& path)
+	{
+		const std::filesystem::path e = path.extension();
+		return e == ".png" || e == L".jpg";
 	}
 }
 
@@ -332,7 +342,29 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 	{
 		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
 	}
-	if (ImGui::Button(ICON_FK_FILE_O, ImVec2(thumbnailSize, thumbnailSize)))
+	bool clicked = false;
+	wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+	const std::optional<wiwa::AssetRef> found = assets != nullptr ? assets->find_asset(file.string()) : std::nullopt;
+
+	// A texture shows its own image once it is on the GPU; until then (and for every other file) the generic icon stands in.
+	wiwa::u32 textureId = 0;
+	if (found && is_texture_file(file))
+	{
+		wiwa::RenderModule* render = wiwa::Engine::get().get_module<wiwa::RenderModule>();
+		textureId = render != nullptr ? render->get_asset_texture_id(*found) : 0;
+	}
+
+	if (textureId != 0)
+	{
+		ImGui::PushID(file.string().c_str());
+		clicked = ImGui::ImageButton("###file", static_cast<ImTextureID>(textureId), ImVec2(thumbnailSize, thumbnailSize));
+		ImGui::PopID();
+	}
+	else
+	{
+		clicked = ImGui::Button(ICON_FK_FILE_O, ImVec2(thumbnailSize, thumbnailSize));
+	}
+	if (clicked)
 	{
 		m_Selected = file;
 	}
