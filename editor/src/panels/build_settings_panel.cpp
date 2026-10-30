@@ -62,7 +62,7 @@ void BuildSettingsPanel::on_draw()
 	}
 
 	ImGui::SetNextWindowSize(ImVec2(360.0f, 340.0f), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin(get_name(), &m_Open))
+	if (!ImGui::Begin(get_name(), &m_Open, ImGuiWindowFlags_NoDocking))
 	{
 		ImGui::End();
 		return;
