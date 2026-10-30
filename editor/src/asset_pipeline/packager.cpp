@@ -54,7 +54,16 @@ namespace wiwa
 			pending.pop_back();
 
 			auto found = byGuid.find(current);
-			if (found == byGuid.end() || !selected.insert(current).second) // a cycle or a shared asset is met again
+			if (found == byGuid.end())
+			{
+				// something a packed asset needs has no cooked file: the pack would ship without it
+				if (std::find(missing.begin(), missing.end(), current) == missing.end())
+				{
+					missing.push_back(current);
+				}
+				continue;
+			}
+			if (!selected.insert(current).second) // a cycle or a shared asset is met again
 			{
 				continue;
 			}
@@ -105,21 +114,26 @@ namespace wiwa
 				std::optional<std::vector<std::byte>> blob = read_binary_file(file);
 				std::span<const std::byte> payload;
 				std::optional<WAssetHeader> assetHeader = blob ? parse_wasset_header(*blob, payload) : std::nullopt;
-				if (!assetHeader)
+				// A file that cannot be read still counts as that asset (the guid is its name): if the build needs it, packing it fails below.
+				const std::optional<AssetGuid> named = AssetGuid::from_string(file.stem().string());
+				if (!assetHeader && !named)
 				{
-					continue; // reported below, when the file is packed
+					continue;
 				}
 
 				PackCandidate candidate;
-				candidate.Guid = assetHeader->Guid;
-				candidate.Dependencies = assetHeader->Dependencies;
+				candidate.Guid = assetHeader ? assetHeader->Guid : *named;
+				if (assetHeader)
+				{
+					candidate.Dependencies = assetHeader->Dependencies;
+				}
 				for (size_t i = 1; i < database.get_roots().size() && !candidate.IsEngine; i++) // root 0 is Assets/, the others are the engine's
 				{
 					const std::filesystem::path relative = file.lexically_normal().lexically_relative(database.get_roots()[i].Library.lexically_normal());
 					candidate.IsEngine = !relative.empty() && *relative.begin() != "..";
 				}
+				fileOf[candidate.Guid] = file;
 				candidates.push_back(std::move(candidate));
-				fileOf[assetHeader->Guid] = file;
 			}
 
 			std::vector<AssetGuid> missing;
@@ -128,7 +142,7 @@ namespace wiwa
 			{
 				for (AssetGuid guid : missing)
 				{
-					WI_ASSET_LOG(Error, "Packing failed: the build settings name {0}, which is not in the Library", guid.to_string());
+					WI_ASSET_LOG(Error, "Packing failed: the build needs {0}, which is not in the Library", guid.to_string());
 				}
 				progress->finish(false);
 				return false;

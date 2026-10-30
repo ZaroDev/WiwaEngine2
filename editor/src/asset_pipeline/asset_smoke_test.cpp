@@ -361,6 +361,18 @@ namespace wiwa
 			select_pack_set(candidates, settings, missing);
 			check(missing.size() == 1 && missing[0] == unknown, "a guid that is not in the Library is reported as missing");
 
+			// an asset that a packed asset needs but that has no cooked file is reported too, once
+			const AssetGuid lost = AssetGuid::generate(), user = AssetGuid::generate(), otherUser = AssetGuid::generate();
+			std::vector<PackCandidate> dangling = candidates;
+			dangling.push_back({ user, { lost } });
+			dangling.push_back({ otherUser, { lost } });
+			settings.Scenes = { user, otherUser };
+			select_pack_set(dangling, settings, missing);
+			check(missing.size() == 1 && missing[0] == lost, "a dependency without a cooked file is reported as missing, once");
+			settings.Scenes = { a };
+			select_pack_set(dangling, settings, missing);
+			check(missing.empty(), "a dangling dependency of an asset that is not packed does not matter");
+
 			// a real pack: the project's scenes, none or all of them
 			std::unordered_map<AssetGuid, const CookedFile*> byGuid;
 			std::vector<AssetGuid> scenes;
@@ -421,6 +433,23 @@ namespace wiwa
 				const std::filesystem::path brokenDirectory = temp / "broken";
 				check(!Packager::pack(database, brokenDirectory, nullptr, &broken), "settings that name an unknown asset fail the pack");
 				check(!std::filesystem::exists(brokenDirectory / "assets.wpak"), "a failed pack leaves no file");
+
+				// a cooked file that cannot be read fails the pack when the build needs it, and only then
+				const AssetGuid damagedGuid = AssetGuid::generate();
+				const std::filesystem::path damaged = database.get_library_root() / "zz" / (damagedGuid.to_string() + ".wasset");
+				std::filesystem::create_directories(damaged.parent_path(), error);
+				{
+					std::ofstream(damaged, std::ios::binary) << "not a cooked asset";
+				}
+
+				BuildSettings needsDamaged;
+				needsDamaged.AlwaysInclude = { damagedGuid };
+				WI_ASSET_LOG(Info, "Smoke test: the next pack error is expected");
+				check(!Packager::pack(database, temp / "damaged", nullptr, &needsDamaged), "a damaged cooked file the build needs fails the pack");
+				check(!std::filesystem::exists(temp / "damaged" / "assets.wpak"), "and leaves no pack");
+				check(Packager::pack(database, temp / "ignored", nullptr, &none), "a damaged cooked file the build does not need is left out");
+
+				std::filesystem::remove_all(damaged.parent_path(), error);
 			}
 		}
 
