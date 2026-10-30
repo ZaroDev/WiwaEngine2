@@ -2,6 +2,7 @@
 
 #include "../passes/taa_math.h"
 #include "../render_pick.h"
+#include "half_float.h"
 #include "scene_tester.h"
 
 // Checks of the temporal chain: the TAA maths, the velocity target, TAA and motion blur.
@@ -41,6 +42,42 @@ namespace wiwa
 		AssetRef cube_mesh(SceneTester& test, float half = 0.5f)
 		{
 			return test.add_mesh(make_test_box(glm::vec3(half), test.add_material(test.color_material(glm::vec3(0.8f)))));
+		}
+
+		// The camera SceneTester::set_camera builds (60 degrees, near 0.1, far 100, square), for working out what a pixel should read.
+		struct LookCamera
+		{
+			glm::mat4 View;
+			glm::mat4 Projection;
+		};
+
+		LookCamera look(glm::vec3 position, glm::vec3 target)
+		{
+			return { glm::lookAt(position, target, glm::vec3(0.0f, 1.0f, 0.0f)), glm::perspectiveRH_ZO(glm::radians(60.0f), 1.0f, 0.1f, 100.0f) };
+		}
+
+		// uv of a world point, origin top left.
+		glm::vec2 project_uv(const LookCamera& camera, glm::vec3 point)
+		{
+			const glm::vec4 clip = camera.Projection * camera.View * glm::vec4(point, 1.0f);
+			return glm::vec2(clip.x / clip.w * 0.5f + 0.5f, 0.5f - clip.y / clip.w * 0.5f);
+		}
+
+		// The velocity the prepass wrote at a pixel.
+		bool read_velocity(RenderCheckContext& context, SceneTester& test, glm::ivec2 pixel, glm::vec2& velocity)
+		{
+			std::vector<u8> bytes;
+			u32 width = 0;
+			u32 height = 0;
+			if (!read_texture_slice_bytes(context.Device, test.renderer().get_viewport().velocity(), 0, 0, bytes, width, height, 4))
+			{
+				return false;
+			}
+			const size_t offset = (static_cast<size_t>(pixel.y) * width + static_cast<size_t>(pixel.x)) * 4;
+			u16 raw[2];
+			std::memcpy(raw, bytes.data() + offset, sizeof(raw));
+			velocity = glm::vec2(half_to_float(raw[0]), half_to_float(raw[1]));
+			return true;
 		}
 	}
 
@@ -348,6 +385,83 @@ namespace wiwa
 				context.check(!data.history_valid(), "an explicit request drops it");
 				step();
 				context.check(data.history_valid() && data.history_reset_count() > resets, "and it is back one frame later; every drop was counted");
+			});
+
+		register_render_check("velocity_still_is_zero", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				context.check(test.render(), "render the still scene");
+				context.check(test.frame(), "render one more frame");
+				glm::vec2 velocity(1.0f);
+				context.check(read_velocity(context, test, test.to_pixel(glm::vec3(0.0f, 0.0f, 0.5f)), velocity), "read the velocity");
+				context.check(glm::length(velocity) < 1e-4f, "nothing moves: the velocity is zero");
+			});
+
+		register_render_check("velocity_moving_object", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				const EntityGuid box = test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				context.check(test.render(), "render the still scene");
+
+				test.set_instance_world(box, glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.0f, 0.0f)));
+				context.check(test.frame(), "render the frame in which the box moves");
+				const LookCamera camera = look(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f));
+				const glm::vec2 expected = project_uv(camera, glm::vec3(0.5f, 0.0f, 0.5f)) - project_uv(camera, glm::vec3(0.0f, 0.0f, 0.5f));
+				glm::vec2 velocity(0.0f);
+				context.check(read_velocity(context, test, test.to_pixel(glm::vec3(0.5f, 0.0f, 0.5f)), velocity), "read the velocity");
+				context.check(glm::distance(velocity, expected) < 1.5e-3f && expected.x > 0.1f, "the box has its own velocity: current uv minus previous uv");
+				const FrameConstants& constants = frame_constants(test);
+				context.check(constants.PreviousViewProjection == constants.UnjitteredViewProjection, "and none of it comes from the camera, which stood still");
+
+				glm::vec2 background(1.0f);
+				context.check(read_velocity(context, test, glm::ivec2(1, 1), background) && glm::length(background) < 1e-4f, "pixels with no geometry read zero");
+			});
+
+		register_render_check("velocity_moving_camera", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				context.check(test.render(), "render the still scene");
+
+				test.set_camera(glm::vec3(0.3f, 0.0f, 4.0f), glm::vec3(0.3f, 0.0f, 0.0f));
+				context.check(test.frame(), "render the frame in which the camera moves");
+				const glm::vec2 expected = project_uv(look(glm::vec3(0.3f, 0.0f, 4.0f), glm::vec3(0.3f, 0.0f, 0.0f)), glm::vec3(0.0f, 0.0f, 0.5f))
+					- project_uv(look(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f)), glm::vec3(0.0f, 0.0f, 0.5f));
+				glm::vec2 velocity(0.0f);
+				context.check(read_velocity(context, test, test.to_pixel(glm::vec3(0.0f, 0.0f, 0.5f)), velocity), "read the velocity");
+				context.check(glm::distance(velocity, expected) < 1.5e-3f && expected.x < -0.05f, "a static box moves on the screen with the camera");
+			});
+
+		register_render_check("velocity_zero_after_stop", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				const EntityGuid box = test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				context.check(test.render(), "render the still scene");
+
+				test.set_instance_world(box, glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.0f, 0.0f)));
+				context.check(test.frame(), "render the frame in which the box moves");
+				const glm::ivec2 pixel = test.to_pixel(glm::vec3(0.5f, 0.0f, 0.5f));
+				glm::vec2 moving(0.0f);
+				context.check(read_velocity(context, test, pixel, moving) && moving.x > 0.05f, "it has a velocity while it moves");
+				context.check(test.frame(), "render the frame after it stopped");
+				glm::vec2 stopped(1.0f);
+				context.check(read_velocity(context, test, pixel, stopped) && glm::length(stopped) < 1e-4f, "and none in the frame after it stopped");
+			});
+
+		register_render_check("velocity_masked_material", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				MaterialData masked = test.color_material(glm::vec3(0.8f));
+				masked.Alpha = AlphaMode::Mask;
+				masked.AlphaCutoff = 0.5f;
+				const EntityGuid box = test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.5f), test.add_material(masked))), glm::mat4(1.0f));
+				context.check(test.render(), "render the still scene");
+
+				test.set_instance_world(box, glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.0f, 0.0f)));
+				context.check(test.frame(), "render the frame in which the box moves");
+				glm::vec2 velocity(0.0f);
+				context.check(read_velocity(context, test, test.to_pixel(glm::vec3(0.5f, 0.0f, 0.5f)), velocity) && velocity.x > 0.1f, "an alpha-masked material writes its velocity too");
 			});
 	}
 }

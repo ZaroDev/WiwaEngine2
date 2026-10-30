@@ -52,7 +52,11 @@ namespace wiwa
 		nvrhi::IFramebuffer* depth_framebuffer() const { return m_DepthFramebuffer; } // depth only
 		// The world normal of the nearest surface, facing the viewer, octahedral encoded (RG16F), written by the depth prepass.
 		nvrhi::ITexture* normal() const { return m_Normal; }
-		nvrhi::IFramebuffer* prepass_framebuffer() const { return m_PrepassFramebuffer; } // normal + depth
+		// How far the surface of every pixel moved on the screen since the previous frame, as a uv delta (current minus previous, unjittered;
+		// RG16F, zero where nothing was drawn), written by the depth prepass and the transparent velocity pass.
+		nvrhi::ITexture* velocity() const { return m_Velocity; }
+		nvrhi::IFramebuffer* prepass_framebuffer() const { return m_PrepassFramebuffer; } // normal + velocity + depth
+		nvrhi::IFramebuffer* velocity_framebuffer() const { return m_VelocityFramebuffer; } // velocity + depth
 		nvrhi::IFramebuffer* ldr_framebuffer() const { return m_LdrFramebuffer; }
 		// ldr() and the depth/stencil target together: the selection outline's stencil mask and the debug draw pass use it.
 		nvrhi::IFramebuffer* ldr_depth_framebuffer() const { return m_LdrDepthFramebuffer; }
@@ -83,6 +87,8 @@ namespace wiwa
 		nvrhi::FramebufferHandle m_LdrDepthFramebuffer{};
 		nvrhi::TextureHandle m_Normal{};
 		nvrhi::FramebufferHandle m_PrepassFramebuffer{};
+		nvrhi::TextureHandle m_Velocity{};
+		nvrhi::FramebufferHandle m_VelocityFramebuffer{};
 		nvrhi::TextureHandle m_PreFxaa{};
 		nvrhi::FramebufferHandle m_PreFxaaFramebuffer{};
 		u32 m_Width = 0;
