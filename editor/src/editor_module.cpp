@@ -246,7 +246,7 @@ void EditorModule::set_theme()
 	colors[ImGuiCol_TitleBgActive] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
 	colors[ImGuiCol_TitleBgCollapsed] = ImVec4{ 0.15f, 0.1505f, 0.151f, 1.0f };
 
-	/*ImGuiIO& io = ImGui::GetIO();
+	ImGuiIO& io = ImGui::GetIO();
 	io.Fonts->AddFontFromFileTTF("engine/fonts/CascadiaCode.ttf", 16.0f);
 	{
 		const ImWchar icons_ranges[] = { ICON_MIN_FK, ICON_MAX_FK, 0 };
@@ -255,5 +255,5 @@ void EditorModule::set_theme()
 		icons_config.GlyphMinAdvanceX = 16.0f;
 		io.Fonts->AddFontFromFileTTF("engine/fonts/forkawesome-webfont.ttf", 16.0f, &icons_config, icons_ranges);
 	}
-	io.Fonts->Build();*/
+	io.Fonts->Build();
 }
