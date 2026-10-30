@@ -25,10 +25,16 @@ namespace wiwa
 		// The font atlas as RGBA8, once: true the first time, so the render thread can create its texture.
 		bool take_font_atlas(u32& width, u32& height, std::vector<u8>& pixels);
 
+		// Re-sends the atlas to the render thread at the next frame; call after adding fonts and building the atlas.
+		void rebuild_fonts();
+
 	private:
+		void upload_font_atlas();
+
 		bool m_Initialized = false;
 		bool m_FrameOpen = false;
 		bool m_FontPending = false;
+		bool m_FontDirty = false;
 		u32 m_FontWidth = 0;
 		u32 m_FontHeight = 0;
 		std::vector<u8> m_FontPixels{};

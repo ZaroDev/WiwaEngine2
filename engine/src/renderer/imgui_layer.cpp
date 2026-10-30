@@ -81,7 +81,23 @@ namespace wiwa
 			return false;
 		}
 
-		// Build the atlas now so the render thread can get its pixels; the fonts must be added before this point.
+		// The atlas is built on the first frame, so modules can add fonts after init.
+		m_FontDirty = true;
+
+		m_Initialized = true;
+		return true;
+	}
+
+	void ImGuiLayer::rebuild_fonts()
+	{
+		m_FontDirty = true;
+	}
+
+	void ImGuiLayer::upload_font_atlas()
+	{
+		ImGuiIO& io = ImGui::GetIO();
+
+		// Fonts added or built by a module since the last frame are picked up here; the default font is added if none was.
 		unsigned char* pixels = nullptr;
 		int width = 0;
 		int height = 0;
@@ -91,9 +107,7 @@ namespace wiwa
 		m_FontPixels.assign(pixels, pixels + static_cast<size_t>(width) * height * 4);
 		io.Fonts->SetTexID(static_cast<ImTextureID>(FONT_TEXTURE_ID));
 		m_FontPending = true;
-
-		m_Initialized = true;
-		return true;
+		m_FontDirty = false;
 	}
 
 	void ImGuiLayer::shutdown()
@@ -114,6 +128,11 @@ namespace wiwa
 		if (!m_Initialized || m_FrameOpen)
 		{
 			return;
+		}
+
+		if (m_FontDirty)
+		{
+			upload_font_atlas();
 		}
 
 		ImGui_ImplGlfw_NewFrame();
