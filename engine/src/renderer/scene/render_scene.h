@@ -21,6 +21,7 @@ namespace wiwa
 		bool Alive = false;
 		EntityGuid Guid{}; // set when the instance is added: what picking answers with
 		glm::mat4 World{ 1.0f };
+		glm::mat4 PrevWorld{ 1.0f }; // World as the last rendered frame had it (equal to World for an instance that does not move): the velocity pass reads it
 		AssetRef Mesh{};
 		std::vector<AssetRef> Materials{}; // overrides per primitive; empty means the mesh's own materials
 	};
@@ -84,6 +85,12 @@ namespace wiwa
 	public:
 		void apply(SceneDelta&& delta);
 
+		// Once per rendered frame, after its passes were recorded: every instance's PrevWorld becomes its World, so the next frame's
+		// velocity is the motion since this one. previous_stale() says the instance buffer, which holds the old PrevWorld, has to be
+		// written again (it is false after a frame in which nothing moved).
+		void end_frame();
+		bool previous_stale() const { return m_PreviousStale; }
+
 		// How many instances / lights exist, and how many slots there are (some may be dead: check Alive).
 		size_t instance_count() const { return m_InstanceCount; }
 		size_t light_count() const { return m_LightCount; }
@@ -118,6 +125,7 @@ namespace wiwa
 
 	private:
 		u32 m_ResetCount = 0;
+		bool m_PreviousStale = false;
 		template<typename T>
 		struct Slots
 		{

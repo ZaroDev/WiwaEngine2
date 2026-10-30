@@ -227,6 +227,7 @@ namespace wiwa
 				m_Profiler.end_pass(m_CommandList, i);
 			}
 			m_Profiler.end_frame(m_Time);
+				m_Scene.end_frame(); // the next frame's velocity is the motion since this one
 		}
 
 		m_CommandList->close();

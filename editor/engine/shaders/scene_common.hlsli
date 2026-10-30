@@ -95,6 +95,10 @@ struct SceneInstance
 	float4 NormalC1;
 	float4 NormalC2;
 	float4 NormalC3;
+	float4 PrevWorldC0;
+	float4 PrevWorldC1;
+	float4 PrevWorldC2;
+	float4 PrevWorldC3;
 };
 
 struct MaterialRecord

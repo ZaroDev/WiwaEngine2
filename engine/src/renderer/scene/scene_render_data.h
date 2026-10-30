@@ -57,14 +57,15 @@ namespace wiwa
 		float Depth = 0.0f; // view-space distance of the primitive's bounds center (for sorting blended draws)
 	};
 
-	// One scene instance as the shaders read it (SceneInstance in scene_common.hlsli): the world matrix and the matrix for normals,
-	// each as four columns.
+	// One scene instance as the shaders read it (SceneInstance in scene_common.hlsli): the world matrix, the matrix for normals and the
+	// world matrix of the previous frame, each as four columns.
 	struct GpuInstance
 	{
 		glm::mat4 World{ 1.0f };
 		glm::mat4 Normal{ 1.0f };
+		glm::mat4 PrevWorld{ 1.0f };
 	};
-	static_assert(sizeof(GpuInstance) == 128);
+	static_assert(sizeof(GpuInstance) == 192);
 
 	// The per-frame constant buffer (FrameBuffer in scene_common.hlsli).
 	struct FrameConstants

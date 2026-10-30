@@ -94,5 +94,67 @@ namespace wiwa
 				context.check(std::abs(taa_feedback(0.9f, 1.0f, 16.0f) - 0.225f) < 1e-6f, "both quarter it");
 				context.check(std::abs(taa_feedback(0.9f, 5.0f, 100.0f) - 0.225f) < 1e-6f, "the reductions are capped");
 			});
+
+		register_render_check("prev_world_new_instance", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				const glm::mat4 world = glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f));
+				const EntityGuid guid = test.add_instance(test.add_mesh(make_test_cube(test.add_material(test.color_material(glm::vec3(1.0f))))), world);
+				const std::optional<size_t> slot = test.scene().find_instance(guid);
+				context.check(slot.has_value() && test.scene().instances()[*slot].PrevWorld == world, "a new instance has no motion: PrevWorld is its World");
+			});
+
+		register_render_check("prev_world_follows_end_frame", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				const glm::mat4 first = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+				const glm::mat4 second = glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f));
+				const EntityGuid guid = test.add_instance(test.add_mesh(make_test_cube(test.add_material(test.color_material(glm::vec3(1.0f))))), first);
+				const size_t slot = *test.scene().find_instance(guid);
+
+				test.set_instance_world(guid, second);
+				context.check(test.scene().instances()[slot].World == second && test.scene().instances()[slot].PrevWorld == first, "moving an instance keeps the matrix of the last frame");
+				test.set_instance_world(guid, glm::translate(glm::mat4(1.0f), glm::vec3(3.0f, 0.0f, 0.0f)));
+				context.check(test.scene().instances()[slot].PrevWorld == first, "several moves in one frame keep the matrix of the last frame");
+
+				test.scene().end_frame();
+				context.check(test.scene().instances()[slot].PrevWorld == test.scene().instances()[slot].World && test.scene().previous_stale(), "end_frame makes the matrix of this frame the previous one and says the buffer is stale");
+				test.scene().end_frame();
+				context.check(!test.scene().previous_stale(), "a frame without motion is not stale");
+			});
+
+		register_render_check("prev_world_in_instance_buffer", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				const glm::mat4 first = glm::translate(glm::mat4(1.0f), glm::vec3(-0.5f, 0.0f, 0.0f));
+				const glm::mat4 second = glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.0f, 0.0f));
+				const EntityGuid guid = test.add_instance(test.add_mesh(make_test_cube(test.add_material(test.color_material(glm::vec3(1.0f))))), first);
+				context.check(test.render(), "render the still scene");
+				const size_t slot = *test.scene().find_instance(guid);
+
+				// x of the translation column: World at byte 0, Normal at 64, PrevWorld at 128, 48 bytes into a matrix
+				auto read_x = [&](u32 matrixOffset, float& x)
+				{
+					std::vector<u8> bytes;
+					const u64 end = (slot + 1) * sizeof(GpuInstance);
+					if (!read_buffer_bytes(context.Device, test.renderer().get_scene_data().instance_buffer(), end, bytes) || bytes.size() < end)
+					{
+						return false;
+					}
+					std::memcpy(&x, bytes.data() + slot * sizeof(GpuInstance) + matrixOffset + 48, sizeof(float));
+					return true;
+				};
+
+				test.set_instance_world(guid, second);
+				context.check(test.frame(), "render the moving frame");
+				float world = 0.0f;
+				float previous = 0.0f;
+				context.check(read_x(0, world) && read_x(128, previous), "read the instance buffer");
+				context.check(std::abs(world - 0.5f) < 1e-6f && std::abs(previous + 0.5f) < 1e-6f, "the frame of the move sees the old matrix as the previous one");
+
+				context.check(test.frame(), "render the frame after the move");
+				context.check(read_x(0, world) && read_x(128, previous), "read the instance buffer again");
+				context.check(std::abs(world - 0.5f) < 1e-6f && std::abs(previous - 0.5f) < 1e-6f, "the frame after it sees no motion");
+			});
 	}
 }

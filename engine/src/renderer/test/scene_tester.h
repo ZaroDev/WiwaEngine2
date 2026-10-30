@@ -84,6 +84,23 @@ namespace wiwa
 			return guid;
 		}
 
+		// Moves an instance that exists: the same mesh and materials with another world matrix.
+		void set_instance_world(EntityGuid guid, const glm::mat4& world)
+		{
+			const std::optional<size_t> slot = scene().find_instance(guid);
+			if (!slot)
+			{
+				return;
+			}
+			RenderInstance instance;
+			instance.World = world;
+			instance.Mesh = scene().instances()[*slot].Mesh;
+			instance.Materials = scene().instances()[*slot].Materials;
+			SceneDelta delta;
+			delta.InstanceUpserts.emplace_back(guid, std::move(instance));
+			scene().apply(std::move(delta));
+		}
+
 		void remove_instance(EntityGuid guid)
 		{
 			SceneDelta delta;

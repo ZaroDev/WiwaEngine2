@@ -546,7 +546,7 @@ namespace wiwa
 			m_WrittenRevision = ~0ull;
 		}
 
-		if (m_InstanceBuffer && m_WrittenRevision != m_Scene->revision())
+		if (m_InstanceBuffer && (m_WrittenRevision != m_Scene->revision() || m_Scene->previous_stale()))
 		{
 			m_InstanceScratch.assign(std::max<size_t>(instances.size(), 1), GpuInstance{});
 			for (size_t slot = 0; slot < instances.size(); slot++)
@@ -555,6 +555,7 @@ namespace wiwa
 				{
 					m_InstanceScratch[slot].World = instances[slot].World;
 					m_InstanceScratch[slot].Normal = glm::transpose(glm::inverse(instances[slot].World));
+					m_InstanceScratch[slot].PrevWorld = instances[slot].PrevWorld;
 				}
 			}
 			commandList->writeBuffer(m_InstanceBuffer, m_InstanceScratch.data(), m_InstanceScratch.size() * sizeof(GpuInstance));
