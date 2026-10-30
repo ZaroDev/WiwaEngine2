@@ -3,6 +3,9 @@
 
 #include <imgui.h>
 
+#include <asset_pipeline/build_settings.h>
+#include <asset_pipeline/meta_file.h>
+
 #include <IconFontCppHeaders/FontIcons/IconsForkAwesome.h>
 
 #ifdef WI_PLATFORM_WINDOWS
@@ -371,6 +374,29 @@ void AssetBrowserPanel::draw_context_menu()
 	{
 		ImGui::Separator();
 		ImGui::TextDisabled("%s", m_Selected.filename().string().c_str());
+
+		// pack it although no packed scene uses it (the Build Settings panel lists these)
+		if (std::optional<wiwa::MetaFile> meta = wiwa::MetaFile::load(wiwa::MetaFile::meta_path_for(m_Selected)))
+		{
+			std::string loadError;
+			wiwa::BuildSettings settings = wiwa::BuildSettings::load(wiwa::BUILD_SETTINGS_FILE, loadError).value_or(wiwa::BuildSettings{});
+			auto listed = std::find(settings.AlwaysInclude.begin(), settings.AlwaysInclude.end(), meta->Guid);
+
+			// a file that cannot be read is left alone: saving would overwrite it
+			if (ImGui::MenuItem("Always include in build", nullptr, listed != settings.AlwaysInclude.end(), loadError.empty()))
+			{
+				if (listed != settings.AlwaysInclude.end())
+				{
+					settings.AlwaysInclude.erase(listed);
+				}
+				else
+				{
+					settings.AlwaysInclude.push_back(meta->Guid);
+				}
+				settings.save(wiwa::BUILD_SETTINGS_FILE);
+			}
+		}
+
 		if (ImGui::MenuItem(ICON_FK_TRASH " Delete"))
 		{
 			// the .meta goes with its file; the database cleans up the cooked files at its next scan
