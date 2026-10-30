@@ -9,7 +9,6 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
-#include <IconFontCppHeaders/FontIcons/IconsForkAwesome.h>
 
 void EditorModule::init()
 {
@@ -34,6 +33,7 @@ void EditorModule::init()
 	m_Panels.push_back(CreateRef<QualityPanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
 	m_Panels.push_back(CreateRef<AssetBrowserPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
+	m_Panels.push_back(CreateRef<BuildSettingsPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
 
 	set_theme();
 }
@@ -155,11 +155,26 @@ void EditorModule::main_bar()
 {
 	if (ImGui::BeginMainMenuBar())
 	{
+		if (ImGui::BeginMenu("File"))
+		{
+			for (auto& panel : m_Panels)
+			{
+				if (any(panel->get_category(), PanelCategory::File))
+				{
+					if (ImGui::MenuItem(panel->get_name(), nullptr, panel->is_active()))
+					{
+						panel->switch_active();
+					}
+				}
+			}
+			ImGui::EndMenu();
+		}
+
 		if (ImGui::BeginMenu("Window"))
 		{
 			for (auto& panel : m_Panels)
 			{
-				if (panel->get_category() == PanelCategory::Window)
+				if (any(panel->get_category(), PanelCategory::Window))
 				{
 					if (ImGui::MenuItem(panel->get_name(), nullptr, panel->is_active()))
 					{
@@ -173,7 +188,7 @@ void EditorModule::main_bar()
 		{
 			for (auto& panel : m_Panels)
 			{
-				if (panel->get_category() == PanelCategory::Info)
+				if (any(panel->get_category(), PanelCategory::Info))
 				{
 					if (ImGui::MenuItem(panel->get_name(), nullptr, panel->is_active()))
 					{
@@ -188,7 +203,7 @@ void EditorModule::main_bar()
 		{
 			for (auto& panel : m_Panels)
 			{
-				if (panel->get_category() == PanelCategory::Renderer)
+				if (any(panel->get_category(), PanelCategory::Renderer))
 				{
 					if (ImGui::MenuItem(panel->get_name(), nullptr, panel->is_active()))
 					{
@@ -208,6 +223,8 @@ void EditorModule::main_bar()
 	{
 		if (ImGui::BeginMenuBar())
 		{
+			
+
 			ImGui::EndMenuBar();
 		}
 		ImGui::End();

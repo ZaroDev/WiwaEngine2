@@ -16,7 +16,7 @@ class BuildSettingsPanel final : public Panel
 {
 public:
 	explicit BuildSettingsPanel(wiwa::AssetDatabase& database)
-		: Panel("Build Settings", PanelCategory::Window), m_Database(database) {}
+		: Panel("Build Settings", PanelCategory::File), m_Database(database) {}
 
 	void on_draw() override;
 

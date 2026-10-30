@@ -1,10 +1,10 @@
 #pragma once
 
 #include "panel.h"
-#include <gizmo/gizmo_apply.h>
+#include <imgui.h>
+#include <ImGuizmo.h>
 #include <gizmo/gizmo_settings.h>
 #include <gizmo/scene_gizmos.h>
-#include <gizmo/viewport_click_test.h>
 #include <renderer/scene/editor_camera.h>
 #include <scene/scene_editor.h>
 
@@ -26,14 +26,14 @@ public:
 	virtual void on_draw() override;
 
 private:
+	void apply_manipulation(entt::entity entity, const glm::mat4& world);
+
 	wiwa::SceneEditor& m_Editor;
-	wiwa::GizmoOperation m_Operation = wiwa::GizmoOperation::Translate;
+	int m_Operation = ImGuizmo::TRANSLATE;
 	bool m_LocalSpace = false; // the transform gizmo works in the entity's own axes (scale always does)
 	wiwa::SceneGizmos m_SceneGizmos;
 	wiwa::GizmoSettings m_GizmoSettings{};
 	bool m_GizmoSettingsChanged = false; // saved once the mouse is let go
-	bool m_ClickTestRequested = wiwa::ViewportClickTest::requested(); // --viewport-click-test
-	wiwa::ViewportClickTest m_ClickTest{};
 	wiwa::EditorCamera m_Camera{};
 	bool m_UseEditorCamera = true;
 };

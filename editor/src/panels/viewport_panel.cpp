@@ -5,6 +5,7 @@
 
 #include <imgui.h>
 #include <ImGuizmo.h>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <assets/asset_manager.h>
@@ -33,6 +34,40 @@ namespace
 ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor)
 	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>()), m_GizmoSettings(wiwa::GizmoSettings::load())
 {
+}
+
+// ImGuizmo hands back the entity's new world matrix; the operation in use decides which field of the local Transform it becomes.
+void ViewportPanel::apply_manipulation(entt::entity entity, const glm::mat4& world)
+{
+	entt::registry& registry = m_Editor.scene().registry();
+	if (!registry.all_of<wiwa::Transform, wiwa::Hierarchy>(entity))
+	{
+		return;
+	}
+
+	glm::mat4 parentWorld(1.0f);
+	const entt::entity parent = registry.get<wiwa::Hierarchy>(entity).Parent;
+	if (parent != entt::null && registry.valid(parent) && registry.all_of<wiwa::WorldTransform>(parent))
+	{
+		parentWorld = registry.get<wiwa::WorldTransform>(parent).Matrix;
+	}
+
+	const glm::mat4 local = glm::inverse(parentWorld) * world;
+	float position[3], rotation[3], scale[3];
+	ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(local), position, rotation, scale);
+
+	if (m_Operation == ImGuizmo::TRANSLATE)
+	{
+		m_Editor.set_field(entity, "Transform", "Position", wiwa::FieldValue(glm::make_vec3(position)));
+	}
+	else if (m_Operation == ImGuizmo::ROTATE)
+	{
+		m_Editor.set_field(entity, "Transform", "Rotation", wiwa::FieldValue(glm::quat(glm::radians(glm::make_vec3(rotation)))));
+	}
+	else
+	{
+		m_Editor.set_field(entity, "Transform", "Scale", wiwa::FieldValue(glm::make_vec3(scale)));
+	}
 }
 
 void ViewportPanel::on_draw()
@@ -65,6 +100,19 @@ void ViewportPanel::on_draw()
 		if (width > 0 && height > 0)
 		{
 			ImGui::Image(static_cast<ImTextureID>(render->get_viewport_texture_id()), size);
+			if (ImGui::BeginDragDropTarget())
+			{
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("WI_ASSET"))
+				{
+					const std::string path = reinterpret_cast<const char*>(payload->Data);
+					std::filesystem::path assetPath = path;
+					if (assetPath.extension() == ".wscene")
+					{
+						m_Editor.open(path);
+					}
+				}
+				ImGui::EndDragDropTarget();
+			}
 			const bool hovered = ImGui::IsItemHovered();
 			const ImVec2 imageMin = ImGui::GetItemRectMin();
 
@@ -94,20 +142,25 @@ void ViewportPanel::on_draw()
 
 			// Over the image, in its corner.
 			ImGui::SetCursorPos(ImVec2(8.0f, 26.0f));
-			ImGui::Checkbox("Editor camera", &m_UseEditorCamera);
+			ImGui::PushStyleColor(ImGuiCol_Button, { 0, 0, 0, 0 });
+			if (ImGui::Button(ICON_FK_MOUSE_POINTER)) { m_Operation = -1; }
 			ImGui::SameLine();
-			if (ImGui::RadioButton("Move (W)", m_Operation == wiwa::GizmoOperation::Translate)) { m_Operation = wiwa::GizmoOperation::Translate; }
+			if (ImGui::Button(ICON_FK_ARROWS)) { m_Operation = ImGuizmo::TRANSLATE; }
 			ImGui::SameLine();
-			if (ImGui::RadioButton("Rotate (E)", m_Operation == wiwa::GizmoOperation::Rotate)) { m_Operation = wiwa::GizmoOperation::Rotate; }
+			if (ImGui::Button(ICON_FK_REPEAT)) { m_Operation = ImGuizmo::ROTATE; }
 			ImGui::SameLine();
-			if (ImGui::RadioButton("Scale (R)", m_Operation == wiwa::GizmoOperation::Scale)) { m_Operation = wiwa::GizmoOperation::Scale; }
+			if (ImGui::Button(ICON_FK_EXPAND)) { m_Operation = ImGuizmo::SCALE; }
 			ImGui::SameLine();
 			ImGui::Checkbox("Local", &m_LocalSpace);
+			ImGui::SameLine();
+			
+			ImGui::Checkbox("Editor camera", &m_UseEditorCamera);
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Gizmos"))
 			{
 				ImGui::OpenPopup("##gizmo_settings");
 			}
+			ImGui::PopStyleColor();
 			if (ImGui::BeginPopup("##gizmo_settings"))
 			{
 				wiwa::GizmoSettings& settings = m_GizmoSettings;
@@ -153,9 +206,9 @@ void ViewportPanel::on_draw()
 
 			if (overImage && !ImGui::IsAnyItemActive())
 			{
-				if (ImGui::IsKeyPressed(ImGuiKey_W, false)) { m_Operation = wiwa::GizmoOperation::Translate; }
-				if (ImGui::IsKeyPressed(ImGuiKey_E, false)) { m_Operation = wiwa::GizmoOperation::Rotate; }
-				if (ImGui::IsKeyPressed(ImGuiKey_R, false)) { m_Operation = wiwa::GizmoOperation::Scale; }
+				if (ImGui::IsKeyPressed(ImGuiKey_W, false)) { m_Operation = ImGuizmo::TRANSLATE; }
+				if (ImGui::IsKeyPressed(ImGuiKey_E, false)) { m_Operation = ImGuizmo::ROTATE; }
+				if (ImGui::IsKeyPressed(ImGuiKey_R, false)) { m_Operation = ImGuizmo::SCALE; }
 			}
 
 			const bool clicked = overImage && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
@@ -178,31 +231,25 @@ void ViewportPanel::on_draw()
 					ImGuizmo::SetRect(imageMin.x, imageMin.y, size.x, size.y);
 					ImGuizmo::Enable(!flying);
 
-					const glm::mat4 display = wiwa::gizmo_display_matrix(registry.get<wiwa::WorldTransform>(selected).Matrix);
-					glm::mat4 model = display;
-					const ImGuizmo::OPERATION operation = m_Operation == wiwa::GizmoOperation::Translate ? ImGuizmo::TRANSLATE : (m_Operation == wiwa::GizmoOperation::Rotate ? ImGuizmo::ROTATE : ImGuizmo::SCALE);
+					glm::mat4 model = registry.get<wiwa::WorldTransform>(selected).Matrix;
 					float snap[3] = { 0.0f, 0.0f, 0.0f };
 					if (io.KeyCtrl)
 					{
-						const float step = m_Operation == wiwa::GizmoOperation::Translate ? TRANSLATE_SNAP : (m_Operation == wiwa::GizmoOperation::Rotate ? ROTATE_SNAP_DEGREES : SCALE_SNAP);
+						const float step = m_Operation == ImGuizmo::TRANSLATE ? TRANSLATE_SNAP : (m_Operation == ImGuizmo::ROTATE ? ROTATE_SNAP_DEGREES : SCALE_SNAP);
 						snap[0] = snap[1] = snap[2] = step;
 					}
-					const bool changed = ImGuizmo::Manipulate(glm::value_ptr(camera.View), glm::value_ptr(camera.Projection), operation, m_LocalSpace ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
+					const bool changed = ImGuizmo::Manipulate(glm::value_ptr(camera.View), glm::value_ptr(camera.Projection), 
+						static_cast<ImGuizmo::OPERATION>(m_Operation), m_LocalSpace ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
 						glm::value_ptr(model), nullptr, io.KeyCtrl ? snap : nullptr);
 					if (changed)
 					{
-						wiwa::apply_gizmo_result(m_Editor, selected, m_Operation, display, model);
+						apply_manipulation(selected, model);
 					}
 					gizmoHasMouse = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
 				}
 			}
 
 			m_SceneGizmos.draw(render->get_debug_draw(), m_Editor.scene(), m_Editor.selected(), m_GizmoSettings, sceneView);
-
-			if (m_ClickTestRequested)
-			{
-				m_ClickTest.update(*render, m_Editor, imageMin, size, m_Camera.get(size.x / std::max(size.y, 1.0f)));
-			}
 
 			if (clicked && !gizmoHasMouse)
 			{
