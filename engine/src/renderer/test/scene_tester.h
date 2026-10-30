@@ -37,6 +37,7 @@ namespace wiwa
 			quality.AoSlices = defaults.AoSlices;
 			quality.AoSteps = defaults.AoSteps;
 			quality.Fxaa = defaults.Fxaa;
+			quality.Taa = defaults.Taa;
 			m_Renderer.set_quality(quality);
 			scene().set_camera_override(std::nullopt);
 			scene().set_selection(std::nullopt); // the selection and its look belong to the renderer, not the scene: no check inherits another's

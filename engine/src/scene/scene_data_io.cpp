@@ -200,6 +200,12 @@ namespace wiwa
 			ar.value(ao.Enabled);
 			ar.value(ao.Radius);
 			ar.value(ao.Power);
+			ar.value(s.Taa.Feedback);
+			MotionBlurSettings& mb = s.MotionBlur;
+			ar.value(mb.Enabled);
+			ar.value(mb.ExposureTime);
+			ar.value(mb.Strength);
+			ar.value(mb.MaxBlurPixels);
 		}
 	}
 

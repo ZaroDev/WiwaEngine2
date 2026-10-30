@@ -95,6 +95,25 @@ namespace wiwa
 		bool operator==(const AoSettings&) const = default;
 	};
 
+	// Temporal anti-aliasing: whether it runs is a project choice (RenderQuality::Taa); this is how it looks.
+	struct TaaSettings
+	{
+		float Feedback = 0.9f; // how much of the history is kept at most: higher is smoother, lower reacts faster
+
+		bool operator==(const TaaSettings&) const = default;
+	};
+
+	// Smears the image along the motion of every pixel, as a camera shutter open for ExposureTime seconds would.
+	struct MotionBlurSettings
+	{
+		bool Enabled = false;
+		float ExposureTime = 0.012f; // seconds: the longer, the longer the streaks
+		float Strength = 1.0f;
+		float MaxBlurPixels = 32.0f;
+
+		bool operator==(const MotionBlurSettings&) const = default;
+	};
+
 	struct SceneSettings
 	{
 		EnvironmentSource Source = EnvironmentSource::None;
@@ -118,6 +137,8 @@ namespace wiwa
 		BloomSettings Bloom{};
 		TonemapSettings Tonemap{};
 		AoSettings Ao{};
+		TaaSettings Taa{};
+		MotionBlurSettings MotionBlur{};
 
 		bool operator==(const SceneSettings&) const = default;
 	};

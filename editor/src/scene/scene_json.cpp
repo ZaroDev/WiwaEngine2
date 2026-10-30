@@ -751,6 +751,17 @@ namespace wiwa
 			put_float_if_different(ao, "radius", s.Ao.Radius, d.Ao.Radius);
 			put_float_if_different(ao, "power", s.Ao.Power, d.Ao.Power);
 			put_group("ao", ao);
+
+			SceneJson taa = SceneJson::object();
+			put_float_if_different(taa, "feedback", s.Taa.Feedback, d.Taa.Feedback);
+			put_group("taa", taa);
+
+			SceneJson motionBlur = SceneJson::object();
+			put_bool(motionBlur, "enabled", s.MotionBlur.Enabled, d.MotionBlur.Enabled);
+			put_float_if_different(motionBlur, "exposureTime", s.MotionBlur.ExposureTime, d.MotionBlur.ExposureTime);
+			put_float_if_different(motionBlur, "strength", s.MotionBlur.Strength, d.MotionBlur.Strength);
+			put_float_if_different(motionBlur, "maxBlurPixels", s.MotionBlur.MaxBlurPixels, d.MotionBlur.MaxBlurPixels);
+			put_group("motionBlur", motionBlur);
 			return json;
 		}
 
@@ -917,6 +928,15 @@ namespace wiwa
 				|| !read_group(json, "ao", path, error, [&](const SceneJson& g, const std::string& p)
 					{
 						return read_bool(g, "enabled", p, ao.Enabled, error) && read_float(g, "radius", p, ao.Radius, error) && read_float(g, "power", p, ao.Power, error);
+					})
+				|| !read_group(json, "taa", path, error, [&](const SceneJson& g, const std::string& p)
+					{
+						return read_float(g, "feedback", p, s.Taa.Feedback, error);
+					})
+				|| !read_group(json, "motionBlur", path, error, [&](const SceneJson& g, const std::string& p)
+					{
+						return read_bool(g, "enabled", p, s.MotionBlur.Enabled, error) && read_float(g, "exposureTime", p, s.MotionBlur.ExposureTime, error)
+							&& read_float(g, "strength", p, s.MotionBlur.Strength, error) && read_float(g, "maxBlurPixels", p, s.MotionBlur.MaxBlurPixels, error);
 					}))
 			{
 				return false;

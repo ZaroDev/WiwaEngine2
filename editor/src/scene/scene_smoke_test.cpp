@@ -792,6 +792,8 @@ namespace wiwa
 			s.Tonemap.Operator = TonemapOperator::Reinhard;
 			s.Tonemap.Vignette = 0.5f;
 			s.Ao.Radius = 2.0f;
+			s.Taa.Feedback = 0.85f;
+			s.MotionBlur = { true, 0.02f, 2.0f, 50.0f };
 			return s;
 		}
 
@@ -832,6 +834,10 @@ namespace wiwa
 			check(contains(error, "settings.bloom.enabled"), "a bloom flag of the wrong type is rejected (" + error + ")");
 			error = error_of([](SceneJson& j) { j["settings"]["atmosphere"]["mie"] = true; });
 			check(contains(error, "settings.atmosphere.mie"), "so is one inside the atmosphere block (" + error + ")");
+			error = error_of([](SceneJson& j) { j["settings"]["taa"]["feedback"] = "x"; });
+			check(contains(error, "settings.taa.feedback"), "a TAA feedback of the wrong type is rejected (" + error + ")");
+			error = error_of([](SceneJson& j) { j["settings"]["motionBlur"]["enabled"] = 3; });
+			check(contains(error, "settings.motionBlur.enabled"), "a motion blur flag of the wrong type is rejected (" + error + ")");
 			SceneJson extra = doc;
 			extra["settings"]["somethingNew"] = 1;
 			check(scene_from_json(extra).Scene.has_value(), "unknown keys are ignored");
