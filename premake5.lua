@@ -13,6 +13,11 @@ workspace "Wiwa2"
 		"MultiProcessorCompile"
 	}
 
+	defines
+	{
+		"_CRT_SECURE_NO_WARNINGS"
+	}
+
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
 VULKAN_SDK = os.getenv("VULKAN_SDK")
@@ -127,7 +132,6 @@ group "Dependencies"
 	include "engine/vendor/ufbx"
 	-- include "Wiwa/vendor/Optick"
 	-- include "Wiwa/vendor/imguizmo"
-	-- include "Wiwa/vendor/ozz"
 group ""
 
 group "Core"

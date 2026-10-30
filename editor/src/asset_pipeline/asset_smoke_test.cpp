@@ -2,10 +2,12 @@
 #include "asset_smoke_test.h"
 
 #include <assets/asset_manager.h>
+#include <assets/build_info.h>
 #include <assets/library_source.h>
 #include <assets/pak_source.h>
 #include <core/engine.h>
 
+#include "build_settings.h"
 #include "file_utils.h"
 #include "packager.h"
 
@@ -193,6 +195,62 @@ namespace wiwa
 			check(!truncatedAccepted, "a truncated catalog is rejected");
 		}
 
+		// The build info (which scene a pack starts with) survives a round trip, and no truncated copy of it is accepted.
+		{
+			const AssetGuid scene = AssetGuid::generate();
+			BuildInfo info;
+			info.DefaultScene = scene;
+
+			const std::vector<std::byte> bytes = serialize(info);
+			std::optional<BuildInfo> back = deserialize<BuildInfo>(bytes);
+			check(back && back->DefaultScene == scene, "build info round-trips");
+
+			bool truncatedAccepted = false;
+			for (size_t length = 0; length < bytes.size(); length++)
+			{
+				truncatedAccepted = truncatedAccepted || deserialize<BuildInfo>(std::span<const std::byte>(bytes.data(), length)).has_value();
+			}
+			check(!truncatedAccepted, "a truncated build info is rejected");
+		}
+
+		// The build settings survive a round trip; a missing file, a damaged one and a bad guid are told apart.
+		{
+			std::filesystem::create_directories(temp, error);
+			const std::filesystem::path file = temp / "build_settings.json";
+
+			BuildSettings settings;
+			settings.Scenes = { AssetGuid::generate(), AssetGuid::generate() };
+			settings.DefaultScene = settings.Scenes[1];
+			settings.AlwaysInclude = { AssetGuid::generate() };
+			check(settings.save(file), "the build settings save");
+
+			std::string loadError;
+			std::optional<BuildSettings> back = BuildSettings::load(file, loadError);
+			check(back && back->DefaultScene == settings.DefaultScene && back->Scenes == settings.Scenes && back->AlwaysInclude == settings.AlwaysInclude, "the build settings round-trip");
+
+			std::optional<BuildSettings> missing = BuildSettings::load(temp / "no_such_settings.json", loadError);
+			check(!missing && loadError.empty(), "a missing settings file is nullopt without an error");
+
+			{
+				std::ofstream(file) << "{not json";
+			}
+			check(!BuildSettings::load(file, loadError) && !loadError.empty(), "a damaged settings file is an error");
+
+			{
+				std::ofstream(file) << R"({ "scenes": ["zz"] })";
+			}
+			loadError.clear();
+			check(!BuildSettings::load(file, loadError) && loadError.find("zz") != std::string::npos, "a bad guid is an error that names it");
+
+			BuildSettings empty;
+			check(empty.validate(loadError), "empty settings are valid");
+			BuildSettings stray;
+			stray.DefaultScene = AssetGuid::generate();
+			check(!stray.validate(loadError) && !loadError.empty(), "a default scene outside the scene list is invalid");
+			stray.Scenes = { stray.DefaultScene };
+			check(stray.validate(loadError), "a default scene in the scene list is valid");
+		}
+
 		// 0. an import reports its progress and ends with every item done
 		{
 			Ref<JobProgress> scan = pipeline.scan_async();
@@ -262,6 +320,138 @@ namespace wiwa
 			check(missing() == LoadState::Failed, "a missing asset fails");
 		}
 		manager.unload_unused();
+
+		// 3b. which assets a pack holds follows the build settings
+		{
+			// the selection itself, on made-up assets: A, D and E are scenes; A and D both use C
+			const AssetGuid a = AssetGuid::generate(), b = AssetGuid::generate(), c = AssetGuid::generate(), d = AssetGuid::generate();
+			const AssetGuid e = AssetGuid::generate(), f = AssetGuid::generate(), g = AssetGuid::generate(), engineAsset = AssetGuid::generate();
+			const AssetGuid x = AssetGuid::generate(), y = AssetGuid::generate();
+			const std::vector<PackCandidate> candidates = {
+				{ a, { b } }, { b, { c } }, { c, {} }, { d, { c } }, { e, { f } }, { f, {} }, { g, {} },
+				{ engineAsset, {}, true }, { x, { y } }, { y, { x } } };
+			std::vector<AssetGuid> missing;
+
+			BuildSettings settings;
+			settings.Scenes = { a };
+			std::unordered_set<AssetGuid> set = select_pack_set(candidates, settings, missing);
+			check(set.contains(a) && set.contains(b) && set.contains(c), "a chosen scene brings what it uses, transitively");
+			check(!set.contains(d) && !set.contains(e) && !set.contains(f), "a scene that is not chosen, and what only it uses, stay out");
+			check(set.contains(engineAsset), "engine assets are always packed");
+			check(!set.contains(g) && missing.empty(), "an asset nobody asks for stays out");
+
+			settings.Scenes = { d };
+			check(select_pack_set(candidates, settings, missing).contains(c), "an asset shared with a chosen scene stays in the pack");
+
+			settings.Scenes.clear();
+			settings.AlwaysInclude = { g };
+			set = select_pack_set(candidates, settings, missing);
+			check(set.contains(g) && !set.contains(a), "an always-included asset is packed without a scene using it");
+
+			settings.AlwaysInclude = { x };
+			set = select_pack_set(candidates, settings, missing);
+			check(set.contains(x) && set.contains(y), "a dependency cycle ends and holds both assets");
+
+			settings.AlwaysInclude.clear();
+			set = select_pack_set(candidates, settings, missing);
+			check(set.size() == 1 && set.contains(engineAsset), "empty settings pack the engine assets only");
+
+			const AssetGuid unknown = AssetGuid::generate();
+			settings.Scenes = { unknown };
+			select_pack_set(candidates, settings, missing);
+			check(missing.size() == 1 && missing[0] == unknown, "a guid that is not in the Library is reported as missing");
+
+			// an asset that a packed asset needs but that has no cooked file is reported too, once
+			const AssetGuid lost = AssetGuid::generate(), user = AssetGuid::generate(), otherUser = AssetGuid::generate();
+			std::vector<PackCandidate> dangling = candidates;
+			dangling.push_back({ user, { lost } });
+			dangling.push_back({ otherUser, { lost } });
+			settings.Scenes = { user, otherUser };
+			select_pack_set(dangling, settings, missing);
+			check(missing.size() == 1 && missing[0] == lost, "a dependency without a cooked file is reported as missing, once");
+			settings.Scenes = { a };
+			select_pack_set(dangling, settings, missing);
+			check(missing.empty(), "a dangling dependency of an asset that is not packed does not matter");
+
+			// a real pack: the project's scenes, none or all of them
+			std::unordered_map<AssetGuid, const CookedFile*> byGuid;
+			std::vector<AssetGuid> scenes;
+			for (const CookedFile& file : cooked)
+			{
+				byGuid[file.Guid] = &file;
+				if (file.Type == AssetType::Scene)
+				{
+					scenes.push_back(file.Guid);
+				}
+			}
+			check(!scenes.empty(), "the Library has a scene to test the pack selection with");
+
+			if (!scenes.empty())
+			{
+				std::unordered_set<AssetGuid> needed; // what the scenes use, transitively
+				std::vector<AssetGuid> pending = scenes;
+				while (!pending.empty())
+				{
+					const AssetGuid current = pending.back();
+					pending.pop_back();
+					if (needed.insert(current).second && byGuid.contains(current))
+					{
+						pending.insert(pending.end(), byGuid[current]->Dependencies.begin(), byGuid[current]->Dependencies.end());
+					}
+				}
+
+				BuildSettings none; // no scene: only the engine's assets
+				const std::filesystem::path noneDirectory = temp / "none";
+				check(Packager::pack(database, noneDirectory, nullptr, &none), "packing with no scene chosen");
+				PakSource nonePak(noneDirectory / "assets.wpak");
+				check(nonePak.valid() && nonePak.get_index().size() < pak.get_index().size(), "a pack with no scene is smaller than the full pack");
+				check(!nonePak.contains(scenes[0]), "an unchosen scene is not in the pack");
+				check(!nonePak.contains(BUILD_INFO_GUID), "no default scene, no build info");
+				std::optional<std::vector<std::byte>> noneCatalog = nonePak.read_catalog();
+				std::optional<AssetCatalog> noneEntries = noneCatalog ? deserialize<AssetCatalog>(*noneCatalog) : std::nullopt;
+				check(noneEntries && noneEntries->find("engine/shaders/imgui.hlsl") && !noneEntries->find("Assets/scenes/demo.wscene"), "its catalog lists the engine's assets and not the unchosen scene");
+
+				BuildSettings all;
+				all.Scenes = scenes;
+				all.DefaultScene = scenes[0];
+				const std::filesystem::path allDirectory = temp / "all";
+				check(Packager::pack(database, allDirectory, nullptr, &all), "packing with every scene chosen");
+				PakSource allPak(allDirectory / "assets.wpak");
+				bool everythingNeeded = allPak.valid();
+				for (AssetGuid guid : needed)
+				{
+					everythingNeeded = everythingNeeded && allPak.contains(guid);
+				}
+				check(everythingNeeded, "a chosen scene and everything it uses are in the pack");
+				std::optional<BuildInfo> info = read_build_info(allPak);
+				check(info && info->DefaultScene == scenes[0], "the default scene is in the pack's build info");
+
+				// settings that name an asset the Library does not have fail the pack and leave no file
+				BuildSettings broken;
+				broken.Scenes = { AssetGuid::generate() };
+				WI_ASSET_LOG(Info, "Smoke test: the next pack error is expected");
+				const std::filesystem::path brokenDirectory = temp / "broken";
+				check(!Packager::pack(database, brokenDirectory, nullptr, &broken), "settings that name an unknown asset fail the pack");
+				check(!std::filesystem::exists(brokenDirectory / "assets.wpak"), "a failed pack leaves no file");
+
+				// a cooked file that cannot be read fails the pack when the build needs it, and only then
+				const AssetGuid damagedGuid = AssetGuid::generate();
+				const std::filesystem::path damaged = database.get_library_root() / "zz" / (damagedGuid.to_string() + ".wasset");
+				std::filesystem::create_directories(damaged.parent_path(), error);
+				{
+					std::ofstream(damaged, std::ios::binary) << "not a cooked asset";
+				}
+
+				BuildSettings needsDamaged;
+				needsDamaged.AlwaysInclude = { damagedGuid };
+				WI_ASSET_LOG(Info, "Smoke test: the next pack error is expected");
+				check(!Packager::pack(database, temp / "damaged", nullptr, &needsDamaged), "a damaged cooked file the build needs fails the pack");
+				check(!std::filesystem::exists(temp / "damaged" / "assets.wpak"), "and leaves no pack");
+				check(Packager::pack(database, temp / "ignored", nullptr, &none), "a damaged cooked file the build does not need is left out");
+
+				std::filesystem::remove_all(damaged.parent_path(), error);
+			}
+		}
 
 		// 4. damaged packs are rejected without a crash
 		{

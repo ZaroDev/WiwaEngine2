@@ -4,6 +4,8 @@
 #include <imgui.h>
 
 #include <scene/reflection/component_registry.h>
+#include <core/engine.h>
+#include <assets/asset_manager.h>
 
 namespace
 {
@@ -241,7 +243,24 @@ bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& 
 	case FieldType::Asset:
 	{
 		const AssetRef& ref = std::get<AssetRef>(current);
-		ImGui::Text("%s: %s", label, describe_ref(ref).c_str());
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 20.0f);
+		ImGui::InputText("##label", (char*)describe_ref(ref).c_str(), 64, ImGuiInputTextFlags_ReadOnly);
+		ImGui::PopStyleVar();
+		if (ImGui::BeginDragDropTarget())
+		{
+			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("WI_ASSET"))
+			{
+				const std::string path = reinterpret_cast<const char*>(payload->Data);
+				wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+				const std::optional<wiwa::AssetRef> found = assets != nullptr ? assets->find_asset(path) : std::nullopt;
+				if (found)
+				{
+					value = *found;
+					changed = true;
+				}
+			}
+			ImGui::EndDragDropTarget();
+		}
 		if (ref.valid())
 		{
 			ImGui::SameLine();

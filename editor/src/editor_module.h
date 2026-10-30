@@ -2,6 +2,8 @@
 
 #include <core/module.h>
 
+#include <imgui.h>
+#include <ImGuizmo.h>
 #include <panels/panels.h>
 #include <scene/scene_editor.h>
 
@@ -37,4 +39,6 @@ private:
 private:
 	std::vector<Ref<Panel>> m_Panels{};
 	Scope<wiwa::SceneEditor> m_SceneEditor;
+	int m_Operation = ImGuizmo::TRANSLATE;
+	bool m_LocalSpace = false;
 };
