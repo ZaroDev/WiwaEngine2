@@ -235,6 +235,46 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// The post chain of the scene checks (ambient occlusion, bloom, automatic exposure, a neutral tonemap) with the temporal effects.
+		SceneSettings chain_scene_settings(bool motionBlur, bool autoExposure)
+		{
+			SceneSettings settings;
+			settings.AmbientIntensity = 0.6f;
+			settings.Ao.Enabled = true;
+			settings.Bloom.Enabled = true;
+			settings.Bloom.Threshold = 0.8f;
+			settings.Bloom.Intensity = 0.2f;
+			settings.Exposure.Auto = autoExposure;
+			settings.Exposure.AdaptSpeed = 20.0f;
+			settings.Exposure.MinEv = -4.0f;
+			settings.Exposure.MaxEv = 4.0f;
+			settings.Tonemap.Operator = TonemapOperator::Neutral;
+			settings.Tonemap.Saturation = 1.2f;
+			settings.Tonemap.Vignette = 0.3f;
+			settings.MotionBlur.Enabled = motionBlur;
+			settings.MotionBlur.ExposureTime = 0.03f;
+			return settings;
+		}
+
+		glm::mat4 chain_box_world(float x)
+		{
+			return glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(x, -0.5f, 0.0f)), glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		}
+
+		// A wall, a bright lamp and a sunlit box; returns the box.
+		EntityGuid add_chain_scene(SceneTester& test)
+		{
+			test.add_instance(test.add_mesh(make_test_box(glm::vec3(4.0f, 4.0f, 0.1f), test.add_material(test.color_material(glm::vec3(0.6f))))), glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -1.5f)));
+			MaterialData lamp = test.color_material(glm::vec3(1.0f));
+			lamp.EmissiveFactor = glm::vec3(6.0f, 5.0f, 3.0f);
+			test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.3f), test.add_material(lamp))), glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, -0.6f, 0.0f)));
+			test.add_light(test.sun(glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)), 2.0f));
+			return test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.4f), test.add_material(test.color_material(glm::vec3(0.9f, 0.2f, 0.1f), 0.4f)))), chain_box_world(-1.0f));
+		}
+	}
+
 	void register_temporal_checks()
 	{
 		register_render_check("taa_halton_sequence", [](RenderCheckContext& context)
@@ -1132,6 +1172,77 @@ namespace wiwa
 				test.scene().set_camera_override(std::nullopt);
 				context.check(test.render(4) && test.frame(), "and without a camera");
 				test.renderer().get_scene_data().set_debug_velocity(false);
+			});
+
+		register_render_check("temporal_chain_scene", [](RenderCheckContext& context)
+			{
+				align_jitter(context);
+				SceneTester test(context, 96);
+				set_taa(test, true);
+				test.scene().set_settings(chain_scene_settings(true, true));
+				const EntityGuid box = add_chain_scene(test);
+				context.check(test.render(), "render the scene with the whole chain on");
+				advance_to(test, 16);
+				for (int i = 1; i <= 12; i++)
+				{
+					test.set_instance_world(box, chain_box_world(-1.0f + 0.04f * static_cast<float>(i)));
+					context.check(test.frame(), "render frame " + std::to_string(i));
+				}
+				test.read();
+				const std::vector<u8> pixels = test.pixels();
+
+				// TAA and motion blur actually acted: the image is not what the plain chain gives.
+				SceneTester plain(context, 96);
+				plain.scene().set_settings(chain_scene_settings(false, true));
+				const EntityGuid plainBox = add_chain_scene(plain);
+				plain.render();
+				plain.set_instance_world(plainBox, chain_box_world(-1.0f + 0.04f * 12.0f));
+				plain.frame();
+				plain.read();
+				context.check(SceneTester::max_difference(plain.pixels(), pixels) > 0, "TAA and motion blur change the image");
+				compare_across_apis(context, "temporal_chain", pixels);
+			});
+
+		register_render_check("temporal_off_is_identity", [](RenderCheckContext& context)
+			{
+				SceneTester test(context, 96);
+				test.scene().set_settings(chain_scene_settings(false, false));
+				add_chain_scene(test);
+				context.check(test.render(8), "render with TAA and motion blur off");
+				test.frame();
+				test.read();
+				const std::vector<u8> off = test.pixels();
+
+				SceneSettings blur = chain_scene_settings(false, false);
+				blur.MotionBlur.Enabled = true;
+				test.scene().set_settings(blur);
+				test.frame();
+				test.read();
+				context.check(SceneTester::max_difference(off, test.pixels()) == 0, "motion blur over a still scene leaves the whole chain unchanged");
+			});
+
+		register_render_check("temporal_fxaa_exclusive", [](RenderCheckContext& context)
+			{
+				auto render_with = [&](bool fxaa)
+				{
+					align_jitter(context);
+					SceneTester test(context, 96);
+					test.scene().set_settings(chain_scene_settings(false, false));
+					add_chain_scene(test);
+					RenderQuality quality = test.renderer().get_quality();
+					quality.Taa = true;
+					quality.Fxaa = fxaa;
+					test.renderer().set_quality(quality);
+					test.render();
+					advance_to(test, 16);
+					test.frame();
+					test.read();
+					return std::make_pair(test.renderer().get_quality().Fxaa, test.pixels());
+				};
+				const auto both = render_with(true);
+				const auto taaOnly = render_with(false);
+				context.check(!both.first, "TAA and FXAA together leave FXAA off");
+				context.check(SceneTester::max_difference(both.second, taaOnly.second) == 0, "the image is the TAA-only image");
 			});
 	}
 }
