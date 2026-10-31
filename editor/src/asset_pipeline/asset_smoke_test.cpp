@@ -83,6 +83,7 @@ namespace wiwa
 			case AssetType::Lut: { auto h = manager.load<LutData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::Shader: { auto h = manager.load<ShaderData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::Scene: { auto h = manager.load<SceneData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::Script: { auto h = manager.load<ScriptData>(ref); return [h]() { return h.state(); }; }
 			default: return []() { return LoadState::Failed; };
 			}
 		}

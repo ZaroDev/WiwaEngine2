@@ -35,6 +35,7 @@ namespace wiwa
 			case AssetType::Lut: return make_asset<LutData>(payload);
 			case AssetType::Shader: return make_asset<ShaderData>(payload);
 			case AssetType::Scene: return make_asset<SceneData>(payload);
+			case AssetType::Script: return make_asset<ScriptData>(payload);
 			default: return nullptr;
 			}
 		}

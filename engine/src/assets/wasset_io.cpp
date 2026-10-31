@@ -243,6 +243,12 @@ namespace wiwa
 		}
 	}
 
+	void archive(BinaryArchive& ar, ScriptData& v)
+	{
+		ar.string(v.Source);
+		ar.string(v.SourcePath);
+	}
+
 	void archive(BinaryArchive& ar, LutData& v)
 	{
 		ar.string(v.Title);

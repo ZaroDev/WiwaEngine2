@@ -233,4 +233,11 @@ namespace wiwa
 		glm::vec3 BoundsMin{ 0.0f };
 		glm::vec3 BoundsMax{ 0.0f };
 	};
+
+	// A Lua script as the runtime loads it: the source text, and the catalog path it came from (for error messages).
+	struct ScriptData
+	{
+		std::string Source{};
+		std::string SourcePath{};
+	};
 }
