@@ -12,8 +12,10 @@
 #include <scene/reflection/value_bag.h>
 #include <scene/scene.h>
 #include <scene/scene_records.h>
+#include <scripting/asset_script_source.h>
 #include <scripting/script_component.h>
 #include <assets/asset_manager.h>
+#include <assets/pak_source.h>
 #include <core/engine.h>
 #include <renderer/debug/debug_draw.h>
 #include <scene/scene_module.h>
@@ -24,8 +26,10 @@
 #include <scripting/script_runtime.h>
 
 #include "asset_pipeline/asset_database.h"
+#include "asset_pipeline/build_settings.h"
 #include "asset_pipeline/builtin_importers.h"
 #include "asset_pipeline/file_utils.h"
+#include "asset_pipeline/packager.h"
 #include "scene/scene_json.h"
 
 #define WI_SCRIPT_LOG(level, ...) WI_LOG(level, "Scripting", __VA_ARGS__)
@@ -1130,6 +1134,104 @@ namespace wiwa
 				check(h.Events == std::vector<std::string>({ "base1", "base2", "base3" }), "reload_inherited_class_reaches_instances");
 			}
 		}
+
+		// A game: the scripts are only in the pack, the sources are gone.
+		void check_pak(Check& check)
+		{
+			std::error_code error;
+			const std::filesystem::path temp = std::filesystem::temp_directory_path() / "wiwa_script_pak_smoke";
+			std::filesystem::remove_all(temp, error);
+
+			const std::filesystem::path scripts = temp / "assets" / "scripts";
+			const std::string root = (temp / "assets").generic_string();
+			write_text(scripts / "pak_lib.lua", "return { answer = 42 }");
+			write_text(scripts / "pak_main.lua", "local lib = require('" + root + "/scripts/pak_lib.lua')\nreturn Script:extend{\n"
+				"  properties = { speed = { type = 'float', default = 1 } },\n"
+				"  on_init = function(self) record('init ' .. lib.answer) end,\n"
+				"  on_update = function(self, dt) record(string.format('update %g', self.speed)) end }");
+			write_text(scripts / "pak_scene_script.lua", "return Script:extend{ on_update = function(self, dt) record('scene script') end }");
+			write_text(scripts / "unused.lua", "return Script:extend{}");
+
+			AssetDatabase database(temp / "assets", temp / "library");
+			register_builtin_importers(database);
+			database.scan();
+
+			const std::optional<AssetRef> mainScript = database.ensure_imported(scripts / "pak_main.lua");
+			const std::optional<AssetRef> sceneScript = database.ensure_imported(scripts / "pak_scene_script.lua");
+			check(mainScript && sceneScript, "pak: scripts import");
+			if (!mainScript || !sceneScript)
+			{
+				return;
+			}
+
+			SceneData level;
+			level.Name = "pak_level";
+			level.Settings.Scripts = { *sceneScript };
+			EntityRecord entity;
+			entity.Id = EntityGuid::generate();
+			entity.Components.push_back(ComponentRecord{ script_component_name(mainScript->Guid), { FieldRecord{ "speed", 3.0f } } });
+			level.Entities.push_back(entity);
+			write_text(temp / "assets" / "scenes" / "pak_level.wscene", scene_to_json(level).dump(1));
+			const std::optional<AssetRef> sceneAsset = database.ensure_imported(temp / "assets" / "scenes" / "pak_level.wscene");
+			check(sceneAsset.has_value(), "pak: the scene imports");
+			if (!sceneAsset)
+			{
+				return;
+			}
+
+			BuildSettings settings;
+			settings.Scenes = { sceneAsset->Guid };
+			settings.DefaultScene = sceneAsset->Guid;
+			check(Packager::pack(database, temp / "out", nullptr, &settings), "pak: packing the build");
+
+			// the sources are gone: only the pack is left
+			std::filesystem::remove_all(temp / "assets", error);
+			std::filesystem::remove_all(temp / "library", error);
+
+			AssetManager manager;
+			manager.init();
+			manager.set_source(CreateScope<PakSource>(temp / "out" / "assets.wpak"));
+
+			check(!manager.find_asset(root + "/scripts/unused.lua").has_value(), "unreferenced_script_not_packed");
+			check(manager.find_asset(root + "/scripts/pak_lib.lua").has_value(), "pak: a required script is packed");
+
+			AssetScriptSource source(manager);
+			ScriptRuntime runtime(source);
+			std::vector<std::string> events;
+			runtime.sandbox().set_function("record", [&events](const std::string& event) { events.push_back(event); });
+
+			// what ScriptingModule does at start-up
+			for (const AssetCatalog::Entry& entry : manager.catalog_entries())
+			{
+				if (entry.Path.ends_with(".lua"))
+				{
+					std::string loadError;
+					ScriptClass* scriptClass = runtime.load(AssetRef{ entry.Guid, 0 }, loadError);
+					check(scriptClass != nullptr, "pak: " + entry.Path + " loads " + loadError);
+					if (scriptClass != nullptr)
+					{
+						register_script_component(*scriptClass);
+					}
+				}
+			}
+
+			Handle<SceneData> sceneHandle = manager.load<SceneData>(*sceneAsset);
+			manager.wait_idle();
+			check(sceneHandle.get() != nullptr, "pak: the scene loads");
+			if (sceneHandle.get() != nullptr)
+			{
+				Ref<Scene> scene = CreateRef<Scene>();
+				apply_scene_data(*scene, *sceneHandle.get());
+				ScriptInstances instances(runtime);
+				instances.start(scene);
+				instances.update(0.016f);
+				check(events == std::vector<std::string>({ "init 42", "update 3", "scene script" }) || events == std::vector<std::string>({ "init 42", "scene script", "update 3" }), "pak_runs_scripts_without_sources");
+				instances.stop();
+			}
+
+			manager.shutdown();
+			std::filesystem::remove_all(temp, error);
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -1148,6 +1250,7 @@ namespace wiwa
 		check_api(check);
 		check_engine_bindings(check, pipeline);
 		check_scene_changes_and_reload(check);
+		check_pak(check);
 
 		if (check.Failures == 0)
 		{
