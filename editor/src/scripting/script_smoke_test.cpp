@@ -10,6 +10,8 @@
 #include <scene/scene.h>
 #include <scene/scene_records.h>
 #include <scripting/script_component.h>
+#include <scripting/script_context.h>
+#include <scripting/script_instances.h>
 #include <scripting/script_requires.h>
 #include <scripting/script_runtime.h>
 
@@ -588,6 +590,174 @@ namespace wiwa
 				check(overridden, "prefab_override_of_script_property");
 			}
 		}
+
+		// A scene with a runtime and the lifecycle running on it, for the lifecycle checks.
+		struct Harness
+		{
+			MemorySource Source;
+			ScriptRuntime Runtime{ Source };
+			Ref<Scene> TheScene = CreateRef<Scene>();
+			ScriptInstances Instances{ Runtime };
+			std::vector<std::string> Events;
+
+			Harness()
+			{
+				Runtime.sandbox().set_function("record", [this](const std::string& event) { Events.push_back(event); });
+				Runtime.sandbox().set_function("kill", [this](const EntityHandle& handle)
+					{
+						const entt::entity entity = TheScene->find(handle.Guid);
+						if (entity != entt::null)
+						{
+							TheScene->destroy(entity);
+						}
+					});
+			}
+
+			// Adds a script and registers its component.
+			AssetRef add_script(const std::string& name, const std::string& source)
+			{
+				const AssetRef ref = Source.add("assets/scripts/" + name + ".lua", source);
+				std::string error;
+				ScriptClass* scriptClass = Runtime.load(ref, error);
+				if (scriptClass == nullptr)
+				{
+					WI_SCRIPT_LOG(Error, "harness script {0}: {1}", name, error);
+					return ref;
+				}
+				register_script_component(*scriptClass);
+				return ref;
+			}
+
+			entt::entity spawn(const std::string& name, std::initializer_list<AssetRef> scripts)
+			{
+				const entt::entity entity = TheScene->create(name);
+				for (const AssetRef& script : scripts)
+				{
+					attach(entity, script);
+				}
+				return entity;
+			}
+
+			void attach(entt::entity entity, AssetRef script)
+			{
+				ComponentRegistry::get().find(script_component_name(script.Guid))->Add(TheScene->registry(), entity);
+			}
+
+			void detach(entt::entity entity, AssetRef script)
+			{
+				ComponentRegistry::get().find(script_component_name(script.Guid))->Remove(TheScene->registry(), entity);
+			}
+
+			size_t count(const std::string& event) const { return static_cast<size_t>(std::count(Events.begin(), Events.end(), event)); }
+		};
+
+		void check_lifecycle(Check& check)
+		{
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("order", R"(return Script:extend{
+					on_init = function(self) record("init") end,
+					on_update = function(self, dt) record("update") end,
+					on_destroy = function(self) record("destroy") end })");
+				const entt::entity entity = h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				h.Instances.update(0.016f);
+				h.detach(entity, ref);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "init", "update", "update", "destroy" }), "hooks_run_in_order / component_removed_calls_on_destroy");
+			}
+
+			{
+				Harness h;
+				const AssetRef entityScript = h.add_script("entity_side", "return Script:extend{ on_update = function(self, dt) record('entity') end }");
+				const AssetRef sceneScript = h.add_script("scene_side", "return Script:extend{ on_update = function(self, dt) record('scene') end }");
+				h.spawn("e", { entityScript });
+				SceneSettings settings = h.TheScene->settings();
+				settings.Scripts = { sceneScript };
+				h.TheScene->set_settings(settings);
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "scene", "entity" }), "scene_scripts_run_before_entity_scripts");
+			}
+
+			{
+				Harness h;
+				const AssetRef child = h.add_script("child", "return Script:extend{ on_init = function(self) record('child_init') end }");
+				const AssetRef spawner = h.add_script("spawner", "return Script:extend{ on_update = function(self, dt) spawn_child() end }");
+				h.Runtime.sandbox().set_function("spawn_child", [&]()
+					{
+						if (h.count("spawned") == 0)
+						{
+							h.Events.push_back("spawned");
+							h.spawn("child", { child });
+						}
+					});
+				h.spawn("spawner", { spawner });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				const bool notYet = h.count("child_init") == 0 && h.count("spawned") == 1;
+				h.Instances.update(0.016f);
+				check(notYet && h.count("child_init") == 1, "entity_created_by_script_inits_next_frame");
+			}
+
+			{
+				Harness h;
+				const AssetRef failing = h.add_script("failing", "return Script:extend{ on_update = function(self, dt) record('a_try') error('boom') end }");
+				const AssetRef healthy = h.add_script("healthy", "return Script:extend{ on_update = function(self, dt) record('b') end }");
+				h.spawn("a", { failing });
+				h.spawn("b", { healthy });
+				h.Instances.start(h.TheScene);
+				for (int i = 0; i < 3; i++)
+				{
+					h.Instances.update(0.016f);
+				}
+				check(h.count("a_try") == 1 && h.count("b") == 3, "throwing_script_does_not_stop_others");
+			}
+
+			{
+				Harness h;
+				const AssetRef failing = h.add_script("init_fails", R"(return Script:extend{
+					on_init = function(self) error('no init') end,
+					on_update = function(self, dt) record('update_after_failed_init') end,
+					on_destroy = function(self) record('destroy_after_failed_init') end })");
+				const entt::entity entity = h.spawn("a", { failing });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				h.detach(entity, failing);
+				h.Instances.update(0.016f);
+				check(h.Events.empty(), "failed_init_disables_the_instance");
+			}
+
+			{
+				Harness h;
+				const AssetRef suicide = h.add_script("suicide", R"(return Script:extend{
+					on_update = function(self, dt) kill(self.entity) record('after_kill') end,
+					on_destroy = function(self) record('suicide_destroy_valid=' .. tostring(self.entity:is_valid())) end })");
+				const AssetRef victim = h.add_script("victim", "return Script:extend{ on_destroy = function(self) record('victim_destroy') end }");
+				const AssetRef murderer = h.add_script("murderer", "return Script:extend{ on_update = function(self, dt) kill(target) end }");
+				h.spawn("suicide", { suicide });
+				const entt::entity victimEntity = h.spawn("victim", { victim });
+				h.spawn("murderer", { murderer });
+				const EntityGuid victimGuid = h.TheScene->registry().get<Id>(victimEntity).Guid;
+				h.Instances.start(h.TheScene);
+				h.Runtime.sandbox()["target"] = EntityHandle{ victimGuid, &h.Instances.context() };
+				h.Instances.update(0.016f);
+				h.Instances.update(0.016f);
+				check(h.count("suicide_destroy_valid=false") == 1 && h.count("victim_destroy") == 1 && h.count("after_kill") == 1, "destroying_entities_in_update_is_safe");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("stop", "return Script:extend{ on_destroy = function(self) record('destroy') end }");
+				h.spawn("a", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				h.Instances.stop();
+				h.Instances.stop();
+				check(h.count("destroy") == 1 && !h.Instances.running(), "stop_destroys_every_instance_once");
+			}
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -603,6 +773,7 @@ namespace wiwa
 		check_require_scan(check);
 		check_importer(check);
 		check_scene_scripts(check);
+		check_lifecycle(check);
 
 		if (check.Failures == 0)
 		{
