@@ -119,6 +119,7 @@ namespace wiwa
 			register_debug_pass_checks();
 			register_outline_checks();
 			register_pick_checks();
+			register_temporal_checks();
 
 			register_render_check("copy_queue_roundtrip", [](RenderCheckContext& context)
 				{

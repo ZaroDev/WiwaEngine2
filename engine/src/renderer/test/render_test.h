@@ -75,6 +75,8 @@ namespace wiwa
 	void register_outline_checks();
 	// GPU picking (pick_checks.cpp).
 	void register_pick_checks();
+	// The temporal chain: TAA maths, velocity, TAA, motion blur (temporal_checks.cpp).
+	void register_temporal_checks();
 
 	// `--render-test`: runs every check once on the render thread. True when all passed.
 	bool run_render_checks(RenderWorld& world);

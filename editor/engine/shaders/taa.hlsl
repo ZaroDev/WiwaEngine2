@@ -191,12 +191,21 @@ void CSMain(uint3 dispatch_id : SV_DispatchThreadID)
 		return;
 	}
 
-	// Was the same surface there? A different depth means something moved in front of it or away from it.
+	// Was the same surface there? A different depth means something moved in front of it or away from it. The jitter flips the
+	// coverage of edge pixels from frame to frame, so the surface counts as found when any pixel next to the place has its depth.
 	int2 history_pixel = clamp(int2(history_uv * float2(size)), int2(0, 0), size - 1);
-	float history_depth = uDepthHistory.Load(int3(history_pixel, 0)).r;
 	float linear_now = LinearDepth(closest_depth);
-	float linear_before = LinearDepth(history_depth);
-	if (abs(linear_now - linear_before) > DEPTH_TOLERANCE * max(linear_now, linear_before))
+	bool same_surface = false;
+	for (int hy = -1; hy <= 1; hy++)
+	{
+		for (int hx = -1; hx <= 1; hx++)
+		{
+			int2 history_tap = clamp(history_pixel + int2(hx, hy), int2(0, 0), size - 1);
+			float linear_before = LinearDepth(uDepthHistory.Load(int3(history_tap, 0)).r);
+			same_surface = same_surface || abs(linear_now - linear_before) <= DEPTH_TOLERANCE * max(linear_now, linear_before);
+		}
+	}
+	if (!same_surface)
 	{
 		uOutput[pixel] = float4(current, 1.0);
 		return;

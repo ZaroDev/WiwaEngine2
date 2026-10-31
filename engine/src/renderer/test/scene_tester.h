@@ -194,6 +194,9 @@ namespace wiwa
 		// The frame time that the next frames report (a sixtieth of a second to begin with).
 		void set_delta(float seconds) { m_Delta = seconds; }
 
+		// How many frames this tester has rendered (the index of the next one).
+		u64 frame_count() const { return m_Frame; }
+
 		// One frame, and no more.
 		bool frame()
 		{

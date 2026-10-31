@@ -55,6 +55,10 @@ namespace wiwa
 		// How far the surface of every pixel moved on the screen since the previous frame, as a uv delta (current minus previous, unjittered;
 		// RG16F, zero where nothing was drawn), written by the depth prepass and the transparent velocity pass.
 		nvrhi::ITexture* velocity() const { return m_Velocity; }
+		// TAA: the resolved image of the last two frames it ran (RGBA16F) and the depth of those frames (R32F), written by the TAA compute
+		// pass. Index i is for the pass to ping-pong between; zero until the pass has written it.
+		nvrhi::ITexture* taa_history(u32 i) const { return m_TaaHistory[i & 1]; }
+		nvrhi::ITexture* taa_depth_history(u32 i) const { return m_TaaDepthHistory[i & 1]; }
 		nvrhi::IFramebuffer* prepass_framebuffer() const { return m_PrepassFramebuffer; } // normal + velocity + depth
 		nvrhi::IFramebuffer* velocity_framebuffer() const { return m_VelocityFramebuffer; } // velocity + depth
 		nvrhi::IFramebuffer* ldr_framebuffer() const { return m_LdrFramebuffer; }
@@ -88,6 +92,8 @@ namespace wiwa
 		nvrhi::TextureHandle m_Normal{};
 		nvrhi::FramebufferHandle m_PrepassFramebuffer{};
 		nvrhi::TextureHandle m_Velocity{};
+		nvrhi::TextureHandle m_TaaHistory[2]{};
+		nvrhi::TextureHandle m_TaaDepthHistory[2]{};
 		nvrhi::FramebufferHandle m_VelocityFramebuffer{};
 		nvrhi::TextureHandle m_PreFxaa{};
 		nvrhi::FramebufferHandle m_PreFxaaFramebuffer{};

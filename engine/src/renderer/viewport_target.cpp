@@ -129,12 +129,31 @@ namespace wiwa
 		velocity.debugName = "Viewport velocity";
 		m_Velocity = device->createTexture(velocity);
 
+		bool taaOk = true;
+		for (u32 i = 0; i < 2; i++)
+		{
+			nvrhi::TextureDesc history;
+			history.width = width;
+			history.height = height;
+			history.format = nvrhi::Format::RGBA16_FLOAT;
+			history.isUAV = true;
+			history.isShaderResource = true;
+			history.initialState = nvrhi::ResourceStates::ShaderResource;
+			history.keepInitialState = true;
+			history.debugName = "TAA history " + std::to_string(i);
+			m_TaaHistory[i] = device->createTexture(history);
+			history.format = nvrhi::Format::R32_FLOAT;
+			history.debugName = "TAA depth history " + std::to_string(i);
+			m_TaaDepthHistory[i] = device->createTexture(history);
+			taaOk = taaOk && m_TaaHistory[i] != nullptr && m_TaaDepthHistory[i] != nullptr;
+		}
+
 		m_Hdr = device->createTexture(hdr);
 		m_Depth = device->createTexture(depth);
 		m_Ldr = device->createTexture(ldr);
 		ldr.debugName = "Viewport tonemapped (before FXAA)";
 		m_PreFxaa = device->createTexture(ldr);
-		if (!m_Hdr || !m_Depth || !m_Ldr || !m_PreFxaa || !m_Normal || !m_Velocity || !m_Exposure || !m_Histogram || !bloomOk || !m_AoRaw || !m_Ao || !m_AoDistance)
+		if (!m_Hdr || !m_Depth || !m_Ldr || !m_PreFxaa || !m_Normal || !m_Velocity || !m_Exposure || !m_Histogram || !bloomOk || !taaOk || !m_AoRaw || !m_Ao || !m_AoDistance)
 		{
 			WI_LOG(Error, "Renderer", "could not create the {0}x{1} viewport targets", width, height);
 			destroy();
@@ -197,6 +216,11 @@ namespace wiwa
 		m_PrepassFramebuffer = nullptr;
 		m_VelocityFramebuffer = nullptr;
 		m_Velocity = nullptr;
+		for (u32 i = 0; i < 2; i++)
+		{
+			m_TaaHistory[i] = nullptr;
+			m_TaaDepthHistory[i] = nullptr;
+		}
 		m_Normal = nullptr;
 		for (nvrhi::TextureHandle& texture : m_BloomDown)
 		{

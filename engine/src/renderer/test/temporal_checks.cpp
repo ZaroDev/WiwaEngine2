@@ -2,6 +2,9 @@
 
 #include "../passes/taa_math.h"
 #include "../render_pick.h"
+#include <functional>
+
+#include "cross_backend.h"
 #include "half_float.h"
 #include "scene_tester.h"
 
@@ -39,9 +42,11 @@ namespace wiwa
 			return glm::vec2(difference.x * 0.5f * static_cast<float>(size), -difference.y * 0.5f * static_cast<float>(size));
 		}
 
-		AssetRef cube_mesh(SceneTester& test, float half = 0.5f)
+		AssetRef cube_mesh(SceneTester& test, float half = 0.5f, float emissive = 0.0f)
 		{
-			return test.add_mesh(make_test_box(glm::vec3(half), test.add_material(test.color_material(glm::vec3(0.8f)))));
+			MaterialData material = test.color_material(glm::vec3(0.8f));
+			material.EmissiveFactor = glm::vec3(emissive);
+			return test.add_mesh(make_test_box(glm::vec3(half), test.add_material(material)));
 		}
 
 		// The camera SceneTester::set_camera builds (60 degrees, near 0.1, far 100, square), for working out what a pixel should read.
@@ -78,6 +83,83 @@ namespace wiwa
 			std::memcpy(raw, bytes.data() + offset, sizeof(raw));
 			velocity = glm::vec2(half_to_float(raw[0]), half_to_float(raw[1]));
 			return true;
+		}
+	}
+
+	namespace
+	{
+		void set_feedback(SceneTester& test, float feedback)
+		{
+			SceneSettings settings;
+			settings.Taa.Feedback = feedback;
+			test.scene().set_settings(settings);
+		}
+
+		void advance_to(SceneTester& test, u64 frame)
+		{
+			while (test.frame_count() < frame)
+			{
+				test.frame();
+			}
+		}
+
+		int luma_of(const SceneTester& test, int x, int y) { return SceneTester::luma(test.pixel(x, y)); }
+
+		// The RGBA16F texture as floats (four per pixel).
+		bool read_half4(RenderCheckContext& context, nvrhi::ITexture* texture, std::vector<float>& values)
+		{
+			std::vector<u8> bytes;
+			u32 width = 0;
+			u32 height = 0;
+			if (!read_texture_slice_bytes(context.Device, texture, 0, 0, bytes, width, height, 8))
+			{
+				return false;
+			}
+			values.resize(bytes.size() / 2);
+			for (size_t i = 0; i < values.size(); i++)
+			{
+				u16 raw;
+				std::memcpy(&raw, bytes.data() + i * 2, sizeof(raw));
+				values[i] = half_to_float(raw);
+			}
+			return true;
+		}
+
+		bool all_finite(const std::vector<float>& values)
+		{
+			return std::all_of(values.begin(), values.end(), [](float v) { return std::isfinite(v); });
+		}
+
+		// How a scenario (a still camera over a box, plus something done at frame 16) ends, with the real feedback or with none (the
+		// current frame alone, a reference that the same jitter makes comparable).
+		using Scenario = std::function<std::vector<u8>(SceneTester&, bool reference)>;
+
+		std::vector<u8> run_scenario(RenderCheckContext& context, const Scenario& scenario, bool reference, u32& size)
+		{
+			{
+				// The renderer counts frames across testers: start both runs at the same point of the jitter sequence.
+				SceneTester pad(context);
+				while (pad.renderer().get_frame_index() % 8 != 0)
+				{
+					pad.frame();
+				}
+			}
+			SceneTester test(context);
+			set_taa(test, true);
+			set_feedback(test, reference ? 0.0f : 0.9f);
+			std::vector<u8> pixels = scenario(test, reference);
+			size = test.size();
+			return pixels;
+		}
+
+		// The box scene that the history checks start from; returns after frame 15.
+		void still_scene(SceneTester& test)
+		{
+			const glm::mat4 turn = glm::rotate(glm::mat4(1.0f), 0.6f, glm::vec3(0.0f, 0.0f, 1.0f));
+			test.add_instance(cube_mesh(test, 0.6f, 2.0f), turn);
+			test.add_instance(cube_mesh(test, 0.6f, 2.0f), glm::translate(glm::mat4(1.0f), glm::vec3(60.0f, 0.0f, 0.0f)) * turn);
+			test.render();
+			advance_to(test, 16);
 		}
 	}
 
@@ -515,6 +597,335 @@ namespace wiwa
 				context.check(test.frame(), "render the frame in which the pane moves");
 				glm::vec2 velocity(1.0f);
 				context.check(read_velocity(context, test, test.to_pixel(glm::vec3(0.0f, 0.0f, 0.5f)), velocity) && glm::length(velocity) < 1e-4f, "a pane behind an opaque box does not overwrite its velocity");
+			});
+
+		register_render_check("taa_off_changes_nothing", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+				set_taa(test, true);
+				context.check(test.render(), "render with TAA on");
+				set_taa(test, false);
+				context.check(test.frame(), "switch TAA off");
+				std::vector<float> before[2];
+				std::vector<float> after[2];
+				bool read = true;
+				for (u32 i = 0; i < 2; i++)
+				{
+					read = read && read_half4(context, test.renderer().get_viewport().taa_history(i), before[i]);
+				}
+				advance_to(test, test.frame_count() + 6);
+				for (u32 i = 0; i < 2; i++)
+				{
+					read = read && read_half4(context, test.renderer().get_viewport().taa_history(i), after[i]);
+				}
+				context.check(read && before[0] == after[0] && before[1] == after[1], "with TAA off the pass does not touch its history");
+			});
+
+		register_render_check("taa_still_converges", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				set_taa(test, true);
+				test.add_instance(cube_mesh(test, 0.6f, 2.0f), glm::rotate(glm::mat4(1.0f), 0.6f, glm::vec3(0.0f, 0.0f, 1.0f)));
+				context.check(test.render(), "render with TAA on");
+				advance_to(test, 20);
+				test.frame();
+				test.read();
+				const std::vector<u8> before = test.pixels();
+				test.frame();
+				test.read();
+				context.check(SceneTester::max_difference(before, test.pixels()) <= 50, "a still scene stops changing between frames (edge pixels move by a fraction of the contrast)");
+
+				// An edge pixel holds a value between the background and the box.
+				const int background = luma_of(test, 1, 1);
+				const int inside = luma_of(test, 32, 32);
+				context.check(std::abs(inside - background) > 40, "the box is visible against the background");
+				int intermediate = 0;
+				for (int y = 0; y < 64; y++)
+				{
+					for (int x = 0; x < 64; x++)
+					{
+						const int value = luma_of(test, x, y);
+						intermediate += (value > background + 6 && value < background + (inside - background) / 2) ? 1 : 0;
+					}
+				}
+				context.check(intermediate > 4, "the edge of the box has intermediate pixels");
+				compare_across_apis(context, "taa_still_converges", test.pixels());
+			});
+
+		register_render_check("taa_edge_gets_coverage", [](RenderCheckContext& context)
+			{
+				auto render_box = [&](bool taa, std::vector<u8>& pixels)
+				{
+					SceneTester test(context);
+					set_taa(test, taa);
+					test.add_instance(cube_mesh(test, 0.6f, 2.0f), glm::rotate(glm::mat4(1.0f), 0.6f, glm::vec3(0.0f, 0.0f, 1.0f)));
+					const bool ok = test.render();
+					advance_to(test, 24);
+					test.frame();
+					test.read();
+					pixels = test.pixels();
+					return ok;
+				};
+				std::vector<u8> off;
+				std::vector<u8> on;
+				context.check(render_box(false, off) && render_box(true, on), "render with and without TAA");
+				int different = 0;
+				for (size_t i = 0; i + 3 < on.size(); i += 4)
+				{
+					different += std::abs(static_cast<int>(on[i]) - static_cast<int>(off[i])) > 8 ? 1 : 0;
+				}
+				context.check(different >= 8, "TAA gives edge pixels a coverage the aliased image does not have");
+				const size_t centre = (static_cast<size_t>(32) * 64 + 32) * 4;
+				context.check(std::abs(static_cast<int>(on[centre]) - static_cast<int>(off[centre])) <= 4, "the inside of the box is unchanged");
+			});
+
+		register_render_check("taa_no_ghost_trail", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				set_taa(test, true);
+				MaterialData bright = test.color_material(glm::vec3(1.0f));
+				bright.EmissiveFactor = glm::vec3(2.0f);
+				const EntityGuid box = test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.3f), test.add_material(bright))), glm::translate(glm::mat4(1.0f), glm::vec3(-0.9f, 0.0f, 0.0f)));
+				context.check(test.render(), "render the box at the start");
+				advance_to(test, 16);
+				for (int i = 1; i <= 12; i++)
+				{
+					test.set_instance_world(box, glm::translate(glm::mat4(1.0f), glm::vec3(-0.9f + 0.1f * static_cast<float>(i), 0.0f, 0.0f)));
+					test.frame();
+				}
+				test.frame();
+				test.frame();
+				test.frame();
+				test.read();
+
+				// The box rests at x = 0.3, its left edge at x = 0. Everything left of it, where it travelled, is the background again.
+				const int background = luma_of(test, 1, 1);
+				const int boxLuma = luma_of(test, test.to_pixel(glm::vec3(0.3f, 0.0f, 0.3f)).x, 32);
+				context.check(boxLuma > background + 60, "the box is bright against the background");
+				const int left = test.to_pixel(glm::vec3(-1.3f, 0.0f, 0.0f)).x;
+				const int stop = test.to_pixel(glm::vec3(-0.1f, 0.0f, 0.0f)).x;
+				const int top = test.to_pixel(glm::vec3(0.0f, 0.2f, 0.3f)).y;
+				const int bottom = test.to_pixel(glm::vec3(0.0f, -0.2f, 0.3f)).y;
+				int worst = 0;
+				for (int y = top; y <= bottom; y++)
+				{
+					for (int x = left; x < stop; x++)
+					{
+						worst = std::max(worst, luma_of(test, x, y) - background);
+					}
+				}
+				context.check(worst <= 6, "no pixel behind the path of the box is brighter than the background (worst +" + std::to_string(worst) + ")");
+			});
+
+		register_render_check("taa_disocclusion", [](RenderCheckContext& context)
+			{
+				// Behind the box, bright thin bars on a dark wall: every neighbourhood has both colors, so the color clip alone cannot
+				// tell the wall from the box. Only the depth of the history can.
+				auto scenario = [&](SceneTester& test, bool reference)
+				{
+					MaterialData wall = test.color_material(glm::vec3(0.05f));
+					const AssetRef wallMaterial = test.add_material(wall);
+					test.add_instance(test.add_mesh(make_test_box(glm::vec3(8.0f, 8.0f, 0.1f), wallMaterial)), glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -1.5f)));
+					MaterialData bar = test.color_material(glm::vec3(1.0f));
+					bar.EmissiveFactor = glm::vec3(1.0f);
+					const AssetRef barMesh = test.add_mesh(make_test_box(glm::vec3(0.07f, 8.0f, 0.12f), test.add_material(bar)));
+					for (int i = -4; i <= 4; i++)
+					{
+						test.add_instance(barMesh, glm::translate(glm::mat4(1.0f), glm::vec3(0.3f * static_cast<float>(i), 0.0f, -1.5f)));
+					}
+					const EntityGuid box = test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+					test.render();
+					advance_to(test, 20);
+					test.set_instance_world(box, glm::translate(glm::mat4(1.0f), glm::vec3(40.0f, 0.0f, 0.0f))); // gone
+					test.frame();
+					test.read();
+					return test.pixels();
+				};
+				u32 sizeA = 0;
+				u32 sizeB = 0;
+				const std::vector<u8> real = run_scenario(context, scenario, false, sizeA);
+				const std::vector<u8> reference = run_scenario(context, scenario, true, sizeB);
+				int worst = 0;
+				for (int y = 27; y < 38; y++)
+				{
+					for (int x = 27; x < 38; x++)
+					{
+						const size_t offset = (static_cast<size_t>(y) * 64 + static_cast<size_t>(x)) * 4;
+						worst = std::max(worst, std::abs(static_cast<int>(real[offset]) - static_cast<int>(reference[offset])));
+					}
+				}
+				context.check(!real.empty() && worst <= 3, "the wall that the box uncovers shows no trace of it (worst " + std::to_string(worst) + ")");
+			});
+
+		register_render_check("taa_history_dropped", [](RenderCheckContext& context)
+			{
+				struct Case
+				{
+					const char* Name;
+					std::function<void(SceneTester&)> Drop;
+				};
+				const Case cases[] = {
+					{ "a resize", [](SceneTester& test) { test.set_size(48); } },
+					{ "a camera jump of 60 units", [](SceneTester& test) { test.set_camera(glm::vec3(60.0f, 0.0f, 4.0f), glm::vec3(60.0f, 0.0f, 0.0f)); } },
+					{ "a history reset request", [](SceneTester& test) { test.renderer().get_scene_data().request_history_reset(); } },
+				};
+
+				for (const Case& drop : cases)
+				{
+					auto scenario = [&](SceneTester& test, bool reference)
+					{
+						still_scene(test);
+						drop.Drop(test);
+						test.frame();
+						test.read();
+						return test.pixels();
+					};
+					u32 sizeA = 0;
+					u32 sizeB = 0;
+					const std::vector<u8> real = run_scenario(context, scenario, false, sizeA);
+					const std::vector<u8> reference = run_scenario(context, scenario, true, sizeB);
+					context.check(!real.empty() && SceneTester::max_difference(real, reference) <= 2, std::string("after ") + drop.Name + " the image is the current frame alone");
+				}
+
+				// And without a drop the history is in the image: the control that the three above are not vacuous.
+				auto undisturbed = [&](SceneTester& test, bool reference)
+				{
+					still_scene(test);
+					test.frame();
+					test.read();
+					return test.pixels();
+				};
+				u32 sizeA = 0;
+				u32 sizeB = 0;
+				const std::vector<u8> real = run_scenario(context, undisturbed, false, sizeA);
+				const std::vector<u8> reference = run_scenario(context, undisturbed, true, sizeB);
+				context.check(SceneTester::max_difference(real, reference) > 10, "with history the image differs from the current frame alone");
+			});
+
+		register_render_check("taa_off_on_toggle", [](RenderCheckContext& context)
+			{
+				auto scenario = [&](SceneTester& test, bool reference)
+				{
+					const EntityGuid box = test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+					test.render();
+					advance_to(test, 10);
+					set_taa(test, false);
+					for (int i = 0; i < 8; i++)
+					{
+						test.set_instance_world(box, glm::translate(glm::mat4(1.0f), glm::vec3(0.15f * static_cast<float>(i), 0.0f, 0.0f)));
+						test.frame();
+					}
+					set_taa(test, true);
+					test.frame();
+					test.read();
+					return test.pixels();
+				};
+				u32 sizeA = 0;
+				u32 sizeB = 0;
+				const std::vector<u8> real = run_scenario(context, scenario, false, sizeA);
+				const std::vector<u8> reference = run_scenario(context, scenario, true, sizeB);
+				context.check(!real.empty() && SceneTester::max_difference(real, reference) <= 2, "the first TAA frame after being off has no history");
+			});
+
+		register_render_check("taa_nan_input", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				set_taa(test, true);
+				MaterialData hot = test.color_material(glm::vec3(1.0f));
+				hot.EmissiveFactor = glm::vec3(1e6f);
+				MaterialData broken = test.color_material(glm::vec3(std::numeric_limits<float>::quiet_NaN()));
+				broken.EmissiveFactor = glm::vec3(std::numeric_limits<float>::infinity());
+				test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.3f), test.add_material(hot))), glm::translate(glm::mat4(1.0f), glm::vec3(-0.6f, 0.0f, 0.0f)));
+				test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.3f), test.add_material(broken))), glm::translate(glm::mat4(1.0f), glm::vec3(0.6f, 0.0f, 0.0f)));
+				context.check(test.render(), "render the scene with bad pixels");
+
+				bool finite = true;
+				for (int i = 0; i < 6; i++)
+				{
+					test.frame();
+					for (u32 history = 0; history < 2; history++)
+					{
+						std::vector<float> values;
+						finite = finite && read_half4(context, test.renderer().get_viewport().taa_history(history), values) && all_finite(values);
+					}
+				}
+				context.check(finite, "no NaN or infinity reaches the history");
+
+				test.read();
+				const int background = luma_of(test, 1, 1);
+				int speckles = 0;
+				for (int x = 0; x < 64; x++)
+				{
+					for (const int y : { 2, 3, 60, 61 })
+					{
+						speckles += std::abs(luma_of(test, x, y) - background) > 3 ? 1 : 0;
+					}
+				}
+				context.check(speckles == 0, "no speckles away from the boxes");
+			});
+
+		register_render_check("taa_tiny_viewport", [](RenderCheckContext& context)
+			{
+				for (const u32 size : { 1u, 3u, 4u })
+				{
+					SceneTester test(context, size);
+					set_taa(test, true);
+					test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+					context.check(test.render(4), "render at " + std::to_string(size) + " pixels with TAA on");
+					context.check(test.frame() && test.frame(), "and keep rendering");
+				}
+			});
+
+		register_render_check("taa_empty_scene", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				set_taa(test, true);
+				context.check(test.render(4) && test.frame(), "TAA over a scene without instances");
+
+				test.scene().set_camera_override(std::nullopt);
+				context.check(test.render(4) && test.frame(), "and without a camera");
+			});
+
+		register_render_check("taa_sky_motion", [](RenderCheckContext& context)
+			{
+				auto render_sky = [&](bool taa, std::vector<u8>& pixels)
+				{
+					SceneTester test(context);
+					set_taa(test, taa);
+					SceneSettings settings;
+					settings.Source = EnvironmentSource::Atmosphere;
+					test.scene().set_settings(settings);
+					test.add_light(test.sun(glm::vec3(0.4f, -0.7f, 0.3f), 1.0f, false));
+					auto aim = [&](int step)
+					{
+						const float angle = glm::radians(2.0f * static_cast<float>(step));
+						test.set_camera(glm::vec3(0.0f), glm::vec3(std::sin(angle), 0.4f, -std::cos(angle)));
+					};
+					aim(0);
+					const bool ok = test.render();
+					for (int step = 1; step <= 12; step++)
+					{
+						aim(step);
+						test.frame();
+					}
+					test.read();
+					pixels = test.pixels();
+					return ok;
+				};
+				std::vector<u8> off;
+				std::vector<u8> on;
+				context.check(render_sky(false, off) && render_sky(true, on), "render the turning sky with and without TAA");
+				u64 total = 0;
+				for (size_t i = 0; i < on.size(); i++)
+				{
+					if ((i & 3) != 3)
+					{
+						total += static_cast<u64>(std::abs(static_cast<int>(on[i]) - static_cast<int>(off[i])));
+					}
+				}
+				const double mean = static_cast<double>(total) / (static_cast<double>(on.size()) * 0.75);
+				context.check(mean < 7.6, "the sky is not smeared by the turning camera (mean difference " + std::to_string(mean) + ")");
 			});
 	}
 }
