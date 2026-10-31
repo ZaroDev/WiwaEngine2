@@ -1,0 +1,173 @@
+#include <pch.h>
+#include "script_runtime.h"
+
+#include <filesystem>
+
+#include "script_properties.h"
+
+#define WI_SCRIPT_LOG(level, ...) WI_LOG(level, "Scripting", __VA_ARGS__)
+
+namespace wiwa
+{
+	namespace
+	{
+		constexpr int HOOK_STEP = 1000; // VM instructions between two calls of the count hook
+		constexpr const char* RUNTIME_KEY = "wiwa.script_runtime";
+
+		void budget_hook(lua_State* state, lua_Debug*)
+		{
+			lua_getfield(state, LUA_REGISTRYINDEX, RUNTIME_KEY);
+			ScriptRuntime* runtime = static_cast<ScriptRuntime*>(lua_touserdata(state, -1));
+			lua_pop(state, 1);
+			if (runtime != nullptr && runtime->consume_budget(HOOK_STEP))
+			{
+				luaL_error(state, "script exceeded instruction budget");
+			}
+		}
+
+		// The base class every script extends. A class table inherits from its parent through its metatable and merges the parent's
+		// properties with its own.
+		constexpr const char* SCRIPT_BASE = R"lua(
+			local Script = {}
+			Script.__index = Script
+			Script.properties = {}
+
+			function Script:extend(definition)
+				local class = definition or {}
+				local properties = {}
+				for name, property in pairs(self.properties or {}) do properties[name] = property end
+				for name, property in pairs(class.properties or {}) do properties[name] = property end
+				class.properties = properties
+				class.__index = class
+				return setmetatable(class, self)
+			end
+
+			return Script
+		)lua";
+
+		// The globals a script may use. dofile, loadfile, load, io, os, package and debug are not among them.
+		constexpr const char* ALLOWED_GLOBALS[] = {
+			"assert", "error", "ipairs", "next", "pairs", "pcall", "select", "tonumber", "tostring", "type", "xpcall",
+			"rawequal", "rawget", "rawlen", "rawset", "setmetatable", "getmetatable",
+			"math", "string", "table", "utf8",
+		};
+
+		constexpr const char* HOOKS[] = { "on_init", "on_update", "on_destroy" };
+	}
+
+	ScriptRuntime::ScriptRuntime(IScriptSource& source) : m_Source(source)
+	{
+		m_Lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string, sol::lib::table, sol::lib::utf8);
+
+		lua_pushlightuserdata(m_Lua.lua_state(), this);
+		lua_setfield(m_Lua.lua_state(), LUA_REGISTRYINDEX, RUNTIME_KEY);
+		lua_sethook(m_Lua.lua_state(), budget_hook, LUA_MASKCOUNT, HOOK_STEP);
+
+		sol::table base = m_Lua.safe_script(SCRIPT_BASE);
+
+		m_Sandbox = m_Lua.create_table();
+		for (const char* name : ALLOWED_GLOBALS)
+		{
+			m_Sandbox[name] = m_Lua[name];
+		}
+		m_Sandbox["Script"] = base;
+
+		m_Sandbox.set_function("log", &Log::log_info);
+		m_Sandbox.set_function("log_warning", &Log::log_warning);
+		m_Sandbox.set_function("log_error", &Log::log_error);
+	}
+
+	ScriptRuntime::~ScriptRuntime() = default;
+
+	bool ScriptRuntime::consume_budget(u64 instructions)
+	{
+		m_Used += instructions;
+		return m_Used > m_Budget;
+	}
+
+	const ScriptClass* ScriptRuntime::find(AssetRef asset) const
+	{
+		const auto found = m_Classes.find(asset.resolved());
+		return found == m_Classes.end() ? nullptr : found->second.get();
+	}
+
+	ScriptClass* ScriptRuntime::load(AssetRef asset, std::string& error)
+	{
+		error.clear();
+
+		const auto cached = m_Classes.find(asset.resolved());
+		if (cached != m_Classes.end())
+		{
+			return cached->second.get();
+		}
+
+		const std::optional<LoadedScript> script = m_Source.find_by_asset(asset);
+		if (!script)
+		{
+			error = "script " + asset.Guid.to_string() + " is not available";
+			return nullptr;
+		}
+
+		sol::load_result loaded = m_Lua.load(script->Source, "@" + script->Path);
+		if (!loaded.valid())
+		{
+			sol::error failure = loaded;
+			error = failure.what();
+			return nullptr;
+		}
+
+		sol::protected_function chunk = loaded;
+		sol::environment environment(m_Lua, sol::create, m_Sandbox);
+		sol::set_environment(environment, chunk);
+
+		sol::protected_function_result result = call(chunk);
+		if (!result.valid())
+		{
+			sol::error failure = result;
+			error = failure.what();
+			return nullptr;
+		}
+
+		const sol::object returned = result;
+		if (!returned.is<sol::table>())
+		{
+			error = script->Path + ": a script must return a class table (Script:extend{...}), not a " + sol::type_name(m_Lua.lua_state(), returned.get_type());
+			return nullptr;
+		}
+
+		sol::table classTable = returned.as<sol::table>();
+		for (const char* hook : HOOKS)
+		{
+			const sol::object member = classTable[hook];
+			if (member.valid() && member.get_type() != sol::type::lua_nil && member.get_type() != sol::type::function)
+			{
+				error = script->Path + ": " + hook + " must be a function, not a " + sol::type_name(m_Lua.lua_state(), member.get_type());
+				return nullptr;
+			}
+		}
+
+		std::vector<FieldDescriptor> properties;
+		const sol::object propertyObject = classTable["properties"];
+		if (propertyObject.is<sol::table>())
+		{
+			std::string propertyError;
+			properties = parse_properties(propertyObject.as<sol::table>(), propertyError);
+			if (!propertyError.empty())
+			{
+				error = script->Path + ": " + propertyError;
+				return nullptr;
+			}
+		}
+
+		auto scriptClass = std::make_unique<ScriptClass>();
+		scriptClass->Asset = asset;
+		scriptClass->Path = script->Path;
+		scriptClass->Name = std::filesystem::path(script->Path).stem().string();
+		scriptClass->Class = std::move(classTable);
+		scriptClass->Properties = std::move(properties);
+
+		ScriptClass* raw = scriptClass.get();
+		m_Classes[asset.resolved()] = std::move(scriptClass);
+		return raw;
+	}
+}
