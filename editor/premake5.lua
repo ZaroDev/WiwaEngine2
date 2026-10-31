@@ -32,6 +32,8 @@ project "wiwa_editor"
 		--"%{IncludeDirs.ImGui}",
 		"%{IncludeDirs.GLM}",
 		"%{IncludeDirs.Wiwa}",
+		"%{IncludeDirs.sol2}",
+		"%{IncludeDirs.lua}",
 		-- "%{IncludeDirs.Optick}",
 		-- "%{IncludeDirs.ImGuizmo}",
 		-- "%{IncludeDirs.filewatch}",

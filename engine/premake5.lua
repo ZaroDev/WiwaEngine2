@@ -34,7 +34,9 @@ project "wiwa"
 		"%{IncludeDirs.ImGui}",
 		"%{IncludeDirs.LZ4}",
 		"%{IncludeDirs.ENTT}",
-		"%{IncludeDirs.NJSON}"
+		"%{IncludeDirs.NJSON}",
+		"%{IncludeDirs.lua}",
+		"%{IncludeDirs.sol2}",
 	}
 
 	links
@@ -49,6 +51,7 @@ project "wiwa"
 		"dxguid",
 		"vk-bootstrap",
 		"ImGui",
+		"lua"
 		-- "Optick",
 		-- "ImGuizmo",
 	}
@@ -60,6 +63,10 @@ project "wiwa"
 
 	filter "files:vendor/imguizmo/**.cpp"
 		flags {"NoPCH"}
+
+	-- the sol2 usertypes of the Lua bindings make big object files
+	filter "files:src/scripting/bindings/**.cpp"
+		buildoptions { "/bigobj" }
 
 	filter "system:windows"
 		staticruntime "Off"
