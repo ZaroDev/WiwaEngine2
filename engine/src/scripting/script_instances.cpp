@@ -17,6 +17,9 @@ namespace wiwa
 		m_Context.Runtime = &m_Runtime;
 		bind_math(m_Runtime);
 		bind_scene(m_Runtime, m_Context);
+		bind_assets(m_Runtime, m_Context);
+		bind_render(m_Runtime, m_Context);
+		bind_engine(m_Runtime, m_Context);
 	}
 
 	ScriptInstances::~ScriptInstances()
@@ -318,6 +321,9 @@ namespace wiwa
 		{
 			return;
 		}
+
+		m_Context.DeltaTime = deltaTime;
+		m_Context.TotalTime += deltaTime;
 
 		reap();
 		discover();

@@ -5,6 +5,7 @@
 #include <core/engine.h>
 #include <scene/scene_module.h>
 #include <renderer/window.h>
+#include <scripting/script_module.h>
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -14,6 +15,9 @@ void EditorModule::init()
 {
 	const std::string editorTitle = fmt::format("Wiwa2 Editor - ({0}) <{1}>", "Default project", WI_BUILD_CONFIGURATION);
 	wiwa::Engine::get().get_module<wiwa::Window>()->set_title(editorTitle);
+
+	// scripts run in play mode only; editing a scene does not run them
+	wiwa::Engine::get().get_module<wiwa::ScriptingModule>()->set_auto_start(false);
 
 	wiwa::SceneModule* scenes = wiwa::Engine::get().get_module<wiwa::SceneModule>();
 	m_SceneEditor = CreateScope<wiwa::SceneEditor>(*wiwa::Engine::get().get_module<wiwa::AssetManager>(), *scenes);

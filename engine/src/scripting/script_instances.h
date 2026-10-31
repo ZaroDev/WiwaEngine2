@@ -34,6 +34,7 @@ namespace wiwa
 		void update(float deltaTime);
 
 		bool running() const { return m_Scene != nullptr; }
+		const Ref<Scene>& scene() const { return m_Scene; }
 		ScriptContext& context() { return m_Context; }
 
 	private:

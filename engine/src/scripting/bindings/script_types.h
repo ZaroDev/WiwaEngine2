@@ -3,6 +3,7 @@
 #include <string>
 
 #include <assets/asset_guid.h>
+#include <core/job_progress.h>
 #include <math/math.h>
 #include "../script_context.h"
 
@@ -41,6 +42,12 @@ namespace wiwa
 	struct LuaMat4
 	{
 		glm::mat4 Value{ 1.0f };
+	};
+
+	// A scene load in progress, as load_scene returns it.
+	struct LuaSceneLoad
+	{
+		Ref<JobProgress> Progress{};
 	};
 
 	// An asset as a script holds it.

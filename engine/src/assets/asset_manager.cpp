@@ -137,6 +137,13 @@ namespace wiwa
 		return m_Catalog.find(path);
 	}
 
+	std::vector<AssetCatalog::Entry> AssetManager::catalog_entries()
+	{
+		find_asset({}); // reads the catalog if nobody has yet
+		std::lock_guard<std::mutex> lock(m_CatalogMutex);
+		return m_Catalog.Entries;
+	}
+
 	LoadState AssetManager::get_state(AssetGuid resolvedGuid) const
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);

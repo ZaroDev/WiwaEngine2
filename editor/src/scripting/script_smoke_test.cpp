@@ -2,7 +2,9 @@
 #include "script_smoke_test.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <thread>
 
 #include <assets/wasset_io.h>
 #include <scene/prefab_expander.h>
@@ -11,7 +13,12 @@
 #include <scene/scene.h>
 #include <scene/scene_records.h>
 #include <scripting/script_component.h>
+#include <assets/asset_manager.h>
+#include <core/engine.h>
+#include <renderer/debug/debug_draw.h>
+#include <scene/scene_module.h>
 #include <scripting/script_context.h>
+#include <scripting/bindings/script_types.h>
 #include <scripting/script_instances.h>
 #include <scripting/script_requires.h>
 #include <scripting/script_runtime.h>
@@ -892,11 +899,119 @@ namespace wiwa
 				check(h.Events == std::vector<std::string>({ "2", "false", "11", "false" }) && std::holds_alternative<float>(afterScript) && std::get<float>(afterScript) == 9.0f, "property_via_self_shares_bag");
 			}
 		}
+
+		void check_engine_bindings(Check& check, AssetPipelineModule& pipeline)
+		{
+			{
+				Harness h;
+				DebugDraw debug;
+				h.Instances.context().Debug = &debug;
+				const AssetRef ref = h.add_script("drawer", R"(return Script:extend{ on_update = function(self, dt)
+					debug_draw.line(vec3(0, 0, 0), vec3(1, 0, 0), vec4(1, 0, 0, 1))
+					debug_draw.box(vec3(-1), vec3(1))
+					debug_draw.sphere(vec3(0, 2, 0), 0.5)
+					record(string.format('%g', time.delta()))
+					record(string.format('%g', time.total()))
+				end })");
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.5f);
+				h.Instances.update(0.25f);
+				const DebugDrawData drawn = debug.seal(0.0f);
+				check(!drawn.Lines[0].empty() && h.Events == std::vector<std::string>({ "0.5", "0.5", "0.25", "0.75" }), "debug_draw_and_time_bindings");
+			}
+
+			{
+				Harness h;
+				const entt::entity first = h.TheScene->create("first");
+				const entt::entity second = h.TheScene->create("second");
+				h.TheScene->registry().emplace<Camera>(first).Primary = true;
+				h.TheScene->registry().emplace<Camera>(second);
+				const AssetRef ref = h.add_script("cameras", R"(return Script:extend{ on_init = function(self)
+					record(camera.primary().name)
+					camera.set_primary(find_entity('second'))
+					record(camera.primary().name)
+				end })");
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "first", "second" }) && !h.TheScene->registry().get<Camera>(first).Primary && h.TheScene->registry().get<Camera>(second).Primary, "camera_primary_roundtrip");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("no_engine", R"(return Script:extend{ on_init = function(self)
+					local ok, err = pcall(load_asset, 'assets/none.png')
+					record(tostring(ok))
+					record(err)
+					local ok2, err2 = pcall(load_scene, 'assets/none.wscene')
+					record(tostring(ok2))
+				end })");
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				check(h.Events.size() == 3 && h.Events[0] == "false" && h.Events[2] == "false", "asset_and_scene_calls_error_without_the_modules");
+			}
+
+			// the real modules: a path from the catalog resolves, an unknown one is an error, and a scene load can be followed
+			AssetManager* assets = Engine::get().get_module<AssetManager>();
+			SceneModule* scenes = Engine::get().get_module<SceneModule>();
+			(void)pipeline;
+			if (assets != nullptr && scenes != nullptr)
+			{
+				Harness h;
+				h.Instances.context().Assets = assets;
+				h.Instances.context().Scenes = scenes;
+
+				const std::vector<AssetCatalog::Entry> entries = assets->catalog_entries();
+				const std::string known = entries.empty() ? std::string() : entries.front().Path;
+				h.Runtime.sandbox()["known_path"] = known;
+				sol::object kept;
+				h.Runtime.sandbox().set_function("keep", [&kept](sol::object object) { kept = object; });
+				bool sceneAvailable = false;
+				for (const AssetCatalog::Entry& entry : entries)
+				{
+					sceneAvailable = sceneAvailable || entry.Path.ends_with(".wscene");
+					if (entry.Path.ends_with(".wscene"))
+					{
+						h.Runtime.sandbox()["scene_path"] = entry.Path;
+						break;
+					}
+				}
+
+				const AssetRef ref = h.add_script("real", R"(return Script:extend{ on_init = function(self)
+					local asset = load_asset(known_path)
+					record(tostring(asset:is_valid()))
+					record(tostring(asset.guid ~= ''))
+					local ok = pcall(load_asset, 'assets/definitely/not/here.png')
+					record(tostring(ok))
+					if scene_path then keep(load_scene(scene_path, 'additive')) end
+				end })");
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				check(!known.empty() && h.Events.size() >= 3 && h.Events[0] == "true" && h.Events[1] == "true" && h.Events[2] == "false", "load_asset_resolves_catalog_paths");
+
+				if (sceneAvailable)
+				{
+					bool finished = false;
+					for (int i = 0; i < 600 && !finished && kept.valid() && kept.is<LuaSceneLoad>(); i++)
+					{
+						std::this_thread::sleep_for(std::chrono::milliseconds(50));
+						finished = kept.as<LuaSceneLoad&>().Progress->finished();
+					}
+					check(finished, "load_scene_from_script");
+				}
+				else
+				{
+					WI_SCRIPT_LOG(Info, "load_scene_from_script skipped: no scene in the catalog");
+				}
+			}
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
 	{
-		(void)pipeline;
 		Check check;
 
 		check_script_data(check);
@@ -909,6 +1024,7 @@ namespace wiwa
 		check_scene_scripts(check);
 		check_lifecycle(check);
 		check_api(check);
+		check_engine_bindings(check, pipeline);
 
 		if (check.Failures == 0)
 		{
