@@ -16,7 +16,7 @@ namespace wiwa
 			CacheFixture(RenderCheckContext& context, size_t budget)
 			{
 				Queue.initialize(context.Device, context.HasCopyQueue, budget);
-				Cache = std::make_unique<GpuResourceCache>(context.Device, context.World.get_renderer().get_assets(), &Queue);
+				Cache = std::make_unique<GpuResourceCache>(context.Device, context.World.get_renderer().get_assets(), &Queue, context.Api);
 			}
 
 			~CacheFixture()

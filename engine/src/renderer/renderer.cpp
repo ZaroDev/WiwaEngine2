@@ -60,7 +60,7 @@ namespace wiwa
 		{
 			m_Uploads.force_graphics_queue(true);
 		}
-		m_Cache = CreateScope<GpuResourceCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads);
+		m_Cache = CreateScope<GpuResourceCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads, m_Description.Api);
 		m_Jobs = CreateScope<JobSystem>(2);
 		m_Environments = CreateScope<EnvironmentCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads, m_Jobs.get());
 		m_SceneData.set_environments(m_Environments.get());
