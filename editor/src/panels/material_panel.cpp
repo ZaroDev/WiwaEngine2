@@ -25,29 +25,32 @@ void MaterialPanel::open(const std::filesystem::path& wmat)
 	m_File = wmat;
 	m_Error.clear();
 	m_Dirty = false;
+	m_Blocked = false;
 	if (!wiwa::read_material_file(wmat, m_Data, m_Error))
 	{
 		m_Data = wiwa::MaterialFileData{};
+		m_Blocked = true;
 	}
 	m_Open = true;
 }
 
 void MaterialPanel::flush()
 {
-	if (!m_Dirty || m_File.empty())
+	if (!m_Dirty || m_Blocked || m_File.empty())
 	{
 		return;
 	}
 
-	m_Dirty = false;
 	std::string error;
 	if (wiwa::write_material_file(m_File, m_Data, error))
 	{
+		m_Dirty = false;
 		m_Error.clear();
 	}
 	else
 	{
 		m_Error = error;
+		m_LastEdit = ImGui::GetTime(); // tried again in a moment, not every frame
 		using wiwa::LogLevel;
 		WI_LOG(Warning, "Editor", "Material panel: {0}", error);
 	}
@@ -90,6 +93,12 @@ void MaterialPanel::on_draw()
 			}
 			ImGui::Separator();
 
+			if (m_Blocked)
+			{
+				ImGui::TextDisabled("The file is left as it is until it can be read. Fix it and open it again.");
+			}
+			else
+			{
 			wiwa::MaterialData& m = m_Data.Material;
 			bool changed = false;
 
@@ -133,16 +142,13 @@ void MaterialPanel::on_draw()
 				m_Dirty = true;
 				m_LastEdit = ImGui::GetTime();
 			}
-			else if (m_Dirty && ImGui::GetTime() - m_LastEdit >= WRITE_DELAY)
-			{
-				flush();
 			}
 		}
 	}
 	ImGui::End();
 
-	// closing the window with an edit pending must not lose it
-	if (!m_Open)
+	// written once the edits have been still for a moment, or at once when the window is closed; also while it is collapsed
+	if (m_Dirty && (!m_Open || ImGui::GetTime() - m_LastEdit >= WRITE_DELAY))
 	{
 		flush();
 	}

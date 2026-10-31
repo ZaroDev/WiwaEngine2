@@ -18,6 +18,8 @@ public:
 	// Loads the file into the panel and shows the panel. A pending edit of the previous file is written first.
 	void open(const std::filesystem::path& wmat);
 
+	virtual ~MaterialPanel() override { flush(); }
+
 	virtual void on_draw() override;
 
 private:
@@ -27,6 +29,7 @@ private:
 	std::filesystem::path m_File{};
 	wiwa::MaterialFileData m_Data{};
 	std::string m_Error{};      // why the file could not be read or written, shown in the panel
+	bool m_Blocked = false;     // the file could not be read: nothing is written over it
 	bool m_Dirty = false;       // edited and not written yet
 	double m_LastEdit = 0.0;    // ImGui::GetTime of the last edit
 };

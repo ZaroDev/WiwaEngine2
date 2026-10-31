@@ -590,20 +590,20 @@ namespace wiwa
 			}
 
 			write_text(wmat, full_material(0.9));
-			database.scan();
+			database.reimport(wmat);
 			material = cooked_material(wmat);
 			check(material && material->RoughnessFactor == 0.9f, "material_reimport_on_edit: the cooked roughness follows the edit");
 
 			WI_ASSET_LOG(Info, "Smoke test: the next material import error is expected");
 			write_text(wmat, "{");
-			database.scan();
+			database.reimport(wmat);
 			material = cooked_material(wmat);
 			check(material && material->RoughnessFactor == 0.9f && material->Name == "Smoke", "material_bad_json_keeps_previous: the previous cooked data still loads");
 
 			const std::filesystem::path missing = dir / "missing_texture.wmat";
 			write_text(missing, R"({ "version": 1, "roughness": 0.5, "textures": { "baseColor": "no_such_texture.png" } })");
 			WI_ASSET_LOG(Info, "Smoke test: the next material warning is expected");
-			database.scan();
+			database.reimport(missing);
 			material = cooked_material(missing);
 			check(material && !material->BaseColorTexture.valid() && material->RoughnessFactor == 0.5f, "material_missing_texture_warns: imports with an invalid texture ref");
 
