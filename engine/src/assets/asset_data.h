@@ -152,6 +152,9 @@ namespace wiwa
 
 	// A parameter of a user surface shader (.wshader). Offset is in bytes inside the parameter block, packed like an HLSL
 	// cbuffer: a member never straddles a 16-byte boundary. Min == Max means the parameter has no range.
+	constexpr u32 SURFACE_BLOCK_MAX_SIZE = 256; // bytes of the parameter block of a surface shader
+	constexpr u32 SURFACE_MAX_TEXTURES = 4;     // user textures per surface shader
+
 	enum class SurfaceParamType : u32
 	{
 		Float,

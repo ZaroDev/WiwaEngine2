@@ -2,6 +2,7 @@
 #include "surface_shader_parser.h"
 
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 
 namespace wiwa
@@ -223,9 +224,18 @@ namespace wiwa
 			{
 				return false;
 			}
+			if (text.find_first_of("xX") != std::string::npos)
+			{
+				return false; // no hex floats
+			}
+			std::string digits = text;
+			if (digits.back() == 'f' || digits.back() == 'F')
+			{
+				digits.pop_back();
+			}
 			char* end = nullptr;
-			value = std::strtof(text.c_str(), &end);
-			return end == text.c_str() + text.size();
+			value = std::strtof(digits.c_str(), &end);
+			return !digits.empty() && end == digits.c_str() + digits.size() && std::isfinite(value);
 		}
 
 		std::string trim(const std::string& text)
@@ -266,6 +276,22 @@ namespace wiwa
 		{
 			bool hasDefault = false;
 			bool hasRange = false;
+
+			// A comment that does not start with an annotation is prose and is ignored
+			{
+				const std::string trimmed = trim(comment);
+				size_t end = 0;
+				while (end < trimmed.size() && is_word_char(trimmed[end]))
+				{
+					end++;
+				}
+				const std::string first = trimmed.substr(0, end);
+				if (first != "range" && first != "default" && first != "color" && first != "label")
+				{
+					return true;
+				}
+			}
+
 			size_t i = 0;
 			while (i < comment.size())
 			{
@@ -397,7 +423,7 @@ namespace wiwa
 						{
 							return fail(failure, line, "default has '" + pieces[c] + "', which is not a number");
 						}
-						if (type.Type == SurfaceParamType::Int && value != static_cast<float>(static_cast<i64>(value)))
+						if (type.Type == SurfaceParamType::Int && (std::fabs(value) > 2147483647.0f || value != std::floor(value)))
 						{
 							return fail(failure, line, "default of an int must be a whole number");
 						}

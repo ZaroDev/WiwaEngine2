@@ -1057,12 +1057,22 @@ namespace wiwa
 			// surface_parse_errors
 			{
 				check(rejected_at("struct MaterialParams {\n    half X;\n};\n" + surfaceFn, 2, "half"), "surface_parse_errors: unknown type");
-				check(rejected_at("struct MaterialParams {\n    float X;\n    float Y; // rnge(0,1)\n};\n" + surfaceFn, 3, "rnge"), "surface_parse_errors: unknown annotation");
+				check(rejected_at("struct MaterialParams {\n    float X;\n    float Y; // default(1) rnge(0,1)\n};\n" + surfaceFn, 3, "rnge"), "surface_parse_errors: unknown annotation");
 				check(rejected_at("struct MaterialParams {\n    float X; // range(0)\n};\n" + surfaceFn, 2, "range"), "surface_parse_errors: range with one value");
 				check(rejected_at("struct MaterialParams {\n    float2 X; // default(1)\n};\n" + surfaceFn, 2, "default"), "surface_parse_errors: default with the wrong count");
 				check(rejected_at("struct MaterialParams {\n    float X; // range(2,1)\n};\n" + surfaceFn, 2, "range"), "surface_parse_errors: range with min above max");
 				check(rejected_at("struct MaterialParams {\n    float2 X; // color\n};\n" + surfaceFn, 2, "color"), "surface_parse_errors: color on a float2");
 				check(rejected_at("struct MaterialParams {\n    float X;\n    float X;\n};\n" + surfaceFn, 3, "X"), "surface_parse_errors: duplicate name");
+				check(rejected_at("struct MaterialParams {\n    float X;\n    float Y; // range(0,1) bogus\n};\n" + surfaceFn, 3, "bogus"), "surface_parse_errors: unknown word after an annotation");
+				check(rejected_at("struct MaterialParams {\n    int X; // default(1e30)\n};\n" + surfaceFn, 2, "default"), "surface_parse_errors: int default out of range");
+				check(rejected_at("struct MaterialParams {\n    float X; // default(nan)\n};\n" + surfaceFn, 2, "nan"), "surface_parse_errors: nan default");
+				check(rejected_at("struct MaterialParams {\n    float X; // default(0x10)\n};\n" + surfaceFn, 2, "0x10"), "surface_parse_errors: hex default");
+				{
+					ParsedSurface prose;
+					std::string proseError;
+					check(parse("struct MaterialParams {\n    float Amount; // how strong it is\n    float B; // default(0.5f)\n};\n" + surfaceFn, prose, proseError) && prose.Params.size() == 2 && prose.Params[1].Default[0] == 0.5f,
+						"surface_parse_errors: prose comment ignored, f suffix accepted (" + proseError + ")");
+				}
 				check(rejected_at("Texture2D A; // @param\nTexture2D B; // @param\nTexture2D C; // @param\nTexture2D D; // @param\nTexture2D E; // @param\n" + surfaceFn, 5, "4"),
 					"surface_parse_errors: five textures");
 				check(rejected_at("struct MaterialParams {\n    float X;\n};\n", 1, "Surface"), "surface_parse_errors: missing Surface");

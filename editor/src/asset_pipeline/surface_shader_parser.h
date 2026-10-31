@@ -7,9 +7,6 @@
 
 namespace wiwa
 {
-	constexpr u32 SURFACE_BLOCK_MAX_SIZE = 256;
-	constexpr u32 SURFACE_MAX_TEXTURES = 4;
-
 	// What the importer needs to know about a .wshader, found by reading the MaterialParams struct and the "Texture2D X; // @param"
 	// lines. The rest of the file is not interpreted here.
 	struct ParsedSurface
