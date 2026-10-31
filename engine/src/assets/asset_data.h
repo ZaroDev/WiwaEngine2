@@ -172,7 +172,7 @@ namespace wiwa
 		u32 Offset = 0;
 		float Min = 0.0f;
 		float Max = 0.0f;
-		float Default[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		float Default[4] = { 0.0f, 0.0f, 0.0f, 0.0f }; // an Int default is a float too: exact only up to 2^24
 		bool Color = false;
 		std::string Label{};
 	};

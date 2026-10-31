@@ -127,6 +127,32 @@ namespace wiwa
 					const auto found = data.Params.find(param.Name);
 					const u32 count = param.Type == SurfaceParamType::Float2 ? 2 : param.Type == SurfaceParamType::Float3 ? 3 : param.Type == SurfaceParamType::Float4 ? 4 : 1;
 
+					const bool ranged = param.Min < param.Max;
+
+					if (param.Type == SurfaceParamType::Int)
+					{
+						// integers stay in the integer domain: a float would lose bits above 2^24 (the shader default is a float, so it
+						// is exact only to 2^24; values from the file are exact)
+						i64 v = static_cast<i64>(std::clamp(param.Default[0], -2147483520.0f, 2147483520.0f));
+						if (found != data.Params.end())
+						{
+							if (!read_int(found->second, v))
+							{
+								ctx.warn("parameter " + param.Name + " has a value of the wrong type; the default is used");
+							}
+						}
+						i64 low = INT32_MIN;
+						i64 high = INT32_MAX;
+						if (ranged)
+						{
+							low = std::max<i64>(low, static_cast<i64>(std::ceil(param.Min)));
+							high = std::min<i64>(high, static_cast<i64>(std::floor(param.Max)));
+						}
+						const i32 packed = static_cast<i32>(std::clamp(v, low, std::max(low, high)));
+						put(material.ParamBytes, param.Offset, &packed, 4);
+						continue;
+					}
+
 					float values[4] = { param.Default[0], param.Default[1], param.Default[2], param.Default[3] };
 					bool bad = false;
 					if (found != data.Params.end())
@@ -139,7 +165,6 @@ namespace wiwa
 						}
 					}
 
-					const bool ranged = param.Min < param.Max;
 					for (u32 k = 0; k < count; k++)
 					{
 						if (ranged && param.Type != SurfaceParamType::Bool)
@@ -150,12 +175,6 @@ namespace wiwa
 
 					switch (param.Type)
 					{
-					case SurfaceParamType::Int:
-					{
-						const i32 v = static_cast<i32>(std::clamp(values[0], -2147483520.0f, 2147483520.0f));
-						put(material.ParamBytes, param.Offset, &v, 4);
-						break;
-					}
 					case SurfaceParamType::Bool:
 					{
 						const u32 v = values[0] != 0.0f ? 1u : 0u;
@@ -213,13 +232,8 @@ namespace wiwa
 					{
 						return false;
 					}
-					const double number = value.get<double>();
-					if (param.Type == SurfaceParamType::Int && number != std::floor(number))
-					{
-						return false;
-					}
-					out[0] = static_cast<float>(number);
-					return true;
+					out[0] = value.get<float>();
+					return std::isfinite(out[0]); // 1e300 is a finite double but not a float
 				}
 
 				if (!value.is_array() || value.size() != count)
@@ -233,8 +247,39 @@ namespace wiwa
 						return false;
 					}
 					out[k] = value[k].get<float>();
+					if (!std::isfinite(out[k]))
+					{
+						return false;
+					}
 				}
 				return true;
+			}
+
+			// An integer parameter: a JSON integer, or a number with an integral value. Values beyond 64 bits are clamped to it
+			// (the caller clamps to int32 and the range afterwards).
+			static bool read_int(const nlohmann::json& value, i64& out)
+			{
+				if (value.is_number_unsigned())
+				{
+					out = static_cast<i64>(std::min<u64>(value.get<u64>(), static_cast<u64>(INT64_MAX)));
+					return true;
+				}
+				if (value.is_number_integer())
+				{
+					out = value.get<i64>();
+					return true;
+				}
+				if (value.is_number_float())
+				{
+					const double number = value.get<double>();
+					if (!std::isfinite(number) || number != std::floor(number))
+					{
+						return false;
+					}
+					out = static_cast<i64>(std::clamp(number, -9.0e18, 9.0e18));
+					return true;
+				}
+				return false;
 			}
 
 			static AssetRef resolve_texture(ImportContext& ctx, const std::string& text, const char* kind, const char* slot)

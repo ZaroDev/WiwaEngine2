@@ -1497,6 +1497,99 @@ namespace wiwa
 				check(log.find("Bogus") != std::string::npos, "material_param_clamped_and_wrong_type_ignored: an unknown name is warned about");
 			}
 
+			// material_wide_types: float2/float4/color lengths, exact and ranged ints, unranged floats
+			{
+				write_text(dir / "w.wshader",
+					"struct MaterialParams\n"
+					"{\n"
+					"    float2 V2;     // default(1,2)\n"
+					"    float4 V4;     // color default(0.1,0.2,0.3,0.4)\n"
+					"    float3 C3;     // color default(1,1,1)\n"
+					"    int    Big;    // \n"
+					"    int    Ranged; // range(10,20) default(15)\n"
+					"    float  Free;   // \n"
+					"};\n"
+					"void Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o)\n"
+					"{\n"
+					"    o.Albedo *= float3(p.V2, p.V4.x) * p.C3 * (float)(p.Big + p.Ranged) * p.Free;\n"
+					"}\n");
+				database.reimport(dir / "w.wshader");
+
+				// V2@0, V4@16, C3@32, Big@44, Ranged@48, Free@52, 64 bytes
+				const auto vec_is = [&](const MaterialData& m, size_t at, std::initializer_list<float> values)
+				{
+					size_t k = 0;
+					for (float value : values)
+					{
+						if (float_at(m, at + 4 * k++) != value)
+						{
+							return false;
+						}
+					}
+					return true;
+				};
+
+				const std::filesystem::path exact = dir / "wide_exact.wmat";
+				write_wmat(exact, { { "Big", 16777217 }, { "Ranged", 100 }, { "Free", 1.0e30 } }, "w.wshader");
+				std::optional<MaterialData> material = cooked_material(exact);
+				check(material && material->ParamBytes.size() == 64 && int_at(*material, 44) == 16777217, "material_int_exact: 16777217 round-trips exactly");
+				check(material && int_at(*material, 48) == 20, "material_int_exact: a ranged int clamps in the integer domain");
+				check(material && float_at(*material, 52) == 1.0e30f, "material_unranged_not_clamped: a float without a range is left alone");
+				check(material && vec_is(*material, 0, { 1.0f, 2.0f }) && vec_is(*material, 16, { 0.1f, 0.2f, 0.3f, 0.4f }) && vec_is(*material, 32, { 1.0f, 1.0f, 1.0f }),
+					"material_wide_types: unset vectors take their defaults");
+
+				const std::filesystem::path maxInt = dir / "wide_max.wmat";
+				write_wmat(maxInt, { { "Big", 2147483647 }, { "Ranged", 5 } }, "w.wshader");
+				material = cooked_material(maxInt);
+				check(material && int_at(*material, 44) == 2147483647 && int_at(*material, 48) == 10, "material_int_exact: int32 max round-trips, a ranged int clamps up to its minimum");
+
+				const std::filesystem::path beyond = dir / "wide_beyond.wmat";
+				write_wmat(beyond, { { "Big", 3000000000.0 }, { "Ranged", 12 } }, "w.wshader");
+				material = cooked_material(beyond);
+				check(material && int_at(*material, 44) == 2147483647 && int_at(*material, 48) == 12, "material_int_exact: a value beyond int32 clamps to int32 max");
+
+				const std::filesystem::path wrong = dir / "wide_wrong.wmat";
+				const std::string log = capture_log([&]()
+					{
+						write_wmat(wrong, { { "V2", { 1, 2, 3 } }, { "V4", { 1, 2 } }, { "C3", { 1, 2 } }, { "Big", 1.5 }, { "Free", 1.0e300 }, { "Ranged", 12 } }, "w.wshader");
+					});
+				material = cooked_material(wrong);
+				check(material && vec_is(*material, 0, { 1.0f, 2.0f }), "material_param_wrong_length: a float2 with three values keeps the default");
+				check(material && vec_is(*material, 16, { 0.1f, 0.2f, 0.3f, 0.4f }), "material_param_wrong_length: a float4 with two values keeps the default");
+				check(material && vec_is(*material, 32, { 1.0f, 1.0f, 1.0f }), "material_param_wrong_length: a color with two values keeps the default");
+				check(material && int_at(*material, 44) == 0, "material_param_wrong_type: a fractional int keeps the default");
+				check(material && float_at(*material, 52) == 0.0f && int_at(*material, 48) == 12, "material_param_wrong_type: 1e300 for a float keeps the default");
+				check(log.find("parameter V2 ") != std::string::npos && log.find("parameter V4 ") != std::string::npos && log.find("parameter C3 ") != std::string::npos &&
+					log.find("parameter Big ") != std::string::npos && log.find("parameter Free ") != std::string::npos && log.find("parameter Ranged ") == std::string::npos,
+					"material_param_wrong_type: each rejected value is warned about, accepted ones are not");
+			}
+
+			// material_archive_corrupt_trailer: a cut or damaged shader section fails to load instead of over-reading
+			{
+				MaterialData full;
+				full.ParamBytes.assign(16, 7);
+				const std::vector<std::byte> bytes = serialize(full);
+				const size_t trailer = sizeof(AssetRef) + sizeof(u64) + 16 + sizeof(AssetRef) * SURFACE_MAX_TEXTURES;
+				const size_t oldSize = bytes.size() - trailer;
+				check(deserialize<MaterialData>(bytes).has_value(), "material_archive_corrupt_trailer: the complete archive loads");
+
+				bool allCutsFail = true;
+				for (size_t cut = oldSize + 1; cut < bytes.size(); cut++)
+				{
+					allCutsFail = allCutsFail && !deserialize<MaterialData>(std::span<const std::byte>(bytes.data(), cut)).has_value();
+				}
+				check(allCutsFail, "material_archive_corrupt_trailer: every cut inside the shader section fails");
+
+				std::vector<std::byte> huge = bytes;
+				const u64 hugeCount = ~0ull;
+				std::memcpy(huge.data() + oldSize + sizeof(AssetRef), &hugeCount, sizeof(hugeCount));
+				check(!deserialize<MaterialData>(huge).has_value(), "material_archive_corrupt_trailer: a block count beyond the data fails");
+
+				MaterialData oversized;
+				oversized.ParamBytes.assign(SURFACE_BLOCK_MAX_SIZE + 1, 1);
+				check(!deserialize<MaterialData>(serialize(oversized)).has_value(), "material_archive_corrupt_trailer: a block above 256 bytes fails");
+			}
+
 			// material_follows_shader_edit
 			{
 				std::optional<MaterialData> before = cooked_material(defaultsFile);
