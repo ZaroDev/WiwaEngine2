@@ -4,7 +4,14 @@
 #include <algorithm>
 
 #include <assets/wasset_io.h>
+#include <scene/reflection/component_registry.h>
+#include <scripting/script_component.h>
+#include <scripting/script_requires.h>
 #include <scripting/script_runtime.h>
+
+#include "asset_pipeline/asset_database.h"
+#include "asset_pipeline/builtin_importers.h"
+#include "asset_pipeline/file_utils.h"
 
 #define WI_SCRIPT_LOG(level, ...) WI_LOG(level, "Scripting", __VA_ARGS__)
 
@@ -287,6 +294,145 @@ namespace wiwa
 				check(baseClass != nullptr && runtime.dependents_of(base).size() == 1, "require_shares_class_with_load: one dependent");
 			}
 		}
+
+		void write_text(const std::filesystem::path& path, const std::string& text)
+		{
+			std::error_code error;
+			std::filesystem::create_directories(path.parent_path(), error);
+			std::ofstream out(path, std::ios::binary | std::ios::trunc);
+			out << text;
+		}
+
+		// The cooked file of an asset, read back from the Library.
+		struct Cooked
+		{
+			bool Found = false;
+			WAssetHeader Header{};
+			std::optional<ScriptData> Data{};
+		};
+
+		Cooked read_cooked(const AssetDatabase& database, AssetRef asset)
+		{
+			Cooked cooked;
+			std::error_code error;
+			for (auto it = std::filesystem::recursive_directory_iterator(database.get_library_root(), error); !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error))
+			{
+				if (!it->is_regular_file() || it->path().extension() != ".wasset")
+				{
+					continue;
+				}
+				std::optional<std::vector<std::byte>> bytes = read_binary_file(it->path());
+				std::span<const std::byte> payload;
+				std::optional<WAssetHeader> header = bytes ? parse_wasset_header(*bytes, payload) : std::nullopt;
+				if (header && header->Guid == asset.Guid)
+				{
+					cooked.Found = true;
+					cooked.Header = *header;
+					cooked.Data = deserialize<ScriptData>(payload);
+				}
+			}
+			return cooked;
+		}
+
+		void check_require_scan(Check& check)
+		{
+			const RequireScan scan = scan_requires(R"(
+				local a = require("assets/scripts/a")
+				local b = require 'assets/scripts/b.lua'
+				local c = require("assets/scripts/a.lua")
+				-- local d = require("assets/scripts/commented")
+				--[[ require("assets/scripts/block") ]]
+				local e = require(name)
+			)");
+			check(scan.Paths.size() == 2 && scan.Paths[0] == "assets/scripts/a.lua" && scan.Paths[1] == "assets/scripts/b.lua", "require_scan_finds_literals_once_and_skips_comments");
+			check(scan.DynamicCalls == 1, "require_scan_counts_dynamic_calls");
+		}
+
+		void check_importer(Check& check)
+		{
+			std::error_code error;
+			const std::filesystem::path temp = std::filesystem::temp_directory_path() / "wiwa_script_smoke";
+			std::filesystem::remove_all(temp, error);
+
+			const std::filesystem::path scripts = temp / "assets" / "scripts";
+			const std::string root = (temp / "assets").generic_string();
+			write_text(scripts / "util.lua", "return { answer = 42 }");
+			write_text(scripts / "player.lua", "local util = require('" + root + "/scripts/util.lua')\nreturn Script:extend{ properties = { speed = { type = 'float', default = 5 }, label = { type = 'string' } } }");
+			write_text(scripts / "broken.lua", "local x = \nreturn Script:extend{");
+			write_text(scripts / "cycle_a.lua", "return require('" + root + "/scripts/cycle_b.lua')");
+			write_text(scripts / "cycle_b.lua", "return require('" + root + "/scripts/cycle_a.lua')");
+			write_text(scripts / "self_cycle.lua", "return require('" + root + "/scripts/self_cycle.lua')");
+			write_text(scripts / "dynamic.lua", "local base = '" + root + "/scripts/'\nlocal m = require(base .. 'util')\nreturn Script:extend{}");
+
+			AssetDatabase database(temp / "assets", temp / "library");
+			register_builtin_importers(database);
+			database.scan();
+
+			const std::optional<AssetRef> util = database.ensure_imported(scripts / "util.lua");
+			const std::optional<AssetRef> player = database.ensure_imported(scripts / "player.lua");
+			check(util.has_value() && player.has_value(), "importer_accepts_valid_script");
+
+			if (player)
+			{
+				const Cooked cooked = read_cooked(database, *player);
+				check(cooked.Found && cooked.Data && cooked.Data->Source.find("Script:extend") != std::string::npos, "importer_keeps_the_source");
+				check(cooked.Data && cooked.Data->SourcePath == root + "/scripts/player.lua", "importer_records_the_catalog_path");
+				check(cooked.Found && util && cooked.Header.Dependencies.size() == 1 && cooked.Header.Dependencies[0] == util->resolved(), "importer_records_require_dependency");
+
+				const std::optional<ComponentSchema> schema = ComponentRegistry::get().schema(script_component_name(player->Guid));
+				check(schema && schema->Fields.size() == 2 && schema->Fields[0].Name == "label" && schema->Fields[1].Name == "speed", "property_schema_registered_at_import");
+				check(schema && schema->find_field("speed") != nullptr && schema->find_field("speed")->Type == FieldType::Float, "property_schema_has_the_declared_types");
+
+				// a property that changes type: its value goes back to the default, the others are kept
+				const ComponentInfo* info = ComponentRegistry::get().find(script_component_name(player->Guid));
+				check(info != nullptr && info->DisplayName == "player", "script_component_is_shown_by_file_name");
+				if (info != nullptr)
+				{
+					entt::registry registry;
+					const entt::entity entity = registry.create();
+					info->Add(registry, entity);
+					info->Set(registry, entity, static_cast<size_t>(info->field_index("speed")), 3.0f);
+					info->Set(registry, entity, static_cast<size_t>(info->field_index("label")), std::string("hero"));
+
+					ScriptClass changed;
+					changed.Asset = *player;
+					changed.Name = "player";
+					for (const char* name : { "label", "speed" })
+					{
+						FieldDescriptor field;
+						field.Name = name;
+						field.Type = FieldType::String;
+						field.Default = std::string("none");
+						changed.Properties.push_back(field);
+					}
+					register_script_component(changed, &registry);
+
+					const ComponentInfo* after = ComponentRegistry::get().find(script_component_name(player->Guid));
+					const FieldValue speed = after != nullptr ? after->Get(registry, entity, static_cast<size_t>(after->field_index("speed"))) : FieldValue{};
+					const FieldValue label = after != nullptr ? after->Get(registry, entity, static_cast<size_t>(after->field_index("label"))) : FieldValue{};
+					check(std::holds_alternative<std::string>(speed) && std::get<std::string>(speed) == "none", "retyped_property_reconciles: retyped value takes the default");
+					check(std::holds_alternative<std::string>(label) && std::get<std::string>(label) == "hero", "retyped_property_reconciles: other values are kept");
+				}
+			}
+
+			// a failed import still has a guid (its .meta), but nothing was cooked for it
+			const auto rejected = [&](const char* file)
+			{
+				const std::optional<AssetRef> asset = database.ensure_imported(scripts / file);
+				return asset.has_value() && !read_cooked(database, *asset).Found;
+			};
+			const auto accepted = [&](const char* file)
+			{
+				const std::optional<AssetRef> asset = database.ensure_imported(scripts / file);
+				return asset.has_value() && read_cooked(database, *asset).Found;
+			};
+			check(rejected("broken.lua"), "importer_rejects_syntax_error");
+			check(rejected("cycle_a.lua") && rejected("cycle_b.lua"), "importer_rejects_require_cycle");
+			check(rejected("self_cycle.lua"), "importer_rejects_self_require");
+			check(accepted("dynamic.lua"), "importer_accepts_dynamic_require_with_a_warning");
+
+			std::filesystem::remove_all(temp, error);
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -299,6 +445,8 @@ namespace wiwa
 		check_sandbox(check);
 		check_budget(check);
 		check_require(check);
+		check_require_scan(check);
+		check_importer(check);
 
 		if (check.Failures == 0)
 		{

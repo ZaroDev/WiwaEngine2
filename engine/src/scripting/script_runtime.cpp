@@ -6,6 +6,7 @@
 #include <filesystem>
 
 #include "script_properties.h"
+#include "script_requires.h"
 
 #define WI_SCRIPT_LOG(level, ...) WI_LOG(level, "Scripting", __VA_ARGS__)
 
@@ -60,6 +61,12 @@ namespace wiwa
 	ScriptRuntime::ScriptRuntime(IScriptSource& source) : m_Source(source)
 	{
 		m_Lua.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string, sol::lib::table, sol::lib::utf8);
+
+		// a C++ exception inside a bound function becomes a Lua error with its message (sol2 would also print it)
+		m_Lua.set_exception_handler([](lua_State* state, sol::optional<const std::exception&> exception, sol::string_view description)
+			{
+				return sol::stack::push(state, exception ? std::string(exception->what()) : std::string(description));
+			});
 
 		lua_pushlightuserdata(m_Lua.lua_state(), this);
 		lua_setfield(m_Lua.lua_state(), LUA_REGISTRYINDEX, RUNTIME_KEY);
@@ -165,11 +172,7 @@ namespace wiwa
 
 	sol::object ScriptRuntime::require_module(std::string path, const std::string& requirer)
 	{
-		std::transform(path.begin(), path.end(), path.begin(), [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
-		if (!path.ends_with(".lua"))
-		{
-			path += ".lua";
-		}
+		path = normalize_require_path(std::move(path));
 
 		const std::optional<LoadedScript> script = m_Source.find_by_path(path);
 		if (!script)
