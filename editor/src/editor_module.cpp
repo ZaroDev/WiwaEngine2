@@ -18,6 +18,7 @@ void EditorModule::init()
 
 	// scripts run in play mode only; editing a scene does not run them
 	wiwa::Engine::get().get_module<wiwa::ScriptingModule>()->set_auto_start(false);
+	wiwa::Engine::get().get_time().stop_game(); // and there is no game time either
 
 	wiwa::SceneModule* scenes = wiwa::Engine::get().get_module<wiwa::SceneModule>();
 	m_SceneEditor = CreateScope<wiwa::SceneEditor>(*wiwa::Engine::get().get_module<wiwa::AssetManager>(), *scenes);

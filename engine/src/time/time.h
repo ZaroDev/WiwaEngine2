@@ -20,6 +20,7 @@ namespace wiwa
 		void start()
 		{
 			Timer = std::chrono::high_resolution_clock::now();
+			LastTime = Timer; // the first delta is the time since the start, not since the clock's epoch
 			FrameCount = 0;
 			TimeScale = 1.0f;
 			IsPlaying = true;

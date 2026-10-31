@@ -9,6 +9,7 @@ namespace wiwa
 	{
 		m_RealTimeClock.start();
 		m_EngineTimeClock.start();
+		m_GameClock.start(); // a game runs from the start; the editor stops it until play mode
 	}
 
 	void Time::pre_update()

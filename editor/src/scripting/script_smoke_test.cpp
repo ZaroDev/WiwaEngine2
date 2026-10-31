@@ -1391,6 +1391,43 @@ namespace wiwa
 				check(!result.valid(), "stale_proxy_after_stop_is_an_error");
 			}
 		}
+
+		// Play mode, task 1: the game clock scripts take their dt from.
+		void check_time(Check& check)
+		{
+			{
+				Time t;
+				t.init();
+				check(t.get_game_clock().IsPlaying && t.get_game_clock().TimeScale == 1.0f, "game_clock_starts_with_init");
+			}
+
+			{
+				Time t;
+				t.init();
+				t.update();
+				t.update();
+				const bool first = t.get_delta_time_seconds() < 1.0f;
+				t.stop_game();
+				t.play_game();
+				t.update();
+				check(first && t.get_delta_time_seconds() < 1.0f, "game_clock_first_delta_is_small");
+			}
+
+			{
+				Time t;
+				t.init();
+				t.update();
+				t.pause_game();
+				const float paused = t.get_game_clock().TimeSinceClock.count();
+				std::this_thread::sleep_for(std::chrono::milliseconds(20));
+				t.update();
+				const bool frozen = t.get_game_clock().TimeSinceClock.count() == paused;
+				t.unpause_game();
+				std::this_thread::sleep_for(std::chrono::milliseconds(20));
+				t.update();
+				check(frozen && t.get_game_clock().TimeSinceClock.count() > paused, "pause_stops_the_game_clock");
+			}
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -1411,6 +1448,7 @@ namespace wiwa
 		check_scene_changes_and_reload(check);
 		check_pak(check);
 		check_review_fixes(check);
+		check_time(check);
 
 		if (check.Failures == 0)
 		{

@@ -126,8 +126,12 @@ namespace wiwa
 			}
 		}
 
-		// seconds of the game clock, which follows pause and time scale
-		m_Instances->update(Engine::get().get_time().get_delta_time_seconds());
+		// seconds of the game clock, which follows pause and time scale; while it is paused the scripts do not run
+		const Time& time = Engine::get().get_time();
+		if (time.get_game_clock().IsPlaying)
+		{
+			m_Instances->update(time.get_delta_time_seconds());
+		}
 	}
 
 	// Scripts write local transforms; the renderer reads the world ones.
