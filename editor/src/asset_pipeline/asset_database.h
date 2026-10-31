@@ -41,6 +41,10 @@ namespace wiwa
 		std::optional<AssetRef> ensure_imported(const std::filesystem::path& source, const nlohmann::json* defaultSettings = nullptr);
 
 		std::optional<std::filesystem::path> path_of(AssetGuid guid) const;
+
+		// The payload of the cooked file of a whole-file asset, nullopt if it is not cooked (never imported, or its first import failed)
+		// or is not of the given type.
+		std::optional<std::vector<std::byte>> read_cooked_payload(AssetGuid guid, AssetType type) const;
 		bool has_importer_for(const std::filesystem::path& source) const;
 
 		// Cooked assets an import in progress is about to write (see ImportContext::declare_pending_asset).

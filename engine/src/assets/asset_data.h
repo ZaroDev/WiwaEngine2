@@ -242,6 +242,12 @@ namespace wiwa
 		AssetRef NormalTexture{};
 		AssetRef OrmTexture{};
 		AssetRef EmissiveTexture{};
+
+		// The surface shader (.wshader) of the material and its parameters packed as the shader's block: ParamBytes.size() is the
+		// shader's BlockSize when the shader loaded, else empty. ParamTextures follow the shader's Textures order.
+		AssetRef Shader{};
+		std::vector<u8> ParamBytes{};
+		AssetRef ParamTextures[SURFACE_MAX_TEXTURES]{};
 	};
 
 	// One skin of a model: the joints (node indices of the Prefab) and the matrices that bring a vertex into each joint's space.

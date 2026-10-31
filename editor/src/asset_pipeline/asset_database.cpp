@@ -107,6 +107,29 @@ namespace wiwa
 		return std::filesystem::path(found->second);
 	}
 
+	std::optional<std::vector<std::byte>> AssetDatabase::read_cooked_payload(AssetGuid guid, AssetType type) const
+	{
+		const std::optional<std::filesystem::path> source = path_of(guid);
+		if (!source)
+		{
+			return std::nullopt;
+		}
+
+		std::vector<std::byte> bytes;
+		if (!read_file(cooked_path(guid, library_folder_for(*source)), bytes))
+		{
+			return std::nullopt;
+		}
+
+		std::span<const std::byte> payload;
+		const std::optional<WAssetHeader> header = parse_wasset_header(bytes, payload);
+		if (!header || header->Type != type || header->Guid != guid)
+		{
+			return std::nullopt;
+		}
+		return std::vector<std::byte>(payload.begin(), payload.end());
+	}
+
 	void AssetDatabase::add_pending_asset(AssetGuid guid)
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);

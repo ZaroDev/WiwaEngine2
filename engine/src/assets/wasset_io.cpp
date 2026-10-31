@@ -401,6 +401,19 @@ namespace wiwa
 		ar.value(v.NormalTexture);
 		ar.value(v.OrmTexture);
 		ar.value(v.EmissiveTexture);
+
+		// The shader section was added after the first cooked materials: they end here and load with no shader. Always written.
+		if (ar.reading() && ar.remaining() == 0)
+		{
+			return;
+		}
+		ar.value(v.Shader);
+		ar.pod_vector(v.ParamBytes);
+		ar.value(v.ParamTextures);
+		if (ar.reading() && ar.ok() && v.ParamBytes.size() > SURFACE_BLOCK_MAX_SIZE)
+		{
+			ar.fail();
+		}
 	}
 
 	void archive(BinaryArchive& ar, SkeletonData& v)

@@ -85,12 +85,25 @@ namespace wiwa
 		// Whether the database knows the asset's source file (a reference may name an asset that was deleted).
 		bool asset_exists(const AssetRef& ref) const;
 
+		// The source file of an asset the database knows.
+		std::optional<std::filesystem::path> path_of(AssetGuid guid) const;
+
+		// A whole-file asset as it was cooked last (a material reads the parameter table of its shader). nullopt if it is not cooked.
+		template<typename T>
+		std::optional<T> load_cooked(AssetRef ref) const
+		{
+			std::optional<std::vector<std::byte>> payload = read_cooked_data(ref.resolved(), asset_type_of<T>());
+			return payload ? deserialize<T>(*payload) : std::nullopt;
+		}
+
 		void warn(const std::string& message);
 
 		std::vector<EmittedAsset>& emitted() { return m_Emitted; }
 		const std::vector<std::filesystem::path>& get_source_dependencies() const { return m_SourceDependencies; }
 
 	private:
+		std::optional<std::vector<std::byte>> read_cooked_data(AssetGuid guid, AssetType type) const;
+
 		AssetDatabase& m_Database;
 		std::filesystem::path m_Source;
 		MetaFile& m_Meta;

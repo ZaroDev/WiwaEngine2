@@ -78,6 +78,16 @@ namespace wiwa
 		return roots;
 	}
 
+	std::optional<std::filesystem::path> ImportContext::path_of(AssetGuid guid) const
+	{
+		return m_Database.path_of(guid);
+	}
+
+	std::optional<std::vector<std::byte>> ImportContext::read_cooked_data(AssetGuid guid, AssetType type) const
+	{
+		return m_Database.read_cooked_payload(guid, type);
+	}
+
 	void ImportContext::warn(const std::string& message)
 	{
 		WI_ASSET_LOG(Warning, "{0}: {1}", m_Source.filename().string(), message);

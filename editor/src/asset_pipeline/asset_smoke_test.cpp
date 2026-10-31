@@ -1327,6 +1327,206 @@ namespace wiwa
 			database.scan();
 		}
 
+		// 8. materials that reference a surface shader
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_matshader_smoke";
+			std::filesystem::create_directories(dir, error);
+
+			const unsigned char png[] = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0x64, 0xf8, 0xcf, 0x50, 0x0f, 0x00, 0x03, 0x86, 0x01, 0x80, 0x5a, 0x34, 0x7d, 0x6b, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82 };
+			{
+				std::ofstream out(dir / "pixel.png", std::ios::binary);
+				out.write(reinterpret_cast<const char*>(png), sizeof(png));
+			}
+
+			const auto write_text = [](const std::filesystem::path& path, const std::string& text)
+			{
+				std::ofstream out(path, std::ios::binary | std::ios::trunc);
+				out << text;
+			};
+
+			const auto cooked_material = [&](const std::filesystem::path& source, std::vector<AssetGuid>* dependencies = nullptr) -> std::optional<MaterialData>
+			{
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				if (!meta)
+				{
+					return std::nullopt;
+				}
+				for (const CookedFile& file : read_library(database.get_library_root()))
+				{
+					std::span<const std::byte> payload;
+					if (file.Guid == meta->Guid && file.Type == AssetType::Material && parse_wasset_header(file.Bytes, payload))
+					{
+						if (dependencies != nullptr)
+						{
+							*dependencies = file.Dependencies;
+						}
+						return deserialize<MaterialData>(payload);
+					}
+				}
+				return std::nullopt;
+			};
+
+			const auto capture_log = [](const std::function<void()>& fn)
+			{
+				struct Captured
+				{
+					std::mutex Mutex{};
+					std::string Text{};
+				};
+				auto captured = std::make_shared<Captured>();
+				const LogCallback previous = Log::get_log_callback();
+				Log::set_log_callback([captured, previous](LogLevel level, std::string line)
+					{
+						{
+							std::lock_guard lock(captured->Mutex);
+							captured->Text += line;
+							captured->Text += '\n';
+						}
+						if (previous)
+						{
+							previous(level, std::move(line));
+						}
+					});
+				fn();
+				Log::set_log_callback(previous);
+				std::lock_guard lock(captured->Mutex);
+				return captured->Text;
+			};
+
+			const auto shader_source = [](const std::string& amountDefault)
+			{
+				return std::string(
+					"struct MaterialParams\n"
+					"{\n"
+					"    float  Amount; // range(0,2) default(") + amountDefault + ")\n"
+					"    float3 Tint;   // color default(1,0.5,0.25)\n"
+					"    int    Mode;   // range(0,3) default(1)\n"
+					"    bool   Flip;   // default(true)\n"
+					"};\n"
+					"Texture2D Mask; // @param\n"
+					"void Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o)\n"
+					"{\n"
+					"    float mask = Mask.Sample(uSurfaceSampler, i.Uv).r;\n"
+					"    o.Albedo *= p.Tint * mask * p.Amount;\n"
+					"    o.Emissive += p.Flip ? float3((float)p.Mode, 0.0, 0.0) : float3(0.0, 0.0, 0.0);\n"
+					"}\n";
+			};
+
+			const std::filesystem::path shaderFile = dir / "s.wshader";
+			write_text(shaderFile, shader_source("0.5"));
+			database.reimport(shaderFile);
+
+			// the parameter block is Amount@0, Tint@4, Mode@16, Flip@20, padded to 32 bytes
+			const auto float_at = [](const MaterialData& m, size_t offset) { float v = -999.0f; if (offset + 4 <= m.ParamBytes.size()) std::memcpy(&v, m.ParamBytes.data() + offset, 4); return v; };
+			const auto int_at = [](const MaterialData& m, size_t offset) { i32 v = -999; if (offset + 4 <= m.ParamBytes.size()) std::memcpy(&v, m.ParamBytes.data() + offset, 4); return v; };
+			const auto uint_at = [](const MaterialData& m, size_t offset) { u32 v = 999; if (offset + 4 <= m.ParamBytes.size()) std::memcpy(&v, m.ParamBytes.data() + offset, 4); return v; };
+
+			const auto write_wmat = [&](const std::filesystem::path& path, const nlohmann::json& params, const std::string& shader = "s.wshader")
+			{
+				write_text(path, nlohmann::json{ { "version", 1 }, { "shader", shader }, { "params", params } }.dump(2));
+				database.reimport(path);
+			};
+
+			// material_old_archive_loads: a material cooked before the shader section ends after the emissive texture
+			{
+				MaterialData old;
+				old.Name = "Old";
+				old.RoughnessFactor = 0.3f;
+				std::vector<std::byte> bytes = serialize(old);
+				const size_t trailer = sizeof(AssetRef) + sizeof(u64) + sizeof(AssetRef) * SURFACE_MAX_TEXTURES; // shader, empty block, textures
+				check(bytes.size() > trailer, "material_old_archive_loads: the new archive has the shader section");
+				bytes.resize(bytes.size() - trailer);
+				std::optional<MaterialData> loaded = deserialize<MaterialData>(bytes);
+				check(loaded && loaded->Name == "Old" && loaded->RoughnessFactor == 0.3f && !loaded->Shader.valid() && loaded->ParamBytes.empty() && !loaded->ParamTextures[0].valid(),
+					"material_old_archive_loads: an archive without the shader section loads with no shader");
+			}
+
+			// material_packs_params
+			{
+				const std::filesystem::path wmat = dir / "packs.wmat";
+				write_wmat(wmat, { { "Amount", 1.5 }, { "Tint", { 0.1, 0.2, 0.3 } }, { "Mode", 2 }, { "Flip", false }, { "Mask", "pixel.png" } });
+				std::vector<AssetGuid> dependencies;
+				std::optional<MaterialData> material = cooked_material(wmat, &dependencies);
+				check(material.has_value(), "material_packs_params: the .wmat is cooked");
+				if (material)
+				{
+					check(material->Shader.valid() && std::find(dependencies.begin(), dependencies.end(), material->Shader.resolved()) != dependencies.end(),
+						"material_packs_params: the shader is referenced and a dependency");
+					check(material->ParamBytes.size() == 32, "material_packs_params: the block is 32 bytes");
+					check(float_at(*material, 0) == 1.5f && float_at(*material, 4) == 0.1f && float_at(*material, 8) == 0.2f && float_at(*material, 12) == 0.3f,
+						"material_packs_params: float at 0 and the color at 4");
+					check(int_at(*material, 16) == 2 && uint_at(*material, 20) == 0u, "material_packs_params: int at 16 and bool at 20");
+					check(uint_at(*material, 24) == 0u && uint_at(*material, 28) == 0u, "material_packs_params: the padding is zero");
+					check(material->ParamTextures[0].valid() && !material->ParamTextures[1].valid() && !material->ParamTextures[2].valid() && !material->ParamTextures[3].valid() &&
+						std::find(dependencies.begin(), dependencies.end(), material->ParamTextures[0].resolved()) != dependencies.end(),
+						"material_packs_params: the texture parameter resolves into slot 0 and is a dependency");
+				}
+			}
+
+			// material_defaults_for_unset
+			const std::filesystem::path defaultsFile = dir / "defaults.wmat";
+			{
+				write_wmat(defaultsFile, nlohmann::json::object());
+				std::optional<MaterialData> material = cooked_material(defaultsFile);
+				check(material && material->ParamBytes.size() == 32 && float_at(*material, 0) == 0.5f && float_at(*material, 4) == 1.0f && float_at(*material, 8) == 0.5f &&
+					float_at(*material, 12) == 0.25f && int_at(*material, 16) == 1 && uint_at(*material, 20) == 1u, "material_defaults_for_unset: every parameter takes the shader default");
+				check(material && !material->ParamTextures[0].valid(), "material_defaults_for_unset: an unset texture stays empty");
+
+				const std::filesystem::path plain = dir / "plain.wmat";
+				write_text(plain, R"({ "version": 1, "roughness": 0.5 })");
+				database.reimport(plain);
+				std::optional<MaterialData> plainMaterial = cooked_material(plain);
+				check(plainMaterial && !plainMaterial->Shader.valid() && plainMaterial->ParamBytes.empty() && !plainMaterial->ParamTextures[0].valid(),
+					"material_defaults_for_unset: a material without a shader has no block");
+			}
+
+			// material_param_clamped_and_wrong_type_ignored
+			{
+				const std::filesystem::path wmat = dir / "clamped.wmat";
+				const std::string log = capture_log([&]()
+					{
+						write_wmat(wmat, { { "Amount", 9.0 }, { "Tint", "red" }, { "Mode", -5 }, { "Flip", 3 }, { "Bogus", 1 } });
+					});
+				std::optional<MaterialData> material = cooked_material(wmat);
+				check(material && float_at(*material, 0) == 2.0f, "material_param_clamped_and_wrong_type_ignored: a float above its range is clamped");
+				check(material && int_at(*material, 16) == 0, "material_param_clamped_and_wrong_type_ignored: an int below its range is clamped");
+				check(material && float_at(*material, 4) == 1.0f && float_at(*material, 8) == 0.5f && float_at(*material, 12) == 0.25f,
+					"material_param_clamped_and_wrong_type_ignored: a string for a color keeps the default");
+				check(material && uint_at(*material, 20) == 1u, "material_param_clamped_and_wrong_type_ignored: a number for a bool keeps the default");
+				check(log.find("Tint") != std::string::npos && log.find("Flip") != std::string::npos, "material_param_clamped_and_wrong_type_ignored: wrong-typed values are warned about");
+				check(log.find("Bogus") != std::string::npos, "material_param_clamped_and_wrong_type_ignored: an unknown name is warned about");
+			}
+
+			// material_follows_shader_edit
+			{
+				std::optional<MaterialData> before = cooked_material(defaultsFile);
+				write_text(shaderFile, shader_source("1.25"));
+				database.reimport(shaderFile);
+				std::optional<MaterialData> after = cooked_material(defaultsFile);
+				check(before && after && float_at(*before, 0) == 0.5f && float_at(*after, 0) == 1.25f, "material_follows_shader_edit: a new shader default reaches the material block");
+			}
+
+			// material_missing_shader_still_imports
+			{
+				const std::filesystem::path missing = dir / "missing.wmat";
+				std::string log = capture_log([&]() { write_wmat(missing, { { "Amount", 1.0 } }, "no_such_shader.wshader"); });
+				std::optional<MaterialData> material = cooked_material(missing);
+				check(material && material->ParamBytes.empty() && !material->Shader.valid() && log.find("no_such_shader") != std::string::npos,
+					"material_missing_shader_still_imports: a shader that does not exist imports with no block and a warning");
+
+				write_text(dir / "bad.wshader", "void Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o)\n{\n    o.Albedo = ;\n}\n");
+				WI_ASSET_LOG(Info, "Smoke test: the next surface shader compile error is expected");
+				const std::filesystem::path broken = dir / "broken.wmat";
+				log = capture_log([&]() { write_wmat(broken, nlohmann::json::object(), "bad.wshader"); });
+				std::optional<MaterialData> brokenMaterial = cooked_material(broken);
+				check(brokenMaterial && brokenMaterial->Shader.valid() && brokenMaterial->ParamBytes.empty(),
+					"material_missing_shader_still_imports: a shader that fails to compile keeps the reference with no block");
+			}
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+
 		std::filesystem::remove_all(temp, error);
 
 		if (check.Failures == 0)
