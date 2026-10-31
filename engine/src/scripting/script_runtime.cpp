@@ -5,6 +5,7 @@
 #include <cctype>
 #include <filesystem>
 
+#include "script_component.h"
 #include "script_properties.h"
 #include "script_requires.h"
 
@@ -114,10 +115,23 @@ namespace wiwa
 
 	ScriptRuntime::Module* ScriptRuntime::run_module(const LoadedScript& script, std::string& error)
 	{
-		const auto cached = m_Modules.find(script.Asset.resolved());
-		if (cached != m_Modules.end())
+		const AssetGuid key = script.Asset.resolved();
+		const bool stale = m_Reloading && m_Stale.contains(key);
+		if (stale)
 		{
-			return cached->second.get();
+			const auto fresh = m_Fresh.find(key);
+			if (fresh != m_Fresh.end())
+			{
+				return fresh->second.get();
+			}
+		}
+		else
+		{
+			const auto cached = m_Modules.find(key);
+			if (cached != m_Modules.end())
+			{
+				return cached->second.get();
+			}
 		}
 
 		const auto running = std::find(m_Loading.begin(), m_Loading.end(), script.Path);
@@ -166,7 +180,7 @@ namespace wiwa
 		module->Value = sol::object(result);
 
 		Module* raw = module.get();
-		m_Modules[script.Asset.resolved()] = std::move(module);
+		(stale ? m_Fresh : m_Modules)[key] = std::move(module);
 		return raw;
 	}
 
@@ -238,6 +252,174 @@ namespace wiwa
 			}
 		}
 		return dependents;
+	}
+
+	namespace
+	{
+		// Makes `target` hold what `source` holds, keeping target's identity: keys that source lacks go, the others are copied, and a
+		// reference to source itself becomes one to target. `renamed` maps the new tables of modules that were swapped before this one
+		// to their old ones (a class's parent, in its metatable).
+		void swap_table_in_place(sol::table target, sol::table source, const std::vector<std::pair<sol::table, sol::table>>& renamed)
+		{
+			const auto translate = [&](const sol::object& value) -> sol::object
+			{
+				if (value == source)
+				{
+					return target;
+				}
+				for (const auto& [fresh, old] : renamed)
+				{
+					if (value == fresh)
+					{
+						return old;
+					}
+				}
+				return value;
+			};
+
+			std::vector<sol::object> removed;
+			for (const auto& [key, value] : target)
+			{
+				if (!source.raw_get<sol::object>(key).valid() || source.raw_get<sol::object>(key).get_type() == sol::type::lua_nil)
+				{
+					removed.push_back(key);
+				}
+			}
+			for (const sol::object& key : removed)
+			{
+				target.raw_set(key, sol::lua_nil);
+			}
+
+			for (const auto& [key, value] : source)
+			{
+				target.raw_set(key, translate(value));
+			}
+
+			const sol::object meta = source[sol::metatable_key];
+			if (meta.valid() && meta.get_type() == sol::type::table)
+			{
+				target[sol::metatable_key] = translate(meta);
+			}
+		}
+	}
+
+	bool ScriptRuntime::reload_script(AssetRef asset, std::string& error, entt::registry* registry)
+	{
+		error.clear();
+
+		std::vector<AssetRef> affected{ asset };
+		for (const AssetRef& dependent : dependents_of(asset))
+		{
+			affected.push_back(dependent);
+		}
+
+		m_Reloading = true;
+		m_Stale.clear();
+		m_Fresh.clear();
+		for (const AssetRef& ref : affected)
+		{
+			m_Stale.insert(ref.resolved());
+		}
+
+		const auto abandon = [&]()
+		{
+			m_Reloading = false;
+			m_Stale.clear();
+			m_Fresh.clear();
+			return false;
+		};
+
+		// 1. run the new versions, changing nothing yet
+		std::map<AssetGuid, std::vector<FieldDescriptor>> properties;
+		for (const AssetRef& ref : affected)
+		{
+			const std::optional<LoadedScript> script = m_Source.find_by_asset(ref);
+			if (!script)
+			{
+				error = "script " + ref.Guid.to_string() + " is not available";
+				return abandon();
+			}
+
+			Module* module = run_module(*script, error);
+			if (module == nullptr)
+			{
+				return abandon();
+			}
+
+			if (!m_Classes.contains(ref.resolved()))
+			{
+				continue; // a module that is not a script class: its table is swapped below
+			}
+
+			const sol::object& value = module->Value;
+			if (!value.is<sol::table>())
+			{
+				error = script->Path + ": a script must return a class table (Script:extend{...}), not a " + sol::type_name(m_Lua.lua_state(), value.get_type());
+				return abandon();
+			}
+
+			sol::table classTable = value.as<sol::table>();
+			for (const char* hook : HOOKS)
+			{
+				const sol::object member = classTable[hook];
+				if (member.valid() && member.get_type() != sol::type::lua_nil && member.get_type() != sol::type::function)
+				{
+					error = script->Path + ": " + hook + " must be a function";
+					return abandon();
+				}
+			}
+
+			std::string propertyError;
+			const sol::object propertyObject = classTable["properties"];
+			std::vector<FieldDescriptor> parsed;
+			if (propertyObject.is<sol::table>())
+			{
+				parsed = parse_properties(propertyObject.as<sol::table>(), propertyError);
+			}
+			if (!propertyError.empty())
+			{
+				error = script->Path + ": " + propertyError;
+				return abandon();
+			}
+			properties[ref.resolved()] = std::move(parsed);
+		}
+
+		// 2. everything loaded: swap the new code into the old tables, the changed script first (the ones that require it follow)
+		std::vector<std::pair<sol::table, sol::table>> renamed;
+		for (const AssetRef& ref : affected)
+		{
+			const AssetGuid key = ref.resolved();
+			const auto fresh = m_Fresh.find(key);
+			if (fresh == m_Fresh.end())
+			{
+				continue;
+			}
+
+			const auto old = m_Modules.find(key);
+			if (old != m_Modules.end() && old->second->Value.is<sol::table>() && fresh->second->Value.is<sol::table>())
+			{
+				sol::table oldTable = old->second->Value.as<sol::table>();
+				sol::table freshTable = fresh->second->Value.as<sol::table>();
+				swap_table_in_place(oldTable, freshTable, renamed);
+				renamed.emplace_back(freshTable, oldTable);
+			}
+			else
+			{
+				m_Modules[key] = std::move(fresh->second);
+			}
+		}
+
+		for (const auto& [key, fields] : properties)
+		{
+			ScriptClass& scriptClass = *m_Classes[key];
+			scriptClass.Properties = fields;
+			register_script_component(scriptClass, registry);
+		}
+
+		m_Reloading = false;
+		m_Stale.clear();
+		m_Fresh.clear();
+		return true;
 	}
 
 	ScriptClass* ScriptRuntime::load(AssetRef asset, std::string& error)

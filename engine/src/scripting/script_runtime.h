@@ -5,6 +5,9 @@
 #include <string>
 #include <vector>
 
+#include <set>
+
+#include <entt/entt.hpp>
 #include <sol/sol.hpp>
 
 #include <scene/reflection/field_descriptor.h>
@@ -46,6 +49,12 @@ namespace wiwa
 		// Every script that requires this one, directly or through others (for reloading them when it changes).
 		std::vector<AssetRef> dependents_of(AssetRef asset) const;
 
+		// Reads the script and every script that requires it again from the source and swaps the new code into the old tables, so
+		// that what already holds those tables (instances, other scripts) runs the new code and keeps its state. The components of
+		// the classes are registered again; with a registry, the entities that hold them keep the values whose name and type still
+		// match. Nothing changes, and `error` says why, if any of the scripts fails to load or has bad properties.
+		bool reload_script(AssetRef asset, std::string& error, entt::registry* registry = nullptr);
+
 		// Calls into Lua always go through here: the call gets a fresh instruction budget, so a script that never returns ends
 		// with an error instead of freezing the engine.
 		template<typename... Args>
@@ -79,6 +88,9 @@ namespace wiwa
 		sol::table m_Sandbox{};
 		std::map<AssetGuid, std::unique_ptr<ScriptClass>> m_Classes{};
 		std::map<AssetGuid, std::unique_ptr<Module>> m_Modules{};
+		bool m_Reloading = false;                                  // reload_script is running the new versions
+		std::set<AssetGuid> m_Stale{};                             // the scripts it runs again
+		std::map<AssetGuid, std::unique_ptr<Module>> m_Fresh{};    // their new versions, until they replace the old ones
 		std::vector<std::string> m_Loading{};                          // the paths being run, innermost last (for cycles)
 		std::map<std::string, AssetRef> m_AssetOfPath{};
 		std::map<std::string, std::vector<std::string>> m_Requirers{}; // path -> the paths that require it directly

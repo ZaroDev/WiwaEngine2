@@ -80,6 +80,17 @@ namespace wiwa
 				return script.Asset;
 			}
 
+			void set_source(AssetRef ref, const std::string& source)
+			{
+				for (LoadedScript& script : m_Scripts)
+				{
+					if (script.Asset == ref)
+					{
+						script.Source = source;
+					}
+				}
+			}
+
 			virtual std::optional<LoadedScript> find_by_path(std::string_view path) override
 			{
 				for (const LoadedScript& script : m_Scripts)
@@ -1008,6 +1019,117 @@ namespace wiwa
 				}
 			}
 		}
+
+		void check_scene_changes_and_reload(Check& check)
+		{
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("swap", R"(return Script:extend{
+					on_init = function(self) record('init') end,
+					on_destroy = function(self) record('destroy') end })");
+				h.spawn("old", { ref });
+				Ref<Scene> next = CreateRef<Scene>();
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				// what a replaced scene looks like to the lifecycle: the module stops it and starts the next one
+				h.Instances.stop();
+				const size_t destroyedOnce = h.count("destroy");
+				h.TheScene = next;
+				h.spawn("new", { ref });
+				h.Instances.start(next);
+				h.Instances.update(0.016f);
+				check(destroyedOnce == 1 && h.count("destroy") == 1 && h.count("init") == 2, "replace_load_destroys_old_scripts_once");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("extra", "return Script:extend{ on_init = function(self) record('init') end }");
+				h.spawn("first", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				h.spawn("added by an additive load", { ref });
+				h.Instances.update(0.016f);
+				check(h.count("init") == 2, "additive_load_discovers_new_scripts");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("hot", R"(return Script:extend{
+					on_update = function(self, dt) self.counter = (self.counter or 0) + 1 record('old' .. self.counter) end })");
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				h.Source.set_source(ref, R"(return Script:extend{
+					on_update = function(self, dt) self.counter = (self.counter or 0) + 1 record('new' .. self.counter) end })");
+				std::string error;
+				const bool reloaded = h.Runtime.reload_script(ref, error, &h.TheScene->registry());
+				h.Instances.update(0.016f);
+				check(reloaded && h.Events == std::vector<std::string>({ "old1", "new2" }), "reload_swaps_methods_in_place");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("keeps", "return Script:extend{ on_update = function(self, dt) record('works') end }");
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Source.set_source(ref, "return Script:extend{ on_update = ");
+				std::string error;
+				const bool reloaded = h.Runtime.reload_script(ref, error, &h.TheScene->registry());
+				h.Instances.update(0.016f);
+				check(!reloaded && contains(error, "assets/scripts/keeps.lua") && h.Events == std::vector<std::string>({ "works" }), "reload_with_syntax_error_keeps_old_class");
+			}
+
+			{
+				Harness h;
+				const AssetRef util = h.Source.add("assets/scripts/shared.lua", "return { value = 1 }");
+				const AssetRef user = h.add_script("uses_shared", R"(
+					local shared = require('assets/scripts/shared.lua')
+					return Script:extend{ on_update = function(self, dt) record(tostring(shared.value)) end })");
+				h.spawn("e", { user });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				h.Source.set_source(util, "return { value = 2 }");
+				std::string error;
+				const bool reloaded = h.Runtime.reload_script(util, error, &h.TheScene->registry());
+				h.Instances.update(0.016f);
+				check(reloaded && h.Events == std::vector<std::string>({ "1", "2" }), "reload_updates_dependents");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("bag", "return Script:extend{ properties = { kept = { type = 'int', default = 1 }, gone = { type = 'string', default = 'x' } } }");
+				const entt::entity entity = h.spawn("e", { ref });
+				const ComponentInfo* before = ComponentRegistry::get().find(script_component_name(ref.Guid));
+				before->Set(h.TheScene->registry(), entity, static_cast<size_t>(before->field_index("kept")), 5);
+				h.Source.set_source(ref, "return Script:extend{ properties = { kept = { type = 'int', default = 1 }, added = { type = 'float', default = 2.5 } } }");
+				std::string error;
+				const bool reloaded = h.Runtime.reload_script(ref, error, &h.TheScene->registry());
+				const ComponentInfo* after = ComponentRegistry::get().find(script_component_name(ref.Guid));
+				const FieldValue kept = after->Get(h.TheScene->registry(), entity, static_cast<size_t>(after->field_index("kept")));
+				const FieldValue added = after->Get(h.TheScene->registry(), entity, static_cast<size_t>(after->field_index("added")));
+				check(reloaded && after->field_index("gone") < 0 && std::holds_alternative<i32>(kept) && std::get<i32>(kept) == 5
+					&& std::holds_alternative<float>(added) && std::get<float>(added) == 2.5f, "reload_reconciles_bags");
+			}
+
+			{
+				Harness h;
+				const AssetRef base = h.add_script("base_class", "return Script:extend{ speak = function(self) return 'base1' end }");
+				const AssetRef child = h.add_script("child_class", R"(
+					local Base = require('assets/scripts/base_class.lua')
+					return Base:extend{ on_update = function(self, dt) record(self:speak()) end })");
+				h.spawn("e", { child });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				h.Source.set_source(base, "return Script:extend{ speak = function(self) return 'base2' end }");
+				std::string error;
+				check(h.Runtime.reload_script(base, error, &h.TheScene->registry()), "reload_inherited_class: reloads");
+				h.Instances.update(0.016f);
+				h.Source.set_source(base, "return Script:extend{ speak = function(self) return 'base3' end }");
+				check(h.Runtime.reload_script(base, error, &h.TheScene->registry()), "reload_inherited_class: reloads again");
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "base1", "base2", "base3" }), "reload_inherited_class_reaches_instances");
+			}
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -1025,6 +1147,7 @@ namespace wiwa
 		check_lifecycle(check);
 		check_api(check);
 		check_engine_bindings(check, pipeline);
+		check_scene_changes_and_reload(check);
 
 		if (check.Failures == 0)
 		{
