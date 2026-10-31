@@ -12,6 +12,15 @@
 
 namespace wiwa
 {
+	// What the editor keeps of the document besides the scene: where it is saved, whether it changed, and what is selected (by guid, so it
+	// can be found again in another copy of the scene). Play mode puts it back when it stops.
+	struct EditorDocument
+	{
+		std::filesystem::path Path{};
+		bool Dirty = false;
+		EntityGuid Selected{};
+	};
+
 	// The scene being edited and everything that changes it: what the Hierarchy and Inspector panels call, without any ImGui in
 	// here. It edits a Scene (the active one of the SceneModule, in the editor) and keeps track of the file it came from, whether
 	// it changed, and the selection. Main thread.
@@ -38,6 +47,14 @@ namespace wiwa
 		Scene& scene() { return *m_Scene; }
 		const std::filesystem::path& path() const { return m_Path; }
 		bool dirty() const { return m_Dirty; }
+
+		EditorDocument capture_document() const;
+		// Adopts the scene with the path, dirty flag and selection captured earlier (the selected entity if the scene has it).
+		void restore_document(Ref<Scene> scene, const EditorDocument& document);
+
+		// While a scene is running (play mode) the document cannot be replaced or written: new_scene, open, save and save_as do nothing.
+		void set_playing(bool playing) { m_Playing = playing; }
+		bool playing() const { return m_Playing; }
 
 		// When on, the editor adopts whatever scene the SceneModule makes active (a scene loaded with --scene, for instance).
 		void set_follow_module(bool follow) { m_Follow = follow; }
@@ -130,6 +147,7 @@ namespace wiwa
 		std::filesystem::path m_Path{};
 		bool m_Dirty = false;
 		bool m_Follow = false;
+		bool m_Playing = false;
 		entt::entity m_Selected{ entt::null };
 
 		Ref<JobProgress> m_Opening{};

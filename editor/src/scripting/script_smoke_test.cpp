@@ -31,6 +31,7 @@
 #include "asset_pipeline/builtin_importers.h"
 #include "asset_pipeline/file_utils.h"
 #include "asset_pipeline/packager.h"
+#include "scene/scene_editor.h"
 #include "scene/scene_json.h"
 
 #define WI_SCRIPT_LOG(level, ...) WI_LOG(level, "Scripting", __VA_ARGS__)
@@ -1576,6 +1577,47 @@ namespace wiwa
 			check(scenes_equal(source, *reference), "changing_a_clone_leaves_the_source_alone");
 			check(!scenes_equal(source, *clone), "the_scene_comparison_sees_a_difference");
 		}
+
+		// Play mode, task 3: what the editor keeps of its document, and what it refuses while the scene is running.
+		void check_editor_document(Check& check)
+		{
+			AssetManager* assets = Engine::get().get_module<AssetManager>();
+			SceneModule* scenes = Engine::get().get_module<SceneModule>();
+			if (assets == nullptr || scenes == nullptr)
+			{
+				WI_SCRIPT_LOG(Info, "editor_document checks skipped: no AssetManager or SceneModule");
+				return;
+			}
+
+			SceneEditor editor(*assets, *scenes);
+			Ref<Scene> first = CreateRef<Scene>();
+			editor.set_scene(first, "some/path.wscene");
+			const entt::entity entity = editor.create_entity(entt::null);
+			editor.select(entity);
+			SceneSettings settings = editor.settings();
+			settings.Exposure.Auto = true;
+			editor.edit_settings(settings);
+
+			const EditorDocument document = editor.capture_document();
+			check(document.Path == "some/path.wscene" && document.Dirty && document.Selected.valid(), "editor_document_is_captured");
+
+			editor.set_scene(CreateRef<Scene>());
+			editor.restore_document(first, document);
+			check(editor.get_scene() == first && editor.path() == "some/path.wscene" && editor.dirty() && editor.selected() == entity, "editor_document_roundtrips");
+
+			editor.set_playing(true);
+			check(editor.playing(), "editor_reports_playing");
+			const std::filesystem::path file = std::filesystem::temp_directory_path() / "wiwa_play_gate.wscene";
+			std::error_code error;
+			std::filesystem::remove(file, error);
+			const bool saved = editor.save_as(file);
+			const bool savedToPath = editor.save();
+			editor.new_scene();
+			editor.open("assets/none.wscene");
+			check(!saved && !savedToPath && !std::filesystem::exists(file) && editor.get_scene() == first && !editor.is_opening() && editor.path() == "some/path.wscene",
+				"editor_refuses_file_actions_while_playing");
+			editor.set_playing(false);
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -1598,6 +1640,7 @@ namespace wiwa
 		check_review_fixes(check);
 		check_time(check);
 		check_clone(check);
+		check_editor_document(check);
 
 		if (check.Failures == 0)
 		{
