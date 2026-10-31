@@ -43,6 +43,9 @@ namespace wiwa
 		ScriptClass* load(AssetRef asset, std::string& error);
 		const ScriptClass* find(AssetRef asset) const;
 
+		// Every script that requires this one, directly or through others (for reloading them when it changes).
+		std::vector<AssetRef> dependents_of(AssetRef asset) const;
+
 		// Calls into Lua always go through here: the call gets a fresh instruction budget, so a script that never returns ends
 		// with an error instead of freezing the engine.
 		template<typename... Args>
@@ -59,12 +62,26 @@ namespace wiwa
 		bool consume_budget(u64 instructions);
 
 	private:
+		// A script that has run once: what its chunk returned (a class table, or any module value).
+		struct Module
+		{
+			AssetRef Asset{};
+			std::string Path{};
+			sol::object Value{};
+		};
+
 		void begin_call() { m_Used = 0; }
+		Module* run_module(const LoadedScript& script, std::string& error);
+		sol::object require_module(std::string path, const std::string& requirer);
 
 		IScriptSource& m_Source;
 		sol::state m_Lua{};
 		sol::table m_Sandbox{};
 		std::map<AssetGuid, std::unique_ptr<ScriptClass>> m_Classes{};
+		std::map<AssetGuid, std::unique_ptr<Module>> m_Modules{};
+		std::vector<std::string> m_Loading{};                          // the paths being run, innermost last (for cycles)
+		std::map<std::string, AssetRef> m_AssetOfPath{};
+		std::map<std::string, std::vector<std::string>> m_Requirers{}; // path -> the paths that require it directly
 		u64 m_Budget = 50'000'000;
 		u64 m_Used = 0;
 	};

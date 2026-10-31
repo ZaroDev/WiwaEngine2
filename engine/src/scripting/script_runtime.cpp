@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "script_runtime.h"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 
 #include "script_properties.h"
@@ -72,6 +74,18 @@ namespace wiwa
 		}
 		m_Sandbox["Script"] = base;
 
+		m_Sandbox.set_function("require", [this](sol::this_state state, const std::string& path) -> sol::object
+			{
+				// who is asking: the chunk name of the Lua function that called require ("@assets/scripts/x.lua")
+				std::string requirer;
+				lua_Debug caller;
+				if (lua_getstack(state.L, 1, &caller) && lua_getinfo(state.L, "S", &caller) && caller.source != nullptr && caller.source[0] == '@')
+				{
+					requirer = caller.source + 1;
+				}
+				return require_module(path, requirer);
+			});
+
 		m_Sandbox.set_function("log", &Log::log_info);
 		m_Sandbox.set_function("log_warning", &Log::log_warning);
 		m_Sandbox.set_function("log_error", &Log::log_error);
@@ -91,24 +105,35 @@ namespace wiwa
 		return found == m_Classes.end() ? nullptr : found->second.get();
 	}
 
-	ScriptClass* ScriptRuntime::load(AssetRef asset, std::string& error)
+	ScriptRuntime::Module* ScriptRuntime::run_module(const LoadedScript& script, std::string& error)
 	{
-		error.clear();
-
-		const auto cached = m_Classes.find(asset.resolved());
-		if (cached != m_Classes.end())
+		const auto cached = m_Modules.find(script.Asset.resolved());
+		if (cached != m_Modules.end())
 		{
 			return cached->second.get();
 		}
 
-		const std::optional<LoadedScript> script = m_Source.find_by_asset(asset);
-		if (!script)
+		const auto running = std::find(m_Loading.begin(), m_Loading.end(), script.Path);
+		if (running != m_Loading.end())
 		{
-			error = "script " + asset.Guid.to_string() + " is not available";
+			error = "require cycle: ";
+			for (auto it = running; it != m_Loading.end(); ++it)
+			{
+				error += *it + " -> ";
+			}
+			error += script.Path;
 			return nullptr;
 		}
 
-		sol::load_result loaded = m_Lua.load(script->Source, "@" + script->Path);
+		m_AssetOfPath[script.Path] = script.Asset;
+		m_Loading.push_back(script.Path);
+		struct Pop
+		{
+			std::vector<std::string>& Stack;
+			~Pop() { Stack.pop_back(); }
+		} pop{ m_Loading };
+
+		sol::load_result loaded = m_Lua.load(script.Source, "@" + script.Path);
 		if (!loaded.valid())
 		{
 			sol::error failure = loaded;
@@ -128,7 +153,114 @@ namespace wiwa
 			return nullptr;
 		}
 
-		const sol::object returned = result;
+		auto module = std::make_unique<Module>();
+		module->Asset = script.Asset;
+		module->Path = script.Path;
+		module->Value = sol::object(result);
+
+		Module* raw = module.get();
+		m_Modules[script.Asset.resolved()] = std::move(module);
+		return raw;
+	}
+
+	sol::object ScriptRuntime::require_module(std::string path, const std::string& requirer)
+	{
+		std::transform(path.begin(), path.end(), path.begin(), [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+		if (!path.ends_with(".lua"))
+		{
+			path += ".lua";
+		}
+
+		const std::optional<LoadedScript> script = m_Source.find_by_path(path);
+		if (!script)
+		{
+			throw sol::error("require: there is no script at '" + path + "'");
+		}
+
+		if (!requirer.empty())
+		{
+			std::vector<std::string>& requirers = m_Requirers[path];
+			if (std::find(requirers.begin(), requirers.end(), requirer) == requirers.end())
+			{
+				requirers.push_back(requirer);
+			}
+		}
+
+		std::string error;
+		Module* module = run_module(*script, error);
+		if (module == nullptr)
+		{
+			throw sol::error(error);
+		}
+		return module->Value;
+	}
+
+	std::vector<AssetRef> ScriptRuntime::dependents_of(AssetRef asset) const
+	{
+		std::string start;
+		for (const auto& [path, ref] : m_AssetOfPath)
+		{
+			if (ref == asset)
+			{
+				start = path;
+			}
+		}
+
+		std::vector<std::string> pending{ start };
+		std::vector<std::string> seen{ start };
+		std::vector<AssetRef> dependents;
+		while (!pending.empty())
+		{
+			const std::string current = pending.back();
+			pending.pop_back();
+
+			const auto requirers = m_Requirers.find(current);
+			if (requirers == m_Requirers.end())
+			{
+				continue;
+			}
+			for (const std::string& requirer : requirers->second)
+			{
+				if (std::find(seen.begin(), seen.end(), requirer) != seen.end())
+				{
+					continue;
+				}
+				seen.push_back(requirer);
+				pending.push_back(requirer);
+				const auto ref = m_AssetOfPath.find(requirer);
+				if (ref != m_AssetOfPath.end())
+				{
+					dependents.push_back(ref->second);
+				}
+			}
+		}
+		return dependents;
+	}
+
+	ScriptClass* ScriptRuntime::load(AssetRef asset, std::string& error)
+	{
+		error.clear();
+
+		const auto cached = m_Classes.find(asset.resolved());
+		if (cached != m_Classes.end())
+		{
+			return cached->second.get();
+		}
+
+		const std::optional<LoadedScript> script = m_Source.find_by_asset(asset);
+		if (!script)
+		{
+			error = "script " + asset.Guid.to_string() + " is not available";
+			return nullptr;
+		}
+
+		Module* module = run_module(*script, error);
+		if (module == nullptr)
+		{
+			return nullptr;
+		}
+
+		const sol::object& returned = module->Value;
 		if (!returned.is<sol::table>())
 		{
 			error = script->Path + ": a script must return a class table (Script:extend{...}), not a " + sol::type_name(m_Lua.lua_state(), returned.get_type());

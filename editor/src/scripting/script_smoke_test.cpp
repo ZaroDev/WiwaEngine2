@@ -1,6 +1,8 @@
 #include <editor_common.h>
 #include "script_smoke_test.h"
 
+#include <algorithm>
+
 #include <assets/wasset_io.h>
 #include <scripting/script_runtime.h>
 
@@ -208,6 +210,83 @@ namespace wiwa
 				check(stopped, "infinite_loop_is_stopped");
 			}
 		}
+
+		void check_require(Check& check)
+		{
+			{
+				MemorySource source;
+				source.add("assets/scripts/util.lua", "return { answer = 42 }");
+				const AssetRef ref = source.add("assets/scripts/user.lua", R"(
+					local util = require("assets/scripts/util.lua")
+					return Script:extend{ value = util.answer }
+				)");
+				ScriptRuntime runtime(source);
+				std::string error;
+				const ScriptClass* cls = runtime.load(ref, error);
+				check(cls != nullptr && cls->Class["value"].get<int>() == 42, "require_returns_module");
+			}
+
+			{
+				MemorySource source;
+				source.add("assets/scripts/counted.lua", "tick() return {}");
+				const AssetRef ref = source.add("assets/scripts/twice.lua", R"(
+					require("assets/scripts/counted.lua")
+					require("assets/scripts/counted")
+					return Script:extend{}
+				)");
+				ScriptRuntime runtime(source);
+				int ticks = 0;
+				runtime.sandbox().set_function("tick", [&ticks]() { ticks++; });
+				std::string error;
+				check(runtime.load(ref, error) != nullptr && ticks == 1, "require_is_cached (with or without extension)");
+			}
+
+			{
+				MemorySource source;
+				source.add("assets/scripts/cycle_b.lua", R"(return require("assets/scripts/cycle_a.lua"))");
+				const AssetRef ref = source.add("assets/scripts/cycle_a.lua", R"(return require("assets/scripts/cycle_b.lua"))");
+				ScriptRuntime runtime(source);
+				std::string error;
+				check(runtime.load(ref, error) == nullptr && contains(error, "cycle_a.lua") && contains(error, "cycle_b.lua") && contains(error, "->"), "require_cycle_errors");
+			}
+
+			{
+				MemorySource source;
+				const AssetRef ref = source.add("assets/scripts/needs_missing.lua", R"(require("assets/scripts/nope.lua") return Script:extend{})");
+				ScriptRuntime runtime(source);
+				std::string error;
+				check(runtime.load(ref, error) == nullptr && contains(error, "assets/scripts/nope.lua"), "require_missing_errors");
+			}
+
+			{
+				MemorySource source;
+				const AssetRef c = source.add("assets/scripts/c.lua", "return {}");
+				const AssetRef b = source.add("assets/scripts/b.lua", R"(require("assets/scripts/c.lua") return {})");
+				const AssetRef a = source.add("assets/scripts/a.lua", R"(require("assets/scripts/b.lua") return Script:extend{})");
+				ScriptRuntime runtime(source);
+				std::string error;
+				check(runtime.load(a, error) != nullptr, "dependents_are_transitive: loads");
+				const std::vector<AssetRef> dependents = runtime.dependents_of(c);
+				const auto has = [&](AssetRef ref) { return std::find(dependents.begin(), dependents.end(), ref) != dependents.end(); };
+				check(dependents.size() == 2 && has(a) && has(b), "dependents_are_transitive");
+				check(runtime.dependents_of(a).empty(), "nothing_depends_on_the_top_script");
+			}
+
+			{
+				MemorySource source;
+				const AssetRef base = source.add("assets/scripts/base.lua", "return Script:extend{ properties = { hp = { type = \"int\", default = 10 } } }");
+				const AssetRef child = source.add("assets/scripts/child2.lua", R"(
+					local Base = require("assets/scripts/base.lua")
+					return Base:extend{}
+				)");
+				ScriptRuntime runtime(source);
+				std::string error;
+				const ScriptClass* childClass = runtime.load(child, error);
+				const ScriptClass* baseClass = runtime.load(base, error);
+				check(childClass != nullptr && baseClass != nullptr && childClass->Properties.size() == 1, "require_shares_class_with_load: inherits properties across files");
+				check(baseClass != nullptr && runtime.dependents_of(base).size() == 1, "require_shares_class_with_load: one dependent");
+			}
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -219,6 +298,7 @@ namespace wiwa
 		check_runtime_classes(check);
 		check_sandbox(check);
 		check_budget(check);
+		check_require(check);
 
 		if (check.Failures == 0)
 		{
