@@ -8,6 +8,7 @@
 #include <scene/scene_module.h>
 
 #include "script_component.h"
+#include "script_reload.h"
 
 #define WI_SCRIPT_LOG(level, ...) WI_LOG(level, "Scripting", __VA_ARGS__)
 
@@ -91,7 +92,7 @@ namespace wiwa
 		}
 
 		SceneModule* scenes = Engine::get().get_module<SceneModule>();
-		for (size_t i = 0; i < guids.size(); i++)
+		for (size_t i = 0; i < guids.size() && scenes != nullptr; i++)
 		{
 			const AssetGuid guid = guids[i];
 			if (std::find(guids.begin(), guids.begin() + static_cast<std::ptrdiff_t>(i), guid) != guids.begin() + static_cast<std::ptrdiff_t>(i))
@@ -99,10 +100,15 @@ namespace wiwa
 				continue; // said twice
 			}
 
+			// a script the runtime ran, one it failed to use, or any script of the catalog: one that failed the first time is fixed by this save
 			const AssetRef ref{ guid, 0 };
 			if (!m_Runtime->knows(ref) && !m_Instances->is_broken(guid))
 			{
-				continue;
+				AssetManager* assets = Engine::get().get_module<AssetManager>();
+				if (assets == nullptr || !is_script_asset(assets->catalog_entries(), guid))
+				{
+					continue;
+				}
 			}
 
 			m_Source->forget(ref);

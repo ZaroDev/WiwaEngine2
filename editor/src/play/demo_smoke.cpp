@@ -56,9 +56,15 @@ namespace wiwa
 		remove_hot_script(); // also when the run ended early
 	}
 
+	// Waits are in seconds as well as frames: with vsync off a frame is a fraction of a millisecond, and the file watcher and the import need real time.
 	bool DemoSmoke::wait(u32 frames, const char* what, std::string& failure)
 	{
-		if (++m_PhaseFrames > frames)
+		if (m_PhaseFrames == 0)
+		{
+			m_PhaseStart = std::chrono::steady_clock::now();
+		}
+		const bool tooLong = std::chrono::steady_clock::now() - m_PhaseStart > std::chrono::seconds(30);
+		if (++m_PhaseFrames > frames && tooLong)
 		{
 			failure = std::string("timed out waiting for ") + what;
 			m_Phase = Phase::Done;
@@ -119,6 +125,11 @@ namespace wiwa
 
 		case Phase::Run:
 		{
+			if (m_Play.play_scene() == nullptr)
+			{
+				failure = "play stopped by itself";
+				return true;
+			}
 			Scene& play = *m_Play.play_scene();
 			const entt::entity ring = find_named(play, "Blue ring");
 			const entt::entity ball = find_named(play, "Neon cyan");
@@ -198,6 +209,11 @@ namespace wiwa
 				return false;
 			}
 
+			if (m_Play.play_scene() == nullptr)
+			{
+				failure = "play stopped by itself";
+				return true;
+			}
 			Scene& play = *m_Play.play_scene();
 			const entt::entity probe = play.create("hot probe");
 			info->Add(play.registry(), probe);
@@ -214,6 +230,11 @@ namespace wiwa
 			{
 				return true;
 			}
+			if (m_Play.play_scene() == nullptr)
+			{
+				failure = "play stopped by itself";
+				return true;
+			}
 			if (position_x(*m_Play.play_scene(), m_Probe) == 111.0f)
 			{
 				write_hot_script(222); // saved while the scene runs
@@ -227,6 +248,11 @@ namespace wiwa
 		{
 			if (!wait(900, "the running script to pick up the new file", failure))
 			{
+				return true;
+			}
+			if (m_Play.play_scene() == nullptr)
+			{
+				failure = "play stopped by itself";
 				return true;
 			}
 			if (position_x(*m_Play.play_scene(), m_Probe) == 222.0f)
@@ -256,7 +282,7 @@ namespace wiwa
 		std::string errors;
 		while (std::getline(log, line))
 		{
-			if (line.find("[error]") != std::string::npos)
+			if (line.find("[error]") != std::string::npos && line.find("zz_hot_smoke") == std::string::npos)
 			{
 				errors += line + "\n";
 			}

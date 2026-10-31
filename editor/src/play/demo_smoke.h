@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <string>
 
 #include <core/common.h>
@@ -42,6 +43,7 @@ namespace wiwa
 		PlayMode& m_Play;
 		Phase m_Phase = Phase::Open;
 		u32 m_PhaseFrames = 0;
+		std::chrono::steady_clock::time_point m_PhaseStart{};
 		u32 m_RunFrames = 0;
 		bool m_Started = false;
 		std::uintmax_t m_LogStart = 0;

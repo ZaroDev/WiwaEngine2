@@ -23,6 +23,7 @@
 #include <scripting/script_context.h>
 #include <scripting/bindings/script_types.h>
 #include <scripting/script_instances.h>
+#include <scripting/script_reload.h>
 #include <scripting/script_requires.h>
 #include <scripting/script_runtime.h>
 
@@ -1894,6 +1895,41 @@ namespace wiwa
 			check(std::abs(std::get<glm::quat>(find("turn").Default).y - std::sqrt(0.5f)) < 1e-4f, "quat_default_is_read");
 			check(std::get<glm::vec3>(find("plain").Default) == glm::vec3(4.0f, 5.0f, 6.0f), "table_default_is_still_read");
 		}
+
+		// Findings of the hot reload review.
+		void check_hot_reload_review(Check& check)
+		{
+			{
+				const AssetGuid lua = AssetGuid::generate();
+				const AssetGuid texture = AssetGuid::generate();
+				const std::vector<AssetCatalog::Entry> entries = {
+					{ "assets/scripts/mover.lua", lua },
+					{ "assets/textures/rock.png", texture },
+				};
+				check(is_script_asset(entries, lua) && !is_script_asset(entries, texture) && !is_script_asset(entries, AssetGuid::generate()) && !is_script_asset({}, lua),
+					"a_lua_asset_in_the_catalog_is_a_script");
+			}
+
+			{
+				// the importer's thread registers the new component description before the main thread reloads the script: for a frame the
+				// registry has no such property any more, and a script that still reads it must not be disabled
+				Harness h;
+				const AssetRef ref = h.add_script("hr_window", R"(return Script:extend{
+					properties = { speed = { type = 'float', default = 5 } },
+					on_update = function(self, dt) self.n = (self.n or 0) + 1 record(string.format('%g', self.speed)) self.speed = 7 end })");
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+
+				ScriptClass newer;
+				newer.Asset = ref;
+				newer.Name = "hr_window"; // no properties: speed was removed
+				register_script_component(newer);
+				h.Instances.update(0.016f);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "5", "5", "5" }), "property_removed_in_the_registry_before_the_reload_does_not_disable_the_instance");
+			}
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -1917,6 +1953,7 @@ namespace wiwa
 		check_time(check);
 		check_hot_reload(check);
 		check_vector_defaults(check);
+		check_hot_reload_review(check);
 		check_clone(check);
 		check_editor_document(check);
 		check_play_mode(check);

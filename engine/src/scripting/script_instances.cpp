@@ -209,8 +209,13 @@ namespace wiwa
 				{
 					throw sol::error(scriptClass->Name + ": the entity no longer exists");
 				}
-				const size_t index = static_cast<size_t>(info->field_index(property->Name));
-				return field_to_lua(sol::state_view(lua), info->Get(m_Scene->registry(), entity, index), *property, FieldLink{ handle, componentName, index });
+				const int index = info->field_index(property->Name);
+				if (index < 0)
+				{
+					// the file was imported with this property gone and the reload has not come yet: the script keeps running on the default
+					return field_to_lua(sol::state_view(lua), property->Default, *property, FieldLink{});
+				}
+				return field_to_lua(sol::state_view(lua), info->Get(m_Scene->registry(), entity, static_cast<size_t>(index)), *property, FieldLink{ handle, componentName, static_cast<size_t>(index) });
 			}
 
 			if (entityScript && key.get_type() == sol::type::string)
@@ -262,7 +267,12 @@ namespace wiwa
 				{
 					throw sol::error(scriptClass->Name + ": the entity no longer exists");
 				}
-				if (!info->Set(m_Scene->registry(), entity, static_cast<size_t>(info->field_index(property->Name)), converted))
+				const int index = info->field_index(property->Name);
+				if (index < 0)
+				{
+					return; // the property is gone from the registry (see __index): the write has nowhere to go until the reload
+				}
+				if (!info->Set(m_Scene->registry(), entity, static_cast<size_t>(index), converted))
 				{
 					throw sol::error(scriptClass->Name + "." + property->Name + ": the value is not valid for the property");
 				}

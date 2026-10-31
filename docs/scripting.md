@@ -100,6 +100,8 @@ without restarting the scene:
 - A script that an error had disabled starts again (a new `self`, `on_init`) with the fixed code.
 - A syntax error or bad properties are logged as "Reload failed, the previous version stays" and nothing changes.
 - It works in edit mode too (the Inspector follows your edits), not only while playing.
+- Limit: state kept in a module that a method writes to (`Base.count = Base.count + 1`) belongs to the version that wrote it; the reload
+  copies the module's contents into the old table once, so such a counter restarts from what the file says.
 
 ## The demo scene
 
