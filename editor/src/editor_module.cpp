@@ -11,6 +11,44 @@
 #include <imgui_internal.h>
 
 
+namespace
+{
+	// The editor's side of play mode: the scene editor, the scene module, the scripts and the game clock.
+	class EditorPlayHost final : public wiwa::IPlayHost
+	{
+	public:
+		EditorPlayHost(wiwa::SceneEditor& editor, wiwa::SceneModule& scenes, wiwa::ScriptingModule& scripts)
+			: m_Editor(editor), m_Scenes(scenes), m_Scripts(scripts) {}
+
+		virtual Ref<wiwa::Scene> edit_scene() override { return m_Editor.get_scene(); }
+		virtual bool can_play() override { return !m_Editor.is_opening() && !m_Editor.has_pending(); }
+		virtual wiwa::EditorDocument capture_document() override { return m_Editor.capture_document(); }
+
+		virtual void show_scene(Ref<wiwa::Scene> scene, bool playing) override
+		{
+			m_Scenes.set_active(scene);
+			m_Editor.set_playing(playing);
+			if (playing)
+			{
+				m_Editor.set_scene(scene);
+			}
+		}
+
+		virtual void restore_document(Ref<wiwa::Scene> scene, const wiwa::EditorDocument& document) override { m_Editor.restore_document(std::move(scene), document); }
+		virtual Ref<wiwa::Scene> active_scene() override { return m_Scenes.get_active(); }
+		virtual void start_scripts() override { m_Scripts.start(); }
+		virtual void stop_scripts() override { m_Scripts.stop(); }
+		virtual void time_play() override { wiwa::Engine::get().get_time().play_game(); }
+		virtual void time_stop() override { wiwa::Engine::get().get_time().stop_game(); }
+		virtual void time_pause(bool paused) override { wiwa::Engine::get().get_time().set_game_pause(paused); }
+
+	private:
+		wiwa::SceneEditor& m_Editor;
+		wiwa::SceneModule& m_Scenes;
+		wiwa::ScriptingModule& m_Scripts;
+	};
+}
+
 void EditorModule::init()
 {
 	const std::string editorTitle = fmt::format("Wiwa2 Editor - ({0}) <{1}>", "Default project", WI_BUILD_CONFIGURATION);
@@ -24,6 +62,13 @@ void EditorModule::init()
 	m_SceneEditor = CreateScope<wiwa::SceneEditor>(*wiwa::Engine::get().get_module<wiwa::AssetManager>(), *scenes);
 	m_SceneEditor->set_scene(scenes->get_active());
 	m_SceneEditor->set_follow_module(true);
+
+	m_PlayHost = CreateScope<EditorPlayHost>(*m_SceneEditor, *scenes, *wiwa::Engine::get().get_module<wiwa::ScriptingModule>());
+	m_PlayMode = CreateScope<wiwa::PlayMode>(*m_PlayHost);
+	for (const std::string& argument : wiwa::Engine::get().get_arguments())
+	{
+		m_PlaySmoke = m_PlaySmoke || argument == "--play-smoke";
+	}
 
 	m_Panels.push_back(CreateRef<HierarchyPanel>(*m_SceneEditor));
 	m_Panels.push_back(CreateRef<InspectorPanel>(*m_SceneEditor));
@@ -45,7 +90,11 @@ void EditorModule::init()
 
 void EditorModule::shutdown()
 {
-	
+	// leaving while the scene plays: the scripts end and the scene that was being edited is the one that is left
+	if (m_PlayMode != nullptr)
+	{
+		m_PlayMode->stop();
+	}
 }
 
 void EditorModule::pre_update(float deltaTime)
@@ -54,6 +103,15 @@ void EditorModule::pre_update(float deltaTime)
 
 void EditorModule::update(float deltaTime)
 {
+	m_Frame++;
+	if (m_PlaySmoke && m_Frame == 30)
+	{
+		const std::string failure = run_play_smoke();
+		WI_INFO("Editor", "{0}", failure.empty() ? std::string("Play smoke test passed") : "Play smoke test FAILED: " + failure);
+		wiwa::Engine::get().set_exit_code(failure.empty() ? 0 : 1);
+		wiwa::Engine::get().request_quit();
+	}
+
 	main_bar();
 	dock_space();
 
@@ -76,6 +134,8 @@ void EditorModule::update(float deltaTime)
 
 void EditorModule::post_update(float deltaTime)
 {
+	// after the scripts ran: a step ends here, and a scene a script loaded becomes the one that plays
+	m_PlayMode->update();
 }
 
 void EditorModule::pre_physics_update(float deltaTime)
@@ -224,16 +284,132 @@ void EditorModule::main_bar()
 	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
 	float height = ImGui::GetFrameHeight();
 
+	// the bar is tinted while the scene plays, so that nobody edits the copy thinking it is the scene
+	const bool playing = m_PlayMode->state() != wiwa::PlayState::Edit;
+	if (playing)
+	{
+		ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4{ 0.55f, 0.28f, 0.05f, 1.0f });
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{ 0.55f, 0.28f, 0.05f, 1.0f });
+	}
+
 	if (ImGui::BeginViewportSideBar("##SecondaryMenuBar", viewport, ImGuiDir_Up, height, window_flags))
 	{
 		if (ImGui::BeginMenuBar())
 		{
-			
-
+			play_toolbar();
 			ImGui::EndMenuBar();
 		}
 		ImGui::End();
 	}
+
+	if (playing)
+	{
+		ImGui::PopStyleColor(2);
+	}
+}
+
+void EditorModule::play_toolbar()
+{
+	const wiwa::PlayState state = m_PlayMode->state();
+
+	if (state == wiwa::PlayState::Edit)
+	{
+		ImGui::BeginDisabled(!m_PlayHost->can_play());
+		if (ImGui::Button("Play"))
+		{
+			m_PlayMode->play();
+		}
+		ImGui::EndDisabled();
+	}
+	else if (ImGui::Button("Stop"))
+	{
+		m_PlayMode->stop();
+	}
+
+	ImGui::BeginDisabled(state == wiwa::PlayState::Edit);
+	if (ImGui::Button(state == wiwa::PlayState::Paused ? "Resume" : "Pause"))
+	{
+		if (state == wiwa::PlayState::Paused)
+		{
+			m_PlayMode->resume();
+		}
+		else
+		{
+			m_PlayMode->pause();
+		}
+	}
+	ImGui::EndDisabled();
+
+	ImGui::BeginDisabled(state != wiwa::PlayState::Paused);
+	if (ImGui::Button("Step"))
+	{
+		m_PlayMode->step();
+	}
+	ImGui::EndDisabled();
+
+	if (state != wiwa::PlayState::Edit)
+	{
+		ImGui::TextUnformatted(state == wiwa::PlayState::Paused ? "  Paused (changes to this scene are lost on Stop)" : "  Playing (changes to this scene are lost on Stop)");
+	}
+}
+
+std::string EditorModule::run_play_smoke()
+{
+	wiwa::SceneModule* scenes = wiwa::Engine::get().get_module<wiwa::SceneModule>();
+	Ref<wiwa::Scene> edit = m_SceneEditor->get_scene();
+
+	const entt::entity probe = m_SceneEditor->create_entity(entt::null);
+	const entt::entity other = m_SceneEditor->create_entity(entt::null);
+	const wiwa::EntityGuid probeGuid = edit->registry().get<wiwa::Id>(probe).Guid;
+	const wiwa::EntityGuid otherGuid = edit->registry().get<wiwa::Id>(other).Guid;
+	const bool dirtyBefore = m_SceneEditor->dirty();
+	const glm::vec3 positionBefore = edit->registry().get<wiwa::Transform>(probe).Position;
+
+	m_PlayMode->play();
+	if (m_PlayMode->state() != wiwa::PlayState::Playing)
+	{
+		return "play did not start";
+	}
+
+	Ref<wiwa::Scene> clone = m_PlayMode->play_scene();
+	if (clone == nullptr || clone == edit || scenes->get_active() != clone || m_SceneEditor->get_scene() != clone || !m_SceneEditor->playing())
+	{
+		return "the clone is not the scene that is shown";
+	}
+	const entt::entity cloneProbe = clone->find(probeGuid);
+	const entt::entity cloneOther = clone->find(otherGuid);
+	if (cloneProbe == entt::null || cloneOther == entt::null)
+	{
+		return "the clone lacks the entities of the edit scene";
+	}
+
+	clone->registry().get<wiwa::Transform>(cloneProbe).Position = glm::vec3(9.0f);
+	clone->destroy(cloneOther);
+
+	m_PlayMode->pause();
+	m_PlayMode->step();
+	m_PlayMode->update();
+	m_PlayMode->update();
+	if (m_PlayMode->state() != wiwa::PlayState::Paused)
+	{
+		return "step left play mode";
+	}
+	m_PlayMode->resume();
+	m_PlayMode->stop();
+
+	if (m_PlayMode->state() != wiwa::PlayState::Edit || scenes->get_active() != edit || m_SceneEditor->get_scene() != edit || m_SceneEditor->playing())
+	{
+		return "the edit scene was not put back";
+	}
+	if (edit->registry().get<wiwa::Transform>(probe).Position != positionBefore || edit->find(otherGuid) == entt::null)
+	{
+		return "the edit scene was changed by playing";
+	}
+	if (m_SceneEditor->dirty() != dirtyBefore)
+	{
+		return "the dirty flag changed";
+	}
+	return {};
 }
 
 void EditorModule::set_theme()
