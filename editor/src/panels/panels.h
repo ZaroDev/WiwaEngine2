@@ -5,6 +5,7 @@
 #include "build_settings_panel.h"
 #include "exposure_panel.h"
 #include "lighting_panel.h"
+#include "material_panel.h"
 #include "tonemap_panel.h"
 #include "environment_panel.h"
 #include "hierarchy_panel.h"

@@ -619,6 +619,50 @@ namespace wiwa
 			check(second.ShaderPath == "x.wshader" && second.Params.contains("Wobble") && second.Material.RoughnessFactor == 0.5f, "material_roundtrip_keeps_unknown_keys: known keys survive");
 			check(!read_material_file(dir / "nope.wmat", first, fileError) && !fileError.empty(), "a missing .wmat is an error");
 
+			// material_create_unique_names: three creations give three distinct files holding the defaults
+			{
+				std::filesystem::path created[3];
+				for (std::filesystem::path& path : created)
+				{
+					path = create_material_file(dir, "New material");
+				}
+				std::error_code existsError;
+				const bool distinct = created[0] != created[1] && created[1] != created[2] && created[0] != created[2];
+				check(distinct && !created[0].empty() && !created[1].empty() && !created[2].empty(), "material_create_unique_names: three distinct paths");
+				check(created[0].filename() == "New material.wmat" && created[1].filename() == "New material 2.wmat" && created[2].filename() == "New material 3.wmat",
+					"material_create_unique_names: the names count up");
+				for (const std::filesystem::path& path : created)
+				{
+					MaterialFileData read;
+					std::string createError;
+					const MaterialData defaults{};
+					const bool ok = !path.empty() && std::filesystem::exists(path, existsError) && read_material_file(path, read, createError);
+					check(ok && read.Material.BaseColorFactor == defaults.BaseColorFactor && read.Material.RoughnessFactor == defaults.RoughnessFactor &&
+						read.Material.MetallicFactor == defaults.MetallicFactor && read.Material.AlphaCutoff == defaults.AlphaCutoff &&
+						read.Material.Alpha == defaults.Alpha && read.ShaderPath.empty() && read.BaseColorPath.empty(), "material_create_unique_names: the file reads back as the defaults");
+				}
+			}
+
+			// material_write_clean_floats: 0.35f is written as 0.35, and no temporary file is left behind
+			{
+				MaterialFileData data;
+				data.Material.RoughnessFactor = 0.35f;
+				data.Material.BaseColorFactor = glm::vec4(0.1f, 0.2f, 0.3f, 1.0f);
+				const std::filesystem::path clean = dir / "clean.wmat";
+				std::string cleanError;
+				check(write_material_file(clean, data, cleanError), "material_write_clean_floats: write");
+				std::ifstream in(clean, std::ios::binary);
+				const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+				check(text.find("0.35,") != std::string::npos && text.find("0.3499") == std::string::npos && text.find("0.2,") != std::string::npos &&
+					text.find("0.1,") != std::string::npos, "material_write_clean_floats: floats are written with their shortest form");
+				bool leftover = false;
+				for (const auto& entry : std::filesystem::directory_iterator(dir, error))
+				{
+					leftover = leftover || entry.path().extension() == ".tmp";
+				}
+				check(!leftover, "material_write_atomic: no temporary file is left behind");
+			}
+
 			std::filesystem::remove_all(dir, error);
 			database.scan();
 		}

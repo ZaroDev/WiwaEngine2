@@ -4,6 +4,7 @@
 #include <imgui.h>
 
 #include <asset_pipeline/build_settings.h>
+#include <asset_pipeline/material_file.h>
 #include <asset_pipeline/meta_file.h>
 
 #include <IconFontCppHeaders/FontIcons/IconsForkAwesome.h>
@@ -151,6 +152,54 @@ const AssetBrowserPanel::FolderEntry* AssetBrowserPanel::find_folder(const std::
 		}
 	}
 	return nullptr;
+}
+
+const AssetBrowserPanel::FileEntry* AssetBrowserPanel::find_file(const std::filesystem::path& path) const
+{
+	std::vector<const FolderEntry*> pending;
+	for (const FolderEntry& root : m_Roots)
+	{
+		pending.push_back(&root);
+	}
+	while (!pending.empty())
+	{
+		const FolderEntry* folder = pending.back();
+		pending.pop_back();
+		for (const FileEntry& file : folder->Files)
+		{
+			std::error_code error;
+			if (file.Path.lexically_normal() == path.lexically_normal() || std::filesystem::equivalent(file.Path, path, error))
+			{
+				return &file;
+			}
+		}
+		for (const FolderEntry& child : folder->Children)
+		{
+			pending.push_back(&child);
+		}
+	}
+	return nullptr;
+}
+
+void AssetBrowserPanel::select_asset(const wiwa::AssetRef& ref)
+{
+	const std::optional<std::filesystem::path> source = m_Database.path_of(ref.Guid);
+	if (!source)
+	{
+		return;
+	}
+
+	rescan(); // a file created a moment ago may not be listed yet
+	const FileEntry* file = find_file(*source);
+	if (file == nullptr)
+	{
+		return;
+	}
+
+	m_Open = true;
+	m_Selected = file->Path;
+	m_CurrentDir = file->Path.parent_path();
+	m_Search[0] = '\0'; // a search would list files from the whole tree instead of the folder
 }
 
 const std::filesystem::path* AssetBrowserPanel::find_root(const std::filesystem::path& path) const
@@ -382,7 +431,14 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 	}
 	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
 	{
-		open_externally(file);
+		if (file.extension() == ".wmat" && m_OpenMaterial)
+		{
+			m_OpenMaterial(file);
+		}
+		else
+		{
+			open_externally(file);
+		}
 	}
 	ImGui::TextWrapped("%s", file.filename().string().c_str());
 }
@@ -399,6 +455,20 @@ void AssetBrowserPanel::draw_context_menu()
 		std::error_code error;
 		std::filesystem::create_directory(m_CurrentDir / "New folder", error);
 		rescan();
+	}
+
+	if (ImGui::MenuItem("New material"))
+	{
+		const std::filesystem::path created = wiwa::create_material_file(m_CurrentDir, "New material");
+		rescan();
+		if (!created.empty())
+		{
+			m_Selected = created;
+			if (m_OpenMaterial)
+			{
+				m_OpenMaterial(created);
+			}
+		}
 	}
 
 	std::error_code error;

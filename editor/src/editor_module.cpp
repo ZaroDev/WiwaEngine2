@@ -83,7 +83,8 @@ void EditorModule::init()
 	}
 
 	m_Panels.push_back(CreateRef<HierarchyPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<InspectorPanel>(*m_SceneEditor));
+	Ref<InspectorPanel> inspector = CreateRef<InspectorPanel>(*m_SceneEditor);
+	m_Panels.push_back(inspector);
 	m_Panels.push_back(CreateRef<EnvironmentPanel>(*m_SceneEditor));
 	m_Panels.push_back(CreateRef<LightingPanel>(*m_SceneEditor));
 	m_Panels.push_back(CreateRef<ExposurePanel>(*m_SceneEditor));
@@ -95,7 +96,15 @@ void EditorModule::init()
 	m_Panels.push_back(CreateRef<RendererPanel>());
 	m_Panels.push_back(CreateRef<QualityPanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
-	m_Panels.push_back(CreateRef<AssetBrowserPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
+	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>();
+	m_Panels.push_back(materialPanel);
+	Ref<AssetBrowserPanel> browser = CreateRef<AssetBrowserPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
+	m_Panels.push_back(browser);
+	// the panels live as long as m_Panels, which holds all of them until shutdown
+	MaterialPanel* materials = materialPanel.get();
+	AssetBrowserPanel* browserPanel = browser.get();
+	browser->set_open_material([materials](const std::filesystem::path& wmat) { materials->open(wmat); });
+	inspector->set_locate([browserPanel](const wiwa::AssetRef& ref) { browserPanel->select_asset(ref); });
 	m_Panels.push_back(CreateRef<BuildSettingsPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
 
 	set_theme();

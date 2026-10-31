@@ -30,4 +30,8 @@ namespace wiwa
 
 	// Writes "version": 1, every known key and the unknown ones, in a fixed key order.
 	bool write_material_file(const std::filesystem::path& file, const MaterialFileData& data, std::string& error);
+
+	// Writes a material with the defaults of MaterialData into directory, as "<baseName>.wmat" or the first free
+	// "<baseName> 2.wmat", "<baseName> 3.wmat", ... Returns the path, or an empty path if it could not be written.
+	std::filesystem::path create_material_file(const std::filesystem::path& directory, const std::string& baseName);
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,13 @@ public:
 
 	void on_update() override;
 	void on_draw() override;
+
+	// Shows the panel, goes to the folder of the asset's source file and selects the file. Does nothing for an asset the database
+	// does not know.
+	void select_asset(const wiwa::AssetRef& ref);
+
+	// What opening a .wmat (a double click, or "New material") calls; the editor points it at the Material panel.
+	void set_open_material(std::function<void(const std::filesystem::path&)> open) { m_OpenMaterial = std::move(open); }
 
 private:
 	struct FileEntry
@@ -43,6 +51,7 @@ private:
 	void draw_context_menu();
 
 	const FolderEntry* find_folder(const std::filesystem::path& path) const;
+	const FileEntry* find_file(const std::filesystem::path& path) const;
 	const std::filesystem::path* find_root(const std::filesystem::path& path) const;
 	void collect_matches(const FolderEntry& folder, std::vector<const FileEntry*>& out) const;
 
@@ -51,6 +60,7 @@ private:
 	std::vector<FolderEntry> m_Roots{}; // one per source root of the database
 	std::filesystem::path m_CurrentDir{};
 	std::filesystem::path m_Selected{};
+	std::function<void(const std::filesystem::path&)> m_OpenMaterial{};
 
 	char m_Search[128] = "";
 	float m_ThumbnailScale = 1.f;       // scales the file cells

@@ -3,6 +3,8 @@
 
 #include <imgui.h>
 
+#include "asset_field.h"
+
 #include <scene/reflection/component_registry.h>
 #include <core/engine.h>
 #include <assets/asset_manager.h>
@@ -243,34 +245,46 @@ bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& 
 	case FieldType::Asset:
 	{
 		const AssetRef& ref = std::get<AssetRef>(current);
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 20.0f);
-		ImGui::InputText("##label", (char*)describe_ref(ref).c_str(), 64, ImGuiInputTextFlags_ReadOnly);
-		ImGui::PopStyleVar();
-		if (ImGui::BeginDragDropTarget())
+		std::string dropped;
+		switch (draw_asset_field(label, describe_ref(ref), ref.valid(), dropped))
 		{
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("WI_ASSET"))
+		case AssetFieldEvent::Dropped:
+		{
+			wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+			const std::optional<wiwa::AssetRef> found = assets != nullptr ? assets->find_asset(dropped) : std::nullopt;
+			if (found)
 			{
-				const std::string path = reinterpret_cast<const char*>(payload->Data);
-				wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
-				const std::optional<wiwa::AssetRef> found = assets != nullptr ? assets->find_asset(path) : std::nullopt;
-				if (found)
-				{
-					value = *found;
-					changed = true;
-				}
+				value = *found;
+				changed = true;
 			}
-			ImGui::EndDragDropTarget();
+			break;
 		}
-		if (ref.valid())
-		{
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Clear")) { value = AssetRef{}; changed = true; }
+		case AssetFieldEvent::Cleared: value = AssetRef{}; changed = true; break;
+		default: break;
 		}
 		break;
 	}
 	case FieldType::AssetList:
-		ImGui::Text("%s: %zu asset(s)", label, std::get<std::vector<AssetRef>>(current).size());
+	{
+		// the slots are shown, not edited here; each one can be found in the Asset Browser
+		const std::vector<AssetRef>& refs = std::get<std::vector<AssetRef>>(current);
+		ImGui::Text("%s: %zu asset(s)", label, refs.size());
+		for (size_t i = 0; i < refs.size(); i++)
+		{
+			ImGui::PushID(static_cast<int>(i));
+			ImGui::BulletText("%s", describe_ref(refs[i]).c_str());
+			if (refs[i].valid() && m_Locate)
+			{
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Locate"))
+				{
+					m_Locate(refs[i]);
+				}
+			}
+			ImGui::PopID();
+		}
 		break;
+	}
 	case FieldType::Entity:
 		ImGui::Text("%s: %s", label, std::get<EntityGuid>(current).valid() ? std::get<EntityGuid>(current).to_string().substr(0, 8).c_str() : "(none)");
 		break;

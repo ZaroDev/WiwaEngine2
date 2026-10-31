@@ -1,6 +1,8 @@
 #include <editor_common.h>
 #include "material_file.h"
 
+#include <charconv>
+#include <cstdlib>
 #include <set>
 
 #include "file_utils.h"
@@ -71,6 +73,20 @@ namespace wiwa
 			}
 			value = found->get<std::string>();
 			return true;
+		}
+
+		// A float written as the double it widens to shows 0.35f as 0.3499999940395355; this takes the shortest text that
+		// reads back as the same float and parses that, so the file says 0.35.
+		Json clean(float value)
+		{
+			char text[48];
+			const auto result = std::to_chars(text, text + sizeof(text) - 1, value);
+			if (result.ec != std::errc())
+			{
+				return value;
+			}
+			*result.ptr = '\0';
+			return std::strtod(text, nullptr);
 		}
 
 		const char* alpha_to_string(AlphaMode mode)
@@ -212,18 +228,18 @@ namespace wiwa
 		Json root = data.Extra.is_object() ? data.Extra : Json::object();
 		root["version"] = 1;
 		root["name"] = m.Name;
-		root["baseColor"] = { m.BaseColorFactor.x, m.BaseColorFactor.y, m.BaseColorFactor.z, m.BaseColorFactor.w };
-		root["metallic"] = m.MetallicFactor;
-		root["roughness"] = m.RoughnessFactor;
-		root["emissive"] = { m.EmissiveFactor.x, m.EmissiveFactor.y, m.EmissiveFactor.z };
+		root["baseColor"] = { clean(m.BaseColorFactor.x), clean(m.BaseColorFactor.y), clean(m.BaseColorFactor.z), clean(m.BaseColorFactor.w) };
+		root["metallic"] = clean(m.MetallicFactor);
+		root["roughness"] = clean(m.RoughnessFactor);
+		root["emissive"] = { clean(m.EmissiveFactor.x), clean(m.EmissiveFactor.y), clean(m.EmissiveFactor.z) };
 		root["alpha"] = alpha_to_string(m.Alpha);
-		root["alphaCutoff"] = m.AlphaCutoff;
+		root["alphaCutoff"] = clean(m.AlphaCutoff);
 		root["doubleSided"] = m.DoubleSided;
-		root["clearcoat"] = m.Clearcoat;
-		root["clearcoatRoughness"] = m.ClearcoatRoughness;
-		root["sheen"] = m.SheenIntensity;
-		root["sheenRoughness"] = m.SheenRoughness;
-		root["transmission"] = m.Transmission;
+		root["clearcoat"] = clean(m.Clearcoat);
+		root["clearcoatRoughness"] = clean(m.ClearcoatRoughness);
+		root["sheen"] = clean(m.SheenIntensity);
+		root["sheenRoughness"] = clean(m.SheenRoughness);
+		root["transmission"] = clean(m.Transmission);
 
 		Json textures = Json::object();
 		if (!data.BaseColorPath.empty()) textures["baseColor"] = data.BaseColorPath;
@@ -247,18 +263,53 @@ namespace wiwa
 		}
 
 		// Keys come out in alphabetical order (nlohmann::json keeps its objects sorted), so the file is the same for the same data.
-		std::ofstream out(file, std::ios::binary | std::ios::trunc);
-		if (!out)
+		// The text goes to a temporary file that then replaces the real one, so a reader (the importer, a crash) never sees half a file.
+		const std::filesystem::path temp = std::filesystem::path(file) += ".tmp";
 		{
-			error = "cannot write " + file.string();
-			return false;
+			std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+			if (!out)
+			{
+				error = "cannot write " + file.string();
+				return false;
+			}
+			out << root.dump(2) << "\n";
+			out.flush();
+			if (!out)
+			{
+				out.close();
+				std::error_code ignored;
+				std::filesystem::remove(temp, ignored);
+				error = "cannot write " + file.string();
+				return false;
+			}
 		}
-		out << root.dump(2) << "\n";
-		if (!out)
+
+		std::error_code renameError;
+		std::filesystem::rename(temp, file, renameError);
+		if (renameError)
 		{
-			error = "cannot write " + file.string();
+			std::error_code ignored;
+			std::filesystem::remove(temp, ignored);
+			error = "cannot replace " + file.string() + ": " + renameError.message();
 			return false;
 		}
 		return true;
+	}
+
+	std::filesystem::path create_material_file(const std::filesystem::path& directory, const std::string& baseName)
+	{
+		std::error_code exists;
+		std::filesystem::path path = directory / (baseName + ".wmat");
+		for (int number = 2; std::filesystem::exists(path, exists); number++)
+		{
+			path = directory / (baseName + " " + std::to_string(number) + ".wmat");
+		}
+
+		std::string error;
+		if (!write_material_file(path, MaterialFileData{}, error))
+		{
+			return {};
+		}
+		return path;
 	}
 }
