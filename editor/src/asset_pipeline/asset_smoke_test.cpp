@@ -9,6 +9,7 @@
 
 #include "build_settings.h"
 #include "file_utils.h"
+#include "material_file.h"
 #include "packager.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
@@ -519,6 +520,108 @@ namespace wiwa
 
 		const std::vector<CookedFile> cookedAfter = read_library(database.get_library_root());
 		check(cookedAfter.size() == cooked.size(), "the Library holds the same assets after a re-import");
+
+		// 6. material assets (.wmat)
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_material_smoke";
+			std::filesystem::create_directories(dir, error);
+
+			const unsigned char png[] = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0x64, 0xf8, 0xcf, 0x50, 0x0f, 0x00, 0x03, 0x86, 0x01, 0x80, 0x5a, 0x34, 0x7d, 0x6b, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82 };
+			{
+				std::ofstream out(dir / "pixel.png", std::ios::binary);
+				out.write(reinterpret_cast<const char*>(png), sizeof(png));
+			}
+
+			const auto write_text = [](const std::filesystem::path& path, const std::string& text)
+			{
+				std::ofstream out(path, std::ios::binary | std::ios::trunc);
+				out << text;
+			};
+
+			// the cooked material of a source file, straight from the Library
+			const auto cooked_material = [&](const std::filesystem::path& source, std::vector<AssetGuid>* dependencies = nullptr) -> std::optional<MaterialData>
+			{
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				if (!meta)
+				{
+					return std::nullopt;
+				}
+				for (const CookedFile& file : read_library(database.get_library_root()))
+				{
+					std::span<const std::byte> payload;
+					if (file.Guid == meta->Guid && file.Type == AssetType::Material && parse_wasset_header(file.Bytes, payload))
+					{
+						if (dependencies != nullptr)
+						{
+							*dependencies = file.Dependencies;
+						}
+						return deserialize<MaterialData>(payload);
+					}
+				}
+				return std::nullopt;
+			};
+
+			const auto full_material = [](double roughness)
+			{
+				nlohmann::json json = {
+					{ "version", 1 }, { "name", "Smoke" }, { "baseColor", { 0.1, 0.2, 0.3, 0.4 } }, { "metallic", 0.6 }, { "roughness", roughness },
+					{ "emissive", { 1.0, 2.0, 3.0 } }, { "alpha", "mask" }, { "alphaCutoff", 0.25 }, { "doubleSided", true },
+					{ "clearcoat", 0.7 }, { "clearcoatRoughness", 0.15 }, { "sheen", 0.45 }, { "sheenRoughness", 0.55 }, { "transmission", 0.65 },
+					{ "textures", { { "baseColor", "pixel.png" }, { "normal", "pixel.png" }, { "orm", "pixel.png" }, { "emissive", "pixel.png" } } } };
+				return json.dump(2);
+			};
+
+			const std::filesystem::path wmat = dir / "smoke.wmat";
+			write_text(wmat, full_material(0.35));
+			database.scan();
+
+			std::vector<AssetGuid> dependencies;
+			std::optional<MaterialData> material = cooked_material(wmat, &dependencies);
+			check(material.has_value(), "material_import_all_fields: the .wmat is cooked");
+			if (material)
+			{
+				check(material->Name == "Smoke" && material->BaseColorFactor == glm::vec4(0.1f, 0.2f, 0.3f, 0.4f) && material->MetallicFactor == 0.6f &&
+					material->RoughnessFactor == 0.35f && material->EmissiveFactor == glm::vec3(1.0f, 2.0f, 3.0f), "material_import_all_fields: name, color, metallic, roughness and emissive");
+				check(material->Alpha == AlphaMode::Mask && material->AlphaCutoff == 0.25f && material->DoubleSided, "material_import_all_fields: alpha mode, cutoff and double sided");
+				check(material->Clearcoat == 0.7f && material->ClearcoatRoughness == 0.15f && material->SheenIntensity == 0.45f &&
+					material->SheenRoughness == 0.55f && material->Transmission == 0.65f, "material_import_all_fields: clearcoat, sheen and transmission");
+				check(material->BaseColorTexture.valid() && material->NormalTexture.valid() && material->OrmTexture.valid() && material->EmissiveTexture.valid(), "material_import_all_fields: the four textures resolve");
+				check(std::find(dependencies.begin(), dependencies.end(), material->BaseColorTexture.resolved()) != dependencies.end(), "material_import_all_fields: the texture is a dependency");
+			}
+
+			write_text(wmat, full_material(0.9));
+			database.scan();
+			material = cooked_material(wmat);
+			check(material && material->RoughnessFactor == 0.9f, "material_reimport_on_edit: the cooked roughness follows the edit");
+
+			WI_ASSET_LOG(Info, "Smoke test: the next material import error is expected");
+			write_text(wmat, "{");
+			database.scan();
+			material = cooked_material(wmat);
+			check(material && material->RoughnessFactor == 0.9f && material->Name == "Smoke", "material_bad_json_keeps_previous: the previous cooked data still loads");
+
+			const std::filesystem::path missing = dir / "missing_texture.wmat";
+			write_text(missing, R"({ "version": 1, "roughness": 0.5, "textures": { "baseColor": "no_such_texture.png" } })");
+			WI_ASSET_LOG(Info, "Smoke test: the next material warning is expected");
+			database.scan();
+			material = cooked_material(missing);
+			check(material && !material->BaseColorTexture.valid() && material->RoughnessFactor == 0.5f, "material_missing_texture_warns: imports with an invalid texture ref");
+
+			const std::filesystem::path unknown = dir / "unknown.wmat";
+			write_text(unknown, R"({ "version": 1, "roughness": 0.5, "shader": "x.wshader", "params": { "Wobble": 0.5 }, "custom": { "a": [1, 2] }, "zzz": 3 })");
+			MaterialFileData first, second;
+			std::string fileError;
+			check(read_material_file(unknown, first, fileError), "material_roundtrip_keeps_unknown_keys: read");
+			check(write_material_file(dir / "copy.wmat", first, fileError), "material_roundtrip_keeps_unknown_keys: write");
+			check(read_material_file(dir / "copy.wmat", second, fileError), "material_roundtrip_keeps_unknown_keys: read back");
+			check(second.Extra == first.Extra && second.Extra.contains("custom") && second.Extra.contains("zzz") && second.Extra["custom"]["a"].size() == 2,
+				"material_roundtrip_keeps_unknown_keys: the unknown keys survive");
+			check(second.ShaderPath == "x.wshader" && second.Params.contains("Wobble") && second.Material.RoughnessFactor == 0.5f, "material_roundtrip_keeps_unknown_keys: known keys survive");
+			check(!read_material_file(dir / "nope.wmat", first, fileError) && !fileError.empty(), "a missing .wmat is an error");
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
 
 		std::filesystem::remove_all(temp, error);
 

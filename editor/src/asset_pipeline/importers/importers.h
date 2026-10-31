@@ -12,4 +12,5 @@ namespace wiwa
 	Scope<IImporter> create_model_importer();       // .gltf .glb .fbx
 	Scope<IImporter> create_scene_importer();       // .wscene
 	Scope<IImporter> create_script_importer();      // .lua
+	Scope<IImporter> create_material_importer();    // .wmat
 }
