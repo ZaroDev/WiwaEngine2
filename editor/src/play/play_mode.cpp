@@ -64,6 +64,7 @@ namespace wiwa
 		}
 
 		m_Host.stop_scripts(); // on_destroy runs while the scene it ran on is still the active one
+		m_Host.cancel_loads();
 		m_Host.time_stop();
 		m_Host.show_scene(m_EditScene, false);
 		m_Host.restore_document(m_EditScene, m_Document);
@@ -86,6 +87,7 @@ namespace wiwa
 		if (active != nullptr && active != m_PlayScene)
 		{
 			m_PlayScene = active;
+			m_Host.stop_scripts(); // the scripts may still hold the scene that was replaced, or already have stopped: start() needs them stopped
 			m_Host.start_scripts();
 		}
 

@@ -60,6 +60,11 @@ namespace wiwa
 		// not catalogued yet is looked for again for a while (the editor writes the catalog when its import has finished).
 		Ref<JobProgress> load_async(std::string_view sourcePath, LoadMode mode = LoadMode::Replace);
 
+		// Stops every load that is not done: the ones still reading, the one creating entities, and one asked for but not taken up yet. None of
+		// them touches a scene afterwards. Main thread. For whoever replaces the scene by hand (play mode's Stop) and must not have a late
+		// load land in or replace it.
+		void cancel_loads();
+
 		// The load that `--scene <path>` started when the module did; null if there was no such argument.
 		Ref<JobProgress> get_startup_load() const { return m_StartupLoad; }
 

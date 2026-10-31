@@ -136,6 +136,23 @@ namespace wiwa
 		retire(std::move(old));
 	}
 
+	void SceneModule::cancel_loads()
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		// every op that has not ended is in m_Running (m_Current too): update_commit drops the one it is creating when it sees the request
+		for (const Ref<LoadOp>& op : m_Running)
+		{
+			op->Progress->request_cancel();
+		}
+		if (m_Pending != nullptr)
+		{
+			// asked for, not taken up by update(): nobody else will finish its progress object
+			m_Pending->Progress->set_stage("Cancelled");
+			m_Pending->Progress->finish(false);
+			m_Pending.reset();
+		}
+	}
+
 	bool SceneModule::is_loading() const
 	{
 		// every op that has not ended is in m_Running, from the moment it is asked for (m_Current belongs to the main thread)

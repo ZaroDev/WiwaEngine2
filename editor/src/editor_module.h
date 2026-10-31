@@ -47,6 +47,9 @@ private:
 	Scope<wiwa::PlayMode> m_PlayMode;
 	bool m_PlaySmoke = false;
 	wiwa::u32 m_Frame = 0;
+	wiwa::u32 m_PlaySmokeFinalFrame = 0;
+	Ref<wiwa::Scene> m_PlaySmokeEdit{};
+	size_t m_PlaySmokeCount = 0;
 	int m_Operation = ImGuizmo::TRANSLATE;
 	bool m_LocalSpace = false;
 };

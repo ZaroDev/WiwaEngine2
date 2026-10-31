@@ -21,6 +21,7 @@ namespace wiwa
 		virtual Ref<Scene> active_scene() = 0;                        // the SceneModule's active scene now
 		virtual void start_scripts() = 0;
 		virtual void stop_scripts() = 0;
+		virtual void cancel_loads() = 0;                              // scene loads still running: a scene that arrives after Stop must not replace the edit scene
 		virtual void time_play() = 0;
 		virtual void time_stop() = 0;
 		virtual void time_pause(bool paused) = 0;

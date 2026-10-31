@@ -1430,6 +1430,17 @@ namespace wiwa
 				t.update();
 				check(frozen && t.get_game_clock().TimeSinceClock.count() > paused, "pause_stops_the_game_clock");
 			}
+
+			{
+				Time t;
+				t.init();
+				t.update();
+				t.pause_game();
+				std::this_thread::sleep_for(std::chrono::milliseconds(150));
+				t.unpause_game();
+				t.update();
+				check(t.get_delta_time_seconds() < 0.05f && t.get_game_clock().TimeSinceClock.count() < 0.1f, "resume_does_not_deliver_the_time_spent_paused");
+			}
 		}
 
 		bool entity_records_equal(const EntityRecord& a, const EntityRecord& b)
@@ -1655,6 +1666,7 @@ namespace wiwa
 			virtual Ref<Scene> active_scene() override { return Active; }
 			virtual void start_scripts() override { Calls.push_back("start_scripts"); }
 			virtual void stop_scripts() override { Calls.push_back("stop_scripts"); }
+			virtual void cancel_loads() override { Calls.push_back("cancel_loads"); }
 			virtual void time_play() override { Calls.push_back("time_play"); }
 			virtual void time_stop() override { Calls.push_back("time_stop"); }
 			virtual void time_pause(bool paused) override { Calls.push_back(paused ? "time_pause(true)" : "time_pause(false)"); }
@@ -1740,7 +1752,7 @@ namespace wiwa
 				mode.play();
 				host.Calls.clear();
 				mode.stop();
-				check(host.Calls == Calls({ "stop_scripts", "time_stop", "show_scene(edit)", "restore_document" }) && host.LastRestored == host.Edit && host.Active == host.Edit
+				check(host.Calls == Calls({ "stop_scripts", "cancel_loads", "time_stop", "show_scene(edit)", "restore_document" }) && host.LastRestored == host.Edit && host.Active == host.Edit
 					&& mode.state() == PlayState::Edit && mode.play_scene() == nullptr, "stop_order_and_the_edit_scene_comes_back");
 			}
 
@@ -1751,7 +1763,7 @@ namespace wiwa
 				mode.pause();
 				host.Calls.clear();
 				mode.stop();
-				check(host.Calls == Calls({ "stop_scripts", "time_stop", "show_scene(edit)", "restore_document" }) && mode.state() == PlayState::Edit, "stop_from_paused");
+				check(host.Calls == Calls({ "stop_scripts", "cancel_loads", "time_stop", "show_scene(edit)", "restore_document" }) && mode.state() == PlayState::Edit, "stop_from_paused");
 			}
 
 			{
@@ -1763,7 +1775,7 @@ namespace wiwa
 				host.Calls.clear();
 				mode.update();
 				mode.update();
-				const bool followed = mode.play_scene() == loaded && host.count("start_scripts") == 1;
+				const bool followed = mode.play_scene() == loaded && host.count("start_scripts") == 1 && host.count("stop_scripts") == 1;
 				mode.stop();
 				check(followed && host.LastRestored == host.Edit && host.Active == host.Edit, "scene_replaced_during_play_restarts_scripts_and_stop_restores_the_original");
 			}

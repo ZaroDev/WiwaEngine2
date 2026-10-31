@@ -21,7 +21,12 @@ namespace
 			: m_Editor(editor), m_Scenes(scenes), m_Scripts(scripts) {}
 
 		virtual Ref<wiwa::Scene> edit_scene() override { return m_Editor.get_scene(); }
-		virtual bool can_play() override { return !m_Editor.is_opening() && !m_Editor.has_pending(); }
+		// not while a scene is opening, a prefab expansion is pending, any scene load is running, or the editor still shows an older scene than
+		// the module's (a load that just finished): the copy would be of the wrong scene
+		virtual bool can_play() override
+		{
+			return !m_Editor.is_opening() && !m_Editor.has_pending() && !m_Scenes.is_loading() && m_Editor.get_scene() == m_Scenes.get_active();
+		}
 		virtual wiwa::EditorDocument capture_document() override { return m_Editor.capture_document(); }
 
 		virtual void show_scene(Ref<wiwa::Scene> scene, bool playing) override
@@ -30,7 +35,9 @@ namespace
 			m_Editor.set_playing(playing);
 			if (playing)
 			{
+				const wiwa::EditorDocument shown = m_Editor.capture_document();
 				m_Editor.set_scene(scene);
+				m_Editor.select(shown.Selected.valid() ? scene->find(shown.Selected) : entt::entity{ entt::null }); // the same entity in the copy
 			}
 		}
 
@@ -38,6 +45,7 @@ namespace
 		virtual Ref<wiwa::Scene> active_scene() override { return m_Scenes.get_active(); }
 		virtual void start_scripts() override { m_Scripts.start(); }
 		virtual void stop_scripts() override { m_Scripts.stop(); }
+		virtual void cancel_loads() override { m_Scenes.cancel_loads(); }
 		virtual void time_play() override { wiwa::Engine::get().get_time().play_game(); }
 		virtual void time_stop() override { wiwa::Engine::get().get_time().stop_game(); }
 		virtual void time_pause(bool paused) override { wiwa::Engine::get().get_time().set_game_pause(paused); }
@@ -107,6 +115,28 @@ void EditorModule::update(float deltaTime)
 	if (m_PlaySmoke && m_Frame == 30)
 	{
 		const std::string failure = run_play_smoke();
+		if (!failure.empty())
+		{
+			WI_INFO("Editor", "Play smoke test FAILED: {0}", failure);
+		}
+		if (!failure.empty())
+		{
+			wiwa::Engine::get().set_exit_code(1);
+			wiwa::Engine::get().request_quit();
+		}
+	}
+	if (m_PlaySmoke && m_PlaySmokeFinalFrame != 0 && m_Frame == m_PlaySmokeFinalFrame)
+	{
+		wiwa::SceneModule* scenes = wiwa::Engine::get().get_module<wiwa::SceneModule>();
+		std::string failure;
+		if (scenes->get_active() != m_PlaySmokeEdit || m_SceneEditor->get_scene() != m_PlaySmokeEdit)
+		{
+			failure = "a load that outlived Stop replaced the edit scene";
+		}
+		else if (m_PlaySmokeEdit->registry().storage<wiwa::Id>().size() != m_PlaySmokeCount)
+		{
+			failure = "a load that outlived Stop added entities to the edit scene";
+		}
 		WI_INFO("Editor", "{0}", failure.empty() ? std::string("Play smoke test passed") : "Play smoke test FAILED: " + failure);
 		wiwa::Engine::get().set_exit_code(failure.empty() ? 0 : 1);
 		wiwa::Engine::get().request_quit();
@@ -365,11 +395,22 @@ std::string EditorModule::run_play_smoke()
 	const bool dirtyBefore = m_SceneEditor->dirty();
 	const glm::vec3 positionBefore = edit->registry().get<wiwa::Transform>(probe).Position;
 
+	m_SceneEditor->select(probe);
+	m_PlaySmokeEdit = edit;
+	m_PlaySmokeCount = edit->registry().storage<wiwa::Id>().size();
+
 	m_PlayMode->play();
 	if (m_PlayMode->state() != wiwa::PlayState::Playing)
 	{
 		return "play did not start";
 	}
+	if (m_SceneEditor->selected() == entt::null || m_PlayMode->play_scene()->registry().get<wiwa::Id>(m_SceneEditor->selected()).Guid != probeGuid)
+	{
+		return "the selection was lost when play started";
+	}
+
+	// a script asks for a scene to be added, and Stop comes before the load is done: it must not end up in the scene being edited
+	scenes->load_async(std::string_view("assets/scenes/demo.wscene"), wiwa::LoadMode::Additive);
 
 	Ref<wiwa::Scene> clone = m_PlayMode->play_scene();
 	if (clone == nullptr || clone == edit || scenes->get_active() != clone || m_SceneEditor->get_scene() != clone || !m_SceneEditor->playing())
@@ -409,6 +450,7 @@ std::string EditorModule::run_play_smoke()
 	{
 		return "the dirty flag changed";
 	}
+	m_PlaySmokeFinalFrame = m_Frame + 90; // and later: nothing may have landed in the edit scene
 	return {};
 }
 
