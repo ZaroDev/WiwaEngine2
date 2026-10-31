@@ -81,6 +81,15 @@ namespace wiwa
 			throw sol::error("'" + name + "' names more than one script: " + paths);
 		}
 
+		// The components every entity has and the scene keeps consistent: a script cannot add or remove them.
+		void require_changeable(const ComponentInfo& info)
+		{
+			if (info.Name == "Id" || info.Name == "Name" || info.Name == "Transform" || info.Name == "PrefabInstance")
+			{
+				throw sol::error("component '" + info.Name + "' cannot be added or removed by a script");
+			}
+		}
+
 		const ComponentInfo& component_of_proxy(const ComponentProxy& proxy)
 		{
 			const ComponentInfo* info = ComponentRegistry::get().find(proxy.Component);
@@ -126,8 +135,8 @@ namespace wiwa
 				{
 					const ComponentInfo& info = component_of_proxy(proxy);
 					const size_t field = field_of(info, key);
+					const entt::entity entity = entity_of(proxy.Handle); // checks that the entity, and so the scene, is there
 					entt::registry& registry = proxy.Handle.Context->ActiveScene->registry();
-					const entt::entity entity = entity_of(proxy.Handle);
 					if (!info.Has(registry, entity))
 					{
 						throw sol::error("the entity has no component '" + info.display_name() + "'");
@@ -138,8 +147,8 @@ namespace wiwa
 				{
 					const ComponentInfo& info = component_of_proxy(proxy);
 					const size_t field = field_of(info, key);
+					const entt::entity entity = entity_of(proxy.Handle); // checks that the entity, and so the scene, is there
 					entt::registry& registry = proxy.Handle.Context->ActiveScene->registry();
-					const entt::entity entity = entity_of(proxy.Handle);
 					if (!info.Has(registry, entity))
 					{
 						throw sol::error("the entity has no component '" + info.display_name() + "'");
@@ -182,12 +191,14 @@ namespace wiwa
 				"add", [&context](const EntityHandle& handle, const std::string& name)
 				{
 					const ComponentInfo& info = find_component(context, name);
+					require_changeable(info);
 					info.Add(scene_of(context).registry(), entity_of(handle));
 					return ComponentProxy{ handle, info.Name };
 				},
 				"remove", [&context](const EntityHandle& handle, const std::string& name)
 				{
 					const ComponentInfo& info = find_component(context, name);
+					require_changeable(info);
 					info.Remove(scene_of(context).registry(), entity_of(handle));
 				},
 

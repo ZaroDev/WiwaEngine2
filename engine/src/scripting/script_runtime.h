@@ -57,18 +57,31 @@ namespace wiwa
 
 		// Calls into Lua always go through here: the call gets a fresh instruction budget, so a script that never returns ends
 		// with an error instead of freezing the engine.
+		// A call made while another is running (a bound function calling back into Lua) shares the budget of the outer one.
 		template<typename... Args>
 		sol::protected_function_result call(const sol::protected_function& function, Args&&... args)
 		{
-			begin_call();
-			return function(std::forward<Args>(args)...);
+			CallScope scope(*this);
+			sol::protected_function_result result = function(std::forward<Args>(args)...);
+			if (m_Depth > 1 && over_budget())
+			{
+				// a nested protected call may have swallowed the error that ended the script; pass it on to the outer one
+				throw sol::error("script exceeded instruction budget");
+			}
+			return result;
 		}
+
+		// table[key] as a protected call: a metamethod of the table that raises an error gives false and the message, never a panic (sol2
+		// aborts the process on an error that no protected call catches). Everything that reads a table a script made goes through here.
+		bool protected_get(const sol::table& table, const sol::object& key, sol::object& out, std::string& error);
 
 		void set_instruction_budget(u64 instructions) { m_Budget = instructions; }
 		u64 instruction_budget() const { return m_Budget; }
 
 		// Used by the Lua count hook: true once the call has used more than the budget.
 		bool consume_budget(u64 instructions);
+		// True once the running call went over its budget; the pcall wrappers use it to pass the error on instead of swallowing it.
+		bool over_budget() const { return m_Used > m_Budget; }
 
 	private:
 		// A script that has run once: what its chunk returned (a class table, or any module value).
@@ -79,13 +92,25 @@ namespace wiwa
 			sol::object Value{};
 		};
 
-		void begin_call() { m_Used = 0; }
+		struct CallScope
+		{
+			explicit CallScope(ScriptRuntime& runtime) : Runtime(runtime)
+			{
+				if (Runtime.m_Depth++ == 0)
+				{
+					Runtime.m_Used = 0;
+				}
+			}
+			~CallScope() { Runtime.m_Depth--; }
+			ScriptRuntime& Runtime;
+		};
 		Module* run_module(const LoadedScript& script, std::string& error);
 		sol::object require_module(std::string path, const std::string& requirer);
 
 		IScriptSource& m_Source;
 		sol::state m_Lua{};
 		sol::table m_Sandbox{};
+		sol::protected_function m_Get{}; // (declared after m_Lua so that it goes first) function(table, key) return table[key] end
 		std::map<AssetGuid, std::unique_ptr<ScriptClass>> m_Classes{};
 		std::map<AssetGuid, std::unique_ptr<Module>> m_Modules{};
 		bool m_Reloading = false;                                  // reload_script is running the new versions
@@ -96,5 +121,6 @@ namespace wiwa
 		std::map<std::string, std::vector<std::string>> m_Requirers{}; // path -> the paths that require it directly
 		u64 m_Budget = 50'000'000;
 		u64 m_Used = 0;
+		u32 m_Depth = 0;
 	};
 }

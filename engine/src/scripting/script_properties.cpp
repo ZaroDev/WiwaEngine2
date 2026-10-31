@@ -8,6 +8,18 @@ namespace wiwa
 {
 	namespace
 	{
+		// A definition table is plain data: it is read without metamethods, so reading it cannot run (or fail in) script code.
+		template<typename T>
+		sol::optional<T> raw_field(const sol::table& table, const char* key)
+		{
+			const sol::object value = table.raw_get<sol::object>(key);
+			if (value.is<T>())
+			{
+				return value.as<T>();
+			}
+			return sol::nullopt;
+		}
+
 		bool equals_ignore_case(const std::string& a, const std::string& b)
 		{
 			return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y)
@@ -29,14 +41,14 @@ namespace wiwa
 			static const char* const rgba[] = { "r", "g", "b", "a" };
 			for (int i = 0; i < count; i++)
 			{
-				sol::object value = table[i + 1];
+				sol::object value = table.raw_get<sol::object>(i + 1);
 				if (!value.is<double>())
 				{
-					value = table[xyzw[i]];
+					value = table.raw_get<sol::object>(xyzw[i]);
 				}
 				if (!value.is<double>())
 				{
-					value = table[rgba[i]];
+					value = table.raw_get<sol::object>(rgba[i]);
 				}
 				if (!value.is<double>())
 				{
@@ -206,7 +218,7 @@ namespace wiwa
 			FieldDescriptor field;
 			field.Name = name;
 
-			const sol::optional<std::string> typeName = entry["type"];
+			const sol::optional<std::string> typeName = raw_field<std::string>(entry, "type");
 			if (!typeName)
 			{
 				error = "property '" + name + "' has no type";
@@ -221,8 +233,8 @@ namespace wiwa
 
 			if (field.Type == FieldType::Float || field.Type == FieldType::Int)
 			{
-				const sol::optional<double> minimum = entry["min"];
-				const sol::optional<double> maximum = entry["max"];
+				const sol::optional<double> minimum = raw_field<double>(entry, "min");
+				const sol::optional<double> maximum = raw_field<double>(entry, "max");
 				if (minimum && maximum)
 				{
 					field.Meta = FieldMeta::range(static_cast<float>(*minimum), static_cast<float>(*maximum));
@@ -234,21 +246,25 @@ namespace wiwa
 			}
 			else if (field.Type == FieldType::Enum)
 			{
-				const sol::optional<sol::table> names = entry["names"];
+				const sol::optional<sol::table> names = raw_field<sol::table>(entry, "names");
 				if (!names)
 				{
 					error = "property '" + name + "' is an enum and needs `names`";
 					return {};
 				}
-				for (size_t i = 1; i <= names->size(); i++)
+				for (int i = 1;; i++)
 				{
-					const sol::optional<std::string> label = (*names)[i];
-					if (!label)
+					const sol::object label = names->raw_get<sol::object>(i);
+					if (label.get_type() == sol::type::lua_nil)
+					{
+						break;
+					}
+					if (!label.is<std::string>())
 					{
 						error = "property '" + name + "': `names` must be strings";
 						return {};
 					}
-					field.Meta.EnumNames.push_back(*label);
+					field.Meta.EnumNames.push_back(label.as<std::string>());
 				}
 				if (field.Meta.EnumNames.empty())
 				{
@@ -258,7 +274,7 @@ namespace wiwa
 			}
 			else if (field.Type == FieldType::Asset || field.Type == FieldType::AssetList)
 			{
-				const sol::optional<std::string> assetName = entry["asset"];
+				const sol::optional<std::string> assetName = raw_field<std::string>(entry, "asset");
 				if (!assetName)
 				{
 					error = "property '" + name + "' holds assets and needs `asset` (the asset type)";
@@ -278,12 +294,12 @@ namespace wiwa
 				}
 			}
 
-			if (const sol::optional<std::string> tooltip = entry["tooltip"])
+			if (const sol::optional<std::string> tooltip = raw_field<std::string>(entry, "tooltip"))
 			{
 				field.Meta.Tooltip = *tooltip;
 			}
 
-			const sol::object defaultValue = entry["default"];
+			const sol::object defaultValue = entry.raw_get<sol::object>("default");
 			if (defaultValue.valid() && defaultValue.get_type() != sol::type::lua_nil)
 			{
 				if (!read_default(defaultValue, field))

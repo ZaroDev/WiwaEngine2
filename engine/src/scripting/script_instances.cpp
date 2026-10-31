@@ -60,6 +60,11 @@ namespace wiwa
 
 	ScriptClass* ScriptInstances::class_of(AssetGuid script)
 	{
+		if (m_BrokenScripts.contains(script))
+		{
+			return nullptr; // it failed to load: not tried again until the scripts start again
+		}
+
 		std::string error;
 		ScriptClass* scriptClass = m_Runtime.load(AssetRef{ script, 0 }, error);
 		if (scriptClass == nullptr && m_BrokenScripts.insert(script).second)
@@ -92,7 +97,14 @@ namespace wiwa
 
 	bool ScriptInstances::call_hook(Instance& instance, const char* hook, const float* deltaTime)
 	{
-		const sol::object member = instance.Class->Class[hook];
+		sol::object member;
+		std::string lookupError;
+		if (!m_Runtime.protected_get(instance.Class->Class, sol::make_object(m_Runtime.state().lua_state(), hook), member, lookupError))
+		{
+			WI_SCRIPT_LOG(Error, "{0}: {1} failed: {2}", describe(instance), hook, lookupError);
+			instance.Failed = true;
+			return false;
+		}
 		if (member.get_type() != sol::type::function)
 		{
 			return true; // a script does not have to have every hook
@@ -219,7 +231,13 @@ namespace wiwa
 					return sol::make_object(lua, m_Scene->registry().get<Name>(entity).Value);
 				}
 			}
-			return scriptClass->Class[sol::object(key)];
+			sol::object member;
+			std::string lookupError;
+			if (!m_Runtime.protected_get(scriptClass->Class, sol::object(key), member, lookupError))
+			{
+				throw sol::error(lookupError);
+			}
+			return member;
 		};
 
 		meta["__newindex"] = [this, scriptClass, handle, componentName, entityScript, find_property](sol::table self, sol::stack_object key, sol::stack_object value)
@@ -245,7 +263,10 @@ namespace wiwa
 				{
 					throw sol::error(scriptClass->Name + ": the entity no longer exists");
 				}
-				info->Set(m_Scene->registry(), entity, static_cast<size_t>(info->field_index(property->Name)), converted);
+				if (!info->Set(m_Scene->registry(), entity, static_cast<size_t>(info->field_index(property->Name)), converted))
+				{
+					throw sol::error(scriptClass->Name + "." + property->Name + ": the value is not valid for the property");
+				}
 				return;
 			}
 

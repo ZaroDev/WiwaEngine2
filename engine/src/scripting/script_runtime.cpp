@@ -32,6 +32,21 @@ namespace wiwa
 		// The base class every script extends. A class table inherits from its parent through its metatable and merges the parent's
 		// properties with its own.
 		constexpr const char* SCRIPT_BASE = R"lua(
+			local raw_pcall, raw_xpcall, over_budget = pcall, xpcall, __wiwa_over_budget
+
+			-- pcall that does not swallow the end of a script that ran out of budget: without it, `while true do pcall(f) end` never ends
+			local function safe_pcall(f, ...)
+				local r = table.pack(raw_pcall(f, ...))
+				if over_budget() then error("script exceeded instruction budget", 0) end
+				return table.unpack(r, 1, r.n)
+			end
+
+			local function safe_xpcall(f, handler, ...)
+				local r = table.pack(raw_xpcall(f, handler, ...))
+				if over_budget() then error("script exceeded instruction budget", 0) end
+				return table.unpack(r, 1, r.n)
+			end
+
 			local Script = {}
 			Script.__index = Script
 			Script.properties = {}
@@ -46,12 +61,14 @@ namespace wiwa
 				return setmetatable(class, self)
 			end
 
-			return Script
+			local function get(table_, key) return table_[key] end
+
+			return Script, safe_pcall, safe_xpcall, get
 		)lua";
 
 		// The globals a script may use. dofile, loadfile, load, io, os, package and debug are not among them.
 		constexpr const char* ALLOWED_GLOBALS[] = {
-			"assert", "error", "ipairs", "next", "pairs", "pcall", "select", "tonumber", "tostring", "type", "xpcall",
+			"assert", "error", "ipairs", "next", "pairs", "select", "tonumber", "tostring", "type",
 			"rawequal", "rawget", "rawlen", "rawset", "setmetatable", "getmetatable",
 			"math", "string", "table", "utf8",
 		};
@@ -73,7 +90,9 @@ namespace wiwa
 		lua_setfield(m_Lua.lua_state(), LUA_REGISTRYINDEX, RUNTIME_KEY);
 		lua_sethook(m_Lua.lua_state(), budget_hook, LUA_MASKCOUNT, HOOK_STEP);
 
-		sol::table base = m_Lua.safe_script(SCRIPT_BASE);
+		m_Lua.set_function("__wiwa_over_budget", [this]() { return over_budget(); });
+		sol::protected_function_result prelude = m_Lua.safe_script(SCRIPT_BASE);
+		sol::table base = prelude.get<sol::table>(0);
 
 		m_Sandbox = m_Lua.create_table();
 		for (const char* name : ALLOWED_GLOBALS)
@@ -81,6 +100,9 @@ namespace wiwa
 			m_Sandbox[name] = m_Lua[name];
 		}
 		m_Sandbox["Script"] = base;
+		m_Sandbox["pcall"] = prelude.get<sol::object>(1);
+		m_Sandbox["xpcall"] = prelude.get<sol::object>(2);
+		m_Get = prelude.get<sol::protected_function>(3);
 
 		m_Sandbox.set_function("require", [this](sol::this_state state, const std::string& path) -> sol::object
 			{
@@ -100,6 +122,19 @@ namespace wiwa
 	}
 
 	ScriptRuntime::~ScriptRuntime() = default;
+
+	bool ScriptRuntime::protected_get(const sol::table& table, const sol::object& key, sol::object& out, std::string& error)
+	{
+		sol::protected_function_result result = call(m_Get, table, key);
+		if (!result.valid())
+		{
+			sol::error failure = result;
+			error = failure.what();
+			return false;
+		}
+		out = result.get<sol::object>();
+		return true;
+	}
 
 	bool ScriptRuntime::consume_budget(u64 instructions)
 	{
@@ -154,7 +189,8 @@ namespace wiwa
 			~Pop() { Stack.pop_back(); }
 		} pop{ m_Loading };
 
-		sol::load_result loaded = m_Lua.load(script.Source, "@" + script.Path);
+		// text only: precompiled chunks are not checked by Lua, and a pack or file could hold a hostile one
+		sol::load_result loaded = m_Lua.load(script.Source, "@" + script.Path, sol::load_mode::text);
 		if (!loaded.valid())
 		{
 			sol::error failure = loaded;
@@ -359,22 +395,40 @@ namespace wiwa
 			}
 
 			sol::table classTable = value.as<sol::table>();
-			for (const char* hook : HOOKS)
+			std::string propertyError;
+			std::vector<FieldDescriptor> parsed;
+			try
 			{
-				const sol::object member = classTable[hook];
-				if (member.valid() && member.get_type() != sol::type::lua_nil && member.get_type() != sol::type::function)
+				std::string lookupError;
+				for (const char* hook : HOOKS)
 				{
-					error = script->Path + ": " + hook + " must be a function";
+					sol::object member;
+					if (!protected_get(classTable, sol::make_object(m_Lua.lua_state(), hook), member, lookupError))
+					{
+						error = script->Path + ": " + hook + ": " + lookupError;
+						return abandon();
+					}
+					if (member.valid() && member.get_type() != sol::type::lua_nil && member.get_type() != sol::type::function)
+					{
+						error = script->Path + ": " + hook + " must be a function";
+						return abandon();
+					}
+				}
+
+				sol::object propertyObject;
+				if (!protected_get(classTable, sol::make_object(m_Lua.lua_state(), "properties"), propertyObject, lookupError))
+				{
+					error = script->Path + ": properties: " + lookupError;
 					return abandon();
 				}
+				if (propertyObject.is<sol::table>())
+				{
+					parsed = parse_properties(propertyObject.as<sol::table>(), propertyError);
+				}
 			}
-
-			std::string propertyError;
-			const sol::object propertyObject = classTable["properties"];
-			std::vector<FieldDescriptor> parsed;
-			if (propertyObject.is<sol::table>())
+			catch (const std::exception& exception)
 			{
-				parsed = parse_properties(propertyObject.as<sol::table>(), propertyError);
+				propertyError = exception.what();
 			}
 			if (!propertyError.empty())
 			{
@@ -453,27 +507,47 @@ namespace wiwa
 		}
 
 		sol::table classTable = returned.as<sol::table>();
-		for (const char* hook : HOOKS)
+		std::vector<FieldDescriptor> properties;
+		try
 		{
-			const sol::object member = classTable[hook];
-			if (member.valid() && member.get_type() != sol::type::lua_nil && member.get_type() != sol::type::function)
+			std::string lookupError;
+			for (const char* hook : HOOKS)
 			{
-				error = script->Path + ": " + hook + " must be a function, not a " + sol::type_name(m_Lua.lua_state(), member.get_type());
+				sol::object member;
+				if (!protected_get(classTable, sol::make_object(m_Lua.lua_state(), hook), member, lookupError))
+				{
+					error = script->Path + ": " + hook + ": " + lookupError;
+					return nullptr;
+				}
+				if (member.valid() && member.get_type() != sol::type::lua_nil && member.get_type() != sol::type::function)
+				{
+					error = script->Path + ": " + hook + " must be a function, not a " + sol::type_name(m_Lua.lua_state(), member.get_type());
+					return nullptr;
+				}
+			}
+
+			sol::object propertyObject;
+			if (!protected_get(classTable, sol::make_object(m_Lua.lua_state(), "properties"), propertyObject, lookupError))
+			{
+				error = script->Path + ": properties: " + lookupError;
 				return nullptr;
+			}
+			if (propertyObject.is<sol::table>())
+			{
+				std::string propertyError;
+				properties = parse_properties(propertyObject.as<sol::table>(), propertyError);
+				if (!propertyError.empty())
+				{
+					error = script->Path + ": " + propertyError;
+					return nullptr;
+				}
 			}
 		}
-
-		std::vector<FieldDescriptor> properties;
-		const sol::object propertyObject = classTable["properties"];
-		if (propertyObject.is<sol::table>())
+		catch (const std::exception& exception)
 		{
-			std::string propertyError;
-			properties = parse_properties(propertyObject.as<sol::table>(), propertyError);
-			if (!propertyError.empty())
-			{
-				error = script->Path + ": " + propertyError;
-				return nullptr;
-			}
+			// the class has a metamethod that failed while it was read
+			error = script->Path + ": " + exception.what();
+			return nullptr;
 		}
 
 		auto scriptClass = std::make_unique<ScriptClass>();

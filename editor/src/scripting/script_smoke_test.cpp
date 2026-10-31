@@ -1232,6 +1232,165 @@ namespace wiwa
 			manager.shutdown();
 			std::filesystem::remove_all(temp, error);
 		}
+
+		// Findings of the final review, each pinned by a test.
+		void check_review_fixes(Check& check)
+		{
+			{
+				MemorySource source;
+				const AssetRef ref = source.add("assets/scripts/pcall_loop.lua", R"(return Script:extend{
+					on_update = function() while true do pcall(function() while true do end end) end end })");
+				ScriptRuntime runtime(source);
+				std::string error;
+				const ScriptClass* cls = runtime.load(ref, error);
+				runtime.set_instruction_budget(100000);
+				bool stopped = false;
+				if (cls != nullptr)
+				{
+					sol::protected_function_result result = runtime.call(sol::protected_function(cls->Class["on_update"]));
+					stopped = !result.valid();
+				}
+				check(stopped, "pcall_cannot_defeat_the_budget");
+			}
+
+			{
+				MemorySource source;
+				const AssetRef ref = source.add("assets/scripts/c_loop.lua", R"(return Script:extend{
+					on_update = function() while true do noop() end end })");
+				ScriptRuntime runtime(source);
+				std::string error;
+				const ScriptClass* cls = runtime.load(ref, error);
+				runtime.sandbox().set_function("noop", []() {});
+				runtime.set_instruction_budget(100000);
+				bool stopped = false;
+				if (cls != nullptr)
+				{
+					sol::protected_function_result result = runtime.call(sol::protected_function(cls->Class["on_update"]));
+					stopped = !result.valid();
+				}
+				check(stopped, "loop_calling_a_c_function_is_stopped");
+			}
+
+			{
+				MemorySource source;
+				const AssetRef ref = source.add("assets/scripts/nested_loop.lua", R"(return Script:extend{
+					on_update = function() while true do inner() end end })");
+				ScriptRuntime runtime(source);
+				std::string error;
+				const ScriptClass* cls = runtime.load(ref, error);
+				sol::protected_function quick = runtime.state().load("return 1").get<sol::protected_function>();
+				runtime.sandbox().set_function("inner", [&runtime, quick]() { runtime.call(quick); });
+				runtime.set_instruction_budget(100000);
+				bool stopped = false;
+				if (cls != nullptr)
+				{
+					sol::protected_function_result result = runtime.call(sol::protected_function(cls->Class["on_update"]));
+					stopped = !result.valid();
+				}
+				check(stopped, "nested_call_does_not_reset_the_budget");
+			}
+
+			{
+				MemorySource source;
+				const AssetRef ref = source.add("assets/scripts/trap.lua", "return setmetatable({}, { __index = function() error('trap') end })");
+				ScriptRuntime runtime(source);
+				std::string error;
+				check(runtime.load(ref, error) == nullptr && !error.empty(), "metamethod_error_is_a_load_error");
+			}
+
+			{
+				ComponentInfo first = make_value_bag_info("review:replaced", { FieldDescriptor{ "a", FieldType::Float, {}, 1.0f }, FieldDescriptor{ "b", FieldType::Float, {}, 1.0f } });
+				ComponentRegistry::get().register_component(std::move(first));
+				const ComponentInfo* held = ComponentRegistry::get().find("review:replaced");
+				ComponentRegistry::get().register_component(make_value_bag_info("review:replaced", { FieldDescriptor{ "only", FieldType::Float, {}, 1.0f } }));
+				check(held != nullptr && held->Fields.size() == 2 && held->Fields[0].Name == "a", "registry_replace_keeps_the_old_info_alive");
+			}
+
+			{
+				ComponentRegistry::get().register_component(make_value_bag_info("review:retyped", { FieldDescriptor{ "v", FieldType::Float, {}, 1.0f } }));
+				entt::registry registry;
+				const entt::entity entity = registry.create();
+				const ComponentInfo* before = ComponentRegistry::get().find("review:retyped");
+				before->Add(registry, entity);
+				before->Set(registry, entity, 0, 3.0f);
+				ComponentRegistry::get().register_component(make_value_bag_info("review:retyped", { FieldDescriptor{ "v", FieldType::String, {}, std::string("d") } }));
+				const FieldValue value = ComponentRegistry::get().find("review:retyped")->Get(registry, entity, 0);
+				check(std::holds_alternative<std::string>(value) && std::get<std::string>(value) == "d", "retyped_bag_value_reads_as_the_default");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("mandatory", R"(return Script:extend{ on_init = function(self)
+					record(tostring(pcall(function() self.entity:remove('Name') end)))
+					record(tostring(pcall(function() self.entity:remove('Id') end)))
+					record(tostring(pcall(function() self.entity:remove('Transform') end)))
+					record(tostring(pcall(function() self.entity:add('Name') end)))
+					record(self.name)
+				end })");
+				h.spawn("hero", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "false", "false", "false", "false", "hero" }), "scripts_cannot_remove_mandatory_components");
+			}
+
+			{
+				MemorySource source;
+				const AssetRef ref = source.add("assets/scripts/binary.lua", std::string("\x1bLua\x54\x00junk", 10));
+				ScriptRuntime runtime(source);
+				std::string error;
+				check(runtime.load(ref, error) == nullptr && !error.empty(), "bytecode_source_is_rejected");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.Source.add("assets/scripts/never_loads.lua", "tick() error('top level')");
+				ScriptClass fake;
+				fake.Asset = ref;
+				fake.Name = "never_loads";
+				register_script_component(fake);
+				int ticks = 0;
+				h.Runtime.sandbox().set_function("tick", [&ticks]() { ticks++; });
+				h.spawn("a", { ref });
+				h.spawn("b", { ref });
+				h.Instances.start(h.TheScene);
+				for (int i = 0; i < 3; i++)
+				{
+					h.Instances.update(0.016f);
+				}
+				check(ticks == 1, "failing_script_is_not_run_again_every_frame");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("numbers", R"(return Script:extend{
+					properties = { speed = { type = 'float', default = 1 }, count = { type = 'int', default = 1 } },
+					on_init = function(self)
+						record(tostring(pcall(function() self.transform.position = vec3(0 / 0, 0, 0) end)))
+						record(tostring(pcall(function() self.speed = 0 / 0 end)))
+						record(tostring(pcall(function() self.count = 1e20 end)))
+						record(tostring(pcall(function() self.count = 7 end)))
+					end })");
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "false", "false", "false", "true" }), "non_finite_and_out_of_range_numbers_are_rejected");
+			}
+
+			{
+				Harness h;
+				sol::object kept;
+				h.Runtime.sandbox().set_function("keep", [&kept](sol::object object) { kept = object; });
+				const AssetRef ref = h.add_script("stale", "return Script:extend{ on_init = function(self) keep(self.transform) end }");
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				h.Instances.stop();
+				h.Runtime.sandbox()["stale_proxy"] = kept;
+				sol::environment env(h.Runtime.state(), sol::create, h.Runtime.sandbox());
+				sol::protected_function_result result = h.Runtime.state().safe_script("return stale_proxy.position", env, sol::script_pass_on_error);
+				check(!result.valid(), "stale_proxy_after_stop_is_an_error");
+			}
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -1251,6 +1410,7 @@ namespace wiwa
 		check_engine_bindings(check, pipeline);
 		check_scene_changes_and_reload(check);
 		check_pak(check);
+		check_review_fixes(check);
 
 		if (check.Failures == 0)
 		{

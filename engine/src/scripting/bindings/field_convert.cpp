@@ -1,10 +1,27 @@
 #include <pch.h>
 #include "bindings.h"
 
+#include <cmath>
+
 namespace wiwa
 {
 	namespace
 	{
+		bool finite(float value) { return std::isfinite(value); }
+
+		template<typename V>
+		bool all_finite(const V& value)
+		{
+			for (int i = 0; i < static_cast<int>(sizeof(V) / sizeof(float)); i++)
+			{
+				if (!std::isfinite(reinterpret_cast<const float*>(&value)[i]))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
 		template<typename V>
 		sol::object vector_to_lua(sol::state_view lua, const V& value, const FieldLink& link)
 		{
@@ -18,7 +35,12 @@ namespace wiwa
 			{
 				return false;
 			}
-			out = object.as<const LuaVec<V>&>().Value;
+			const V& value = object.as<const LuaVec<V>&>().Value;
+			if (!all_finite(value))
+			{
+				return false;
+			}
+			out = value;
 			return true;
 		}
 
@@ -83,10 +105,18 @@ namespace wiwa
 			if (ok = object.is<bool>()) out = object.as<bool>();
 			break;
 		case FieldType::Int:
-			if (ok = object.is<double>()) out = static_cast<i32>(object.as<double>());
+			if (object.is<double>() && object.as<double>() >= -2147483648.0 && object.as<double>() <= 2147483647.0) // also false for NaN
+			{
+				out = static_cast<i32>(object.as<double>());
+				ok = true;
+			}
 			break;
 		case FieldType::Float:
-			if (ok = object.is<double>()) out = static_cast<float>(object.as<double>());
+			if (object.is<double>() && finite(static_cast<float>(object.as<double>())))
+			{
+				out = static_cast<float>(object.as<double>());
+				ok = true;
+			}
 			break;
 		case FieldType::Vec2:
 			ok = vector_from_lua<glm::vec2>(object, out);
@@ -105,7 +135,7 @@ namespace wiwa
 			if (ok = object.is<std::string>()) out = object.as<std::string>();
 			break;
 		case FieldType::Enum:
-			if (object.is<double>())
+			if (object.is<double>() && object.as<double>() >= 0.0 && object.as<double>() <= 2147483647.0)
 			{
 				out = static_cast<i32>(object.as<double>());
 				ok = is_valid_field_value(field, out);

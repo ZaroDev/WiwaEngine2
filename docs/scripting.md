@@ -94,3 +94,14 @@ with the script; a computed argument works in the editor but its script may be m
 In the editor scripts are loaded (their components exist) but do not run while you edit. In a game they run as soon as a scene is
 active. Packing a scene packs the scripts it uses; a script that nothing references and that is not in the build's "always include"
 list is left out.
+
+## Limits
+
+- A hook that runs over 50 million VM instructions is stopped, and `pcall` does not swallow that error. The limit counts Lua
+  instructions only: one long call into a C library function (a pathological `string.find` pattern, `string.rep` of a huge size)
+  is not interrupted, and memory is not capped. Scripts are trusted code written by the project, not a sandbox against hostile ones.
+- In `on_destroy` of a script whose entity was destroyed, `self.entity:is_valid()` is false and `self.transform`, `self.name` and the
+  properties are not available (the entity is gone); fields you set on `self` still are.
+- Scripts cannot add or remove `Id`, `Name`, `Transform` or `PrefabInstance`.
+- Numbers assigned to fields must be finite; an `int` property must be in the 32-bit range.
+- Script source is text only: precompiled Lua chunks are rejected.

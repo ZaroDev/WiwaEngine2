@@ -11,6 +11,7 @@ namespace wiwa
 
 	const ComponentInfo* ComponentRegistry::find(std::string_view name) const
 	{
+		std::shared_lock lock(m_Mutex);
 		for (const std::unique_ptr<ComponentInfo>& info : m_Infos)
 		{
 			if (info->Name == name)
@@ -41,7 +42,8 @@ namespace wiwa
 		{
 			if (existing->Name == info.Name)
 			{
-				*existing = std::move(info);
+				m_Retired.push_back(std::move(existing));
+				existing = CreateScope<ComponentInfo>(std::move(info));
 				rebuild_view();
 				return;
 			}
@@ -54,16 +56,25 @@ namespace wiwa
 	void ComponentRegistry::unregister_component(std::string_view name)
 	{
 		std::unique_lock lock(m_Mutex);
-		std::erase_if(m_Infos, [&](const std::unique_ptr<ComponentInfo>& info) { return info->Name == name; });
+		for (std::unique_ptr<ComponentInfo>& info : m_Infos)
+		{
+			if (info != nullptr && info->Name == name)
+			{
+				m_Retired.push_back(std::move(info));
+			}
+		}
+		std::erase_if(m_Infos, [](const std::unique_ptr<ComponentInfo>& info) { return info == nullptr; });
 		rebuild_view();
 	}
 
 	void ComponentRegistry::rebuild_view()
 	{
-		m_View.clear();
+		auto view = std::make_unique<std::vector<const ComponentInfo*>>();
 		for (const std::unique_ptr<ComponentInfo>& info : m_Infos)
 		{
-			m_View.push_back(info.get());
+			view->push_back(info.get());
 		}
+		m_Current.store(view.get(), std::memory_order_release);
+		m_Views.push_back(std::move(view));
 	}
 }

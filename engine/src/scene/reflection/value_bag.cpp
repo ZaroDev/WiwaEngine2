@@ -78,9 +78,9 @@ namespace wiwa
 			if (const ValueBag* bag = find_bag(registry, entity, shared->Name))
 			{
 				const auto it = bag->Values.find(field.Name);
-				if (it != bag->Values.end())
+				if (it != bag->Values.end() && is_valid_field_value(field, it->second))
 				{
-					return it->second;
+					return it->second; // a value left over from before the field changed type is not one
 				}
 			}
 			return field.Default;
