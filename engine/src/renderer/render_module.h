@@ -63,6 +63,10 @@ namespace wiwa
 		// thread and saves them to render_quality.json next to the program.
 		const RenderQuality& get_quality() const { return m_Quality; }
 		void set_quality(const RenderQuality& quality);
+		// The next frame starts TAA and motion blur without a history (the panel offers it when the image smears).
+		void reset_temporal_history();
+		// Shows the velocity of every pixel instead of the scene.
+		void set_debug_velocity(bool enabled);
 
 		// The size the scene is rendered at, in pixels; the Viewport panel asks for the size of its content region every frame. The render
 		// thread makes (or remakes) the viewport target a frame or two later. The result is drawn by ImGui as the texture id below.

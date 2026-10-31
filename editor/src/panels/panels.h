@@ -9,6 +9,7 @@
 #include "environment_panel.h"
 #include "hierarchy_panel.h"
 #include "inspector_panel.h"
+#include "post_effects_panel.h"
 #include "quality_panel.h"
 #include "renderer_panel.h"
 #include "viewport_panel.h"

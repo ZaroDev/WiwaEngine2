@@ -234,6 +234,22 @@ namespace wiwa
 		}
 	}
 
+	void RenderModule::reset_temporal_history()
+	{
+		submit([](RenderWorld& world)
+			{
+				world.get_renderer().get_scene_data().request_history_reset();
+			});
+	}
+
+	void RenderModule::set_debug_velocity(bool enabled)
+	{
+		submit([enabled](RenderWorld& world)
+			{
+				world.get_renderer().get_scene_data().set_debug_velocity(enabled);
+			});
+	}
+
 	u32 RenderModule::get_asset_texture_id(const AssetRef& texture)
 	{
 		if (!texture.valid())
