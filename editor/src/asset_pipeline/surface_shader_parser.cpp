@@ -583,6 +583,7 @@ namespace wiwa
 					return fail(failure, static_cast<u32>(l + 1), "at most " + std::to_string(SURFACE_MAX_TEXTURES) + " textures per shader");
 				}
 				out.Textures.push_back(code.substr(begin, end - begin));
+				out.TextureLines.push_back(static_cast<u32>(l + 1));
 			}
 
 			if (!has_call(allCode, "Surface"))

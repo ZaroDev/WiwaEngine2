@@ -14,6 +14,7 @@ namespace wiwa
 		std::vector<SurfaceParam> Params{};
 		u32 BlockSize = 0;                  // bytes, a multiple of 16, at most SURFACE_BLOCK_MAX_SIZE
 		std::vector<std::string> Textures{}; // names of the @param textures, in file order
+		std::vector<u32> TextureLines{};     // the 1-based line of each declaration in Textures
 		bool HasVertexOffset = false;
 		std::string ParamsStructSource{};   // the MaterialParams declaration with comments blanked, "" without one
 	};

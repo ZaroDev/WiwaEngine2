@@ -10,6 +10,7 @@ struct DepthVertexOutput
 	float3 Normal : TEXCOORD1;
 	float4 CurrentClip : TEXCOORD2;  // clip position without the TAA jitter
 	float4 PreviousClip : TEXCOORD3; // where the same point of the surface was in the previous frame
+	float3 WorldPosition : TEXCOORD4; // for the surface shaders of masked materials (surface_depth.hlsl)
 };
 
 // What the prepass writes besides depth: the world normal, facing the viewer, octahedral encoded, and how far the pixel moved.
@@ -21,9 +22,9 @@ struct DepthOutput
 
 // Where the point of the surface was in the previous frame, in that frame's clip space. A rigid instance moved with its world matrix;
 // a skinned mesh has to skin the point with the previous frame's pose here instead, so that the velocity includes the animation.
-float4 PreviousClipPosition(MeshVertexInput input, SceneInstance instance)
+float4 PreviousClipPosition(float3 position, SceneInstance instance)
 {
-	float3 world = instance.PrevWorldC0.xyz * input.Position.x + instance.PrevWorldC1.xyz * input.Position.y + instance.PrevWorldC2.xyz * input.Position.z + instance.PrevWorldC3.xyz;
+	float3 world = instance.PrevWorldC0.xyz * position.x + instance.PrevWorldC1.xyz * position.y + instance.PrevWorldC2.xyz * position.z + instance.PrevWorldC3.xyz;
 	return mul(PreviousViewProjection, float4(world, 1.0));
 }
 
@@ -52,17 +53,25 @@ DepthOutput DepthPixel(DepthVertexOutput input, bool frontFace)
 	return output;
 }
 
-DepthVertexOutput DepthVertex(MeshVertexInput input)
+// The vertex at an object-space position (the mesh's, or moved by a surface shader's VertexOffset): this frame and the previous
+// one both use it, so an offset that does not change over time gives the velocity of the mesh itself.
+DepthVertexOutput DepthVertexAt(MeshVertexInput input, float3 position)
 {
 	SceneInstance instance = uInstances[DrawConstants.InstanceIndex];
-	float3 world = TransformPoint(instance, input.Position);
+	float3 world = TransformPoint(instance, position);
 	DepthVertexOutput output;
 	output.Position = mul(ViewProjection, float4(world, 1.0));
 	output.Uv = input.Uv;
 	output.Normal = TransformNormal(instance, input.Normal);
 	output.CurrentClip = mul(UnjitteredViewProjection, float4(world, 1.0));
-	output.PreviousClip = PreviousClipPosition(input, instance);
+	output.PreviousClip = PreviousClipPosition(position, instance);
+	output.WorldPosition = world;
 	return output;
+}
+
+DepthVertexOutput DepthVertex(MeshVertexInput input)
+{
+	return DepthVertexAt(input, input.Position);
 }
 
 #endif // DEPTH_HLSLI

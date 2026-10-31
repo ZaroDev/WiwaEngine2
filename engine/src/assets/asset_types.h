@@ -18,6 +18,7 @@ namespace wiwa
 		Shader,
 		Scene,
 		Script,
+		SurfaceShader,
 
 		Last
 	};
@@ -37,6 +38,7 @@ namespace wiwa
 		case AssetType::Shader: return "Shader";
 		case AssetType::Scene: return "Scene";
 		case AssetType::Script: return "Script";
+		case AssetType::SurfaceShader: return "SurfaceShader";
 		default: return "None";
 		}
 	}

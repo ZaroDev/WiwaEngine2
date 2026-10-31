@@ -3,9 +3,6 @@
 // The forward pass: PBR metallic-roughness for opaque and alpha-masked materials (the depth prepass has already cut the masked
 // pixels out), and the same shading for blended ones.
 
-// The blurred screen-space ambient occlusion, 1 = open (a white 1x1 texture when it is off). A layout of its own: set 2 on Vulkan.
-VK_BINDING(15, 2) Texture2D<float> uAmbientOcclusion : register(t15);
-
 struct ForwardVertexOutput
 {
 	float4 Position : SV_Position;
@@ -38,15 +35,6 @@ float4 PSMain(ForwardVertexOutput input, bool frontFace : SV_IsFrontFace) : SV_T
 		discard;
 	}
 
-	// The ambient light is dimmed where the surroundings block it; the 1x1 stand-in of "no AO" is white wherever it is read.
-	float ambientOcclusion = uAmbientOcclusion.SampleLevel(uEnvironmentSampler, input.Position.xy * ViewportSize.zw, 0);
-	float3 color = AmbientLight(surface) * ambientOcclusion + surface.Emissive;
-	if (SunDirection.w > 0.5)
-	{
-		float3 toTheSun = -SunDirection.xyz;
-		float shadow = SunShadow(surface.Position, surface.Normal, saturate(dot(surface.Normal, toTheSun)));
-		color += DirectLight(surface, toTheSun, SunColor.rgb) * shadow;
-	}
-	color += ClusteredLights(surface, input.Position.xy);
+	float3 color = ForwardLighting(surface, input.Position.xy);
 	return float4(color, surface.Alpha);
 }

@@ -177,6 +177,52 @@ namespace wiwa
 		std::string Label{};
 	};
 
+	// The passes a material with a surface shader is drawn in; each is one vertex and one pixel shader per target.
+	enum class SurfaceVariantKind : u32
+	{
+		Forward,      // lit color, opaque, masked and blended
+		Depth,        // depth prepass: depth, normal and velocity
+		DepthMasked,  // the same, running Surface for the alpha cutout
+		Velocity,     // the velocity of blended materials, where alpha >= 0.5
+		Shadow,       // shadow casters: depth only
+		ShadowMasked, // shadow casters with the alpha cutout
+	};
+	constexpr u32 SURFACE_VARIANT_COUNT = 6;
+
+	struct SurfaceVariant
+	{
+		SurfaceVariantKind Kind = SurfaceVariantKind::Forward;
+		ShaderStage Stage = ShaderStage::Vertex;
+		ShaderTarget Target = ShaderTarget::Dxbc;
+		std::vector<u8> Code{};
+	};
+
+	// A .wshader cooked: its parameter table and one binary per variant, stage and target (the user file composed into the
+	// engine's entry templates, see surface_contract.hlsli). LayoutHash changes when the parameter block layout or the texture
+	// slots change (not when a default or an annotation does).
+	struct SurfaceShaderData
+	{
+		std::string Name{};
+		std::vector<SurfaceParam> Params{};
+		u32 BlockSize = 0;
+		std::vector<std::string> Textures{};
+		bool HasVertexOffset = false;
+		u64 LayoutHash = 0;
+		std::vector<SurfaceVariant> Variants{};
+
+		const SurfaceVariant* find(SurfaceVariantKind kind, ShaderStage stage, ShaderTarget target) const
+		{
+			for (const SurfaceVariant& variant : Variants)
+			{
+				if (variant.Kind == kind && variant.Stage == stage && variant.Target == target)
+				{
+					return &variant;
+				}
+			}
+			return nullptr;
+		}
+	};
+
 	struct MaterialData
 	{
 		std::string Name{};

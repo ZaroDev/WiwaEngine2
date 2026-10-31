@@ -86,6 +86,7 @@ namespace wiwa
 			case AssetType::Shader: { auto h = manager.load<ShaderData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::Scene: { auto h = manager.load<SceneData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::Script: { auto h = manager.load<ScriptData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::SurfaceShader: { auto h = manager.load<SurfaceShaderData>(ref); return [h]() { return h.state(); }; }
 			default: return []() { return LoadState::Failed; };
 			}
 		}
@@ -1112,6 +1113,218 @@ namespace wiwa
 				check(rejected_at("/* void Surface(SurfaceInput i) */\n// Surface(\nstatic const string S = \"Surface(\";\n", 1, "Surface"),
 					"surface_parse_ignores_comments_and_strings: a Surface only in comments and strings is missing");
 			}
+		}
+
+		// 7. surface shader assets (.wshader)
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_surface_smoke";
+			std::filesystem::create_directories(dir, error);
+
+			const auto write_text = [](const std::filesystem::path& path, const std::string& text)
+			{
+				std::ofstream out(path, std::ios::binary | std::ios::trunc);
+				out << text;
+			};
+
+			// the cooked surface shader of a source file, straight from the Library
+			const auto cooked_surface = [&](const std::filesystem::path& source) -> std::optional<SurfaceShaderData>
+			{
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				if (!meta)
+				{
+					return std::nullopt;
+				}
+				for (const CookedFile& file : read_library(database.get_library_root()))
+				{
+					std::span<const std::byte> payload;
+					if (file.Guid == meta->Guid && file.Type == AssetType::SurfaceShader && parse_wasset_header(file.Bytes, payload))
+					{
+						return deserialize<SurfaceShaderData>(payload);
+					}
+				}
+				return std::nullopt;
+			};
+
+			// every variant for both stages and both targets, each a binary of its target (DXBC container, SPIR-V magic)
+			const auto all_variants = [](const SurfaceShaderData& shader)
+			{
+				const SurfaceVariantKind kinds[] = { SurfaceVariantKind::Forward, SurfaceVariantKind::Depth, SurfaceVariantKind::DepthMasked,
+					SurfaceVariantKind::Velocity, SurfaceVariantKind::Shadow, SurfaceVariantKind::ShadowMasked };
+				for (SurfaceVariantKind kind : kinds)
+				{
+					for (ShaderStage stage : { ShaderStage::Vertex, ShaderStage::Pixel })
+					{
+						for (ShaderTarget target : { ShaderTarget::Dxbc, ShaderTarget::Spirv })
+						{
+							const SurfaceVariant* variant = shader.find(kind, stage, target);
+							if (variant == nullptr || variant->Code.size() < 4)
+							{
+								return false;
+							}
+							const bool dxbc = std::memcmp(variant->Code.data(), "DXBC", 4) == 0;
+							u32 magic = 0;
+							std::memcpy(&magic, variant->Code.data(), 4);
+							if (target == ShaderTarget::Dxbc ? !dxbc : magic != 0x07230203u)
+							{
+								return false;
+							}
+						}
+					}
+				}
+				return shader.Variants.size() == 24;
+			};
+
+			const auto same_params = [](const std::vector<SurfaceParam>& a, const std::vector<SurfaceParam>& b)
+			{
+				if (a.size() != b.size())
+				{
+					return false;
+				}
+				for (size_t i = 0; i < a.size(); i++)
+				{
+					if (a[i].Name != b[i].Name || a[i].Type != b[i].Type || a[i].Offset != b[i].Offset || a[i].Min != b[i].Min || a[i].Max != b[i].Max ||
+						std::memcmp(a[i].Default, b[i].Default, sizeof(a[i].Default)) != 0 || a[i].Color != b[i].Color || a[i].Label != b[i].Label)
+					{
+						return false;
+					}
+				}
+				return true;
+			};
+
+			// What the importer logs while fn runs (the console panel's callback, if any, still gets every line).
+			const auto capture_log = [](const std::function<void()>& fn)
+			{
+				struct Captured
+				{
+					std::mutex Mutex{};
+					std::string Text{};
+				};
+				auto captured = std::make_shared<Captured>();
+				const LogCallback previous = Log::get_log_callback();
+				Log::set_log_callback([captured, previous](LogLevel level, std::string line)
+					{
+						{
+							std::lock_guard lock(captured->Mutex);
+							captured->Text += line;
+							captured->Text += '\n';
+						}
+						if (previous)
+						{
+							previous(level, std::move(line));
+						}
+					});
+				fn();
+				Log::set_log_callback(previous);
+				std::lock_guard lock(captured->Mutex);
+				return captured->Text;
+			};
+
+			const auto shader_a = [](const std::string& extraParam, const std::string& amountDefault, const std::string& brokenLine)
+			{
+				return std::string(
+					"struct MaterialParams\n"                                          // 1
+					"{\n"                                                              // 2
+					"    float4 Tint;   // color default(1,0.5,0,1)\n"                 // 3
+					"    float  Amount; // range(0,2) default(") + amountDefault + ")\n" // 4
+					"    int    Mode;   // range(0,3) default(1)\n"                    // 5
+					"    bool   Flip;   // default(true) label(\"Flip it\")\n"         // 6
+					+ extraParam +                                                     // 7
+					"};\n"                                                             // 8
+					"Texture2D Mask; // @param\n"                                      // 9
+					"\n"                                                               // 10
+					"float3 VertexOffset(VertexInput v, MaterialParams p) { return v.Normal * (p.Amount * 0.0); }\n" // 11
+					"void Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o)\n" // 12
+					"{\n"                                                              // 13
+					"    float mask = Mask.Sample(uSurfaceSampler, i.Uv).r;\n"         // 14
+					+ brokenLine +                                                     // 15
+					"    o.Albedo *= p.Tint.rgb * mask;\n"                             // 16
+					"    o.Emissive += p.Flip ? float3((float)p.Mode, 0.0, 0.0) : float3(0.0, 0.0, 0.0);\n"
+					"    o.Alpha *= mask;\n"
+					"}\n";
+			};
+			const std::string validA = shader_a("    float  Unused;\n", "0.5", "\n");
+
+			// surface_import_compiles_all_variants
+			const std::filesystem::path a = dir / "a.wshader";
+			write_text(a, validA);
+			database.reimport(a);
+			std::optional<SurfaceShaderData> cooked = cooked_surface(a);
+			check(cooked.has_value(), "surface_import_compiles_all_variants: the .wshader is cooked");
+			u64 hashA = 0;
+			if (cooked)
+			{
+				hashA = cooked->LayoutHash;
+				ParsedSurface parsed;
+				std::string parseError;
+				const bool parsedOk = parse_surface_shader(validA, parsed, parseError);
+				check(all_variants(*cooked), "surface_import_compiles_all_variants: every variant, stage and target is present and valid");
+				check(parsedOk && same_params(cooked->Params, parsed.Params) && cooked->BlockSize == parsed.BlockSize && cooked->Textures == parsed.Textures &&
+					cooked->HasVertexOffset == parsed.HasVertexOffset, "surface_import_compiles_all_variants: the params table equals the parser's");
+				check(cooked->Name == "a.wshader" && cooked->BlockSize == 32 && cooked->Textures.size() == 1 && cooked->HasVertexOffset && cooked->LayoutHash != 0,
+					"surface_import_compiles_all_variants: name, block size, texture, vertex offset and hash");
+			}
+
+			// surface_import_compile_error_keeps_previous
+			{
+				write_text(a, shader_a("    float  Unused;\n", "0.5", "    o.Albedo = ;\n"));
+				WI_ASSET_LOG(Info, "Smoke test: the next surface shader compile error is expected");
+				const std::string log = capture_log([&]() { database.reimport(a); });
+				check(log.find("a.wshader(15") != std::string::npos, "surface_import_compile_error_keeps_previous: the log names the line of the error");
+				std::optional<SurfaceShaderData> previous = cooked_surface(a);
+				check(previous && previous->LayoutHash == hashA && all_variants(*previous), "surface_import_compile_error_keeps_previous: the previous cooked data still loads");
+			}
+
+			// surface_hash_changes_with_layout
+			{
+				write_text(a, shader_a("    float  Unused;\n", "1.5", "\n"));
+				database.reimport(a);
+				std::optional<SurfaceShaderData> changedDefault = cooked_surface(a);
+				check(changedDefault && changedDefault->Params.size() == 5 && changedDefault->Params[1].Default[0] == 1.5f && changedDefault->LayoutHash == hashA,
+					"surface_hash_changes_with_layout: a new default keeps the hash");
+
+				write_text(a, shader_a("    float  Unused;\n    float3 Added;\n", "0.5", "\n"));
+				database.reimport(a);
+				std::optional<SurfaceShaderData> added = cooked_surface(a);
+				check(added && added->Params.size() == 6 && added->LayoutHash != hashA, "surface_hash_changes_with_layout: adding a parameter changes the hash");
+			}
+
+			// surface_import_no_params_no_textures
+			{
+				const std::filesystem::path empty = dir / "empty.wshader";
+				write_text(empty, "void Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o)\n{\n    o.Emissive = float3(1.0, 0.0, 0.0);\n}\n");
+				database.reimport(empty);
+				std::optional<SurfaceShaderData> shader = cooked_surface(empty);
+				check(shader && shader->Params.empty() && shader->BlockSize == 0 && shader->Textures.empty() && !shader->HasVertexOffset && all_variants(*shader),
+					"surface_import_no_params_no_textures: imports with every variant");
+			}
+
+			// surface_import_256_bytes
+			{
+				const auto with_floats = [](u32 count)
+				{
+					std::string source = "struct MaterialParams\n{\n";
+					for (u32 i = 0; i < count; i++)
+					{
+						source += "    float P" + std::to_string(i) + "; // default(" + std::to_string(i) + ")\n";
+					}
+					return source + "};\nvoid Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o)\n{\n    o.Emissive = float3(p.P0, p.P31, p.P63);\n}\n";
+				};
+				const std::filesystem::path full = dir / "full.wshader";
+				write_text(full, with_floats(64));
+				database.reimport(full);
+				std::optional<SurfaceShaderData> shader = cooked_surface(full);
+				check(shader && shader->BlockSize == 256 && shader->Params.size() == 64 && shader->Params[63].Offset == 252 && all_variants(*shader),
+					"surface_import_256_bytes: a 256-byte block imports");
+
+				const std::filesystem::path over = dir / "over.wshader";
+				write_text(over, with_floats(65));
+				WI_ASSET_LOG(Info, "Smoke test: the next surface shader error is expected");
+				const std::string log = capture_log([&]() { database.reimport(over); });
+				check(!cooked_surface(over).has_value() && log.find("256") != std::string::npos, "surface_import_256_bytes: a 257-byte block is rejected with the limit");
+			}
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
 		}
 
 		std::filesystem::remove_all(temp, error);

@@ -13,4 +13,5 @@ namespace wiwa
 	Scope<IImporter> create_scene_importer();       // .wscene
 	Scope<IImporter> create_script_importer();      // .lua
 	Scope<IImporter> create_material_importer();    // .wmat
+	Scope<IImporter> create_surface_shader_importer(); // .wshader
 }
