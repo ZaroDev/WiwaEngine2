@@ -715,6 +715,16 @@ namespace wiwa
 				}
 			};
 
+			if (!s.Scripts.empty())
+			{
+				SceneJson scripts = SceneJson::array();
+				for (const AssetRef& script : s.Scripts)
+				{
+					scripts.push_back(ref_to_json(script));
+				}
+				json["scripts"] = std::move(scripts);
+			}
+
 			SceneJson exposure = SceneJson::object();
 			put_bool(exposure, "auto", s.Exposure.Auto, d.Exposure.Auto);
 			put_float_if_different(exposure, "compensation", s.Exposure.CompensationEv, d.Exposure.CompensationEv);
@@ -880,6 +890,26 @@ namespace wiwa
 			{
 				error = path + ".environment: not an AssetRef";
 				return false;
+			}
+
+			if (json.contains("scripts"))
+			{
+				const SceneJson& scripts = json["scripts"];
+				if (!scripts.is_array())
+				{
+					error = path + ".scripts: not an array";
+					return false;
+				}
+				for (size_t i = 0; i < scripts.size(); i++)
+				{
+					AssetRef script;
+					if (!ref_from_json(scripts[i], script))
+					{
+						error = path + ".scripts[" + std::to_string(i) + "]: not an AssetRef";
+						return false;
+					}
+					s.Scripts.push_back(script);
+				}
 			}
 
 			if (json.contains("atmosphere"))

@@ -4,7 +4,11 @@
 #include <algorithm>
 
 #include <assets/wasset_io.h>
+#include <scene/prefab_expander.h>
 #include <scene/reflection/component_registry.h>
+#include <scene/reflection/value_bag.h>
+#include <scene/scene.h>
+#include <scene/scene_records.h>
 #include <scripting/script_component.h>
 #include <scripting/script_requires.h>
 #include <scripting/script_runtime.h>
@@ -12,6 +16,7 @@
 #include "asset_pipeline/asset_database.h"
 #include "asset_pipeline/builtin_importers.h"
 #include "asset_pipeline/file_utils.h"
+#include "scene/scene_json.h"
 
 #define WI_SCRIPT_LOG(level, ...) WI_LOG(level, "Scripting", __VA_ARGS__)
 
@@ -309,6 +314,7 @@ namespace wiwa
 			bool Found = false;
 			WAssetHeader Header{};
 			std::optional<ScriptData> Data{};
+			std::vector<std::byte> Payload{};
 		};
 
 		Cooked read_cooked(const AssetDatabase& database, AssetRef asset)
@@ -328,7 +334,11 @@ namespace wiwa
 				{
 					cooked.Found = true;
 					cooked.Header = *header;
-					cooked.Data = deserialize<ScriptData>(payload);
+					cooked.Payload.assign(payload.begin(), payload.end());
+					if (header->Type == AssetType::Script)
+					{
+						cooked.Data = deserialize<ScriptData>(payload);
+					}
 				}
 			}
 			return cooked;
@@ -383,6 +393,29 @@ namespace wiwa
 				check(schema && schema->Fields.size() == 2 && schema->Fields[0].Name == "label" && schema->Fields[1].Name == "speed", "property_schema_registered_at_import");
 				check(schema && schema->find_field("speed") != nullptr && schema->find_field("speed")->Type == FieldType::Float, "property_schema_has_the_declared_types");
 
+				// a scene that uses the script imports with its property values and the script as a dependency (scripts import first)
+				{
+					SceneData level;
+					level.Name = "level";
+					EntityRecord entity;
+					entity.Id = EntityGuid::generate();
+					entity.Components.push_back(ComponentRecord{ script_component_name(player->Guid), { FieldRecord{ "label", std::string("boss") }, FieldRecord{ "speed", 9.0f } } });
+					level.Entities.push_back(entity);
+					write_text(temp / "assets" / "scenes" / "level.wscene", scene_to_json(level).dump(1));
+
+					const std::optional<AssetRef> sceneAsset = database.ensure_imported(temp / "assets" / "scenes" / "level.wscene");
+					check(sceneAsset.has_value(), "scene_with_a_script_component_imports");
+					if (sceneAsset)
+					{
+						const Cooked cooked = read_cooked(database, *sceneAsset);
+						const std::optional<SceneData> cookedScene = cooked.Found ? deserialize<SceneData>(cooked.Payload) : std::nullopt;
+						check(cookedScene && cookedScene->Entities.size() == 1 && cookedScene->Entities[0].Components.size() == 1
+							&& cookedScene->Entities[0].Components[0].Fields.size() == 2, "scene_with_a_script_component_keeps_its_fields");
+						check(cooked.Found && std::find(cooked.Header.Dependencies.begin(), cooked.Header.Dependencies.end(), player->resolved()) != cooked.Header.Dependencies.end(), "scene_depends_on_its_scripts");
+					}
+				}
+
+
 				// a property that changes type: its value goes back to the default, the others are kept
 				const ComponentInfo* info = ComponentRegistry::get().find(script_component_name(player->Guid));
 				check(info != nullptr && info->DisplayName == "player", "script_component_is_shown_by_file_name");
@@ -433,6 +466,128 @@ namespace wiwa
 
 			std::filesystem::remove_all(temp, error);
 		}
+
+		float speed_of(const EntityRecord& entity, const std::string& component, float fallback = -1.0f)
+		{
+			for (const ComponentRecord& record : entity.Components)
+			{
+				if (record.Name == component)
+				{
+					for (const FieldRecord& field : record.Fields)
+					{
+						if (field.Name == "speed" && std::holds_alternative<float>(field.Value))
+						{
+							return std::get<float>(field.Value);
+						}
+					}
+				}
+			}
+			return fallback;
+		}
+
+		void check_scene_scripts(Check& check)
+		{
+			const AssetRef mover{ AssetGuid::generate(), 0 };
+			const AssetRef sceneScript{ AssetGuid::generate(), 0 };
+
+			ScriptClass moverClass;
+			moverClass.Asset = mover;
+			moverClass.Name = "mover";
+			FieldDescriptor speedField;
+			speedField.Name = "speed";
+			speedField.Type = FieldType::Float;
+			speedField.Default = 1.0f;
+			moverClass.Properties.push_back(speedField);
+			register_script_component(moverClass);
+			const std::string component = script_component_name(mover.Guid);
+
+			SceneData data;
+			data.Name = "scripts";
+			data.Settings.Scripts = { sceneScript };
+			EntityRecord entity;
+			entity.Id = EntityGuid::generate();
+			entity.Components.push_back(ComponentRecord{ component, { FieldRecord{ "speed", 7.5f } } });
+			data.Entities.push_back(entity);
+
+			const std::vector<std::byte> bytes = serialize(data);
+			const std::optional<SceneData> back = deserialize<SceneData>(bytes);
+			check(back && back->Settings.Scripts == data.Settings.Scripts && back->Entities.size() == 1, "scene_settings_scripts_roundtrip: binary");
+
+			const SceneJsonResult parsed = scene_from_json(scene_to_json(data));
+			check(parsed.Scene && parsed.Scene->Settings.Scripts == data.Settings.Scripts, "scene_settings_scripts_roundtrip: json");
+			check(parsed.Scene && parsed.Scene->Entities.size() == 1 && speed_of(parsed.Scene->Entities[0], component) == 7.5f, "script_properties_roundtrip_in_scene: json");
+
+			const std::vector<AssetRef> references = collect_references(data);
+			const auto has = [&](AssetRef ref) { return std::find(references.begin(), references.end(), ref) != references.end(); };
+			check(references.size() == 2 && has(mover) && has(sceneScript), "scene_dependencies_include_scripts");
+
+			{
+				Scene scene;
+				apply_scene_data(scene, data);
+				const ComponentInfo* info = ComponentRegistry::get().find(component);
+				bool found = false;
+				for (const entt::entity entity : scene.registry().view<ValueBags>())
+				{
+					const FieldValue value = info->Get(scene.registry(), entity, 0);
+					found = std::holds_alternative<float>(value) && std::get<float>(value) == 7.5f;
+				}
+				check(found, "script_properties_roundtrip_in_scene: applied to a scene");
+			}
+
+			// a hundred entities with the same script keep their own values
+			{
+				Scene scene;
+				std::vector<EntityGuid> ids;
+				for (int i = 0; i < 100; i++)
+				{
+					EntityRecord record;
+					record.Id = EntityGuid::generate();
+					record.Components.push_back(ComponentRecord{ component, { FieldRecord{ "speed", static_cast<float>(i) } } });
+					ids.push_back(record.Id);
+					apply_record(scene, record);
+				}
+				const ComponentInfo* info = ComponentRegistry::get().find(component);
+				bool allKept = true;
+				for (int i = 0; i < 100; i++)
+				{
+					const entt::entity entity = scene.find(ids[i]);
+					const FieldValue value = entity == entt::null ? FieldValue{} : info->Get(scene.registry(), entity, 0);
+					allKept = allKept && std::holds_alternative<float>(value) && std::get<float>(value) == static_cast<float>(i);
+				}
+				check(allKept, "same_script_on_many_entities_keeps_each_value");
+			}
+
+			// a prefab instance can add the script to a node and override its property
+			{
+				PrefabData prefab;
+				PrefabNode node;
+				node.Name = "node";
+				node.StableId = 1234;
+				prefab.Nodes.push_back(node);
+
+				EntityRecord instance;
+				instance.Id = EntityGuid::generate();
+				PrefabOverride add;
+				add.Kind = OverrideKind::AddComponent;
+				add.NodeId = 1234;
+				add.Added = ComponentRecord{ component, { FieldRecord{ "speed", 2.0f } } };
+				PrefabOverride set;
+				set.Kind = OverrideKind::SetField;
+				set.NodeId = 1234;
+				set.Component = component;
+				set.Field = "speed";
+				set.Value = 7.5f;
+				instance.Overrides = { add, set };
+
+				const ExpandResult expanded = expand_prefab(instance, prefab);
+				bool overridden = false;
+				for (const EntityRecord& record : expanded.Entities)
+				{
+					overridden = overridden || speed_of(record, component) == 7.5f;
+				}
+				check(overridden, "prefab_override_of_script_property");
+			}
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -447,6 +602,7 @@ namespace wiwa
 		check_require(check);
 		check_require_scan(check);
 		check_importer(check);
+		check_scene_scripts(check);
 
 		if (check.Failures == 0)
 		{

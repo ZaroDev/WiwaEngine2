@@ -3,6 +3,9 @@
 
 #include <mutex>
 
+#include <algorithm>
+
+#include <scripting/script_names.h>
 #include "reflection/component_registry.h"
 
 #define WI_SCENE_LOG(level, ...) WI_LOG(level, "Scene", __VA_ARGS__)
@@ -71,6 +74,14 @@ namespace wiwa
 		{
 			auto collect_component = [&](const ComponentRecord& component)
 			{
+				if (const std::optional<AssetGuid> script = script_guid_from_component(component.Name))
+				{
+					const AssetRef ref{ *script, 0 };
+					if (seen.insert(ref.resolved()).second)
+					{
+						out.push_back(ref);
+					}
+				}
 				for (const FieldRecord& field : component.Fields)
 				{
 					collect_value(field.Value, seen, out);
@@ -285,6 +296,14 @@ namespace wiwa
 
 	std::vector<AssetRef> collect_references(const SceneData& data)
 	{
-		return collect_references(data.Entities);
+		std::vector<AssetRef> references = collect_references(data.Entities);
+		for (const AssetRef& script : data.Settings.Scripts)
+		{
+			if (script.valid() && std::find(references.begin(), references.end(), script) == references.end())
+			{
+				references.push_back(script);
+			}
+		}
+		return references;
 	}
 }

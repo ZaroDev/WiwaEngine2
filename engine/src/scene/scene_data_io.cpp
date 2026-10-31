@@ -206,6 +206,7 @@ namespace wiwa
 			ar.value(mb.ExposureTime);
 			ar.value(mb.Strength);
 			ar.value(mb.MaxBlurPixels);
+			ar.pod_vector(s.Scripts);
 		}
 	}
 

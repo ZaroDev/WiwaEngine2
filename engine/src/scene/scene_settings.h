@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <assets/asset_guid.h>
 #include <math/math.h>
 
@@ -139,6 +141,9 @@ namespace wiwa
 		AoSettings Ao{};
 		TaaSettings Taa{};
 		MotionBlurSettings MotionBlur{};
+
+		// Scene-level scripts (Script assets): they run while the scene is active, in this order, and have no entity.
+		std::vector<AssetRef> Scripts{};
 
 		bool operator==(const SceneSettings&) const = default;
 	};

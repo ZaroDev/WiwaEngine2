@@ -74,7 +74,7 @@ void InspectorPanel::on_draw()
 					{
 						continue;
 					}
-					if (ImGui::MenuItem(info->Name.c_str()))
+					if (ImGui::MenuItem(info->display_name().c_str()))
 					{
 						const std::string name = info->Name;
 						m_Deferred = [this, entity, name]() { m_Editor.add_component(entity, name); };
@@ -97,7 +97,7 @@ void InspectorPanel::on_draw()
 void InspectorPanel::draw_component(entt::entity entity, const wiwa::ComponentInfo& info)
 {
 	ImGui::PushID(info.Name.c_str());
-	const bool open = ImGui::CollapsingHeader(info.Name.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+	const bool open = ImGui::CollapsingHeader(info.display_name().c_str(), ImGuiTreeNodeFlags_DefaultOpen);
 
 	if (!is_mandatory(info.Name) && info.Name != "PrefabInstance" && ImGui::BeginPopupContextItem())
 	{
