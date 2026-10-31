@@ -953,6 +953,18 @@ namespace wiwa
 				check(used.size() == 2 && used[0].valid() && used[1].valid() && used[0] != used[1], "model_material_names_from_meta_are_safe: the materials still resolve");
 			}
 
+			// material_unknown_guid_texture_rejected: a texture guid that is no asset is a warning and an invalid reference
+			{
+				const std::filesystem::path bogus = dir / "bogus_guid.wmat";
+				nlohmann::json json = { { "version", 1 }, { "roughness", 0.5 }, { "textures", { { "baseColor", AssetGuid::generate().to_string() } } } };
+				write_text(bogus, json.dump(2));
+				WI_ASSET_LOG(Info, "Smoke test: the next material warning is expected");
+				database.reimport(bogus);
+				std::vector<std::byte> bogusBytes;
+				std::optional<MaterialData> cooked = deserialize<MaterialData>(cooked_payload(guid_of(bogus), AssetType::Material, bogusBytes));
+				check(cooked && cooked->RoughnessFactor == 0.5f && !cooked->BaseColorTexture.valid(), "material_unknown_guid_texture_rejected: imports with an invalid texture ref");
+			}
+
 			std::filesystem::remove_all(dir, error);
 			database.scan();
 		}
