@@ -59,6 +59,9 @@ namespace wiwa
 		// pass. Index i is for the pass to ping-pong between; zero until the pass has written it.
 		nvrhi::ITexture* taa_history(u32 i) const { return m_TaaHistory[i & 1]; }
 		nvrhi::ITexture* taa_depth_history(u32 i) const { return m_TaaDepthHistory[i & 1]; }
+		// A second HDR image for the full-screen compute effects after the scene (motion blur): they read hdr(), write this one and copy it
+		// back. RGBA16F, UAV + SRV.
+		nvrhi::ITexture* post_scratch() const { return m_PostScratch; }
 		nvrhi::IFramebuffer* prepass_framebuffer() const { return m_PrepassFramebuffer; } // normal + velocity + depth
 		nvrhi::IFramebuffer* velocity_framebuffer() const { return m_VelocityFramebuffer; } // velocity + depth
 		nvrhi::IFramebuffer* ldr_framebuffer() const { return m_LdrFramebuffer; }
@@ -93,6 +96,7 @@ namespace wiwa
 		nvrhi::FramebufferHandle m_PrepassFramebuffer{};
 		nvrhi::TextureHandle m_Velocity{};
 		nvrhi::TextureHandle m_TaaHistory[2]{};
+		nvrhi::TextureHandle m_PostScratch{};
 		nvrhi::TextureHandle m_TaaDepthHistory[2]{};
 		nvrhi::FramebufferHandle m_VelocityFramebuffer{};
 		nvrhi::TextureHandle m_PreFxaa{};

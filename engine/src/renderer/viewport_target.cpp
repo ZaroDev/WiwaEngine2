@@ -148,12 +148,23 @@ namespace wiwa
 			taaOk = taaOk && m_TaaHistory[i] != nullptr && m_TaaDepthHistory[i] != nullptr;
 		}
 
+		nvrhi::TextureDesc scratch;
+		scratch.width = width;
+		scratch.height = height;
+		scratch.format = nvrhi::Format::RGBA16_FLOAT;
+		scratch.isUAV = true;
+		scratch.isShaderResource = true;
+		scratch.initialState = nvrhi::ResourceStates::ShaderResource;
+		scratch.keepInitialState = true;
+		scratch.debugName = "Viewport post scratch";
+		m_PostScratch = device->createTexture(scratch);
+
 		m_Hdr = device->createTexture(hdr);
 		m_Depth = device->createTexture(depth);
 		m_Ldr = device->createTexture(ldr);
 		ldr.debugName = "Viewport tonemapped (before FXAA)";
 		m_PreFxaa = device->createTexture(ldr);
-		if (!m_Hdr || !m_Depth || !m_Ldr || !m_PreFxaa || !m_Normal || !m_Velocity || !m_Exposure || !m_Histogram || !bloomOk || !taaOk || !m_AoRaw || !m_Ao || !m_AoDistance)
+		if (!m_Hdr || !m_Depth || !m_Ldr || !m_PreFxaa || !m_Normal || !m_Velocity || !m_Exposure || !m_Histogram || !bloomOk || !taaOk || !m_PostScratch || !m_AoRaw || !m_Ao || !m_AoDistance)
 		{
 			WI_LOG(Error, "Renderer", "could not create the {0}x{1} viewport targets", width, height);
 			destroy();
@@ -216,6 +227,7 @@ namespace wiwa
 		m_PrepassFramebuffer = nullptr;
 		m_VelocityFramebuffer = nullptr;
 		m_Velocity = nullptr;
+		m_PostScratch = nullptr;
 		for (u32 i = 0; i < 2; i++)
 		{
 			m_TaaHistory[i] = nullptr;

@@ -39,6 +39,7 @@ namespace wiwa
 			quality.Fxaa = defaults.Fxaa;
 			quality.Taa = defaults.Taa;
 			m_Renderer.set_quality(quality);
+			m_Renderer.get_scene_data().set_debug_velocity(false);
 			scene().set_camera_override(std::nullopt);
 			scene().set_selection(std::nullopt); // the selection and its look belong to the renderer, not the scene: no check inherits another's
 			scene().set_outline_style(SelectionOutlineStyle{});

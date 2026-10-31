@@ -137,6 +137,9 @@ namespace wiwa
 		u32 history_reset_count() const { return m_HistoryResetCount; }
 		// The jitter of this frame in pixels (zero without TAA).
 		glm::vec2 jitter() const { return glm::vec2(m_Constants.JitterInfo.x, m_Constants.JitterInfo.y); }
+		// Shows the velocity of every pixel instead of the scene (the motion blur pass draws it); for looking at what TAA and motion blur see.
+		void set_debug_velocity(bool enabled) { m_DebugVelocity = enabled; }
+		bool debug_velocity() const { return m_DebugVelocity; }
 		// The next frame starts without a history.
 		void request_history_reset() { m_HistoryResetRequested = true; }
 		// A camera that moves farther than this between two frames is a cut: there is no history across it.
@@ -217,6 +220,7 @@ namespace wiwa
 		u64 m_FrameIndex = 0;
 		bool m_TemporalActive = false;
 		bool m_HistoryValid = false;
+		bool m_DebugVelocity = false;
 		bool m_HistoryResetRequested = false;
 		u32 m_HistoryResetCount = 0;
 		// What the previous frame looked through, for the history checks and the previous matrix.

@@ -130,20 +130,24 @@ namespace wiwa
 			return std::all_of(values.begin(), values.end(), [](float v) { return std::isfinite(v); });
 		}
 
+		// The renderer counts frames across testers: renders empty frames until the next one starts the jitter sequence, so that runs
+		// that must match start at the same point of it.
+		void align_jitter(RenderCheckContext& context)
+		{
+			SceneTester pad(context);
+			while (pad.renderer().get_frame_index() % 8 != 0)
+			{
+				pad.frame();
+			}
+		}
+
 		// How a scenario (a still camera over a box, plus something done at frame 16) ends, with the real feedback or with none (the
 		// current frame alone, a reference that the same jitter makes comparable).
 		using Scenario = std::function<std::vector<u8>(SceneTester&, bool reference)>;
 
 		std::vector<u8> run_scenario(RenderCheckContext& context, const Scenario& scenario, bool reference, u32& size)
 		{
-			{
-				// The renderer counts frames across testers: start both runs at the same point of the jitter sequence.
-				SceneTester pad(context);
-				while (pad.renderer().get_frame_index() % 8 != 0)
-				{
-					pad.frame();
-				}
-			}
+			align_jitter(context);
 			SceneTester test(context);
 			set_taa(test, true);
 			set_feedback(test, reference ? 0.0f : 0.9f);
@@ -160,6 +164,74 @@ namespace wiwa
 			test.add_instance(cube_mesh(test, 0.6f, 2.0f), glm::translate(glm::mat4(1.0f), glm::vec3(60.0f, 0.0f, 0.0f)) * turn);
 			test.render();
 			advance_to(test, 16);
+		}
+	}
+
+	namespace
+	{
+		void set_motion_blur(SceneTester& test, bool enabled, float exposure = 0.0167f, float maxPixels = 32.0f)
+		{
+			SceneSettings settings;
+			settings.MotionBlur.Enabled = enabled;
+			settings.MotionBlur.ExposureTime = exposure;
+			settings.MotionBlur.MaxBlurPixels = maxPixels;
+			test.scene().set_settings(settings);
+		}
+
+		// A bright box that moves along x by speed units per second, one step per frame at the tester's frame time; the image of the frame
+		// in which it moved last.
+		std::vector<u8> render_moving_box(RenderCheckContext& context, bool blur, float exposure, float maxPixels, float speed, float delta)
+		{
+			SceneTester test(context);
+			set_motion_blur(test, blur, exposure, maxPixels);
+			test.set_delta(delta);
+			const EntityGuid box = test.add_instance(cube_mesh(test, 0.5f, 2.0f), glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, 0.0f, 0.0f)));
+			test.render();
+			for (int i = 1; i <= 3; i++)
+			{
+				test.set_instance_world(box, glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f + speed * delta * static_cast<float>(i), 0.0f, 0.0f)));
+				test.frame();
+			}
+			test.read();
+			return test.pixels();
+		}
+
+		// The columns, in the middle row, that a bright thing covers (luma well above the corner's) in an image of 64 x 64.
+		glm::ivec2 bright_span(const std::vector<u8>& pixels)
+		{
+			const auto luma = [&](int x, int y)
+			{
+				const size_t offset = (static_cast<size_t>(y) * 64 + static_cast<size_t>(x)) * 4;
+				return (pixels[offset] * 3 + pixels[offset + 1] * 6 + pixels[offset + 2]) / 10;
+			};
+			const int background = luma(1, 1);
+			int first = 64;
+			int last = -1;
+			for (int x = 0; x < 64; x++)
+			{
+				if (luma(x, 32) > background + 60)
+				{
+					first = std::min(first, x);
+					last = std::max(last, x);
+				}
+			}
+			return glm::ivec2(first, last);
+		}
+
+		// How many pixels of the middle row, outside the span, differ between two images.
+		int changed_outside(const std::vector<u8>& a, const std::vector<u8>& b, glm::ivec2 span)
+		{
+			int count = 0;
+			for (int x = 0; x < 64; x++)
+			{
+				if (x >= span.x && x <= span.y)
+				{
+					continue;
+				}
+				const size_t offset = (static_cast<size_t>(32) * 64 + static_cast<size_t>(x)) * 4;
+				count += std::abs(static_cast<int>(a[offset]) - static_cast<int>(b[offset])) > 3 ? 1 : 0;
+			}
+			return count;
 		}
 	}
 
@@ -624,6 +696,7 @@ namespace wiwa
 
 		register_render_check("taa_still_converges", [](RenderCheckContext& context)
 			{
+				align_jitter(context);
 				SceneTester test(context);
 				set_taa(test, true);
 				test.add_instance(cube_mesh(test, 0.6f, 2.0f), glm::rotate(glm::mat4(1.0f), 0.6f, glm::vec3(0.0f, 0.0f, 1.0f)));
@@ -926,6 +999,139 @@ namespace wiwa
 				}
 				const double mean = static_cast<double>(total) / (static_cast<double>(on.size()) * 0.75);
 				context.check(mean < 7.6, "the sky is not smeared by the turning camera (mean difference " + std::to_string(mean) + ")");
+			});
+
+		register_render_check("motion_blur_identity_when_still", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.add_instance(cube_mesh(test, 0.5f, 2.0f), glm::mat4(1.0f));
+				set_motion_blur(test, false);
+				context.check(test.render(), "render with motion blur off");
+				test.frame();
+				test.read();
+				const std::vector<u8> off = test.pixels();
+				set_motion_blur(test, true);
+				test.frame();
+				test.read();
+				context.check(SceneTester::max_difference(off, test.pixels()) == 0, "nothing moves: the image is unchanged");
+			});
+
+		register_render_check("motion_blur_along_velocity", [](RenderCheckContext& context)
+			{
+				const std::vector<u8> off = render_moving_box(context, false, 0.0167f, 32.0f, 20.0f, 1.0f / 60.0f);
+				const std::vector<u8> on = render_moving_box(context, true, 0.0167f, 32.0f, 20.0f, 1.0f / 60.0f);
+				const glm::ivec2 span = bright_span(off);
+				context.check(span.y > span.x + 8, "the box is in view");
+				compare_across_apis(context, "motion_blur", on);
+				context.check(changed_outside(off, on, span) >= 2, "pixels beside the box along x are smeared");
+
+				// Above and below the box, in its middle column, nothing changes.
+				const int column = (span.x + span.y) / 2;
+				int changed = 0;
+				for (int y = 0; y < 64; y++)
+				{
+					const size_t offset = (static_cast<size_t>(y) * 64 + static_cast<size_t>(column)) * 4;
+					const int box = SceneTester::luma(glm::ivec3(off[offset], off[offset + 1], off[offset + 2]));
+					const int background = SceneTester::luma(glm::ivec3(off[4], off[5], off[6]));
+					if (box <= background + 60 && std::abs(static_cast<int>(on[offset]) - static_cast<int>(off[offset])) > 3)
+					{
+						changed++;
+					}
+				}
+				context.check(changed == 0, "pixels above and below the box are not smeared (" + std::to_string(changed) + ")");
+			});
+
+		register_render_check("motion_blur_clamp", [](RenderCheckContext& context)
+			{
+				const std::vector<u8> off = render_moving_box(context, false, 0.0167f, 4.0f, 20.0f, 1.0f / 60.0f);
+				const std::vector<u8> on = render_moving_box(context, true, 0.0167f, 4.0f, 20.0f, 1.0f / 60.0f);
+				const int changed = changed_outside(off, on, bright_span(off));
+				context.check(changed >= 1 && changed <= 5, "a smear limited to 4 pixels reaches at most 4 + 1 pixels beyond the box (" + std::to_string(changed) + ")");
+			});
+
+		register_render_check("motion_blur_frame_rate_independent", [](RenderCheckContext& context)
+			{
+				int length[2];
+				int index = 0;
+				for (const float delta : { 1.0f / 60.0f, 1.0f / 30.0f })
+				{
+					const std::vector<u8> off = render_moving_box(context, false, 0.03f, 100.0f, 20.0f, delta);
+					const std::vector<u8> on = render_moving_box(context, true, 0.03f, 100.0f, 20.0f, delta);
+					length[index++] = changed_outside(off, on, bright_span(off));
+				}
+				context.check(length[0] > 5, "the smear is long enough to measure (" + std::to_string(length[0]) + ")");
+				context.check(std::abs(length[0] - length[1]) <= std::max(2, length[0] / 10), "the same speed gives the same smear at 60 and 30 frames per second (" + std::to_string(length[0]) + ", " + std::to_string(length[1]) + ")");
+			});
+
+		register_render_check("motion_blur_camera_cut", [](RenderCheckContext& context)
+			{
+				auto jump = [&](bool blur)
+				{
+					SceneTester test(context);
+					set_motion_blur(test, blur);
+					const glm::mat4 turn = glm::rotate(glm::mat4(1.0f), 0.6f, glm::vec3(0.0f, 0.0f, 1.0f));
+					test.add_instance(cube_mesh(test, 0.6f, 2.0f), turn);
+					test.add_instance(cube_mesh(test, 0.6f, 2.0f), glm::translate(glm::mat4(1.0f), glm::vec3(60.0f, 0.0f, 0.0f)) * turn);
+					test.render();
+					test.set_camera(glm::vec3(60.0f, 0.0f, 4.0f), glm::vec3(60.0f, 0.0f, 0.0f));
+					test.frame();
+					test.read();
+					return test.pixels();
+				};
+				context.check(SceneTester::max_difference(jump(false), jump(true)) <= 1, "a camera jump of 60 units does not blur");
+			});
+
+		register_render_check("motion_blur_debug_velocity", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				set_motion_blur(test, false);
+				const EntityGuid box = test.add_instance(cube_mesh(test, 0.5f, 2.0f), glm::translate(glm::mat4(1.0f), glm::vec3(-0.5f, 0.0f, 0.0f)));
+				test.render();
+				auto move_and_read = [&](float x)
+				{
+					test.set_instance_world(box, glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, 0.0f)));
+					test.frame();
+					test.read();
+					return test.pixels();
+				};
+
+				move_and_read(-0.4f);
+				test.renderer().get_scene_data().set_debug_velocity(true);
+				move_and_read(-0.3f);
+				const glm::ivec3 inside = test.pixel(test.to_pixel(glm::vec3(-0.3f, 0.0f, 0.5f)));
+				const glm::ivec3 corner = test.pixel(1, 1);
+				context.check(inside.r > 40 && inside.g < 8 && inside.b < 8, "a box moving along x is red in the velocity view");
+				context.check(corner.r < 3 && corner.g < 3 && corner.b < 3, "the still background is black");
+
+				test.renderer().get_scene_data().set_debug_velocity(false);
+				test.set_instance_world(box, glm::translate(glm::mat4(1.0f), glm::vec3(-0.3f, 0.0f, 0.0f)));
+				test.frame();
+				test.read();
+				context.check(SceneTester::luma(test.pixel(1, 1)) > 8 && SceneTester::luma(test.pixel(test.to_pixel(glm::vec3(-0.3f, 0.0f, 0.5f)))) > 100, "switching the view off brings the scene back");
+			});
+
+		register_render_check("motion_blur_tiny_viewport", [](RenderCheckContext& context)
+			{
+				for (const u32 size : { 1u, 3u, 4u })
+				{
+					SceneTester test(context, size);
+					set_motion_blur(test, true);
+					test.add_instance(cube_mesh(test), glm::mat4(1.0f));
+					context.check(test.render(4), "render at " + std::to_string(size) + " pixels with motion blur on");
+					context.check(test.frame() && test.frame(), "and keep rendering");
+				}
+			});
+
+		register_render_check("motion_blur_empty_scene", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				set_motion_blur(test, true);
+				test.renderer().get_scene_data().set_debug_velocity(true);
+				context.check(test.render(4) && test.frame(), "motion blur over a scene without instances");
+
+				test.scene().set_camera_override(std::nullopt);
+				context.check(test.render(4) && test.frame(), "and without a camera");
+				test.renderer().get_scene_data().set_debug_velocity(false);
 			});
 	}
 }
