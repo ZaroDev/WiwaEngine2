@@ -5,6 +5,7 @@
 #include <cctype>
 #include <filesystem>
 
+#include "bindings/bindings.h"
 #include "script_component.h"
 #include "script_properties.h"
 #include "script_requires.h"
@@ -115,6 +116,10 @@ namespace wiwa
 				}
 				return require_module(path, requirer);
 			});
+
+		// the math types are part of the language scripts are written in: a property default may be vec3(0, 1, 0) when the script is only
+		// being imported, with no scene around
+		bind_math(*this);
 
 		m_Sandbox.set_function("log", &Log::log_info);
 		m_Sandbox.set_function("log_warning", &Log::log_warning);
@@ -339,7 +344,7 @@ namespace wiwa
 		}
 	}
 
-	bool ScriptRuntime::reload_script(AssetRef asset, std::string& error, entt::registry* registry)
+	bool ScriptRuntime::reload_script(AssetRef asset, std::string& error, entt::registry* registry, std::vector<AssetRef>* reloaded)
 	{
 		error.clear();
 
@@ -473,6 +478,10 @@ namespace wiwa
 		m_Reloading = false;
 		m_Stale.clear();
 		m_Fresh.clear();
+		if (reloaded != nullptr)
+		{
+			*reloaded = affected;
+		}
 		return true;
 	}
 

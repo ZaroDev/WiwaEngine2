@@ -15,7 +15,6 @@ namespace wiwa
 	ScriptInstances::ScriptInstances(ScriptRuntime& runtime) : m_Runtime(runtime)
 	{
 		m_Context.Runtime = &m_Runtime;
-		bind_math(m_Runtime);
 		bind_scene(m_Runtime, m_Context);
 		bind_assets(m_Runtime, m_Context);
 		bind_render(m_Runtime, m_Context);
@@ -333,6 +332,29 @@ namespace wiwa
 			{
 				begin(std::move(instance));
 			}
+		}
+	}
+
+	void ScriptInstances::script_reloaded(std::span<const AssetRef> scripts)
+	{
+		for (const AssetRef& script : scripts)
+		{
+			m_BrokenScripts.erase(script.resolved());
+		}
+
+		// without on_destroy: the instance never finished starting, or stopped running on an error; discover() makes a new one
+		for (std::vector<Instance>* instances : { &m_Instances, &m_SceneInstances })
+		{
+			std::erase_if(*instances, [&](const Instance& instance)
+				{
+					const bool reloaded = std::any_of(scripts.begin(), scripts.end(), [&](const AssetRef& script) { return script.resolved() == instance.Script; });
+					if (reloaded && instance.Failed)
+					{
+						m_Known.erase({ instance.Entity, instance.Script });
+						return true;
+					}
+					return false;
+				});
 		}
 	}
 

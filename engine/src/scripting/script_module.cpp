@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "script_module.h"
 
+#include <algorithm>
+
 #include <core/engine.h>
 #include <renderer/render_module.h>
 #include <scene/scene_module.h>
@@ -27,10 +29,21 @@ namespace wiwa
 		}
 
 		register_catalog_scripts();
+
+		// the listener runs on whatever thread cooked the asset: it only notes the guid
+		m_ReloadListener = assets->add_reload_listener([this](AssetGuid guid)
+			{
+				std::lock_guard<std::mutex> lock(m_ReloadMutex);
+				m_ReloadQueue.push_back(guid);
+			});
 	}
 
 	void ScriptingModule::shutdown()
 	{
+		if (AssetManager* assets = Engine::get().get_module<AssetManager>())
+		{
+			assets->remove_reload_listener(m_ReloadListener);
+		}
 		stop();
 		m_Instances.reset();
 		m_Runtime.reset();
@@ -64,6 +77,47 @@ namespace wiwa
 		if (registered > 0)
 		{
 			WI_SCRIPT_LOG(Info, "Loaded {0} script(s)", registered);
+		}
+	}
+
+	// A script that was cooked again (the editor imported a change): its new code replaces the old in place, and the scripts that
+	// require it follow. Asset guids that are not scripts this runtime has run (shaders, textures, a script nobody used) are ignored.
+	void ScriptingModule::process_reloads()
+	{
+		std::vector<AssetGuid> guids;
+		{
+			std::lock_guard<std::mutex> lock(m_ReloadMutex);
+			guids.swap(m_ReloadQueue);
+		}
+
+		SceneModule* scenes = Engine::get().get_module<SceneModule>();
+		for (size_t i = 0; i < guids.size(); i++)
+		{
+			const AssetGuid guid = guids[i];
+			if (std::find(guids.begin(), guids.begin() + static_cast<std::ptrdiff_t>(i), guid) != guids.begin() + static_cast<std::ptrdiff_t>(i))
+			{
+				continue; // said twice
+			}
+
+			const AssetRef ref{ guid, 0 };
+			if (!m_Runtime->knows(ref) && !m_Instances->is_broken(guid))
+			{
+				continue;
+			}
+
+			m_Source->forget(ref);
+			std::string error;
+			std::vector<AssetRef> reloaded;
+			entt::registry* registry = scenes != nullptr ? &scenes->get_active()->registry() : nullptr;
+			if (m_Runtime->reload_script(ref, error, registry, &reloaded))
+			{
+				m_Instances->script_reloaded(reloaded);
+				WI_SCRIPT_LOG(Info, "Reloaded {0} script(s)", reloaded.size());
+			}
+			else
+			{
+				WI_SCRIPT_LOG(Error, "Reload failed, the previous version stays: {0}", error);
+			}
 		}
 	}
 
@@ -111,6 +165,8 @@ namespace wiwa
 		{
 			return;
 		}
+
+		process_reloads();
 
 		if (m_AutoStart)
 		{

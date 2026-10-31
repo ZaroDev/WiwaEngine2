@@ -1790,6 +1790,110 @@ namespace wiwa
 				check(host.count("show_scene(play)") == 1 && mode.state() == PlayState::Playing, "play_again_after_stop");
 			}
 		}
+
+		// Hot reload: what the runtime and the instances do when a script changed.
+		void check_hot_reload(Check& check)
+		{
+			{
+				Harness h;
+				const AssetRef base = h.add_script("hr_base", "return Script:extend{ speak = function() return 1 end }");
+				const AssetRef child = h.add_script("hr_child", "local Base = require('assets/scripts/hr_base.lua') return Base:extend{}");
+				check(h.Runtime.knows(base) && h.Runtime.knows(child) && !h.Runtime.knows(AssetRef{ AssetGuid::generate(), 0 }), "runtime_knows_the_scripts_it_loaded");
+				h.Source.set_source(base, "return Script:extend{ speak = function() return 2 end }");
+				std::string error;
+				std::vector<AssetRef> reloaded;
+				const bool ok = h.Runtime.reload_script(base, error, nullptr, &reloaded);
+				const auto has = [&](AssetRef ref) { return std::find(reloaded.begin(), reloaded.end(), ref) != reloaded.end(); };
+				check(ok && reloaded.size() == 2 && has(base) && has(child), "reload_reports_what_it_reloaded");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("hr_fails", R"(return Script:extend{
+					on_init = function(self) record('init1') end,
+					on_update = function(self, dt) error('boom') end })");
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				h.Instances.update(0.016f);
+				h.Source.set_source(ref, R"(return Script:extend{
+					on_init = function(self) record('init2') end,
+					on_update = function(self, dt) record('update2') end })");
+				std::string error;
+				std::vector<AssetRef> reloaded;
+				const bool ok = h.Runtime.reload_script(ref, error, &h.TheScene->registry(), &reloaded);
+				h.Instances.script_reloaded(reloaded);
+				h.Instances.update(0.016f);
+				check(ok && h.Events == std::vector<std::string>({ "init1", "init2", "update2" }), "reload_rebuilds_instances_that_an_error_disabled");
+			}
+
+			{
+				Harness h;
+				const AssetRef healthy = h.add_script("hr_healthy", R"(return Script:extend{
+					on_init = function(self) record('healthy init') end,
+					on_update = function(self, dt) self.n = (self.n or 0) + 1 record('healthy ' .. self.n) end })");
+				h.spawn("e", { healthy });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				h.Source.set_source(healthy, "return Script:extend{ on_init = function(self) record('REINIT') end, on_update = function(self, dt) self.n = (self.n or 0) + 1 record('healthy ' .. self.n) end }");
+				std::string error;
+				std::vector<AssetRef> reloaded;
+				h.Runtime.reload_script(healthy, error, &h.TheScene->registry(), &reloaded);
+				h.Instances.script_reloaded(reloaded);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "healthy init", "healthy 1", "healthy 2" }), "reload_keeps_instances_that_were_fine");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.Source.add("assets/scripts/hr_late.lua", "return Script:extend{ on_init = function(self) record('ok') end ");
+				ScriptClass fake;
+				fake.Asset = ref;
+				fake.Name = "hr_late";
+				register_script_component(fake);
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				h.Source.set_source(ref, "return Script:extend{ on_init = function(self) record('ok') end }");
+				std::string error;
+				std::vector<AssetRef> reloaded;
+				const bool ok = h.Runtime.reload_script(ref, error, &h.TheScene->registry(), &reloaded);
+				h.Instances.script_reloaded(reloaded);
+				h.Instances.update(0.016f);
+				check(ok && h.Events == std::vector<std::string>({ "ok" }), "script_that_failed_to_load_is_used_after_a_reload");
+			}
+		}
+
+		// A bare runtime (the importer has no ScriptInstances) must know the math types, and a property default may be one of them.
+		void check_vector_defaults(Check& check)
+		{
+			MemorySource source;
+			const AssetRef ref = source.add("assets/scripts/vector_defaults.lua", R"(return Script:extend{ properties = {
+				direction = { type = 'vec3', default = vec3(0, 1, 0) },
+				offset = { type = 'vec2', default = vec2(1, 2) },
+				tint = { type = 'color', default = vec4(1, 0.5, 0.25, 1) },
+				turn = { type = 'quat', default = quat.from_axis_angle(vec3(0, 1, 0), 90) },
+				plain = { type = 'vec3', default = { 4, 5, 6 } },
+			} })");
+			ScriptRuntime runtime(source);
+			std::string error;
+			const ScriptClass* cls = runtime.load(ref, error);
+			check(cls != nullptr && cls->Properties.size() == 5, "vector_defaults_load_in_a_bare_runtime");
+			if (cls == nullptr || cls->Properties.size() != 5)
+			{
+				return;
+			}
+
+			const auto find = [&](const char* name) -> const FieldDescriptor&
+			{
+				return *std::find_if(cls->Properties.begin(), cls->Properties.end(), [&](const FieldDescriptor& field) { return field.Name == name; });
+			};
+			check(std::get<glm::vec3>(find("direction").Default) == glm::vec3(0.0f, 1.0f, 0.0f), "vec3_default_is_read");
+			check(std::get<glm::vec2>(find("offset").Default) == glm::vec2(1.0f, 2.0f), "vec2_default_is_read");
+			check(std::get<glm::vec4>(find("tint").Default) == glm::vec4(1.0f, 0.5f, 0.25f, 1.0f), "color_default_is_read");
+			check(std::abs(std::get<glm::quat>(find("turn").Default).y - std::sqrt(0.5f)) < 1e-4f, "quat_default_is_read");
+			check(std::get<glm::vec3>(find("plain").Default) == glm::vec3(4.0f, 5.0f, 6.0f), "table_default_is_still_read");
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -1811,6 +1915,8 @@ namespace wiwa
 		check_pak(check);
 		check_review_fixes(check);
 		check_time(check);
+		check_hot_reload(check);
+		check_vector_defaults(check);
 		check_clone(check);
 		check_editor_document(check);
 		check_play_mode(check);

@@ -76,6 +76,10 @@ void EditorModule::init()
 	for (const std::string& argument : wiwa::Engine::get().get_arguments())
 	{
 		m_PlaySmoke = m_PlaySmoke || argument == "--play-smoke";
+		if (argument == "--demo-smoke")
+		{
+			m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
+		}
 	}
 
 	m_Panels.push_back(CreateRef<HierarchyPanel>(*m_SceneEditor));
@@ -140,6 +144,18 @@ void EditorModule::update(float deltaTime)
 		WI_INFO("Editor", "{0}", failure.empty() ? std::string("Play smoke test passed") : "Play smoke test FAILED: " + failure);
 		wiwa::Engine::get().set_exit_code(failure.empty() ? 0 : 1);
 		wiwa::Engine::get().request_quit();
+	}
+
+	if (m_DemoSmoke != nullptr && m_Frame >= 30)
+	{
+		std::string failure;
+		if (m_DemoSmoke->update(failure))
+		{
+			WI_INFO("Editor", "{0}", failure.empty() ? std::string("Demo smoke test passed") : "Demo smoke test FAILED: " + failure);
+			wiwa::Engine::get().set_exit_code(failure.empty() ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+			m_DemoSmoke.reset();
+		}
 	}
 
 	main_bar();

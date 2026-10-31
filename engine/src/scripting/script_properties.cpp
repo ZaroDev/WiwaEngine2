@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "script_properties.h"
 
+#include "bindings/script_types.h"
+
 #include <algorithm>
 #include <cctype>
 
@@ -59,13 +61,13 @@ namespace wiwa
 			return true;
 		}
 
-		// A vector the engine bound to Lua, or a table of numbers.
+		// A vector the engine bound to Lua (vec3(0, 1, 0)), or a table of numbers.
 		template<typename V>
 		bool read_vector(const sol::object& object, V& out, int count)
 		{
-			if (object.is<V>())
+			if (object.is<LuaVec<V>>())
 			{
-				out = object.as<V>();
+				out = object.as<const LuaVec<V>&>().Value;
 				return true;
 			}
 			float values[4] = {};
@@ -162,9 +164,9 @@ namespace wiwa
 			}
 			case FieldType::Quat:
 			{
-				if (object.is<glm::quat>())
+				if (object.is<LuaQuat>())
 				{
-					field.Default = object.as<glm::quat>();
+					field.Default = object.as<const LuaQuat&>().Value;
 					return true;
 				}
 				float v[4] = {};

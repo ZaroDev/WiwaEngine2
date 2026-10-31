@@ -53,7 +53,11 @@ namespace wiwa
 		// that what already holds those tables (instances, other scripts) runs the new code and keeps its state. The components of
 		// the classes are registered again; with a registry, the entities that hold them keep the values whose name and type still
 		// match. Nothing changes, and `error` says why, if any of the scripts fails to load or has bad properties.
-		bool reload_script(AssetRef asset, std::string& error, entt::registry* registry = nullptr);
+		// `reloaded`, if given, receives every script that was reloaded (the one asked for and the scripts that require it).
+		bool reload_script(AssetRef asset, std::string& error, entt::registry* registry = nullptr, std::vector<AssetRef>* reloaded = nullptr);
+
+		// Whether the script has run in this runtime (as a class, or as a module another script required).
+		bool knows(AssetRef asset) const { return m_Modules.contains(asset.resolved()) || m_Classes.contains(asset.resolved()); }
 
 		// Calls into Lua always go through here: the call gets a fresh instruction budget, so a script that never returns ends
 		// with an error instead of freezing the engine.

@@ -17,6 +17,9 @@ namespace wiwa
 		virtual std::optional<LoadedScript> find_by_path(std::string_view path) override;
 		virtual std::optional<LoadedScript> find_by_asset(AssetRef ref) override;
 
+		// Drops the loaded copy of a script, so that the next read reads the file again (it was cooked again).
+		void forget(AssetRef ref) { m_Handles.erase(ref.resolved()); }
+
 	private:
 		AssetManager& m_Assets;
 		std::map<AssetGuid, Handle<ScriptData>> m_Handles{}; // keeps the scripts loaded

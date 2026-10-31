@@ -5,6 +5,7 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <panels/panels.h>
+#include <play/demo_smoke.h>
 #include <play/play_mode.h>
 #include <scene/scene_editor.h>
 
@@ -45,6 +46,7 @@ private:
 	Scope<wiwa::SceneEditor> m_SceneEditor;
 	Scope<wiwa::IPlayHost> m_PlayHost;
 	Scope<wiwa::PlayMode> m_PlayMode;
+	Scope<wiwa::DemoSmoke> m_DemoSmoke;
 	bool m_PlaySmoke = false;
 	wiwa::u32 m_Frame = 0;
 	wiwa::u32 m_PlaySmokeFinalFrame = 0;

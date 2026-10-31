@@ -89,6 +89,32 @@ Input and physics are not bound yet.
 that names the chain. The importer follows `require` calls whose argument is a string literal, so the required scripts are packed
 with the script; a computed argument works in the editor but its script may be missing from a build (the importer warns).
 
+## Hot reload
+
+Save a script (or a file it `require`s) while the editor is open and the import picks it up; the running scripts switch to the new code
+without restarting the scene:
+
+- The new code replaces the old in place, so instances keep `self` and every field set on it (`self.base_y` and the like), and the
+  scripts that `require` the changed file are reloaded with it.
+- Properties added, removed or retyped show up in the Inspector at once; values that still fit are kept, the rest take the default.
+- A script that an error had disabled starts again (a new `self`, `on_init`) with the fixed code.
+- A syntax error or bad properties are logged as "Reload failed, the previous version stays" and nothing changes.
+- It works in edit mode too (the Inspector follows your edits), not only while playing.
+
+## The demo scene
+
+`assets/scenes/demo.wscene` has scripts to try all of this (the sources are in `assets/scripts/`; `scripts/gen_demo_scene.py` puts them
+on the scene). Press Play and watch the Console:
+
+- **spinner** (gold knot, blue ring, crate C): turns the entity; change `degrees_per_second` or `axis` in the Inspector while playing.
+- **bobber** (neon balls): bobs them using `lib/wave.lua`. Edit `wave.sine` there while playing and every ball changes.
+- **light_pulse** (podium spot, neon lights): reads and writes the `Light` component.
+- **camera_sway** (camera): drifts the camera sideways.
+- **scene_overlay** (a scene-level script, in the scene settings): logs on Play and Stop and draws debug shapes around the podium.
+
+Try: Pause, then Step; edit a script into a syntax error and save (the old version keeps running, the Console says why); fix it; add a
+property to `spinner.lua` and see it in the Inspector without stopping.
+
 ## Editor and builds
 
 In the editor scripts are loaded (their components exist) but do not run while you edit. In a game they run as soon as a scene is

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <set>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,12 @@ namespace wiwa
 		// on_destroy of everything that is running; the scene is still the active one while they run.
 		void stop();
 		void update(float deltaTime);
+
+		// After ScriptRuntime::reload_script: an instance that an error had disabled starts over (a new self, on_init) with the new code, and
+		// a script that could not be loaded is tried again. Instances that were running keep their self and carry on with the new code.
+		void script_reloaded(std::span<const AssetRef> scripts);
+		// A script that failed to load and has not been reloaded since.
+		bool is_broken(AssetGuid script) const { return m_BrokenScripts.contains(script); }
 
 		bool running() const { return m_Scene != nullptr; }
 		const Ref<Scene>& scene() const { return m_Scene; }

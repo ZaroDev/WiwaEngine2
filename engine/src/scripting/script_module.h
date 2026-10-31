@@ -1,6 +1,9 @@
 #pragma once
 #include <core/module.h>
 
+#include <mutex>
+#include <vector>
+
 #include "asset_script_source.h"
 #include "script_instances.h"
 #include "script_runtime.h"
@@ -38,11 +41,17 @@ namespace wiwa
 
 	private:
 		void register_catalog_scripts();
+		void process_reloads();
 		void follow_active_scene();
 
 		Scope<AssetScriptSource> m_Source{};
 		Scope<ScriptRuntime> m_Runtime{};
 		Scope<ScriptInstances> m_Instances{};
 		bool m_AutoStart = true;
+
+		// Scripts that were cooked again, noted on the importer's thread and reloaded on the main one.
+		u32 m_ReloadListener = 0;
+		std::mutex m_ReloadMutex{};
+		std::vector<AssetGuid> m_ReloadQueue{};
 	};
 }
