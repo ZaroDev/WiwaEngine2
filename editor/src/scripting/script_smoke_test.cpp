@@ -31,6 +31,7 @@
 #include "asset_pipeline/builtin_importers.h"
 #include "asset_pipeline/file_utils.h"
 #include "asset_pipeline/packager.h"
+#include "play/play_mode.h"
 #include "scene/scene_editor.h"
 #include "scene/scene_json.h"
 
@@ -1618,6 +1619,165 @@ namespace wiwa
 				"editor_refuses_file_actions_while_playing");
 			editor.set_playing(false);
 		}
+
+		// A host that only writes down what PlayMode asks of it.
+		class FakeHost final : public IPlayHost
+		{
+		public:
+			Ref<Scene> Edit = CreateRef<Scene>();
+			Ref<Scene> Active{};
+			Ref<Scene> LastRestored{};
+			bool CanPlay = true;
+			EditorDocument Document{ "edit.wscene", true, {} };
+			std::vector<std::string> Calls;
+
+			FakeHost()
+			{
+				Edit->create("one");
+				Edit->create("two");
+				Active = Edit;
+			}
+
+			virtual Ref<Scene> edit_scene() override { return Edit; }
+			virtual bool can_play() override { return CanPlay; }
+			virtual EditorDocument capture_document() override { Calls.push_back("capture_document"); return Document; }
+			virtual void show_scene(Ref<Scene> scene, bool playing) override
+			{
+				Calls.push_back(playing ? "show_scene(play)" : "show_scene(edit)");
+				Active = scene;
+			}
+			virtual void restore_document(Ref<Scene> scene, const EditorDocument& document) override
+			{
+				Calls.push_back("restore_document");
+				LastRestored = scene;
+				(void)document;
+			}
+			virtual Ref<Scene> active_scene() override { return Active; }
+			virtual void start_scripts() override { Calls.push_back("start_scripts"); }
+			virtual void stop_scripts() override { Calls.push_back("stop_scripts"); }
+			virtual void time_play() override { Calls.push_back("time_play"); }
+			virtual void time_stop() override { Calls.push_back("time_stop"); }
+			virtual void time_pause(bool paused) override { Calls.push_back(paused ? "time_pause(true)" : "time_pause(false)"); }
+
+			size_t count(const std::string& call) const { return static_cast<size_t>(std::count(Calls.begin(), Calls.end(), call)); }
+		};
+
+		void check_play_mode(Check& check)
+		{
+			using Calls = std::vector<std::string>;
+
+			{
+				FakeHost host;
+				PlayMode mode(host);
+				mode.play();
+				check(host.Calls == Calls({ "capture_document", "show_scene(play)", "time_play", "start_scripts" }) && mode.state() == PlayState::Playing, "play_from_edit");
+				check(mode.play_scene() != nullptr && mode.play_scene() != host.Edit && mode.play_scene()->roots().size() == host.Edit->roots().size(), "play_runs_on_a_clone");
+			}
+
+			{
+				FakeHost host;
+				host.CanPlay = false;
+				PlayMode mode(host);
+				mode.play();
+				check(host.Calls.empty() && mode.state() == PlayState::Edit, "play_refused_when_the_host_says_no");
+			}
+
+			{
+				FakeHost host;
+				PlayMode mode(host);
+				mode.pause();
+				mode.resume();
+				mode.step();
+				mode.stop();
+				mode.update();
+				check(host.Calls.empty() && mode.state() == PlayState::Edit, "controls_are_no_ops_in_edit");
+			}
+
+			{
+				FakeHost host;
+				PlayMode mode(host);
+				mode.play();
+				host.Calls.clear();
+				mode.play();
+				mode.resume();
+				mode.step();
+				mode.update();
+				check(host.Calls.empty() && mode.state() == PlayState::Playing, "play_twice_resume_and_step_while_playing_do_nothing");
+			}
+
+			{
+				FakeHost host;
+				PlayMode mode(host);
+				mode.play();
+				host.Calls.clear();
+				mode.pause();
+				mode.pause();
+				const bool paused = mode.state() == PlayState::Paused;
+				mode.resume();
+				check(paused && host.Calls == Calls({ "time_pause(true)", "time_pause(false)" }) && mode.state() == PlayState::Playing, "pause_and_resume");
+			}
+
+			{
+				FakeHost host;
+				PlayMode mode(host);
+				mode.play();
+				mode.pause();
+				host.Calls.clear();
+				mode.step();
+				mode.update();
+				const Calls afterFirst = host.Calls;
+				mode.update();
+				const Calls afterSecond = host.Calls;
+				mode.update();
+				mode.update();
+				check(afterFirst == Calls({ "time_pause(false)" }) && afterSecond == Calls({ "time_pause(false)", "time_pause(true)" }) && host.Calls == afterSecond
+					&& mode.state() == PlayState::Paused, "step_unpauses_for_exactly_one_update");
+			}
+
+			{
+				FakeHost host;
+				PlayMode mode(host);
+				mode.play();
+				host.Calls.clear();
+				mode.stop();
+				check(host.Calls == Calls({ "stop_scripts", "time_stop", "show_scene(edit)", "restore_document" }) && host.LastRestored == host.Edit && host.Active == host.Edit
+					&& mode.state() == PlayState::Edit && mode.play_scene() == nullptr, "stop_order_and_the_edit_scene_comes_back");
+			}
+
+			{
+				FakeHost host;
+				PlayMode mode(host);
+				mode.play();
+				mode.pause();
+				host.Calls.clear();
+				mode.stop();
+				check(host.Calls == Calls({ "stop_scripts", "time_stop", "show_scene(edit)", "restore_document" }) && mode.state() == PlayState::Edit, "stop_from_paused");
+			}
+
+			{
+				FakeHost host;
+				PlayMode mode(host);
+				mode.play();
+				Ref<Scene> loaded = CreateRef<Scene>();
+				host.Active = loaded; // a script loaded another scene
+				host.Calls.clear();
+				mode.update();
+				mode.update();
+				const bool followed = mode.play_scene() == loaded && host.count("start_scripts") == 1;
+				mode.stop();
+				check(followed && host.LastRestored == host.Edit && host.Active == host.Edit, "scene_replaced_during_play_restarts_scripts_and_stop_restores_the_original");
+			}
+
+			{
+				FakeHost host;
+				PlayMode mode(host);
+				mode.play();
+				mode.stop();
+				host.Calls.clear();
+				mode.play();
+				check(host.count("show_scene(play)") == 1 && mode.state() == PlayState::Playing, "play_again_after_stop");
+			}
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -1641,6 +1801,7 @@ namespace wiwa
 		check_time(check);
 		check_clone(check);
 		check_editor_document(check);
+		check_play_mode(check);
 
 		if (check.Failures == 0)
 		{
