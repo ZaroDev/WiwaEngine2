@@ -65,7 +65,7 @@ namespace wiwa
 
 	bool ImportContext::asset_exists(const AssetRef& ref) const
 	{
-		return ref.valid() && (m_Database.path_of(ref.Guid).has_value() || m_Database.is_pending_asset(ref.Guid));
+		return ref.valid() && (m_Database.path_of(ref.Guid).has_value() || m_Database.is_pending_asset(ref.Guid) || m_Database.is_cooked_asset(ref.Guid));
 	}
 
 	std::vector<std::filesystem::path> ImportContext::get_source_roots() const

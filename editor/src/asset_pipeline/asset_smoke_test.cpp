@@ -871,6 +871,88 @@ namespace wiwa
 					"model_removed_material_keeps_file: the remaining materials keep their files");
 			}
 
+			// model_embedded_texture_survives_reimport: a material file refers to an embedded image by guid, and the reference
+			// is still there when the .wmat itself is cooked again later
+			{
+				std::vector<unsigned char> buffer;
+				const float corners[9] = { 0, 0, 0, 1, 0, 0, 0, 1, 0 };
+				buffer.insert(buffer.end(), reinterpret_cast<const unsigned char*>(corners), reinterpret_cast<const unsigned char*>(corners) + sizeof(corners));
+				buffer.insert(buffer.end(), { 0, 0, 1, 0, 2, 0, 0, 0 });
+				buffer.insert(buffer.end(), png, png + sizeof(png));
+
+				const std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+				std::string encoded;
+				for (size_t i = 0; i < buffer.size(); i += 3)
+				{
+					const u32 group = (u32(buffer[i]) << 16) | (i + 1 < buffer.size() ? u32(buffer[i + 1]) << 8 : 0u) | (i + 2 < buffer.size() ? u32(buffer[i + 2]) : 0u);
+					encoded += alphabet[(group >> 18) & 63];
+					encoded += alphabet[(group >> 12) & 63];
+					encoded += (i + 1 < buffer.size()) ? alphabet[(group >> 6) & 63] : '=';
+					encoded += (i + 2 < buffer.size()) ? alphabet[group & 63] : '=';
+				}
+
+				nlohmann::json primitives = nlohmann::json::array();
+				primitives.push_back({ { "attributes", { { "POSITION", 0 } } }, { "indices", 1 }, { "material", 0 } });
+				nlohmann::json root = {
+					{ "asset", { { "version", "2.0" } } }, { "scene", 0 }, { "scenes", { { { "nodes", { 0 } } } } },
+					{ "nodes", { { { "name", "Body" }, { "mesh", 0 } } } },
+					{ "meshes", { { { "primitives", primitives } } } },
+					{ "materials", { { { "name", "Skin" }, { "pbrMetallicRoughness", { { "baseColorTexture", { { "index", 0 } } } } } } } },
+					{ "textures", { { { "source", 0 } } } }, { "images", { { { "bufferView", 2 }, { "mimeType", "image/png" } } } },
+					{ "accessors", { { { "bufferView", 0 }, { "componentType", 5126 }, { "count", 3 }, { "type", "VEC3" }, { "min", { 0, 0, 0 } }, { "max", { 1, 1, 0 } } },
+						{ { "bufferView", 1 }, { "componentType", 5123 }, { "count", 3 }, { "type", "SCALAR" } } } },
+					{ "bufferViews", { { { "buffer", 0 }, { "byteOffset", 0 }, { "byteLength", 36 } }, { { "buffer", 0 }, { "byteOffset", 36 }, { "byteLength", 6 } },
+						{ { "buffer", 0 }, { "byteOffset", 44 }, { "byteLength", sizeof(png) } } } },
+					{ "buffers", { { { "byteLength", buffer.size() }, { "uri", "data:application/octet-stream;base64," + encoded } } } } };
+
+				const std::filesystem::path embedded = dir / "e.gltf";
+				write_text(embedded, root.dump(2));
+				database.scan();
+
+				const std::filesystem::path skin = dir / "e_materials" / "Skin.wmat";
+				MaterialFileData skinData;
+				std::string skinError;
+				const bool readSkin = read_material_file(skin, skinData, skinError);
+				check(readSkin && AssetGuid::from_string(skinData.BaseColorPath).has_value(), "model_embedded_texture_survives_reimport: the file names the embedded image by guid");
+
+				const auto cooked_texture = [&]()
+				{
+					std::vector<std::byte> materialBytes;
+					std::optional<MaterialData> cooked = deserialize<MaterialData>(cooked_payload(guid_of(skin), AssetType::Material, materialBytes));
+					return cooked && cooked->BaseColorTexture.valid();
+				};
+				check(cooked_texture(), "model_embedded_texture_survives_reimport: the first import keeps the texture");
+
+				write_text(skin, read_text(skin) + "\n");
+				database.reimport(skin);
+				check(cooked_texture(), "model_embedded_texture_survives_reimport: the texture is still there after the file is cooked again");
+			}
+
+			// model_material_names_from_meta_are_safe: a hand-edited file name in the .meta cannot leave the material folder
+			{
+				const std::filesystem::path hand = dir / "h.gltf";
+				write_text(hand, model_text({ "Red", "Blue" }));
+				database.scan();
+
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(hand));
+				check(meta && meta->Settings.contains("materialFiles"), "model_material_names_from_meta_are_safe: the .meta remembers the files");
+				if (meta)
+				{
+					meta->Settings["materialFiles"]["Red"] = "../../escape";
+					meta->Settings["materialFiles"]["Blue"] = "sub/dir";
+					meta->save(MetaFile::meta_path_for(hand));
+					WI_ASSET_LOG(Info, "Smoke test: the next import may warn");
+					database.reimport(hand);
+				}
+
+				std::error_code existsError;
+				const std::filesystem::path root = database.get_assets_root();
+				check(!std::filesystem::exists(root / "escape.wmat", existsError) && !std::filesystem::exists(dir / "escape.wmat", existsError) &&
+					!std::filesystem::exists(dir / "h_materials" / "sub", existsError), "model_material_names_from_meta_are_safe: nothing is written outside the material folder");
+				const std::vector<AssetGuid> used = primitive_materials(hand);
+				check(used.size() == 2 && used[0].valid() && used[1].valid() && used[0] != used[1], "model_material_names_from_meta_are_safe: the materials still resolve");
+			}
+
 			std::filesystem::remove_all(dir, error);
 			database.scan();
 		}

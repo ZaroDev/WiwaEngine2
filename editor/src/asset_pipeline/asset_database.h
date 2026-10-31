@@ -47,6 +47,8 @@ namespace wiwa
 		void add_pending_asset(AssetGuid guid);
 		void remove_pending_asset(AssetGuid guid);
 		bool is_pending_asset(AssetGuid guid) const;
+		// Whether some source's last import cooked this guid (the embedded textures and other sub-assets of a model have no path of their own).
+		bool is_cooked_asset(AssetGuid guid) const;
 
 		// Called (on a worker thread) with each cooked guid after a file was re-cooked with new content.
 		void add_reimport_listener(std::function<void(AssetGuid)> listener);

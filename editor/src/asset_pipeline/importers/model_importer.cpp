@@ -25,47 +25,47 @@ namespace wiwa
 			return extension;
 		}
 
-			std::string lower_text(std::string text)
+		std::string lower_text(std::string text)
+		{
+			std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			return text;
+		}
+
+		// A material name as a file name: characters outside [A-Za-z0-9 _.-] become '_'; a name that would be empty, only
+		// dots, end in a dot or space, or be a reserved device name on Windows is changed so that it is a plain file.
+		std::string safe_file_stem(const std::string& name)
+		{
+			std::string stem;
+			for (char c : name)
 			{
-				std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-				return text;
+				const bool allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '_' || c == '.' || c == '-';
+				stem.push_back(allowed ? c : '_');
+			}
+			if (stem.size() > 100)
+			{
+				stem.resize(100);
+			}
+			while (!stem.empty() && (stem.back() == '.' || stem.back() == ' '))
+			{
+				stem.pop_back();
+			}
+			if (stem.empty() || stem.find_first_not_of('.') == std::string::npos)
+			{
+				return "material";
 			}
 
-			// A material name as a file name: characters outside [A-Za-z0-9 _.-] become '_'; a name that would be empty, only
-			// dots, end in a dot or space, or be a reserved device name on Windows is changed so that it is a plain file.
-			std::string safe_file_stem(const std::string& name)
+			static const char* const reserved[] = { "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+				"lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9" };
+			const std::string lowered = lower_text(stem.substr(0, stem.find('.')));
+			for (const char* word : reserved)
 			{
-				std::string stem;
-				for (char c : name)
+				if (lowered == word)
 				{
-					const bool allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '_' || c == '.' || c == '-';
-					stem.push_back(allowed ? c : '_');
+					return stem + "_";
 				}
-				if (stem.size() > 100)
-				{
-					stem.resize(100);
-				}
-				while (!stem.empty() && (stem.back() == '.' || stem.back() == ' '))
-				{
-					stem.pop_back();
-				}
-				if (stem.empty() || stem.find_first_not_of('.') == std::string::npos)
-				{
-					return "material";
-				}
-
-				static const char* const reserved[] = { "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
-					"lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9" };
-				const std::string lowered = lower_text(stem.substr(0, stem.find('.')));
-				for (const char* word : reserved)
-				{
-					if (lowered == word)
-					{
-						return stem + "_";
-					}
-				}
-				return stem;
 			}
+			return stem;
+		}
 
 		// Box around the whole model: each mesh's box through the world transform of its node.
 		void compute_bounds(const ImportedModel& model, glm::vec3& minimum, glm::vec3& maximum)
@@ -273,7 +273,8 @@ namespace wiwa
 					}
 					usedKeys.insert(key);
 
-					if (!materialFiles.contains(key) || !materialFiles[key].is_string())
+					// a name read from the .meta may have been edited by hand: only a plain file stem is used
+					if (!materialFiles.contains(key) || !materialFiles[key].is_string() || safe_file_stem(materialFiles[key].get<std::string>()) != materialFiles[key].get<std::string>())
 					{
 						const std::string stem = safe_file_stem(key);
 						std::string candidate = stem;

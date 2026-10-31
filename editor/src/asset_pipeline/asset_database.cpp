@@ -129,6 +129,21 @@ namespace wiwa
 		return m_PendingAssets.contains(guid);
 	}
 
+	bool AssetDatabase::is_cooked_asset(AssetGuid guid) const
+	{
+		const std::string text = guid.to_string();
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto it = m_ImportCache.begin(); it != m_ImportCache.end(); ++it)
+		{
+			const nlohmann::json& assets = it.value().is_object() ? it.value().value("assets", nlohmann::json::array()) : nlohmann::json::array();
+			if (std::find(assets.begin(), assets.end(), text) != assets.end())
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	void AssetDatabase::add_root(std::filesystem::path sourceRoot, std::filesystem::path libraryFolder)
 	{
 		m_Roots.push_back({ std::move(sourceRoot), std::move(libraryFolder) });
