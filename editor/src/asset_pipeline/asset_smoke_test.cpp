@@ -11,6 +11,7 @@
 #include "file_utils.h"
 #include "material_file.h"
 #include "packager.h"
+#include "surface_shader_parser.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -967,6 +968,140 @@ namespace wiwa
 
 			std::filesystem::remove_all(dir, error);
 			database.scan();
+		}
+
+		// The .wshader parser is pure text processing, no database needed
+		{
+			const std::string surfaceFn = "void Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o) {}\n";
+			const auto parse = [](const std::string& source, ParsedSurface& out, std::string& error) { return parse_surface_shader(source, out, error); };
+			// True if the source is rejected with an error that starts with "<line>: " and contains text
+			const auto rejected_at = [&](const std::string& source, u32 line, const std::string& text)
+			{
+				ParsedSurface parsed;
+				std::string parseError;
+				const bool ok = parse(source, parsed, parseError);
+				return !ok && parseError.rfind(std::to_string(line) + ": ", 0) == 0 && parseError.find(text) != std::string::npos;
+			};
+
+			// surface_parse_all_types
+			{
+				const std::string source =
+					"struct MaterialParams\n"
+					"{\n"
+					"    float  A;   // range(0,2) default(0.5) label(\"Amount\")\n"
+					"    float2 B;   // default(1,2)\n"
+					"    float3 C;   // color default(1,0.5,0.25)\n"
+					"    float  D;\n"
+					"    float4 E;   // color default(1,0.5,0,1)\n"
+					"    int    F;   // range(0,3) default(2)\n"
+					"    bool   G;   // default(true)\n"
+					"    float2 H;\n"
+					"    float3 I;\n"
+					"};\n"
+					"Texture2D Mask; // @param\n"
+					"Texture2D Other; // @param\n"
+					"Texture2D NotAParam;\n"
+					"float3 VertexOffset(VertexInput v, MaterialParams p) { return 0; }\n" + surfaceFn;
+				ParsedSurface parsed;
+				std::string parseError;
+				const bool ok = parse(source, parsed, parseError);
+				check(ok && parseError.empty(), "surface_parse_all_types: parses (" + parseError + ")");
+				if (ok && parsed.Params.size() == 9)
+				{
+					const std::vector<SurfaceParam>& p = parsed.Params;
+					// HLSL packing: B (float2) fits in 4..12, C (float3) would straddle 16 so it moves to 16, D fills 28..32, H fits 56..64
+					const u32 offsets[9] = { 0, 4, 16, 28, 32, 48, 52, 56, 64 };
+					bool offsetsMatch = true;
+					for (u32 i = 0; i < 9; i++)
+					{
+						offsetsMatch = offsetsMatch && p[i].Offset == offsets[i];
+					}
+					check(offsetsMatch, "surface_parse_all_types: offsets are 0,4,16,28,32,48,52,56,64");
+					check(parsed.BlockSize == 80, "surface_parse_all_types: the block is 80 bytes");
+					check(p[0].Name == "A" && p[0].Type == SurfaceParamType::Float && p[0].Min == 0.0f && p[0].Max == 2.0f && p[0].Default[0] == 0.5f && p[0].Label == "Amount" && !p[0].Color,
+						"surface_parse_all_types: float with range, default and label");
+					check(p[1].Type == SurfaceParamType::Float2 && p[1].Default[0] == 1.0f && p[1].Default[1] == 2.0f, "surface_parse_all_types: float2 default");
+					check(p[2].Type == SurfaceParamType::Float3 && p[2].Color && p[2].Default[2] == 0.25f, "surface_parse_all_types: float3 color");
+					check(p[4].Type == SurfaceParamType::Float4 && p[4].Color && p[4].Default[1] == 0.5f && p[4].Default[3] == 1.0f, "surface_parse_all_types: float4 color");
+					check(p[5].Type == SurfaceParamType::Int && p[5].Max == 3.0f && p[5].Default[0] == 2.0f, "surface_parse_all_types: int");
+					check(p[6].Type == SurfaceParamType::Bool && p[6].Default[0] == 1.0f, "surface_parse_all_types: bool default true");
+					check(p[3].Label.empty() && p[3].Min == p[3].Max, "surface_parse_all_types: no annotations, no range");
+					check(parsed.Textures.size() == 2 && parsed.Textures[0] == "Mask" && parsed.Textures[1] == "Other", "surface_parse_all_types: only @param textures");
+					check(parsed.HasVertexOffset, "surface_parse_all_types: VertexOffset is detected");
+					check(parsed.ParamsStructSource.find("struct MaterialParams") != std::string::npos && parsed.ParamsStructSource.find("float3 C;") != std::string::npos,
+						"surface_parse_all_types: the struct source is kept");
+				}
+				else
+				{
+					check(false, "surface_parse_all_types: nine parameters");
+				}
+			}
+
+			// surface_parse_block_limit
+			{
+				const auto with_floats = [&](u32 count)
+				{
+					std::string source = "struct MaterialParams {\n";
+					for (u32 i = 0; i < count; i++)
+					{
+						source += "float P" + std::to_string(i) + ";\n";
+					}
+					return source + "};\n" + surfaceFn;
+				};
+				ParsedSurface parsed;
+				std::string parseError;
+				check(parse(with_floats(64), parsed, parseError) && parsed.BlockSize == 256, "surface_parse_block_limit: exactly 256 bytes is accepted");
+				check(rejected_at(with_floats(65), 66, "256"), "surface_parse_block_limit: 257 bytes is rejected with the limit, at the member that crosses it");
+			}
+
+			// surface_parse_errors
+			{
+				check(rejected_at("struct MaterialParams {\n    half X;\n};\n" + surfaceFn, 2, "half"), "surface_parse_errors: unknown type");
+				check(rejected_at("struct MaterialParams {\n    float X;\n    float Y; // rnge(0,1)\n};\n" + surfaceFn, 3, "rnge"), "surface_parse_errors: unknown annotation");
+				check(rejected_at("struct MaterialParams {\n    float X; // range(0)\n};\n" + surfaceFn, 2, "range"), "surface_parse_errors: range with one value");
+				check(rejected_at("struct MaterialParams {\n    float2 X; // default(1)\n};\n" + surfaceFn, 2, "default"), "surface_parse_errors: default with the wrong count");
+				check(rejected_at("struct MaterialParams {\n    float X; // range(2,1)\n};\n" + surfaceFn, 2, "range"), "surface_parse_errors: range with min above max");
+				check(rejected_at("struct MaterialParams {\n    float2 X; // color\n};\n" + surfaceFn, 2, "color"), "surface_parse_errors: color on a float2");
+				check(rejected_at("struct MaterialParams {\n    float X;\n    float X;\n};\n" + surfaceFn, 3, "X"), "surface_parse_errors: duplicate name");
+				check(rejected_at("Texture2D A; // @param\nTexture2D B; // @param\nTexture2D C; // @param\nTexture2D D; // @param\nTexture2D E; // @param\n" + surfaceFn, 5, "4"),
+					"surface_parse_errors: five textures");
+				check(rejected_at("struct MaterialParams {\n    float X;\n};\n", 1, "Surface"), "surface_parse_errors: missing Surface");
+			}
+
+			// surface_parse_empty_params
+			{
+				ParsedSurface parsed;
+				std::string parseError;
+				check(parse(surfaceFn, parsed, parseError) && parsed.Params.empty() && parsed.BlockSize == 0 && parsed.Textures.empty() && !parsed.HasVertexOffset,
+					"surface_parse_empty_params: no struct, no parameters");
+				check(parse("struct MaterialParams {\n};\n" + surfaceFn, parsed, parseError) && parsed.Params.empty() && parsed.BlockSize == 0, "surface_parse_empty_params: an empty struct");
+			}
+
+			// surface_parse_ignores_comments_and_strings
+			{
+				const std::string source =
+					"/* void Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o)\n"
+					"   float3 VertexOffset(VertexInput v, MaterialParams p) */\n"
+					"struct MaterialParams\n"
+					"{\n"
+					"    float A;\n"
+					"    // float Hidden;\n"
+					"    /* float AlsoHidden;\n"
+					"       float3 Gone; */\n"
+					"    float B; // default(2)\n"
+					"};\n"
+					"// Texture2D Commented; // @param\n"
+					"static const string S = \"Surface( VertexOffset( Texture2D T; // @param\";\n"
+					+ surfaceFn;
+				ParsedSurface parsed;
+				std::string parseError;
+				const bool ok = parse(source, parsed, parseError);
+				check(ok, "surface_parse_ignores_comments_and_strings: parses (" + parseError + ")");
+				check(ok && parsed.Params.size() == 2 && parsed.Params[1].Name == "B" && parsed.Params[1].Offset == 4 && parsed.Textures.empty() && !parsed.HasVertexOffset,
+					"surface_parse_ignores_comments_and_strings: commented members, textures and hooks are not seen");
+				check(rejected_at("/* void Surface(SurfaceInput i) */\n// Surface(\nstatic const string S = \"Surface(\";\n", 1, "Surface"),
+					"surface_parse_ignores_comments_and_strings: a Surface only in comments and strings is missing");
+			}
 		}
 
 		std::filesystem::remove_all(temp, error);

@@ -150,6 +150,30 @@ namespace wiwa
 		glm::vec3 BoundsMax{ 0.0f };
 	};
 
+	// A parameter of a user surface shader (.wshader). Offset is in bytes inside the parameter block, packed like an HLSL
+	// cbuffer: a member never straddles a 16-byte boundary. Min == Max means the parameter has no range.
+	enum class SurfaceParamType : u32
+	{
+		Float,
+		Float2,
+		Float3,
+		Float4,
+		Int,
+		Bool,
+	};
+
+	struct SurfaceParam
+	{
+		std::string Name{};
+		SurfaceParamType Type = SurfaceParamType::Float;
+		u32 Offset = 0;
+		float Min = 0.0f;
+		float Max = 0.0f;
+		float Default[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		bool Color = false;
+		std::string Label{};
+	};
+
 	struct MaterialData
 	{
 		std::string Name{};
