@@ -8,6 +8,7 @@
 
 #include <assets/wasset_io.h>
 #include <scene/prefab_expander.h>
+#include <scene/scene_clone.h>
 #include <scene/reflection/component_registry.h>
 #include <scene/reflection/value_bag.h>
 #include <scene/scene.h>
@@ -1428,6 +1429,153 @@ namespace wiwa
 				check(frozen && t.get_game_clock().TimeSinceClock.count() > paused, "pause_stops_the_game_clock");
 			}
 		}
+
+		bool entity_records_equal(const EntityRecord& a, const EntityRecord& b)
+		{
+			if (a.Id != b.Id || a.Parent != b.Parent || a.Components.size() != b.Components.size() || a.Overrides.size() != b.Overrides.size())
+			{
+				return false;
+			}
+			for (size_t i = 0; i < a.Components.size(); i++)
+			{
+				if (a.Components[i].Name != b.Components[i].Name || a.Components[i].Fields.size() != b.Components[i].Fields.size())
+				{
+					return false;
+				}
+				for (size_t f = 0; f < a.Components[i].Fields.size(); f++)
+				{
+					if (a.Components[i].Fields[f].Name != b.Components[i].Fields[f].Name || !(a.Components[i].Fields[f].Value == b.Components[i].Fields[f].Value))
+					{
+						return false;
+					}
+				}
+			}
+			for (size_t i = 0; i < a.Overrides.size(); i++)
+			{
+				if (a.Overrides[i].Kind != b.Overrides[i].Kind || a.Overrides[i].NodeId != b.Overrides[i].NodeId || a.Overrides[i].Field != b.Overrides[i].Field
+					|| !(a.Overrides[i].Value == b.Overrides[i].Value))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		// Everything a scene holds that the clone must keep: the records in order (hierarchy, siblings, roots, reflected fields, overrides),
+		// the settings, and what the records do not hold.
+		bool scenes_equal(Scene& a, Scene& b)
+		{
+			const SceneData da = data_from_scene(a, "s");
+			const SceneData db = data_from_scene(b, "s");
+			if (da.Entities.size() != db.Entities.size() || !(da.Settings == db.Settings) || a.roots().size() != b.roots().size())
+			{
+				return false;
+			}
+
+			for (size_t i = 0; i < da.Entities.size(); i++)
+			{
+				if (!entity_records_equal(da.Entities[i], db.Entities[i]))
+				{
+					return false;
+				}
+
+				const entt::entity ea = a.find(da.Entities[i].Id);
+				const entt::entity eb = b.find(da.Entities[i].Id);
+				const PrefabChild* pa = a.registry().try_get<PrefabChild>(ea);
+				const PrefabChild* pb = b.registry().try_get<PrefabChild>(eb);
+				if ((pa == nullptr) != (pb == nullptr) || (pa != nullptr && (pa->Instance != pb->Instance || pa->NodeId != pb->NodeId)))
+				{
+					return false;
+				}
+
+				const UnknownComponents* ua = a.registry().try_get<UnknownComponents>(ea);
+				const UnknownComponents* ub = b.registry().try_get<UnknownComponents>(eb);
+				if ((ua == nullptr) != (ub == nullptr) || (ua != nullptr && (ua->Records.size() != ub->Records.size() || ua->Records[0].Name != ub->Records[0].Name)))
+				{
+					return false;
+				}
+
+				const ValueBags* ba = a.registry().try_get<ValueBags>(ea);
+				const ValueBags* bb = b.registry().try_get<ValueBags>(eb);
+				if ((ba == nullptr) != (bb == nullptr) || (ba != nullptr && (ba->Bags.size() != bb->Bags.size() || ba->Bags[0].Name != bb->Bags[0].Name || !(ba->Bags[0].Values == bb->Bags[0].Values))))
+				{
+					return false;
+				}
+			}
+			for (size_t i = 0; i < a.roots().size(); i++)
+			{
+				if (a.registry().get<Id>(a.roots()[i]).Guid != b.registry().get<Id>(b.roots()[i]).Guid)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		void check_clone(Check& check)
+		{
+			ScriptClass scriptClass;
+			scriptClass.Asset = AssetRef{ AssetGuid::generate(), 0 };
+			scriptClass.Name = "cloned";
+			FieldDescriptor speed;
+			speed.Name = "speed";
+			speed.Type = FieldType::Float;
+			speed.Default = 1.0f;
+			scriptClass.Properties.push_back(speed);
+			register_script_component(scriptClass);
+
+			Scene source;
+			const entt::entity rootA = source.create("rootA");
+			const entt::entity childA1 = source.create("childA1", rootA);
+			source.create("childA2", rootA);
+			const entt::entity grandchild = source.create("grandchild", childA1);
+			const entt::entity rootB = source.create("rootB");
+			const entt::entity rootC = source.create("rootC");
+
+			source.registry().get<Transform>(grandchild).Position = glm::vec3(1.0f, 2.0f, 3.0f);
+			Light& light = source.registry().emplace<Light>(rootB);
+			light.Intensity = 7.0f;
+			source.registry().emplace<Camera>(rootC).FovY = 33.0f;
+
+			ComponentRegistry::get().find(script_component_name(scriptClass.Asset.Guid))->Add(source.registry(), rootB);
+			ComponentRegistry::get().find(script_component_name(scriptClass.Asset.Guid))->Set(source.registry(), rootB, 0, 7.5f);
+
+			PrefabInstance& instance = source.registry().emplace<PrefabInstance>(rootC);
+			instance.Prefab = AssetRef{ AssetGuid::generate(), 0 };
+			PrefabOverride override;
+			override.Kind = OverrideKind::SetField;
+			override.NodeId = 5;
+			override.Component = "Transform";
+			override.Field = "Position";
+			override.Value = glm::vec3(4.0f);
+			instance.Overrides.push_back(override);
+			const entt::entity generated = source.create("generated", rootC);
+			source.registry().emplace<PrefabChild>(generated, PrefabChild{ source.registry().get<Id>(rootC).Guid, 99 });
+
+			ComponentRecord unknown;
+			unknown.Name = "FromTheFuture";
+			unknown.Fields.push_back(FieldRecord{ "x", 1.0f });
+			source.registry().emplace<UnknownComponents>(rootA, UnknownComponents{ { unknown } });
+
+			SceneSettings settings = source.settings();
+			settings.Exposure.Auto = true;
+			settings.Scripts = { scriptClass.Asset };
+			source.set_settings(settings);
+			source.update_world_transforms();
+
+			Ref<Scene> reference = clone_scene(source);
+			Ref<Scene> clone = clone_scene(source);
+			check(clone != nullptr && scenes_equal(source, *clone), "clone_scene_is_exact");
+			check(clone != nullptr && clone->registry().get<WorldTransform>(clone->find(source.registry().get<Id>(grandchild).Guid)).Matrix == source.registry().get<WorldTransform>(grandchild).Matrix, "clone_scene_computes_world_transforms");
+
+			// changing the clone leaves the source alone
+			clone->registry().get<Transform>(clone->find(source.registry().get<Id>(grandchild).Guid)).Position = glm::vec3(9.0f);
+			clone->destroy(clone->find(source.registry().get<Id>(rootB).Guid));
+			clone->create("only in the clone");
+			clone->registry().get<PrefabChild>(clone->find(source.registry().get<Id>(generated).Guid)).NodeId = 1;
+			check(scenes_equal(source, *reference), "changing_a_clone_leaves_the_source_alone");
+			check(!scenes_equal(source, *clone), "the_scene_comparison_sees_a_difference");
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -1449,6 +1597,7 @@ namespace wiwa
 		check_pak(check);
 		check_review_fixes(check);
 		check_time(check);
+		check_clone(check);
 
 		if (check.Failures == 0)
 		{
