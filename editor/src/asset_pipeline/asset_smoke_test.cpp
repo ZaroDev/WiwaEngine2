@@ -667,6 +667,214 @@ namespace wiwa
 			database.scan();
 		}
 
+
+		// 7. model materials become .wmat files
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_model_smoke";
+			std::filesystem::remove_all(dir, error);
+			std::filesystem::create_directories(dir, error);
+
+			const unsigned char png[] = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0x64, 0xf8, 0xcf, 0x50, 0x0f, 0x00, 0x03, 0x86, 0x01, 0x80, 0x5a, 0x34, 0x7d, 0x6b, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82 };
+			{
+				std::ofstream out(dir / "pixel.png", std::ios::binary);
+				out.write(reinterpret_cast<const char*>(png), sizeof(png));
+			}
+
+			const auto write_text = [](const std::filesystem::path& path, const std::string& text)
+			{
+				std::ofstream out(path, std::ios::binary | std::ios::trunc);
+				out << text;
+			};
+			const auto read_text = [](const std::filesystem::path& path)
+			{
+				std::ifstream in(path, std::ios::binary);
+				return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+			};
+
+			// a glTF with one triangle per material; the first material has a texture
+			const auto model_text = [](const std::vector<std::string>& names)
+			{
+				nlohmann::json primitives = nlohmann::json::array();
+				nlohmann::json materials = nlohmann::json::array();
+				for (size_t i = 0; i < names.size(); i++)
+				{
+					primitives.push_back({ { "attributes", { { "POSITION", 0 } } }, { "indices", 1 }, { "material", i } });
+					nlohmann::json material = { { "name", names[i] }, { "pbrMetallicRoughness", { { "baseColorFactor", { 0.25, 0.5, 0.75, 1.0 } }, { "roughnessFactor", 0.375 }, { "metallicFactor", 0.125 } } } };
+					if (i == 0)
+					{
+						material["pbrMetallicRoughness"]["baseColorTexture"] = { { "index", 0 } };
+					}
+					else
+					{
+						material["doubleSided"] = true;
+						material["emissiveFactor"] = { 0.5, 0.25, 0.125 };
+					}
+					materials.push_back(material);
+				}
+				nlohmann::json root = {
+					{ "asset", { { "version", "2.0" } } }, { "scene", 0 }, { "scenes", { { { "nodes", { 0 } } } } },
+					{ "nodes", { { { "name", "Body" }, { "mesh", 0 } } } },
+					{ "meshes", { { { "primitives", primitives } } } },
+					{ "materials", materials },
+					{ "textures", { { { "source", 0 } } } }, { "images", { { { "uri", "pixel.png" } } } },
+					{ "accessors", { { { "bufferView", 0 }, { "componentType", 5126 }, { "count", 3 }, { "type", "VEC3" }, { "min", { 0, 0, 0 } }, { "max", { 1, 1, 0 } } },
+						{ { "bufferView", 1 }, { "componentType", 5123 }, { "count", 3 }, { "type", "SCALAR" } } } },
+					{ "bufferViews", { { { "buffer", 0 }, { "byteOffset", 0 }, { "byteLength", 36 } }, { { "buffer", 0 }, { "byteOffset", 36 }, { "byteLength", 6 } } } },
+					{ "buffers", { { { "byteLength", 44 }, { "uri", "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAABAAIAAAA=" } } } } };
+				return root.dump(2);
+			};
+
+			// the cooked asset with this guid
+			const auto cooked_payload = [&](AssetGuid guid, AssetType type, std::vector<std::byte>& storage) -> std::span<const std::byte>
+			{
+				for (CookedFile& file : read_library(database.get_library_root()))
+				{
+					std::span<const std::byte> payload;
+					if (file.Guid == guid && file.Type == type)
+					{
+						storage = std::move(file.Bytes);
+						if (parse_wasset_header(storage, payload))
+						{
+							return payload;
+						}
+					}
+				}
+				return {};
+			};
+
+			// the material guid of each primitive of the first mesh of a model
+			const auto primitive_materials = [&](const std::filesystem::path& modelFile) -> std::vector<AssetGuid>
+			{
+				std::vector<AssetGuid> result;
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(modelFile));
+				if (!meta)
+				{
+					return result;
+				}
+				std::vector<std::byte> prefabBytes, meshBytes;
+				std::optional<PrefabData> prefab = deserialize<PrefabData>(cooked_payload(meta->Guid, AssetType::Prefab, prefabBytes));
+				if (!prefab)
+				{
+					return result;
+				}
+				for (const PrefabNode& node : prefab->Nodes)
+				{
+					if (node.Mesh.valid())
+					{
+						std::optional<MeshData> mesh = deserialize<MeshData>(cooked_payload(node.Mesh.resolved(), AssetType::Mesh, meshBytes));
+						for (const MeshPrimitive& primitive : mesh ? mesh->Primitives : std::vector<MeshPrimitive>{})
+						{
+							result.push_back(primitive.Material.valid() ? primitive.Material.resolved() : AssetGuid{});
+						}
+						break;
+					}
+				}
+				return result;
+			};
+
+			const auto guid_of = [](const std::filesystem::path& source) -> AssetGuid
+			{
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				return meta ? meta->Guid : AssetGuid{};
+			};
+
+			// model_extracts_materials
+			const std::filesystem::path model = dir / "m.gltf";
+			write_text(model, model_text({ "Red", "Blue" }));
+			database.scan();
+			const std::filesystem::path materialsDir = dir / "m_materials";
+			const std::filesystem::path red = materialsDir / "Red.wmat";
+			const std::filesystem::path blue = materialsDir / "Blue.wmat";
+			{
+				std::error_code existsError;
+				check(std::filesystem::exists(red, existsError) && std::filesystem::exists(blue, existsError), "model_extracts_materials: one .wmat per material");
+				MaterialFileData redData, blueData;
+				std::string readError;
+				const bool readRed = read_material_file(red, redData, readError);
+				const bool readBlue = read_material_file(blue, blueData, readError);
+				check(readRed && readBlue, "model_extracts_materials: both files read back");
+				if (readRed && readBlue)
+				{
+					check(redData.Material.Name == "Red" && redData.Material.BaseColorFactor == glm::vec4(0.25f, 0.5f, 0.75f, 1.0f) && redData.Material.RoughnessFactor == 0.375f &&
+						redData.Material.MetallicFactor == 0.125f, "model_extracts_materials: the factors of the model");
+					check(blueData.Material.DoubleSided && blueData.Material.EmissiveFactor == glm::vec3(0.5f, 0.25f, 0.125f), "model_extracts_materials: double sided and emissive");
+					std::error_code pathError;
+					check(!redData.BaseColorPath.empty() && std::filesystem::equivalent(materialsDir / redData.BaseColorPath, dir / "pixel.png", pathError) && blueData.BaseColorPath.empty(),
+						"model_extracts_materials: the texture is written as a path to the image");
+				}
+
+				const std::vector<AssetGuid> used = primitive_materials(model);
+				check(used.size() == 2 && used[0].valid() && used[0] == guid_of(red) && used[1].valid() && used[1] == guid_of(blue), "model_extracts_materials: the mesh primitives refer to the files");
+				std::vector<std::byte> materialBytes;
+				std::optional<MaterialData> cooked = deserialize<MaterialData>(cooked_payload(guid_of(red), AssetType::Material, materialBytes));
+				check(cooked && cooked->RoughnessFactor == 0.375f && cooked->BaseColorTexture.valid(), "model_extracts_materials: the file is cooked with its texture");
+			}
+
+			// model_reimport_keeps_edits
+			{
+				MaterialFileData edited;
+				std::string editError;
+				check(read_material_file(red, edited, editError), "model_reimport_keeps_edits: read");
+				edited.Material.RoughnessFactor = 0.9f;
+				check(write_material_file(red, edited, editError), "model_reimport_keeps_edits: write");
+				const std::string before = read_text(red);
+
+				write_text(model, model_text({ "Red", "Blue" }) + "\n");
+				database.reimport(model);
+
+				MaterialFileData after;
+				check(read_material_file(red, after, editError) && after.Material.RoughnessFactor == 0.9f && read_text(red) == before, "model_reimport_keeps_edits: the edited file is unchanged");
+			}
+
+			// model_material_names_safe
+			const std::filesystem::path named = dir / "n.gltf";
+			write_text(named, model_text({ "a/b", "", "Mat", "Mat" }));
+			database.scan();
+			const std::filesystem::path namedDir = dir / "n_materials";
+			const std::vector<std::filesystem::path> expectedNames = { namedDir / "a_b.wmat", namedDir / "material.wmat", namedDir / "Mat.wmat", namedDir / "Mat 2.wmat" };
+			{
+				std::error_code existsError;
+				size_t files = 0;
+				for (const auto& entry : std::filesystem::directory_iterator(namedDir, existsError))
+				{
+					files += entry.path().extension() == ".wmat" ? 1 : 0;
+				}
+				bool all = true;
+				for (const std::filesystem::path& path : expectedNames)
+				{
+					all = all && std::filesystem::exists(path, existsError);
+				}
+				check(all && files == 4, "model_material_names_safe: four distinct safe files");
+
+				const std::vector<AssetGuid> used = primitive_materials(named);
+				bool distinct = used.size() == 4;
+				for (size_t i = 0; distinct && i < used.size(); i++)
+				{
+					distinct = used[i].valid() && used[i] == guid_of(expectedNames[i]);
+				}
+				check(distinct, "model_material_names_safe: each primitive refers to its own file");
+			}
+
+			// model_removed_material_keeps_file: a material the model no longer has leaves its file, and the others keep theirs
+			{
+				write_text(named, model_text({ "", "Mat", "Mat" }));
+				database.reimport(named);
+				std::error_code existsError;
+				bool all = true;
+				for (const std::filesystem::path& path : expectedNames)
+				{
+					all = all && std::filesystem::exists(path, existsError);
+				}
+				check(all, "model_removed_material_keeps_file: every file is still there");
+				const std::vector<AssetGuid> used = primitive_materials(named);
+				check(used.size() == 3 && used[0] == guid_of(expectedNames[1]) && used[1] == guid_of(expectedNames[2]) && used[2] == guid_of(expectedNames[3]),
+					"model_removed_material_keeps_file: the remaining materials keep their files");
+			}
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+
 		std::filesystem::remove_all(temp, error);
 
 		if (check.Failures == 0)

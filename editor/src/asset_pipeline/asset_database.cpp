@@ -107,6 +107,28 @@ namespace wiwa
 		return std::filesystem::path(found->second);
 	}
 
+	void AssetDatabase::add_pending_asset(AssetGuid guid)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		m_PendingAssets[guid]++;
+	}
+
+	void AssetDatabase::remove_pending_asset(AssetGuid guid)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		auto found = m_PendingAssets.find(guid);
+		if (found != m_PendingAssets.end() && --found->second == 0)
+		{
+			m_PendingAssets.erase(found);
+		}
+	}
+
+	bool AssetDatabase::is_pending_asset(AssetGuid guid) const
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		return m_PendingAssets.contains(guid);
+	}
+
 	void AssetDatabase::add_root(std::filesystem::path sourceRoot, std::filesystem::path libraryFolder)
 	{
 		m_Roots.push_back({ std::move(sourceRoot), std::move(libraryFolder) });
@@ -557,7 +579,7 @@ namespace wiwa
 
 		const std::string sourceHash = hex(hash64(sourceBytes.data(), sourceBytes.size()));
 		const std::string settingsText = meta.Settings.dump();
-		const std::string settingsHash = hex(hash64(settingsText.data(), settingsText.size()));
+		std::string settingsHash = hex(hash64(settingsText.data(), settingsText.size()));
 		const std::string guidText = meta.Guid.to_string();
 
 		nlohmann::json previous;
@@ -655,6 +677,10 @@ namespace wiwa
 
 		meta.Version = importer->version();
 		meta.save(metaPath);
+
+		// An importer may add to the settings (the model importer remembers its material files): the next run must find them unchanged.
+		const std::string settingsAfter = meta.Settings.dump();
+		settingsHash = hex(hash64(settingsAfter.data(), settingsAfter.size()));
 
 		nlohmann::json extraSources = nlohmann::json::object();
 		for (const std::filesystem::path& dependency : context.get_source_dependencies())

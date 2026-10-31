@@ -43,6 +43,11 @@ namespace wiwa
 		std::optional<std::filesystem::path> path_of(AssetGuid guid) const;
 		bool has_importer_for(const std::filesystem::path& source) const;
 
+		// Cooked assets an import in progress is about to write (see ImportContext::declare_pending_asset).
+		void add_pending_asset(AssetGuid guid);
+		void remove_pending_asset(AssetGuid guid);
+		bool is_pending_asset(AssetGuid guid) const;
+
 		// Called (on a worker thread) with each cooked guid after a file was re-cooked with new content.
 		void add_reimport_listener(std::function<void(AssetGuid)> listener);
 
@@ -86,6 +91,7 @@ namespace wiwa
 		std::condition_variable m_Condition{};
 		std::unordered_map<std::string, SourceRecord> m_Sources{};
 		std::unordered_map<AssetGuid, std::string> m_PathByGuid{};
+		std::unordered_map<AssetGuid, u32> m_PendingAssets{};
 		nlohmann::json m_ImportCache = nlohmann::json::object();
 		std::vector<std::function<void(AssetGuid)>> m_Listeners{};
 

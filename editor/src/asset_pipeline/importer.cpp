@@ -31,9 +31,41 @@ namespace wiwa
 		return m_Database.ensure_imported(path.lexically_normal(), defaultSettings);
 	}
 
+	ImportContext::~ImportContext()
+	{
+		for (const AssetGuid& guid : m_PendingAssets)
+		{
+			m_Database.remove_pending_asset(guid);
+		}
+	}
+
+	bool ImportContext::drop_sub_assets(const std::string& prefix)
+	{
+		bool any = false;
+		for (auto it = m_Meta.SubAssets.begin(); it != m_Meta.SubAssets.end();)
+		{
+			if (it->first.rfind(prefix, 0) == 0)
+			{
+				it = m_Meta.SubAssets.erase(it);
+				any = true;
+			}
+			else
+			{
+				++it;
+			}
+		}
+		return any;
+	}
+
+	void ImportContext::declare_pending_asset(AssetGuid guid)
+	{
+		m_Database.add_pending_asset(guid);
+		m_PendingAssets.push_back(guid);
+	}
+
 	bool ImportContext::asset_exists(const AssetRef& ref) const
 	{
-		return ref.valid() && m_Database.path_of(ref.Guid).has_value();
+		return ref.valid() && (m_Database.path_of(ref.Guid).has_value() || m_Database.is_pending_asset(ref.Guid));
 	}
 
 	std::vector<std::filesystem::path> ImportContext::get_source_roots() const

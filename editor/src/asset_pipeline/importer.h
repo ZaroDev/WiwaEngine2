@@ -29,9 +29,23 @@ namespace wiwa
 	public:
 		ImportContext(AssetDatabase& database, std::filesystem::path source, MetaFile& meta)
 			: m_Database(database), m_Source(std::move(source)), m_Meta(meta) {}
+		~ImportContext();
+		ImportContext(const ImportContext&) = delete;
+		ImportContext& operator=(const ImportContext&) = delete;
 
 		const std::filesystem::path& source() const { return m_Source; }
 		const nlohmann::json& settings() const { return m_Meta.Settings; }
+
+		// For an importer that keeps something of its own in the .meta (the model importer remembers which file each material
+		// went to). Saved with the .meta when the import succeeds.
+		nlohmann::json& mutable_settings() { return m_Meta.Settings; }
+
+		// Sub-asset names starting with prefix are dropped from the .meta (an importer stops producing them). True if there were any.
+		bool drop_sub_assets(const std::string& prefix);
+
+		// Names an asset this import emits but has not written yet, so that a file imported meanwhile (a model's material, which
+		// refers to the model's embedded textures) accepts a reference to it. Forgotten when this context ends.
+		void declare_pending_asset(AssetGuid guid);
 
 		// The whole-file asset (local id 0): a texture's image, a model's prefab, ...
 		AssetRef main_asset() const { return AssetRef{ m_Meta.Guid, 0 }; }
@@ -82,6 +96,7 @@ namespace wiwa
 		MetaFile& m_Meta;
 		std::vector<EmittedAsset> m_Emitted{};
 		std::vector<std::filesystem::path> m_SourceDependencies{};
+		std::vector<AssetGuid> m_PendingAssets{};
 	};
 
 	class IImporter

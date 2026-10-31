@@ -2,12 +2,14 @@
 #include "importers.h"
 
 #include <algorithm>
+#include <set>
 
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <scene/prefab_node_id.h>
 
 #include "../image_utils.h"
+#include "../material_file.h"
 #include "model_import.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
@@ -22,6 +24,48 @@ namespace wiwa
 			std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 			return extension;
 		}
+
+			std::string lower_text(std::string text)
+			{
+				std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+				return text;
+			}
+
+			// A material name as a file name: characters outside [A-Za-z0-9 _.-] become '_'; a name that would be empty, only
+			// dots, end in a dot or space, or be a reserved device name on Windows is changed so that it is a plain file.
+			std::string safe_file_stem(const std::string& name)
+			{
+				std::string stem;
+				for (char c : name)
+				{
+					const bool allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '_' || c == '.' || c == '-';
+					stem.push_back(allowed ? c : '_');
+				}
+				if (stem.size() > 100)
+				{
+					stem.resize(100);
+				}
+				while (!stem.empty() && (stem.back() == '.' || stem.back() == ' '))
+				{
+					stem.pop_back();
+				}
+				if (stem.empty() || stem.find_first_not_of('.') == std::string::npos)
+				{
+					return "material";
+				}
+
+				static const char* const reserved[] = { "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+					"lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9" };
+				const std::string lowered = lower_text(stem.substr(0, stem.find('.')));
+				for (const char* word : reserved)
+				{
+					if (lowered == word)
+					{
+						return stem + "_";
+					}
+				}
+				return stem;
+			}
 
 		// Box around the whole model: each mesh's box through the world transform of its node.
 		void compute_bounds(const ImportedModel& model, glm::vec3& minimum, glm::vec3& maximum)
@@ -90,7 +134,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "ModelImporter"; }
-			virtual u32 version() const override { return 3; } // 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
+			virtual u32 version() const override { return 4; } // 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
 			virtual bool imports_dependencies() const override { return true; }
 			virtual std::vector<std::string> extensions() const override { return { ".gltf", ".glb", ".fbx" }; }
 
@@ -161,9 +205,58 @@ namespace wiwa
 					}
 				}
 
-				auto imageRef = [&](int image) { return (image >= 0 && image < static_cast<int>(imageRefs.size())) ? imageRefs[image] : AssetRef{}; };
+				// Materials become .wmat files next to the model, once: a file that exists is the user's and stays as it is.
+				// Which file belongs to which material name is kept in the .meta, so that the files keep their names when the
+				// model changes. Models imported before this had the materials as sub-assets of the model.
+				if (ctx.drop_sub_assets("material/"))
+				{
+					WI_ASSET_LOG(Info, "{0}: the materials of this model are now .wmat files in {1}_materials", ctx.source().filename().string(), ctx.source().stem().string());
+				}
+
+				for (const AssetRef& embedded : imageRefs)
+				{
+					// the material files refer to the embedded images by guid, before the images are written
+					if (embedded.valid() && embedded.LocalId != 0)
+					{
+						ctx.declare_pending_asset(embedded.resolved());
+					}
+				}
+
+				const std::filesystem::path materialsDirectory = ctx.source().parent_path() / (ctx.source().stem().string() + "_materials");
+				nlohmann::json& materialFiles = ctx.mutable_settings()["materialFiles"];
+				if (!materialFiles.is_object())
+				{
+					materialFiles = nlohmann::json::object();
+				}
+
+				std::set<std::string> takenFiles;
+				for (auto it = materialFiles.begin(); it != materialFiles.end(); ++it)
+				{
+					if (it.value().is_string())
+					{
+						takenFiles.insert(lower_text(it.value().get<std::string>()));
+					}
+				}
+
+				// the path of an image as a material file writes it: relative to the material folder, or the guid of an embedded image
+				auto imagePath = [&](int image) -> std::string
+				{
+					if (image < 0 || image >= static_cast<int>(imageRefs.size()))
+					{
+						return {};
+					}
+					const ImportedImage& source = model.Images[image];
+					if (!source.File.empty())
+					{
+						const std::filesystem::path absolute = source.File.is_absolute() ? source.File : ctx.source().parent_path() / source.File;
+						const std::filesystem::path relative = absolute.lexically_normal().lexically_relative(materialsDirectory.lexically_normal());
+						return (relative.empty() ? absolute : relative).generic_string();
+					}
+					return imageRefs[image].valid() ? imageRefs[image].resolved().to_string() : std::string{};
+				};
 
 				std::vector<AssetRef> materialRefs(model.Materials.size());
+				std::set<std::string> usedKeys;
 				for (size_t i = 0; i < model.Materials.size(); i++)
 				{
 					if (!materialUsed[i])
@@ -171,15 +264,56 @@ namespace wiwa
 						continue;
 					}
 
-					MaterialData material = model.Materials[i].Data;
-					material.BaseColorTexture = imageRef(model.Materials[i].BaseColorImage);
-					material.NormalTexture = imageRef(model.Materials[i].NormalImage);
-					material.OrmTexture = imageRef(model.Materials[i].OrmImage);
-					material.EmissiveTexture = imageRef(model.Materials[i].EmissiveImage);
+					// the key of this material in the .meta: its name, with " 2", " 3" for a name that came before
+					const std::string baseKey = model.Materials[i].Data.Name.empty() ? "material" : model.Materials[i].Data.Name;
+					std::string key = baseKey;
+					for (int number = 2; usedKeys.contains(key); number++)
+					{
+						key = baseKey + " " + std::to_string(number);
+					}
+					usedKeys.insert(key);
 
-					materialRefs[i] = ctx.sub_asset("material/" + std::to_string(i));
-					ctx.emit(materialRefs[i], material,
-						{ material.BaseColorTexture, material.NormalTexture, material.OrmTexture, material.EmissiveTexture });
+					if (!materialFiles.contains(key) || !materialFiles[key].is_string())
+					{
+						const std::string stem = safe_file_stem(key);
+						std::string candidate = stem;
+						for (int number = 2; takenFiles.contains(lower_text(candidate)); number++)
+						{
+							candidate = stem + " " + std::to_string(number);
+						}
+						takenFiles.insert(lower_text(candidate));
+						materialFiles[key] = candidate;
+					}
+
+					const std::filesystem::path file = materialsDirectory / (materialFiles[key].get<std::string>() + ".wmat");
+					std::error_code fileError;
+					if (!std::filesystem::exists(file, fileError))
+					{
+						std::filesystem::create_directories(materialsDirectory, fileError);
+
+						MaterialFileData data;
+						data.Material = model.Materials[i].Data;
+						data.BaseColorPath = imagePath(model.Materials[i].BaseColorImage);
+						data.NormalPath = imagePath(model.Materials[i].NormalImage);
+						data.OrmPath = imagePath(model.Materials[i].OrmImage);
+						data.EmissivePath = imagePath(model.Materials[i].EmissiveImage);
+
+						std::string writeError;
+						if (!write_material_file(file, data, writeError))
+						{
+							ctx.warn("Cannot write the material " + file.filename().string() + ": " + writeError);
+							continue;
+						}
+					}
+
+					if (std::optional<AssetRef> ref = ctx.import_dependency(file))
+					{
+						materialRefs[i] = *ref;
+					}
+					else
+					{
+						ctx.warn("The material " + file.filename().string() + " has no importer");
+					}
 				}
 
 				// Skeletons and clips
