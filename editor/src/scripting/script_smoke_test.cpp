@@ -2,6 +2,7 @@
 #include "script_smoke_test.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <assets/wasset_io.h>
 #include <scene/prefab_expander.h>
@@ -758,6 +759,139 @@ namespace wiwa
 				check(h.count("destroy") == 1 && !h.Instances.running(), "stop_destroys_every_instance_once");
 			}
 		}
+
+		void check_api(Check& check)
+		{
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("math", R"(return Script:extend{ on_init = function(self)
+					local a, b = vec3(1, 2, 3), vec3(4, 5, 6)
+					local c = a + b
+					record(string.format('%g,%g,%g', c.x, c.y, c.z))
+					record(string.format('%g', a:dot(b)))
+					record(string.format('%g', (a * 2).y))
+					record(string.format('%g', (2 * a).z))
+					record(string.format('%g', vec3(3, 4, 0):length()))
+					record(string.format('%g', a:cross(b).x))
+					record(tostring(a == vec3(1, 2, 3)))
+					local q = quat.from_axis_angle(vec3(0, 1, 0), 90)
+					local v = q * vec3(1, 0, 0)
+					record(tostring(math.abs(v.x) < 1e-5 and math.abs(v.y) < 1e-5 and math.abs(v.z + 1) < 1e-5))
+					local m = mat4.translate(vec3(1, 2, 3)) * mat4.identity()
+					local p = m:transform_point(vec3(0, 0, 0))
+					record(string.format('%g,%g,%g', p.x, p.y, p.z))
+				end })");
+				h.spawn("e", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "5,7,9", "32", "4", "6", "5", "-3", "true", "true", "1,2,3" }), "vec3_quat_mat4_math");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("transform", R"(return Script:extend{ on_init = function(self)
+					record(self.name)
+					self.transform.position.x = 4
+					record(string.format('%g', self.transform.position.x))
+					self.transform.scale = vec3(2, 2, 2)
+					self.transform.rotation = quat.from_axis_angle(vec3(0, 0, 1), 90)
+					local ok, err = pcall(function() self.transform.position = 'nope' end)
+					record(tostring(ok))
+					record(err)
+					local ok2, err2 = pcall(function() return self.transform.nothing end)
+					record(tostring(ok2))
+					record(err2)
+				end })");
+				const entt::entity entity = h.spawn("hero", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				const Transform& transform = h.TheScene->registry().get<Transform>(entity);
+				check(transform.Position.x == 4.0f && transform.Scale == glm::vec3(2.0f) && std::abs(transform.Rotation.z - std::sqrt(0.5f)) < 1e-4f, "component_proxy_reads_and_writes");
+				check(h.Events.size() == 6 && h.Events[0] == "hero" && h.Events[1] == "4", "self_name_and_transform");
+				check(h.Events.size() == 6 && h.Events[2] == "false" && contains(h.Events[3], "Position"), "wrong_type_write_errors");
+				check(h.Events.size() == 6 && h.Events[4] == "false" && contains(h.Events[5], "nothing"), "unknown_field_errors");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("spawner2", R"(return Script:extend{ on_init = function(self)
+					local e = create_entity('made', self.entity)
+					record(tostring(e:is_valid()))
+					record(tostring(find_entity('made') == e))
+					record(tostring(e.parent == self.entity))
+					record(tostring(#self.entity.children))
+					destroy_entity(e)
+					record(tostring(e:is_valid()))
+					record(tostring(find_entity('made') == nil))
+				end })");
+				h.spawn("parent", { ref });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "true", "true", "true", "1", "false", "true" }), "entity_create_find_destroy_and_hierarchy");
+			}
+
+			{
+				Harness h;
+				const AssetRef enemy = h.add_script("Enemy", "return Script:extend{ properties = { health = { type = 'int', default = 3 } } }");
+				const AssetRef hunter = h.add_script("hunter", R"(return Script:extend{ on_init = function(self)
+					local other = find_entity('enemy')
+					record(tostring(other:get('Enemy').health))
+					other:get('Enemy').health = 7
+					record(tostring(other:get('Enemy').health))
+					record(tostring(other:has('Enemy')) .. tostring(other:has('Light')))
+				end })");
+				const entt::entity enemyEntity = h.spawn("enemy", { enemy });
+				h.spawn("hunter", { hunter });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				const ComponentInfo* info = ComponentRegistry::get().find(script_component_name(enemy.Guid));
+				const FieldValue health = info->Get(h.TheScene->registry(), enemyEntity, 0);
+				check(h.Events == std::vector<std::string>({ "3", "7", "truefalse" }) && std::holds_alternative<i32>(health) && std::get<i32>(health) == 7, "get_other_script_component_by_name");
+			}
+
+			{
+				Harness h;
+				const AssetRef a = h.Source.add("assets/a/dup.lua", "return Script:extend{}");
+				const AssetRef b = h.Source.add("assets/b/dup.lua", "return Script:extend{}");
+				for (const AssetRef& ref : { a, b })
+				{
+					std::string error;
+					register_script_component(*h.Runtime.load(ref, error));
+				}
+				const AssetRef user = h.add_script("asker", R"(return Script:extend{ on_init = function(self)
+					local ok, err = pcall(function() return self.entity:get('dup') end)
+					record(tostring(ok))
+					record(err)
+				end })");
+				const entt::entity entity = h.spawn("e", { user, a, b });
+				(void)entity;
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				check(h.Events.size() == 2 && h.Events[0] == "false" && contains(h.Events[1], "assets/a/dup.lua") && contains(h.Events[1], "assets/b/dup.lua"), "ambiguous_script_name_errors");
+			}
+
+			{
+				Harness h;
+				const AssetRef ref = h.add_script("props", R"(return Script:extend{
+					properties = { speed = { type = 'float', default = 5 } },
+					on_update = function(self, dt)
+						record(string.format('%g', self.speed))
+						self.speed = 9
+						local ok = pcall(function() self.speed = 'fast' end)
+						record(tostring(ok))
+						self.counter = (self.counter or 0) + 1
+					end })");
+				const entt::entity entity = h.spawn("e", { ref });
+				const ComponentInfo* info = ComponentRegistry::get().find(script_component_name(ref.Guid));
+				info->Set(h.TheScene->registry(), entity, 0, 2.0f);
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				const FieldValue afterScript = info->Get(h.TheScene->registry(), entity, 0);
+				info->Set(h.TheScene->registry(), entity, 0, 11.0f);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "2", "false", "11", "false" }) && std::holds_alternative<float>(afterScript) && std::get<float>(afterScript) == 9.0f, "property_via_self_shares_bag");
+			}
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -774,6 +908,7 @@ namespace wiwa
 		check_importer(check);
 		check_scene_scripts(check);
 		check_lifecycle(check);
+		check_api(check);
 
 		if (check.Failures == 0)
 		{

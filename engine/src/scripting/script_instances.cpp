@@ -3,6 +3,7 @@
 
 #include <algorithm>
 
+#include <scene/reflection/component_registry.h>
 #include <scene/reflection/value_bag.h>
 #include "bindings/bindings.h"
 #include "script_names.h"
@@ -13,7 +14,9 @@ namespace wiwa
 {
 	ScriptInstances::ScriptInstances(ScriptRuntime& runtime) : m_Runtime(runtime)
 	{
-		bind_entity_handle(m_Runtime.state());
+		m_Context.Runtime = &m_Runtime;
+		bind_math(m_Runtime);
+		bind_scene(m_Runtime, m_Context);
 	}
 
 	ScriptInstances::~ScriptInstances()
@@ -152,16 +155,119 @@ namespace wiwa
 		}
 	}
 
+	// `self`: a table for the script's own fields, whose metatable gives the rest. Reading a declared property reads the entity's value
+	// bag (a scene-level script has no bag: it reads the declared default until it sets its own); writing one is checked against the
+	// property's type. `transform` and `name` are the entity's; anything else comes from the class (methods, inherited ones too).
+	void ScriptInstances::make_self(Instance& instance)
+	{
+		lua_State* state = m_Runtime.state().lua_state();
+		instance.Self = sol::table::create(state);
+		sol::table meta = sol::table::create(state);
+
+		ScriptClass* scriptClass = instance.Class;
+		const EntityHandle handle{ instance.Entity, &m_Context };
+		const std::string componentName = script_component_name(instance.Script);
+		const bool entityScript = instance.Entity.valid();
+
+		auto find_property = [scriptClass](const sol::stack_object& key) -> const FieldDescriptor*
+		{
+			if (key.get_type() != sol::type::string)
+			{
+				return nullptr;
+			}
+			const std::string name = key.as<std::string>();
+			const auto found = std::find_if(scriptClass->Properties.begin(), scriptClass->Properties.end(), [&](const FieldDescriptor& field) { return field.Name == name; });
+			return found == scriptClass->Properties.end() ? nullptr : &*found;
+		};
+
+		meta["__index"] = [this, scriptClass, handle, componentName, entityScript, find_property](sol::table, sol::stack_object key, sol::this_state lua) -> sol::object
+		{
+			if (const FieldDescriptor* property = find_property(key))
+			{
+				if (!entityScript)
+				{
+					return field_to_lua(sol::state_view(lua), property->Default, *property, FieldLink{});
+				}
+
+				const ComponentInfo* info = ComponentRegistry::get().find(componentName);
+				const entt::entity entity = handle.resolve();
+				if (info == nullptr || entity == entt::null)
+				{
+					throw sol::error(scriptClass->Name + ": the entity no longer exists");
+				}
+				const size_t index = static_cast<size_t>(info->field_index(property->Name));
+				return field_to_lua(sol::state_view(lua), info->Get(m_Scene->registry(), entity, index), *property, FieldLink{ handle, componentName, index });
+			}
+
+			if (entityScript && key.get_type() == sol::type::string)
+			{
+				const std::string name = key.as<std::string>();
+				if (name == "transform")
+				{
+					return sol::make_object(lua, ComponentProxy{ handle, "Transform" });
+				}
+				if (name == "name")
+				{
+					const entt::entity entity = handle.resolve();
+					if (entity == entt::null)
+					{
+						throw sol::error(scriptClass->Name + ": the entity no longer exists");
+					}
+					return sol::make_object(lua, m_Scene->registry().get<Name>(entity).Value);
+				}
+			}
+			return scriptClass->Class[sol::object(key)];
+		};
+
+		meta["__newindex"] = [this, scriptClass, handle, componentName, entityScript, find_property](sol::table self, sol::stack_object key, sol::stack_object value)
+		{
+			if (const FieldDescriptor* property = find_property(key))
+			{
+				FieldValue converted;
+				std::string error;
+				if (!field_from_lua(*property, sol::object(value), converted, error))
+				{
+					throw sol::error(scriptClass->Name + "." + property->Name + ": " + error);
+				}
+
+				if (!entityScript)
+				{
+					self.raw_set(sol::object(key), sol::object(value));
+					return;
+				}
+
+				const ComponentInfo* info = ComponentRegistry::get().find(componentName);
+				const entt::entity entity = handle.resolve();
+				if (info == nullptr || entity == entt::null)
+				{
+					throw sol::error(scriptClass->Name + ": the entity no longer exists");
+				}
+				info->Set(m_Scene->registry(), entity, static_cast<size_t>(info->field_index(property->Name)), converted);
+				return;
+			}
+
+			if (entityScript && key.get_type() == sol::type::string && key.as<std::string>() == "name" && value.get_type() == sol::type::string)
+			{
+				const entt::entity entity = handle.resolve();
+				if (entity != entt::null)
+				{
+					m_Scene->registry().get<Name>(entity).Value = value.as<std::string>();
+				}
+				return;
+			}
+			self.raw_set(sol::object(key), sol::object(value));
+		};
+
+		instance.Self[sol::metatable_key] = meta;
+		if (entityScript)
+		{
+			instance.Self["entity"] = handle;
+		}
+	}
+
 	void ScriptInstances::begin(Instance instance)
 	{
-		instance.Self = sol::table::create(m_Runtime.state().lua_state());
-		sol::table meta = sol::table::create(m_Runtime.state().lua_state());
-		meta["__index"] = instance.Class->Class;
-		instance.Self[sol::metatable_key] = meta;
-		if (instance.Entity.valid())
-		{
-			instance.Self["entity"] = EntityHandle{ instance.Entity, &m_Context };
-		}
+		make_self(instance);
 
 		m_Known.insert({ instance.Entity, instance.Script });
 		std::vector<Instance>& target = instance.Entity.valid() ? m_Instances : m_SceneInstances;

@@ -50,6 +50,7 @@ namespace wiwa
 		bool alive(const Instance& instance) const;
 		void reap();
 		void discover();
+		void make_self(Instance& instance);
 		void begin(Instance instance);
 		bool call_hook(Instance& instance, const char* hook, const float* deltaTime);
 		std::string describe(const Instance& instance) const;

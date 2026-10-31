@@ -7,10 +7,13 @@
 
 namespace wiwa
 {
+	class ScriptRuntime;
+
 	// What the Lua bindings reach besides the Lua state: the scene scripts are running on. Set by ScriptInstances.
 	struct ScriptContext
 	{
 		Scene* ActiveScene = nullptr;
+		ScriptRuntime* Runtime = nullptr;
 	};
 
 	// How a script holds an entity: by guid, resolved through the active scene on every use. A destroyed entity (or a handle kept

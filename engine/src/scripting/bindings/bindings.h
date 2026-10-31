@@ -2,11 +2,24 @@
 
 #include <sol/sol.hpp>
 
+#include <scene/reflection/field_descriptor.h>
 #include "../script_context.h"
+#include "../script_runtime.h"
+#include "script_types.h"
 
-// One function per area of the Lua API; each registers its part in the state of a ScriptRuntime.
+// One function per area of the Lua API; each registers its part in the state of a ScriptRuntime (types on the state, functions in
+// the sandbox the scripts run in).
 namespace wiwa
 {
-	// The Entity type scripts hold.
-	void bind_entity_handle(sol::state& lua);
+	// vec2, vec3, vec4, quat, mat4.
+	void bind_math(ScriptRuntime& runtime);
+
+	// Entity, Component, and create_entity / destroy_entity / find_entity.
+	void bind_scene(ScriptRuntime& runtime, ScriptContext& context);
+
+	// A field's value as Lua holds it. A vector or quaternion keeps `link` so that writes to its parts reach the field.
+	sol::object field_to_lua(sol::state_view lua, const FieldValue& value, const FieldDescriptor& field, const FieldLink& link);
+
+	// The other way: false, with `error` saying what was expected, if the Lua value is not one the field can hold.
+	bool field_from_lua(const FieldDescriptor& field, const sol::object& object, FieldValue& out, std::string& error);
 }
