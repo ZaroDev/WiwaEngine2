@@ -103,6 +103,23 @@ without restarting the scene:
 - Limit: state kept in a module that a method writes to (`Base.count = Base.count + 1`) belongs to the version that wrote it; the reload
   copies the module's contents into the old table once, so such a counter restarts from what the file says.
 
+## Editor support (completion and hints in VS Code)
+
+Install the "Lua" extension (sumneko.lua) and open the **`editor/` folder** (the project folder) in VS Code. You get completion, hover
+help and warnings for the whole API: `self.transform.position.`, `vec3.`, `debug_draw.`, `e:get("Light").` (the component names and
+their fields) and `other:get("Enemy").health` (the properties of your scripts). `os`, `io` and `debug` are flagged, because the
+sandbox does not have them.
+
+The editor sets this up itself each time it starts, so there is nothing to configure:
+
+- `.luarc.json` (next to `assets/`) points the extension at the two stub folders. Its first line is a marker: delete that line to
+  take the file over, and the editor stops rewriting it.
+- `engine/lua/wiwa.lua` is the stub of the fixed API (math, entities, `debug_draw`, ...). It is written by hand; when you add a
+  binding to the sandbox, declare it there too. `--script-smoke` fails if the two disagree.
+- `library/lua/generated.lua` is written by the editor from the registered components and scripts, and again when they change
+  (import, reload). It is not committed. A script shows up in it once the editor has loaded it, which happens at start for every
+  script in the project.
+
 ## The demo scene
 
 `assets/scenes/demo.wscene` has scripts to try all of this (the sources are in `assets/scripts/`; `scripts/gen_demo_scene.py` puts them
