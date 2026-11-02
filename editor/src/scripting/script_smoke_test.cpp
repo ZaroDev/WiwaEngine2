@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <fstream>
+#include <iterator>
+#include <set>
 #include <thread>
 
 #include <assets/wasset_io.h>
@@ -1935,6 +1938,60 @@ namespace wiwa
 
 	namespace
 	{
+		// The globals the sandbox adds to the standard libraries must be exactly the ones editor/engine/lua/wiwa.lua declares.
+		void check_stub_globals(Check& check)
+		{
+			const std::filesystem::path stubPath = "engine/lua/wiwa.lua";
+			check(is_lua_stub_file(stubPath), "wiwa_lua_is_a_meta_file");
+
+			const std::set<std::string> parsed = declared_globals(
+				"---@meta\nfoo = 1\nlocal bar = 2\nfunction baz(x) end\nfunction qux.m() end\nfunction Q:n() end\n  indented = 3\n--- note = 1\nlocal function f() end\nif a == 2 then end\n");
+			check(parsed == std::set<std::string>({ "foo", "baz" }), "declared_globals_reads_assignments_and_plain_functions");
+
+			std::ifstream file(stubPath, std::ios::binary);
+			const std::string stub((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+			const std::set<std::string> declared = declared_globals(stub);
+
+			MemorySource source;
+			ScriptRuntime runtime(source);
+			ScriptInstances instances(runtime); // binds the scene, asset, render and engine parts of the API
+			sol::state baseline;
+			baseline.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string, sol::lib::table, sol::lib::utf8);
+
+			std::set<std::string> added;
+			u32 seen = 0;
+			for (const auto& entry : runtime.sandbox())
+			{
+				seen++;
+				if (entry.first.get_type() == sol::type::string)
+				{
+					const std::string name = entry.first.as<std::string>();
+					const sol::object inBaseline = baseline[name];
+					if (inBaseline.get_type() == sol::type::lua_nil || inBaseline.get_type() == sol::type::none)
+					{
+						added.insert(name);
+					}
+				}
+			}
+			check(seen > 20 && !added.empty(), "sandbox_globals_are_read");
+
+			for (const std::string& name : added)
+			{
+				if (!declared.contains(name))
+				{
+					WI_SCRIPT_LOG(Error, "the sandbox has the global '{0}' but wiwa.lua does not declare it", name);
+				}
+			}
+			for (const std::string& name : declared)
+			{
+				if (!added.contains(name))
+				{
+					WI_SCRIPT_LOG(Error, "wiwa.lua declares the global '{0}' but the sandbox does not have it", name);
+				}
+			}
+			check(added == declared, "stub_declares_exactly_the_sandbox_globals");
+		}
+
 		// The LuaLS support files: stubs the importer must leave alone, the stub the editor writes, and the project settings.
 		void check_lua_stubs(Check& check, AssetPipelineModule& pipeline)
 		{
@@ -1995,6 +2052,7 @@ namespace wiwa
 		check_clone(check);
 		check_editor_document(check);
 		check_play_mode(check);
+		check_stub_globals(check);
 		check_lua_stubs(check, pipeline);
 
 		if (check.Failures == 0)
