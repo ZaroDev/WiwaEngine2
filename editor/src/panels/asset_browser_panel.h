@@ -8,6 +8,7 @@
 #include "panel.h"
 
 #include <asset_pipeline/asset_database.h>
+#include <asset_pipeline/asset_templates.h>
 
 // The "Assets" panel: a folder tree of the source roots known to the AssetDatabase (assets/ and the engine's own assets) beside the
 // files of the selected folder, with a search box that filters the files of the whole tree. Files can be dragged out (payload
@@ -49,6 +50,9 @@ private:
 	void draw_file_grid();
 	void draw_file(const std::filesystem::path& file, float thumbnailSize);
 	void draw_context_menu();
+	// The popup that asks for the name of a new asset, and makes it.
+	void draw_create_popup();
+	void begin_create(wiwa::CreateKind kind);
 
 	const FolderEntry* find_folder(const std::filesystem::path& path) const;
 	const FileEntry* find_file(const std::filesystem::path& path) const;
@@ -61,6 +65,12 @@ private:
 	std::filesystem::path m_CurrentDir{};
 	std::filesystem::path m_Selected{};
 	std::function<void(const std::filesystem::path&)> m_OpenMaterial{};
+
+	wiwa::CreateKind m_CreateKind = wiwa::CreateKind::Folder;
+	std::filesystem::path m_CreateDir{}; // the folder the new asset goes in: the one that was open when Create was chosen
+	char m_CreateName[128] = "";
+	bool m_CreateRequested = false;      // open the popup (the context menu is another popup, so it is opened from on_draw)
+	bool m_CreateFocus = false;
 
 	char m_Search[128] = "";
 	float m_ThumbnailScale = 1.f;       // scales the file cells

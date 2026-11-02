@@ -7,6 +7,7 @@
 #include <assets/pak_source.h>
 #include <core/engine.h>
 
+#include "asset_templates.h"
 #include "build_settings.h"
 #include "file_utils.h"
 #include "material_file.h"
@@ -1707,6 +1708,61 @@ namespace wiwa
 			std::string conversionError;
 			check(!prefab_from_records({ nested }, "Nested", conversionError).has_value() && !conversionError.empty(), "prefab_file: a nested prefab instance is refused with a reason");
 			check(!prefab_from_records({}, "Empty", conversionError).has_value(), "prefab_file: no entities is refused");
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+
+		// 10. assets made from templates (the Asset Browser's Create menu)
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_create_smoke";
+			std::filesystem::create_directories(dir, error);
+
+			check(std::string(extension(CreateKind::Script)) == ".lua" && std::string(extension(CreateKind::Folder)).empty() && std::string(extension(CreateKind::Scene)) == ".wscene" &&
+				std::string(extension(CreateKind::SurfaceShader)) == ".wshader" && std::string(extension(CreateKind::HlslShader)) == ".hlsl" && std::string(extension(CreateKind::HlslInclude)) == ".hlsli" &&
+				std::string(extension(CreateKind::Material)) == ".wmat", "create_asset: every kind has its extension");
+
+			// names that cannot be used say why
+			for (const char* bad : { "", "a/b", "a\\b", "a:b", "x?y", "CON", "con", "Com1", "nul", "bad.", "bad ", " ", "tab\tname" })
+			{
+				check(!validate_name(bad, dir, CreateKind::Script).empty(), std::string("create_asset: the name '") + bad + "' is refused");
+			}
+			check(validate_name("Good name", dir, CreateKind::Script).empty() && validate_name("Console", dir, CreateKind::Script).empty(), "create_asset: an ordinary name is accepted");
+			check(!validate_name(std::string(200, 'a'), dir, CreateKind::Script).empty(), "create_asset: a name that is too long is refused");
+
+			// every kind is written, imports and loads
+			struct Case { CreateKind Kind; const char* Name; AssetType Type; };
+			const Case cases[] = {
+				{ CreateKind::Script, "Mover", AssetType::Script }, { CreateKind::Scene, "Level", AssetType::Scene }, { CreateKind::SurfaceShader, "Glow", AssetType::SurfaceShader },
+				{ CreateKind::HlslShader, "Fullscreen", AssetType::Shader }, { CreateKind::HlslInclude, "Helpers", AssetType::Shader }, { CreateKind::Material, "Metal", AssetType::Material } };
+			for (const Case& testCase : cases)
+			{
+				const std::string label = std::string("create_asset: ") + testCase.Name;
+				const std::filesystem::path made = create_asset(testCase.Kind, dir, testCase.Name);
+				check(made == dir / (std::string(testCase.Name) + extension(testCase.Kind)) && std::filesystem::exists(made, error), label + " is written");
+				check(!validate_name(testCase.Name, dir, testCase.Kind).empty(), label + " cannot be made twice");
+
+				const std::optional<AssetRef> ref = database.ensure_imported(made);
+				check(ref.has_value(), label + " imports");
+				if (ref)
+				{
+					const std::function<LoadState()> state = request(manager, testCase.Type, ref->Guid);
+					manager.wait_idle();
+					check(state() == LoadState::Ready, label + " loads as a cooked asset");
+				}
+			}
+
+			const std::filesystem::path folder = create_asset(CreateKind::Folder, dir, "Sub");
+			check(folder == dir / "Sub" && std::filesystem::is_directory(folder, error) && !validate_name("Sub", dir, CreateKind::Folder).empty(), "create_asset: a folder is made, and its name is then taken");
+			check(validate_name("Sub", dir, CreateKind::Script).empty(), "create_asset: a script may share the name of a folder");
+
+			// the script template is a class with the three hooks, named after the file
+			if (std::ifstream in(dir / "Mover.lua"); in)
+			{
+				const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+				check(text.find("local Mover = Script:extend{") != std::string::npos && text.find("function Mover:on_update(dt)") != std::string::npos && text.find("return Mover") != std::string::npos, "create_asset: the script template is named after the file");
+			}
+			check(create_asset(CreateKind::Script, dir, "Mover").empty(), "create_asset: an existing file is not overwritten");
 
 			std::filesystem::remove_all(dir, error);
 			database.scan();

@@ -248,6 +248,7 @@ void AssetBrowserPanel::on_draw()
 			draw_file_grid();
 			ImGui::EndTable();
 		}
+		draw_create_popup();
 	}
 	ImGui::End();
 }
@@ -443,6 +444,83 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 	ImGui::TextWrapped("%s", file.filename().string().c_str());
 }
 
+void AssetBrowserPanel::begin_create(wiwa::CreateKind kind)
+{
+	m_CreateKind = kind;
+	m_CreateDir = m_CurrentDir;
+
+	// start from a name that is free, so that OK works at once
+	std::string name = wiwa::default_name(kind);
+	for (int number = 2; number < 1000 && !wiwa::validate_name(name, m_CreateDir, kind).empty(); number++)
+	{
+		name = std::string(wiwa::default_name(kind)) + " " + std::to_string(number);
+	}
+	std::snprintf(m_CreateName, sizeof(m_CreateName), "%s", name.c_str());
+	m_CreateRequested = true;
+}
+
+void AssetBrowserPanel::draw_create_popup()
+{
+	if (m_CreateRequested)
+	{
+		m_CreateRequested = false;
+		m_CreateFocus = true;
+		ImGui::OpenPopup("Create asset");
+	}
+
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (!ImGui::BeginPopupModal("Create asset", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		return;
+	}
+
+	ImGui::Text("New %s", wiwa::display_name(m_CreateKind));
+	ImGui::TextDisabled("in %s", m_CreateDir.generic_string().c_str());
+
+	if (m_CreateFocus)
+	{
+		ImGui::SetKeyboardFocusHere();
+		m_CreateFocus = false;
+	}
+	const bool entered = ImGui::InputText("##create_name", m_CreateName, sizeof(m_CreateName), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+	if (wiwa::extension(m_CreateKind)[0] != '\0')
+	{
+		ImGui::SameLine();
+		ImGui::TextDisabled("%s", wiwa::extension(m_CreateKind));
+	}
+
+	const std::string reason = wiwa::validate_name(m_CreateName, m_CreateDir, m_CreateKind);
+	if (!reason.empty())
+	{
+		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", reason.c_str());
+	}
+
+	ImGui::BeginDisabled(!reason.empty());
+	const bool confirmed = ImGui::Button("OK") || (entered && reason.empty());
+	ImGui::EndDisabled();
+	if (confirmed)
+	{
+		const std::filesystem::path created = wiwa::create_asset(m_CreateKind, m_CreateDir, m_CreateName);
+		rescan();
+		if (!created.empty())
+		{
+			m_Selected = created;
+			if (m_CreateKind == wiwa::CreateKind::Material && m_OpenMaterial)
+			{
+				m_OpenMaterial(created);
+			}
+		}
+		ImGui::CloseCurrentPopup();
+	}
+
+	ImGui::SameLine();
+	if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+	{
+		ImGui::CloseCurrentPopup();
+	}
+	ImGui::EndPopup();
+}
+
 void AssetBrowserPanel::draw_context_menu()
 {
 	if (!ImGui::BeginPopupContextWindow("##assets_context", ImGuiPopupFlags_MouseButtonRight))
@@ -450,25 +528,17 @@ void AssetBrowserPanel::draw_context_menu()
 		return;
 	}
 
-	if (ImGui::MenuItem(ICON_FK_FOLDER " New folder"))
+	if (ImGui::BeginMenu("Create"))
 	{
-		std::error_code error;
-		std::filesystem::create_directory(m_CurrentDir / "New folder", error);
-		rescan();
-	}
-
-	if (ImGui::MenuItem("New material"))
-	{
-		const std::filesystem::path created = wiwa::create_material_file(m_CurrentDir, "New material");
-		rescan();
-		if (!created.empty())
+		for (const wiwa::CreateKind kind : { wiwa::CreateKind::Folder, wiwa::CreateKind::Material, wiwa::CreateKind::Script, wiwa::CreateKind::Scene,
+			wiwa::CreateKind::SurfaceShader, wiwa::CreateKind::HlslShader, wiwa::CreateKind::HlslInclude })
 		{
-			m_Selected = created;
-			if (m_OpenMaterial)
+			if (ImGui::MenuItem(wiwa::display_name(kind)))
 			{
-				m_OpenMaterial(created);
+				begin_create(kind);
 			}
 		}
+		ImGui::EndMenu();
 	}
 
 	std::error_code error;
