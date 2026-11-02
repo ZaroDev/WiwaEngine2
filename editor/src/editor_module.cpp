@@ -97,6 +97,8 @@ void EditorModule::init()
 	MaterialPanel* materials = materialPanel.get();
 	AssetBrowserPanel* browserPanel = browser.get();
 	browser->set_open_material([materials](const std::filesystem::path& wmat) { materials->open(wmat); });
+	wiwa::SceneEditor* sceneEditor = m_SceneEditor.get();
+	browser->set_make_prefab([sceneEditor](entt::entity entity, const std::filesystem::path& folder) { return sceneEditor->make_prefab(entity, folder); });
 	inspector->set_locate([browserPanel](const wiwa::AssetRef& ref) { browserPanel->select_asset(ref); });
 	m_BuildSettings = CreateScope<BuildSettingsPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 

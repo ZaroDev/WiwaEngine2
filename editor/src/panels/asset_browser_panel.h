@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include <entt/entt.hpp>
+
 #include "panel.h"
 
 #include <asset_pipeline/asset_database.h>
@@ -27,6 +29,10 @@ public:
 
 	// What opening a .wmat (a double click, or "New material") calls; the editor points it at the Material panel.
 	void set_open_material(std::function<void(const std::filesystem::path&)> open) { m_OpenMaterial = std::move(open); }
+
+	// What an entity dragged here from the Hierarchy calls (payload "WI_ENTITY"): makes a prefab of it in the folder it was dropped on, and
+	// returns why that cannot be done, or an empty string. The editor points it at SceneEditor::make_prefab.
+	void set_make_prefab(std::function<std::string(entt::entity, const std::filesystem::path&)> make) { m_MakePrefab = std::move(make); }
 
 private:
 	struct FileEntry
@@ -53,6 +59,8 @@ private:
 	// The popup that asks for the name of a new asset, and makes it.
 	void draw_create_popup();
 	void begin_create(wiwa::CreateKind kind);
+	// Inside a BeginDragDropTarget: takes a dropped hierarchy entity and makes a prefab of it in folder.
+	void accept_entity_drop(const std::filesystem::path& folder);
 
 	const FolderEntry* find_folder(const std::filesystem::path& path) const;
 	const FileEntry* find_file(const std::filesystem::path& path) const;
@@ -65,6 +73,8 @@ private:
 	std::filesystem::path m_CurrentDir{};
 	std::filesystem::path m_Selected{};
 	std::function<void(const std::filesystem::path&)> m_OpenMaterial{};
+	std::function<std::string(entt::entity, const std::filesystem::path&)> m_MakePrefab{};
+	std::string m_Status{};             // why the last dropped entity did not become a prefab
 
 	wiwa::CreateKind m_CreateKind = wiwa::CreateKind::Folder;
 	std::filesystem::path m_CreateDir{}; // the folder the new asset goes in: the one that was open when Create was chosen

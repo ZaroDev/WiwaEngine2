@@ -281,6 +281,11 @@ void AssetBrowserPanel::draw_folder_node(const FolderEntry& folder)
 	{
 		m_CurrentDir = folder.Path;
 	}
+	if (ImGui::BeginDragDropTarget())
+	{
+		accept_entity_drop(folder.Path);
+		ImGui::EndDragDropTarget();
+	}
 	if (open)
 	{
 		for (const FolderEntry& child : folder.Children)
@@ -317,6 +322,11 @@ void AssetBrowserPanel::draw_top_bar()
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(100.0f);
 	ImGui::SliderFloat("##asset_zoom", &m_ThumbnailScale, 0.5f, 2.0f, "Size %.1f");
+
+	if (!m_Status.empty())
+	{
+		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_Status.c_str());
+	}
 }
 
 void AssetBrowserPanel::draw_file_grid()
@@ -365,6 +375,11 @@ void AssetBrowserPanel::draw_file_grid()
 			{
 				m_CurrentDir = folder->Path;
 			}
+			if (ImGui::BeginDragDropTarget())
+			{
+				accept_entity_drop(folder->Path);
+				ImGui::EndDragDropTarget();
+			}
 			ImGui::TextWrapped("%s", folder->Path.filename().string().c_str());
 			ImGui::PopID();
 			ImGui::TableNextColumn();
@@ -383,6 +398,22 @@ void AssetBrowserPanel::draw_file_grid()
 
 	draw_context_menu();
 	ImGui::EndChild();
+
+	// an entity dropped on the files makes its prefab in the folder that is open
+	if (ImGui::BeginDragDropTarget())
+	{
+		accept_entity_drop(m_CurrentDir);
+		ImGui::EndDragDropTarget();
+	}
+}
+
+void AssetBrowserPanel::accept_entity_drop(const std::filesystem::path& folder)
+{
+	const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("WI_ENTITY");
+	if (payload != nullptr && m_MakePrefab)
+	{
+		m_Status = m_MakePrefab(*static_cast<const entt::entity*>(payload->Data), folder);
+	}
 }
 
 void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumbnailSize)
