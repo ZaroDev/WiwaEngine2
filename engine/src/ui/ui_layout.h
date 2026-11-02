@@ -39,6 +39,8 @@ namespace wiwa
 		std::function<std::optional<glm::vec3>(const EntityGuid&)> WorldPosition{};
 		// The font of a Text widget, or null while it is not loaded (the text then has no size).
 		std::function<const FontData*(const AssetRef&)> Fonts{};
+		// The size in texels of a texture, or nothing while it is not loaded (a 9-slice Image is then drawn as a plain quad).
+		std::function<std::optional<glm::vec2>(const AssetRef&)> TextureSize{};
 	};
 
 	// Per widget, by its index in UiPanelData::Widgets.
@@ -48,6 +50,7 @@ namespace wiwa
 		std::vector<u8> Visible{};     // the widget and all its parents are visible and, for a world anchor, it is on the screen
 		std::vector<float> Opacity{};  // multiplied down the tree, and by the distance fade of a world anchor
 		std::vector<float> Scale{};    // pixels per reference pixel at this widget: the canvas scale times the distance scales above it
+		std::vector<float> Distance{}; // from the camera to the anchored entity, for a visible world anchored widget; else 0
 		float CanvasScale = 0.0f;
 	};
 

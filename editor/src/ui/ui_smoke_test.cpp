@@ -5,12 +5,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <assets/asset_manager.h>
 #include <assets/wasset_io.h>
 #include <core/engine.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <ui/ui_font.h>
+#include <ui/ui_draw_list.h>
 #include <ui/ui_layout.h>
 #include <ui/ui_panel_io.h>
 #include <ui/ui_widget.h>
@@ -363,6 +365,7 @@ namespace wiwa
 			targetPosition = { 0.0f, 0.0f, 0.0f };
 			result = run({ floating });
 			check(result.Visible[0] == 1 && near_rect(result.Rects[0], { 910, 525 }, { 1010, 555 }, 1.0f), "layout_world_center: an entity in front of the camera puts the pivot at the middle of the screen");
+			check(std::abs(result.Distance[0] - 5.0f) < 1e-3f && result.Distance[0] == result.Distance[0], "layout_world_distance_reported: the layout says how far the anchored entity is from the camera");
 
 			floating.WorldScreenOffset = { 0.0f, -100.0f };
 			result = run({ floating });
@@ -429,6 +432,239 @@ namespace wiwa
 				result = run({ layout_widget(1, 0, WidgetKind::Panel, "Fill", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 }), floating }, size);
 				check(result.Visible[0] == 0 && result.Visible[1] == 0 && finite(result.Rects[0]) && finite(result.Rects[1]) && std::isfinite(result.CanvasScale), "layout_zero_canvas: a canvas without area hides everything and makes no NaN");
 			}
+		}
+
+		u32 pack_color(float r, float g, float b, float a)
+		{
+			const auto channel = [](float v) { return static_cast<u32>(std::round(std::clamp(v, 0.0f, 1.0f) * 255.0f)); };
+			return channel(r) | (channel(g) << 8) | (channel(b) << 16) | (channel(a) << 24);
+		}
+
+		bool all_finite(const UiDrawList& list)
+		{
+			for (const UiVertex& vertex : list.Vertices)
+			{
+				if (!std::isfinite(vertex.Pos.x) || !std::isfinite(vertex.Pos.y) || !std::isfinite(vertex.Uv.x) || !std::isfinite(vertex.Uv.y))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		// The extent of the quad that starts at vertex 4 * quad.
+		UiRect quad_rect(const UiDrawList& list, size_t quad)
+		{
+			UiRect rect{ list.Vertices[quad * 4].Pos, list.Vertices[quad * 4].Pos };
+			for (size_t i = 0; i < 4; i++)
+			{
+				rect.Min = glm::min(rect.Min, list.Vertices[quad * 4 + i].Pos);
+				rect.Max = glm::max(rect.Max, list.Vertices[quad * 4 + i].Pos);
+			}
+			return rect;
+		}
+
+		void check_draw(Check& check, const FontData* font)
+		{
+			const glm::vec2 canvas{ 1920.0f, 1080.0f };
+			const EntityGuid target = EntityGuid::generate();
+			EntityGuid farTarget = EntityGuid::generate();
+			const UiCameraView camera = test_camera();
+
+			UiLayoutInput input;
+			input.CanvasSize = canvas;
+			input.Camera = &camera;
+			input.WorldPosition = [&](const EntityGuid& guid) -> std::optional<glm::vec3>
+			{
+				if (guid == target)
+				{
+					return glm::vec3(0.0f, 0.0f, 0.0f);
+				}
+				if (guid == farTarget)
+				{
+					return glm::vec3(0.0f, 0.0f, -20.0f);
+				}
+				return std::nullopt;
+			};
+			input.Fonts = [font](const AssetRef&) { return font; };
+			input.TextureSize = [](const AssetRef&) -> std::optional<glm::vec2> { return glm::vec2(64.0f, 64.0f); };
+
+			const auto build = [&](std::vector<UiWidget> widgets, std::vector<UiInteractionState> interaction = {}, const UiLayoutInput* override = nullptr)
+			{
+				UiPanelData panel;
+				panel.Widgets = std::move(widgets);
+				const UiLayoutInput& use = override != nullptr ? *override : input;
+				interaction.resize(panel.Widgets.size(), UiInteractionState::Normal);
+				const UiLayoutResult layout = compute_layout(panel, use);
+				UiDrawList list;
+				append_panel(list, panel, interaction, layout, use);
+				return list;
+			};
+
+			const AssetRef someFont{ AssetGuid::generate(), 0 };
+			const AssetRef someTexture{ AssetGuid::generate(), 0 };
+
+			check(build({}).Vertices.empty() && build({}).Batches.empty(), "draw_empty_panel: no widgets, nothing to draw");
+
+			UiWidget red = layout_widget(1, 0, WidgetKind::Panel, "Red", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 });
+			red.Color = { 1.0f, 0.0f, 0.0f, 1.0f };
+			UiDrawList list = build({ red });
+			check(list.Vertices.size() == 4 && list.Indices.size() == 6 && list.Batches.size() == 1 && list.Batches[0].Kind == UiQuadKind::Solid, "draw_solid_quad: a panel is one solid quad");
+			check(list.Vertices.size() == 4 && near_rect(quad_rect(list, 0), { 0, 0 }, canvas) && list.Vertices[0].Color == pack_color(1, 0, 0, 1), "draw_solid_quad: the quad is the rect, in the colour of the widget");
+			check(list.Batches.size() == 1 && list.Batches[0].FirstIndex == 0 && list.Batches[0].IndexCount == 6 && list.CanvasSize == canvas, "draw_solid_quad: the batch covers the indices, and the list knows the canvas");
+			bool indicesInRange = true;
+			for (const u32 index : list.Indices)
+			{
+				indicesInRange = indicesInRange && index < list.Vertices.size();
+			}
+			check(indicesInRange, "draw_solid_quad: every index points at a vertex");
+
+			UiWidget clear = red;
+			clear.Color = { 1.0f, 0.0f, 0.0f, 0.0f };
+			check(build({ clear }).Vertices.empty(), "draw_clear_skipped: a fully transparent background draws nothing");
+
+			UiWidget green = layout_widget(2, 0, WidgetKind::Panel, "Green", { 0, 0 }, { 0.5f, 0.5f }, { 0, 0 }, { 0, 0 });
+			green.Color = { 1.0f, 0.0f, 0.0f, 1.0f };
+			list = build({ red, green });
+			check(list.Batches.size() == 1 && list.Batches[0].IndexCount == 12 && list.Vertices.size() == 8, "draw_batch_merge: two solid siblings of one colour share a batch");
+			green.Color = { 0.0f, 1.0f, 0.0f, 1.0f };
+			check(build({ red, green }).Batches.size() == 1, "draw_batch_merge: the colour is in the vertices, so different colours still share a batch");
+
+			UiWidget hidden = red;
+			hidden.Visible = false;
+			check(build({ hidden }).Vertices.empty(), "draw_hidden_skipped: a hidden widget draws nothing");
+			UiWidget transparent = red;
+			transparent.Opacity = 0.0f;
+			check(build({ transparent }).Vertices.empty(), "draw_opacity_zero_skipped: an opacity of 0 draws nothing");
+			UiWidget faint = red;
+			faint.Opacity = 0.5f;
+			list = build({ faint });
+			check(list.Vertices.size() == 4 && list.Vertices[0].Color == pack_color(1, 0, 0, 0.5f), "draw_opacity: opacity multiplies the alpha");
+
+			// text
+			if (font != nullptr)
+			{
+				UiWidget text = layout_widget(1, 0, WidgetKind::Text, "Label", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 400, 60 });
+				text.Text = "AB";
+				text.Font = someFont;
+				text.FontSize = 24.0f;
+				text.Outline = 0.25f;
+				text.Shadow = true;
+				list = build({ text });
+				check(list.Vertices.size() == 8 && list.Indices.size() == 12 && list.Batches.size() == 1 && list.Batches[0].Kind == UiQuadKind::Sdf && list.Batches[0].Texture == someFont,
+					"draw_text_batch: text is one quad per glyph in an SDF batch that names the font");
+				check(list.Batches.size() == 1 && list.Batches[0].SdfRange == font->SdfRange && std::abs(list.Batches[0].PixelScale - 24.0f / font->PixelSize) < 1e-4f && list.Batches[0].Outline == 0.25f && list.Batches[0].Shadow,
+					"draw_text_batch: the batch carries the range, the pixel scale, the outline and the shadow");
+
+				text.Text = "";
+				check(build({ text }).Vertices.empty(), "draw_text_empty: no text, no quads");
+
+				text.Text = "AB";
+				UiLayoutInput noFont = input;
+				noFont.Fonts = [](const AssetRef&) -> const FontData* { return nullptr; };
+				check(build({ text }, {}, &noFont).Vertices.empty(), "draw_text_missing_font: while the font is not loaded the text is not drawn");
+
+				UiWidget colored = text;
+				colored.Color = { 0.0f, 0.0f, 1.0f, 1.0f };
+				list = build({ colored });
+				check(list.Vertices.size() == 8 && list.Vertices[0].Color == pack_color(0, 0, 1, 1), "draw_text_colour: glyphs take the colour of the widget");
+			}
+
+			// buttons
+			UiWidget button = layout_widget(1, 0, WidgetKind::Button, "Go", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 100, 30 });
+			button.Color = { 1.0f, 1.0f, 1.0f, 1.0f };
+			button.HoverColor = { 0.0f, 1.0f, 0.0f, 1.0f };
+			button.PressedColor = { 0.0f, 0.0f, 1.0f, 1.0f };
+			button.DisabledColor = { 0.5f, 0.5f, 0.5f, 0.5f };
+			check(build({ button }).Vertices[0].Color == pack_color(1, 1, 1, 1), "draw_button_states: normal uses Color");
+			check(build({ button }, { UiInteractionState::Hover }).Vertices[0].Color == pack_color(0, 1, 0, 1), "draw_button_states: hover uses HoverColor");
+			check(build({ button }, { UiInteractionState::Pressed }).Vertices[0].Color == pack_color(0, 0, 1, 1), "draw_button_states: pressed uses PressedColor");
+			UiWidget disabledButton = button;
+			disabledButton.Enabled = false;
+			check(build({ disabledButton }, { UiInteractionState::Pressed }).Vertices[0].Color == pack_color(0.5f, 0.5f, 0.5f, 0.5f), "draw_button_states: disabled uses DisabledColor whatever the pointer does");
+
+			// bars and sliders
+			UiWidget bar = layout_widget(1, 0, WidgetKind::Bar, "Health", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 200, 20 });
+			bar.Value = 0.25f;
+			list = build({ bar });
+			check(list.Vertices.size() == 8 && near_rect(quad_rect(list, 0), { 0, 0 }, { 200, 20 }) && near_rect(quad_rect(list, 1), { 0, 0 }, { 50, 20 }), "draw_bar_fill: a quarter full bar fills a quarter of its width, from the left");
+			bar.Direction = UiDirection::RightToLeft;
+			list = build({ bar });
+			check(list.Vertices.size() == 8 && near_rect(quad_rect(list, 1), { 150, 0 }, { 200, 20 }), "draw_bar_fill: RightToLeft fills from the right");
+			bar.Direction = UiDirection::BottomToTop;
+			list = build({ bar });
+			check(list.Vertices.size() == 8 && near_rect(quad_rect(list, 1), { 0, 15 }, { 200, 20 }), "draw_bar_fill: BottomToTop fills from the bottom");
+			bar.Direction = UiDirection::LeftToRight;
+			bar.Value = 5.0f;
+			list = build({ bar });
+			check(list.Vertices.size() == 8 && near_rect(quad_rect(list, 1), { 0, 0 }, { 200, 20 }), "draw_bar_clamp: a value above 1 is a full bar");
+			bar.Value = -1.0f;
+			check(build({ bar }).Vertices.size() == 4, "draw_bar_clamp: a value below 0 is an empty bar (only the background)");
+			bar.Value = std::numeric_limits<float>::quiet_NaN();
+			list = build({ bar });
+			check(all_finite(list) && list.Vertices.size() == 4, "draw_bar_clamp: NaN is an empty bar");
+
+			UiWidget slider = layout_widget(1, 0, WidgetKind::Slider, "Volume", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 200, 20 });
+			slider.MinValue = 0.0f;
+			slider.MaxValue = 10.0f;
+			slider.Value = 5.0f;
+			list = build({ slider });
+			check(list.Vertices.size() == 12 && all_finite(list) && near_rect(quad_rect(list, 1), { 0, 0 }, { 100, 20 }), "draw_slider: track, fill up to the value, and a handle");
+			slider.MinValue = 3.0f;
+			slider.MaxValue = 3.0f;
+			slider.Step = 0.0f;
+			list = build({ slider });
+			check(all_finite(list) && !list.Vertices.empty(), "draw_slider_degenerate: min equal to max, and no step, give finite quads");
+			slider.MaxValue = std::numeric_limits<float>::infinity();
+			check(all_finite(build({ slider })), "draw_slider_degenerate: an infinite range gives finite quads");
+
+			UiWidget toggle = layout_widget(1, 0, WidgetKind::Toggle, "Mute", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 30, 30 });
+			toggle.Value = 0.0f;
+			check(build({ toggle }).Vertices.size() == 4, "draw_toggle: off is the box");
+			toggle.Value = 1.0f;
+			check(build({ toggle }).Vertices.size() == 8, "draw_toggle: on adds the check");
+
+			// images
+			UiWidget image = layout_widget(1, 0, WidgetKind::Image, "Logo", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 128, 128 });
+			image.Texture = someTexture;
+			list = build({ image });
+			check(list.Batches.size() == 1 && list.Batches[0].Kind == UiQuadKind::Image && list.Batches[0].Texture == someTexture && list.Vertices.size() == 4, "draw_image: an image is one quad that names the texture");
+			image.Slice9 = true;
+			image.SliceBorders = { 16.0f, 16.0f, 16.0f, 16.0f };
+			list = build({ image });
+			check(list.Vertices.size() == 36 && list.Batches.size() == 1 && near_rect(quad_rect(list, 4), { 16, 16 }, { 112, 112 }) && all_finite(list), "draw_slice9: nine quads, the middle one inside the borders");
+			image.SliceBorders = { 100.0f, 100.0f, 100.0f, 100.0f };
+			check(all_finite(build({ image })), "draw_slice9: borders bigger than the widget stay finite");
+			UiWidget plain = image;
+			plain.Texture = AssetRef{};
+			plain.Slice9 = false;
+			check(build({ plain }).Batches.size() == 1 && build({ plain }).Batches[0].Kind == UiQuadKind::Solid, "draw_image_no_texture: an image without a texture is a solid quad");
+
+			// clipping
+			UiWidget clipper = layout_widget(1, 0, WidgetKind::Panel, "Clip", { 0, 0 }, { 0, 0 }, { 100, 100 }, { 300, 200 });
+			clipper.ClipChildren = true;
+			clipper.Color = { 0.0f, 0.0f, 0.0f, 1.0f };
+			UiWidget inside = layout_widget(2, 1, WidgetKind::Panel, "Inside", { 0, 0 }, { 1, 1 }, { -50, -50 }, { 50, 50 });
+			inside.Color = { 1.0f, 1.0f, 1.0f, 1.0f };
+			list = build({ clipper, inside });
+			check(list.Batches.size() == 2 && list.Batches[0].ClipRect == glm::vec4(0, 0, 1920, 1080) && list.Batches[1].ClipRect == glm::vec4(100, 100, 300, 200), "draw_clip: a child of a clipping widget carries its rect, the widget itself is not clipped");
+
+			// world anchors
+			UiWidget nearMarker = layout_widget(1, 0, WidgetKind::Panel, "Near", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 40, 40 });
+			nearMarker.WorldEntity = target;
+			nearMarker.WorldScreenOffset = { 200.0f, 0.0f };
+			nearMarker.Color = { 0.0f, 0.0f, 1.0f, 1.0f };
+			UiWidget farMarker = layout_widget(2, 0, WidgetKind::Panel, "Far", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 40, 40 });
+			farMarker.WorldEntity = farTarget;
+			farMarker.WorldScreenOffset = { -200.0f, 0.0f };
+			farMarker.Color = { 1.0f, 0.0f, 0.0f, 1.0f };
+			list = build({ nearMarker, farMarker });
+			check(list.Batches.size() == 1 && list.Vertices.size() == 8 && list.Vertices[0].Color == pack_color(1, 0, 0, 1) && list.Vertices[4].Color == pack_color(0, 0, 1, 1), "draw_order_world: the farther world widget is drawn first, whatever the order in the panel");
+
+			UiWidget backdrop = layout_widget(3, 0, WidgetKind::Panel, "Backdrop", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 });
+			backdrop.Color = { 0.0f, 1.0f, 0.0f, 1.0f };
+			list = build({ nearMarker, backdrop });
+			check(list.Vertices.size() == 8 && list.Vertices[0].Color == pack_color(0, 1, 0, 1), "draw_order_world: world widgets are drawn after the widgets that are fixed to the screen");
 		}
 
 		// A texel of the font's atlas at a position given as a fraction of a glyph's quad.
@@ -595,6 +831,7 @@ namespace wiwa
 		Handle<FontData> fontHandle;
 		check_fonts(check, pipeline, fontHandle);
 		check_layout(check, fontHandle.get());
+		check_draw(check, fontHandle.get());
 
 		if (check.Failures == 0)
 		{

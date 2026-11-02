@@ -39,6 +39,8 @@ namespace wiwa
 	enum class UiDirection : u32 { LeftToRight, RightToLeft, BottomToTop, TopToBottom };
 	enum class UiChildAlign : u32 { Start, Center, End };
 	enum class UiOffscreen : u32 { Hide, ClampToEdge }; // what a world anchored widget does when its point is outside the canvas
+	// What the pointer or the keyboard is doing to a widget; the draw list tints buttons by it.
+	enum class UiInteractionState : u32 { Normal, Hover, Pressed, Focused };
 
 	const char* widget_kind_name(WidgetKind kind);
 	std::optional<WidgetKind> widget_kind_from_name(std::string_view name);

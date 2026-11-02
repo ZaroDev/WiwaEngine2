@@ -113,6 +113,7 @@ namespace wiwa
 		result.Visible.assign(count, 0);
 		result.Opacity.assign(count, 0.0f);
 		result.Scale.assign(count, 0.0f);
+		result.Distance.assign(count, 0.0f);
 		result.CanvasScale = ui_canvas_scale(panel, input.CanvasSize);
 		if (count == 0 || result.CanvasScale <= 0.0f)
 		{
@@ -188,6 +189,7 @@ namespace wiwa
 					const glm::vec3 world = *position + widget.WorldOffset;
 					const Projected projected = project(*input.Camera, world, input.CanvasSize);
 					const float distance = glm::length(world - input.Camera->Position);
+					result.Distance[i] = safe(distance);
 
 					if (widget.WorldScaleWithDistance)
 					{
