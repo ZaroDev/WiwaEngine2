@@ -85,16 +85,9 @@ void EditorModule::init()
 	m_Panels.push_back(CreateRef<HierarchyPanel>(*m_SceneEditor));
 	Ref<InspectorPanel> inspector = CreateRef<InspectorPanel>(*m_SceneEditor);
 	m_Panels.push_back(inspector);
-	m_Panels.push_back(CreateRef<EnvironmentPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<LightingPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<ExposurePanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<BloomPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<TonemapPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<AoPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<PostEffectsPanel>(*m_SceneEditor));
+	m_Panels.push_back(CreateRef<WorldPanel>(*m_SceneEditor));
 	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor));
 	m_Panels.push_back(CreateRef<RendererPanel>());
-	m_Panels.push_back(CreateRef<QualityPanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
 	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>();
 	m_Panels.push_back(materialPanel);
