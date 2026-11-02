@@ -9,7 +9,9 @@
 #include <assets/asset_manager.h>
 #include <assets/wasset_io.h>
 #include <core/engine.h>
+#include <glm/gtc/matrix_transform.hpp>
 #include <ui/ui_font.h>
+#include <ui/ui_layout.h>
 #include <ui/ui_panel_io.h>
 #include <ui/ui_widget.h>
 
@@ -195,6 +197,240 @@ namespace wiwa
 			check(ui_panel_from_json(UiJson::object(), error).has_value(), "an empty object is an empty panel");
 		}
 
+		UiWidget layout_widget(UiId id, UiId parent, WidgetKind kind, const char* name, glm::vec2 anchorMin, glm::vec2 anchorMax, glm::vec2 offsetMin, glm::vec2 offsetMax)
+		{
+			UiWidget widget = make_widget(id, parent, kind, name);
+			widget.AnchorMin = anchorMin;
+			widget.AnchorMax = anchorMax;
+			widget.OffsetMin = offsetMin;
+			widget.OffsetMax = offsetMax;
+			return widget;
+		}
+
+		// A camera at (0, 0, 5) looking down -z, 60 degrees, for a 16:9 canvas. NDC y points up.
+		UiCameraView test_camera()
+		{
+			UiCameraView view;
+			view.Position = { 0.0f, 0.0f, 5.0f };
+			const glm::mat4 projection = glm::perspective(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 1000.0f);
+			view.ViewProjection = projection * glm::lookAt(view.Position, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+			view.Valid = true;
+			return view;
+		}
+
+		bool finite(const UiRect& rect)
+		{
+			return std::isfinite(rect.Min.x) && std::isfinite(rect.Min.y) && std::isfinite(rect.Max.x) && std::isfinite(rect.Max.y);
+		}
+
+		bool near_rect(const UiRect& rect, glm::vec2 min, glm::vec2 max, float tolerance = 0.5f)
+		{
+			return glm::length(rect.Min - min) <= tolerance && glm::length(rect.Max - max) <= tolerance;
+		}
+
+		void check_layout(Check& check, const FontData* font)
+		{
+			const glm::vec2 canvas{ 1920.0f, 1080.0f };
+			const EntityGuid target = EntityGuid::generate();
+			glm::vec3 targetPosition{ 0.0f, 0.0f, 0.0f };
+			bool targetExists = true;
+			const UiCameraView camera = test_camera();
+
+			UiLayoutInput input;
+			input.CanvasSize = canvas;
+			input.Camera = &camera;
+			input.WorldPosition = [&](const EntityGuid& guid) -> std::optional<glm::vec3>
+			{
+				if (guid == target && targetExists)
+				{
+					return targetPosition;
+				}
+				return std::nullopt;
+			};
+			input.Fonts = [font](const AssetRef&) { return font; };
+
+			const auto run = [&](std::vector<UiWidget> widgets, const glm::vec2& size = glm::vec2(1920.0f, 1080.0f))
+			{
+				UiPanelData panel;
+				panel.Widgets = std::move(widgets);
+				UiLayoutInput local = input;
+				local.CanvasSize = size;
+				return compute_layout(panel, local);
+			};
+
+			// anchors and offsets
+			UiLayoutResult result = run({ layout_widget(1, 0, WidgetKind::Panel, "Fill", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 }) });
+			check(result.Rects.size() == 1 && near_rect(result.Rects[0], { 0, 0 }, canvas) && result.Visible[0] == 1 && result.Opacity[0] == 1.0f, "layout_stretch: anchors 0..1 with no offsets fill the canvas");
+
+			result = run({ layout_widget(1, 0, WidgetKind::Panel, "Corner", { 1, 1 }, { 1, 1 }, { -100, -30 }, { 0, 0 }) });
+			check(near_rect(result.Rects[0], { 1820, 1050 }, canvas), "layout_corner_anchor: anchored to the bottom right, a 100x30 widget sits in the corner");
+
+			result = run({ layout_widget(1, 0, WidgetKind::Panel, "Inset", { 0, 0 }, { 1, 1 }, { 10, 20 }, { -30, -40 }) });
+			check(near_rect(result.Rects[0], { 10, 20 }, { 1890, 1040 }), "layout_stretch: offsets move the edges in from the anchors");
+
+			result = run({ layout_widget(1, 0, WidgetKind::Panel, "Swapped", { 1, 1 }, { 0, 0 }, { 0, 0 }, { 0, 0 }) });
+			check(result.Rects[0].Max.x > result.Rects[0].Min.x && result.Rects[0].Max.y > result.Rects[0].Min.y && finite(result.Rects[0]), "layout_anchor_swapped: anchor min above max still gives a rect with an area");
+
+			// nesting
+			result = run({ layout_widget(1, 0, WidgetKind::Panel, "Parent", { 0, 0 }, { 0.5f, 0.5f }, { 0, 0 }, { 0, 0 }),
+				layout_widget(2, 1, WidgetKind::Panel, "Child", { 0.5f, 0.5f }, { 1, 1 }, { 0, 0 }, { 0, 0 }) });
+			check(near_rect(result.Rects[1], { 480, 270 }, { 960, 540 }), "layout_nested: a child's anchors are fractions of its parent's rect");
+
+			// the reference resolution
+			result = run({ layout_widget(1, 0, WidgetKind::Panel, "Box", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 100, 30 }) }, { 3840.0f, 2160.0f });
+			check(near_rect(result.Rects[0], { 0, 0 }, { 200, 60 }) && std::abs(result.CanvasScale - 2.0f) < 1e-4f && std::abs(result.Scale[0] - 2.0f) < 1e-4f, "layout_scale_match: a canvas twice the reference size doubles pixel sizes");
+
+			UiPanelData wide;
+			wide.Widgets = { layout_widget(1, 0, WidgetKind::Panel, "Box", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 100, 30 }) };
+			wide.MatchWidthOrHeight = 0.0f;
+			UiLayoutInput wideInput = input;
+			wideInput.CanvasSize = { 3840.0f, 1080.0f };
+			check(std::abs(compute_layout(wide, wideInput).CanvasScale - 2.0f) < 1e-4f, "layout_scale_match: match 0 scales with the width");
+			wide.MatchWidthOrHeight = 1.0f;
+			check(std::abs(compute_layout(wide, wideInput).CanvasScale - 1.0f) < 1e-4f, "layout_scale_match: match 1 scales with the height");
+
+			// visibility and opacity
+			UiWidget hiddenParent = layout_widget(1, 0, WidgetKind::Panel, "Hidden", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 });
+			hiddenParent.Visible = false;
+			result = run({ hiddenParent, layout_widget(2, 1, WidgetKind::Panel, "Child", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 }) });
+			check(result.Visible[0] == 0 && result.Visible[1] == 0, "layout_visibility: a hidden widget hides its children");
+
+			UiWidget half = layout_widget(1, 0, WidgetKind::Panel, "Half", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 });
+			half.Opacity = 0.5f;
+			UiWidget halfChild = layout_widget(2, 1, WidgetKind::Panel, "Child", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 });
+			halfChild.Opacity = 0.5f;
+			result = run({ half, halfChild });
+			check(std::abs(result.Opacity[1] - 0.25f) < 1e-5f, "layout_opacity: opacity multiplies down the tree");
+
+			// a parent may come after its child in the array
+			result = run({ layout_widget(2, 1, WidgetKind::Panel, "Child", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 }),
+				layout_widget(1, 0, WidgetKind::Panel, "Parent", { 0, 0 }, { 0.5f, 0.5f }, { 0, 0 }, { 0, 0 }) });
+			check(near_rect(result.Rects[0], { 0, 0 }, { 960, 540 }), "layout_order: a child listed before its parent is laid out inside it");
+
+			// stacks
+			UiWidget vstack = layout_widget(1, 0, WidgetKind::VStack, "Menu", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 300, 300 });
+			vstack.Spacing = 10.0f;
+			vstack.Padding = { 5, 5, 5, 5 };
+			std::vector<UiWidget> column = { vstack };
+			for (UiId i = 0; i < 3; i++)
+			{
+				column.push_back(layout_widget(2 + i, 1, WidgetKind::Panel, "Item", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 100, 30 }));
+			}
+			result = run(column);
+			check(near_rect(result.Rects[1], { 5, 5 }, { 105, 35 }) && near_rect(result.Rects[2], { 5, 45 }, { 105, 75 }) && near_rect(result.Rects[3], { 5, 85 }, { 105, 115 }), "layout_vstack: items stack with the spacing, inside the padding");
+
+			UiWidget hstack = vstack;
+			hstack.Kind = WidgetKind::HStack;
+			column[0] = hstack;
+			result = run(column);
+			check(near_rect(result.Rects[1], { 5, 5 }, { 105, 35 }) && near_rect(result.Rects[2], { 115, 5 }, { 215, 35 }) && near_rect(result.Rects[3], { 225, 5 }, { 325, 35 }), "layout_hstack: items go left to right");
+
+			vstack.ChildAlign = UiChildAlign::Center;
+			column[0] = vstack;
+			result = run(column);
+			check(near_rect(result.Rects[1], { 100, 5 }, { 200, 35 }), "layout_stack_align: Center centres the items across the stack");
+
+			vstack.ChildAlign = UiChildAlign::Start;
+			vstack.ForceExpand = true;
+			column[0] = vstack;
+			result = run(column);
+			check(std::abs((result.Rects[1].Max.x - result.Rects[1].Min.x) - 290.0f) < 0.5f && std::abs((result.Rects[3].Max.y) - 295.0f) < 1.0f, "layout_stack_force_expand: items fill the cross axis and share the free main space");
+
+			UiWidget hiddenItem = column[2];
+			hiddenItem.Visible = false;
+			vstack.ForceExpand = false;
+			column[0] = vstack;
+			column[2] = hiddenItem;
+			result = run(column);
+			check(near_rect(result.Rects[3], { 5, 45 }, { 105, 75 }), "layout_stack_hidden_item: a hidden item takes no room");
+
+			result = run({ layout_widget(1, 0, WidgetKind::VStack, "Empty", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 100, 100 }) });
+			check(finite(result.Rects[0]) && result.Visible[0] == 1, "layout_stack_empty: a stack with no children is fine");
+
+			if (font != nullptr)
+			{
+				UiWidget text = layout_widget(2, 1, WidgetKind::Text, "Label", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 });
+				text.Text = "Hello";
+				text.FontSize = 24.0f;
+				result = run({ layout_widget(1, 0, WidgetKind::VStack, "Menu", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 300, 300 }), text });
+				const glm::vec2 measured = measure_text(*font, "Hello", 24.0f, 0.0f, false);
+				check(std::abs((result.Rects[1].Max.x - result.Rects[1].Min.x) - measured.x) < 0.5f && std::abs((result.Rects[1].Max.y - result.Rects[1].Min.y) - measured.y) < 0.5f, "layout_text_in_stack: a text without a size measures its content");
+			}
+
+			// world anchors
+			UiWidget floating = layout_widget(1, 0, WidgetKind::Panel, "Marker", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 100, 30 });
+			floating.WorldEntity = target;
+			targetPosition = { 0.0f, 0.0f, 0.0f };
+			result = run({ floating });
+			check(result.Visible[0] == 1 && near_rect(result.Rects[0], { 910, 525 }, { 1010, 555 }, 1.0f), "layout_world_center: an entity in front of the camera puts the pivot at the middle of the screen");
+
+			floating.WorldScreenOffset = { 0.0f, -100.0f };
+			result = run({ floating });
+			check(near_rect(result.Rects[0], { 910, 425 }, { 1010, 455 }, 1.0f), "layout_world_screen_offset: the screen offset moves the widget");
+			floating.WorldScreenOffset = { 0.0f, 0.0f };
+
+			floating.WorldOffset = { 0.0f, 1.0f, 0.0f };
+			result = run({ floating });
+			check(result.Visible[0] == 1 && result.Rects[0].Min.y < 525.0f, "layout_world_offset: a world offset up puts the widget higher on the screen");
+			floating.WorldOffset = { 0.0f, 0.0f, 0.0f };
+
+			UiWidget child = layout_widget(2, 1, WidgetKind::Panel, "Inside", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 });
+			result = run({ floating, child });
+			check(near_rect(result.Rects[1], result.Rects[0].Min, result.Rects[0].Max), "layout_world_children: the children of an anchored widget follow it");
+
+			targetPosition = { 0.0f, 0.0f, 10.0f }; // behind the camera
+			result = run({ floating });
+			check(result.Visible[0] == 0, "layout_world_behind: an entity behind the camera is hidden");
+
+			targetPosition = { 0.0f, 0.0f, 0.0f };
+			targetExists = false;
+			result = run({ floating });
+			check(result.Visible[0] == 0 && finite(result.Rects[0]), "layout_world_missing_entity: an entity that does not exist hides the widget");
+			targetExists = true;
+
+			targetPosition = { 100.0f, 0.0f, 0.0f };
+			result = run({ floating });
+			check(result.Visible[0] == 0, "layout_world_offscreen: off the screen with Hide hides the widget");
+			floating.WorldOffscreen = UiOffscreen::ClampToEdge;
+			result = run({ floating });
+			check(result.Visible[0] == 1 && std::abs(result.Rects[0].Min.x + 50.0f - 1920.0f) < 1.0f, "layout_world_offscreen: ClampToEdge puts the pivot on the edge of the canvas");
+			floating.WorldOffscreen = UiOffscreen::Hide;
+
+			floating.WorldScaleWithDistance = true;
+			targetPosition = { 0.0f, 0.0f, -15.0f }; // 20 away, the reference distance is 10
+			result = run({ floating });
+			check(std::abs((result.Rects[0].Max.x - result.Rects[0].Min.x) - 50.0f) < 0.5f && std::abs(result.Scale[0] - 0.5f) < 1e-3f, "layout_world_distance_scale: twice the reference distance is half the size");
+			targetPosition = { 0.0f, 0.0f, -95.0f }; // 100 away
+			result = run({ floating });
+			check(std::abs(result.Scale[0] - 0.25f) < 1e-3f, "layout_world_distance_scale: the scale stops at the minimum");
+			targetPosition = { 0.0f, 0.0f, 4.0f }; // 1 away
+			result = run({ floating });
+			check(std::abs(result.Scale[0] - 2.0f) < 1e-3f, "layout_world_distance_scale: the scale stops at the maximum");
+
+			floating.WorldScaleWithDistance = false;
+			floating.WorldFadeStart = 10.0f;
+			floating.WorldFadeEnd = 30.0f;
+			targetPosition = { 0.0f, 0.0f, -15.0f };
+			result = run({ floating });
+			check(std::abs(result.Opacity[0] - 0.5f) < 1e-3f, "layout_world_fade: halfway through the fade range is half opaque");
+			targetPosition = { 0.0f, 0.0f, -40.0f };
+			result = run({ floating });
+			check(result.Visible[0] == 0 || result.Opacity[0] == 0.0f, "layout_world_fade: past the end of the fade range nothing is left");
+
+			UiLayoutInput noCamera = input;
+			noCamera.Camera = nullptr;
+			UiPanelData lone;
+			lone.Widgets = { floating };
+			check(compute_layout(lone, noCamera).Visible[0] == 0, "layout_world_no_camera: without a camera a world anchored widget is hidden");
+
+			// a canvas with no area
+			for (const glm::vec2 size : { glm::vec2(0.0f, 1080.0f), glm::vec2(1920.0f, 0.0f), glm::vec2(0.0f, 0.0f) })
+			{
+				result = run({ layout_widget(1, 0, WidgetKind::Panel, "Fill", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 }), floating }, size);
+				check(result.Visible[0] == 0 && result.Visible[1] == 0 && finite(result.Rects[0]) && finite(result.Rects[1]) && std::isfinite(result.CanvasScale), "layout_zero_canvas: a canvas without area hides everything and makes no NaN");
+			}
+		}
+
 		// A texel of the font's atlas at a position given as a fraction of a glyph's quad.
 		u8 atlas_texel(const FontData& font, const FontGlyph& glyph, float fx, float fy)
 		{
@@ -219,7 +455,7 @@ namespace wiwa
 			return rows.size();
 		}
 
-		void check_fonts(Check& check, AssetPipelineModule& pipeline)
+		void check_fonts(Check& check, AssetPipelineModule& pipeline, Handle<FontData>& handle)
 		{
 			AssetDatabase& database = pipeline.get_database();
 			AssetManager& manager = *Engine::get().get_module<AssetManager>();
@@ -230,7 +466,7 @@ namespace wiwa
 			{
 				return;
 			}
-			Handle<FontData> handle = manager.load<FontData>(*ref);
+			handle = manager.load<FontData>(*ref);
 			manager.wait_idle();
 			const FontData* fontPointer = handle.get();
 			check(fontPointer != nullptr, "font_imported: the cooked font loads");
@@ -356,7 +592,9 @@ namespace wiwa
 
 		check_field_table(check);
 		check_panel_files(check);
-		check_fonts(check, pipeline);
+		Handle<FontData> fontHandle;
+		check_fonts(check, pipeline, fontHandle);
+		check_layout(check, fontHandle.get());
 
 		if (check.Failures == 0)
 		{
