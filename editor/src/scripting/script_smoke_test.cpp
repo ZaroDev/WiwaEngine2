@@ -1992,6 +1992,50 @@ namespace wiwa
 			check(added == declared, "stub_declares_exactly_the_sandbox_globals");
 		}
 
+		ComponentInfo stub_component(const std::string& name, const std::string& displayName, std::vector<FieldDescriptor> fields)
+		{
+			ComponentInfo info;
+			info.Name = name;
+			info.DisplayName = displayName;
+			info.Fields = std::move(fields);
+			return info;
+		}
+
+		bool loads_as_lua(const std::string& text)
+		{
+			sol::state lua;
+			return lua.load(text).valid();
+		}
+
+		void check_component_stubs(Check& check)
+		{
+			const auto field = [](const char* name, FieldType type) { FieldDescriptor f; f.Name = name; f.Type = type; return f; };
+
+			const ComponentInfo light = stub_component("Light", "", { field("Intensity", FieldType::Float), field("Color", FieldType::Color) });
+			const ComponentInfo enemy = stub_component("script:abcd", "Enemy", { field("health", FieldType::Int), field("target", FieldType::Entity), field("icons", FieldType::AssetList) });
+			const std::string text = generate_component_stubs({ &enemy, &light });
+
+			check(contains(text, "---@class Comp.Light"), "stubs_have_a_class_per_component");
+			check(contains(text, "---@field Intensity number") && contains(text, "---@field Color vec4"), "stubs_map_float_and_color_fields");
+			check(contains(text, "---@class Comp.Enemy") && contains(text, "---@field health integer"), "stubs_use_the_script_file_name_and_int_is_integer");
+			check(contains(text, "---@field target Entity?") && contains(text, "---@field icons Asset[]"), "stubs_map_entity_and_asset_list_fields");
+			check(contains(text, "name: \"Enemy\"): Comp.Enemy") && contains(text, "name: \"Light\"): Comp.Light"), "stubs_overload_get_by_component_name");
+			check(contains(text, "---@alias ComponentName \"Enemy\"|\"Light\""), "stubs_list_the_component_names_sorted");
+			check(loads_as_lua(text), "stubs_are_valid_lua");
+			check(text == generate_component_stubs({ &light, &enemy }), "stubs_do_not_depend_on_the_order_of_the_input");
+
+			const std::string empty = generate_component_stubs({});
+			check(loads_as_lua(empty) && !contains(empty, "@overload") && contains(empty, "function Entity:get"), "stubs_of_no_components_are_valid_and_still_declare_get");
+
+			const ComponentInfo odd = stub_component("script:odd", "my \"x\"-script", { field("hp", FieldType::Int) });
+			const std::string oddText = generate_component_stubs({ &odd });
+			check(loads_as_lua(oddText) && contains(oddText, "---@class Comp.my__x__script") && contains(oddText, "name: \"my \\\"x\\\"-script\""), "stubs_sanitize_and_escape_odd_script_names");
+
+			const ComponentInfo twin = stub_component("script:twin", "Enemy", { field("other", FieldType::Bool) });
+			const std::string twinText = generate_component_stubs({ &enemy, &twin });
+			check(loads_as_lua(twinText) && contains(twinText, "-- duplicate: Enemy") && !contains(twinText, "---@field other"), "stubs_skip_a_second_component_with_the_same_name");
+		}
+
 		// The LuaLS support files: stubs the importer must leave alone, the stub the editor writes, and the project settings.
 		void check_lua_stubs(Check& check, AssetPipelineModule& pipeline)
 		{
@@ -2053,6 +2097,7 @@ namespace wiwa
 		check_editor_document(check);
 		check_play_mode(check);
 		check_stub_globals(check);
+		check_component_stubs(check);
 		check_lua_stubs(check, pipeline);
 
 		if (check.Failures == 0)
