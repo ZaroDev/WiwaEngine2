@@ -1,6 +1,7 @@
 #include <pch.h>
 #include "render_test.h"
 
+#include "../passes/ui_pass.h"
 #include "scene_tester.h"
 
 // The UI pass: whole frames through the renderer with a hand-made UiDrawList, read back from the viewport image.
@@ -237,6 +238,72 @@ namespace wiwa
 				add_quad(test.ui(), UiQuadKind::Sdf, AssetRef{}, { 0.0f, 0.0f }, { 64.0f, 64.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, std::nullopt, 4.0f, 1.0f);
 				context.check(test.render(), "a frame with fonts and textures that do not exist still renders");
 				context.check(SceneTester::max_difference(baseline, test.pixels()) == 0, "and draws nothing for them");
+			});
+
+		register_render_check("ui_preview_pixels", [](RenderCheckContext& context)
+			{
+				SceneTester test(context, SIZE);
+				dark_scene(test);
+				UiRenderPass* pass = test.renderer().get_pass<UiRenderPass>();
+				context.check(pass != nullptr, "the renderer has a UI pass");
+				if (pass == nullptr)
+				{
+					return;
+				}
+
+				auto read_preview = [&](std::vector<u8>& pixels, u32& width, u32& height)
+				{
+					nvrhi::ITexture* texture = test.renderer().get_textures().get(UI_PREVIEW_TEXTURE_ID);
+					return texture != nullptr && read_texture_rgba8(context.Device, texture, pixels, width, height);
+				};
+				auto at = [](const std::vector<u8>& pixels, u32 width, int x, int y)
+				{
+					const size_t offset = (static_cast<size_t>(y) * width + static_cast<size_t>(x)) * 4;
+					return glm::ivec3(pixels[offset], pixels[offset + 1], pixels[offset + 2]);
+				};
+
+				UiDrawList squares;
+				squares.CanvasSize = { 32.0f, 32.0f };
+				add_quad(squares, UiQuadKind::Solid, AssetRef{}, { 8.0f, 8.0f }, { 24.0f, 24.0f }, { 1.0f, 0.0f, 0.0f, 1.0f });
+				pass->set_preview(squares, 32, 32, glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
+				context.check(test.render(), "render with a preview");
+
+				std::vector<u8> pixels;
+				u32 width = 0;
+				u32 height = 0;
+				context.check(read_preview(pixels, width, height) && width == 32 && height == 32, "the preview is a texture of the size asked for, under its id");
+				if (pixels.size() == 32 * 32 * 4)
+				{
+					context.check(is_color(at(pixels, width, 16, 16), 255, 0, 0), "the list is drawn into it");
+					context.check(is_color(at(pixels, width, 2, 2), 0, 0, 255) && is_color(at(pixels, width, 29, 29), 0, 0, 255), "and the rest is the background colour");
+				}
+				context.check(is_color(test.pixel(16, 16), 0, 0, 0), "the scene's image is not touched by the preview");
+
+				const AssetRef font = test.cache().add_inline_font(make_bar_font());
+				UiDrawList text;
+				text.CanvasSize = { 32.0f, 32.0f };
+				add_quad(text, UiQuadKind::Sdf, font, { 0.0f, 0.0f }, { 32.0f, 32.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, std::nullopt, 4.0f, 1.0f);
+				pass->set_preview(text, 32, 32, glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+				context.check(test.render(), "render a preview with text");
+				context.check(read_preview(pixels, width, height) && pixels.size() == 32 * 32 * 4, "read the preview with text");
+				if (pixels.size() == 32 * 32 * 4)
+				{
+					context.check(is_color(at(pixels, width, 15, 16), 255, 255, 255, 4) && is_color(at(pixels, width, 4, 16), 0, 0, 0), "text in the preview is drawn from the font on the GPU");
+				}
+
+				UiDrawList bigger;
+				bigger.CanvasSize = { 64.0f, 64.0f };
+				add_quad(bigger, UiQuadKind::Solid, AssetRef{}, { 0.0f, 0.0f }, { 64.0f, 64.0f }, { 0.0f, 1.0f, 0.0f, 1.0f });
+				pass->set_preview(bigger, 64, 64, glm::vec4(0.0f));
+				context.check(test.render(), "render a preview of another size");
+				context.check(read_preview(pixels, width, height) && width == 64 && height == 64 && is_color(at(pixels, width, 32, 32), 0, 255, 0), "a new size makes a new texture, and it is drawn");
+
+				pass->clear_preview();
+				context.check(test.render(), "render with the preview cleared");
+				context.check(test.renderer().get_textures().get(UI_PREVIEW_TEXTURE_ID) == nullptr, "a cleared preview has no texture");
+
+				pass->set_preview(squares, 0, 32, glm::vec4(0.0f));
+				context.check(test.render() && test.renderer().get_textures().get(UI_PREVIEW_TEXTURE_ID) == nullptr, "a preview without width has no texture, and the frame renders");
 			});
 
 		register_render_check("ui_resize_rebuilds", [](RenderCheckContext& context)

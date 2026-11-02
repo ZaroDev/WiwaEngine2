@@ -22,6 +22,7 @@
 namespace wiwa
 {
 	class ImGuiRenderPass;
+	class UiRenderPass;
 	class RenderWorld;
 
 	// The main-thread face of the renderer: the only thing the rest of the engine talks to. It owns the render thread and
@@ -99,6 +100,13 @@ namespace wiwa
 
 		static constexpr u32 get_viewport_texture_id() { return VIEWPORT_TEXTURE_ID; }
 
+		// The UI editor's canvas, drawn by the renderer like the viewport: every frame the render thread clears a texture of this size to the
+		// background and draws the list into it (the list is in canvas pixels of list.CanvasSize). ImGui shows it as get_ui_preview_texture_id()
+		// a frame or two later. Call it every frame the canvas is open; clear_ui_preview() when it is not.
+		void set_ui_preview(UiDrawList list, u32 width, u32 height, const glm::vec4& background);
+		void clear_ui_preview();
+		static constexpr u32 get_ui_preview_texture_id() { return UI_PREVIEW_TEXTURE_ID; }
+
 		// The id to draw a texture asset with in the UI (ImGui::Image), or 0 until the texture is on the GPU (and for good if it failed).
 		// Asking starts the load; call it every frame the texture is shown. Main thread.
 		u32 get_asset_texture_id(const AssetRef& texture);
@@ -121,6 +129,7 @@ namespace wiwa
 		SnapshotChannel m_Snapshot{};
 		Scope<Renderer> m_Renderer{}; // created, used and destroyed on the render thread
 		ImGuiRenderPass* m_ImGuiPass = nullptr; // owned by the renderer; set on the render thread during start
+		UiRenderPass* m_UiPass = nullptr;       // the same, for the game UI
 		std::vector<RenderCommand> m_PendingCommands{};
 		DebugDraw m_DebugDraw{};
 		UiDrawList m_PendingUi{};

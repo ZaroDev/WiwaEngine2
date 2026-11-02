@@ -3,10 +3,13 @@
 
 #include "../asset_pipeline/asset_database.h"
 #include "editor_play_input.h"
+#include "ui_edit_model.h"
 
 #include <algorithm>
+#include <fstream>
 #include <cmath>
 #include <limits>
+#include <set>
 #include <unordered_map>
 
 #include <assets/asset_manager.h>
@@ -1369,6 +1372,230 @@ namespace wiwa
 			}
 		}
 
+		UiId add_named(UiEditModel& model, WidgetKind kind, UiId parent, const char* name)
+		{
+			const UiId id = model.add(kind, parent);
+			if (id != 0)
+			{
+				model.rename(id, name);
+			}
+			return id;
+		}
+
+		std::vector<std::string> child_names(const UiEditModel& model, UiId parent)
+		{
+			std::vector<std::string> names;
+			for (const UiWidget& widget : model.data().Widgets)
+			{
+				if (widget.Parent == parent)
+				{
+					names.push_back(widget.Name);
+				}
+			}
+			return names;
+		}
+
+		void check_edit_model(Check& check)
+		{
+			// adding
+			{
+				UiEditModel model{ UiPanelData{} };
+				check(model.data().Widgets.empty() && !model.dirty() && !model.can_undo() && !model.can_redo(), "edit_new_model: nothing in it, nothing to save or undo");
+
+				const UiId root = model.add(WidgetKind::Panel, 0);
+				const UiId child = model.add(WidgetKind::Button, root);
+				check(root != 0 && child != 0 && root != child && model.data().find(child)->Parent == root && model.data().find(child)->Kind == WidgetKind::Button, "edit_add_child: a widget is added under its parent with a new id");
+				check(model.add(WidgetKind::Text, 999) == 0 && model.data().Widgets.size() == 2, "edit_add_child: a parent that does not exist adds nothing");
+				check(model.data().NextId > child && model.dirty() && model.can_undo(), "edit_add_child: the panel remembers the next id, and is dirty");
+
+				const UiId second = model.add(WidgetKind::Button, root);
+				const UiId third = model.add(WidgetKind::Button, root);
+				check(child_names(model, root) == std::vector<std::string>({ "Button", "Button 1", "Button 2" }) && second != third, "edit_unique_names: siblings of one name get a number");
+				model.add(WidgetKind::Button, 0);
+				check(child_names(model, 0) == std::vector<std::string>({ "Panel", "Button" }), "edit_unique_names: and another parent starts again");
+
+				for (const WidgetKind kind : { WidgetKind::Panel, WidgetKind::HStack, WidgetKind::VStack, WidgetKind::Text, WidgetKind::Image, WidgetKind::Button, WidgetKind::Slider, WidgetKind::Toggle, WidgetKind::Bar })
+				{
+					const UiId id = model.add(kind, 0);
+					const UiWidget* widget = model.data().find(id);
+					const glm::vec2 size = widget != nullptr ? widget->OffsetMax - widget->OffsetMin : glm::vec2(0.0f);
+					check(widget != nullptr && widget->Kind == kind && size.x > 0.0f && size.y > 0.0f, std::string("edit_add_defaults: a new ") + widget_kind_name(kind) + " has a size you can see");
+				}
+			}
+
+			// names
+			{
+				UiEditModel model{ UiPanelData{} };
+				const UiId a = add_named(model, WidgetKind::Panel, 0, "A");
+				const UiId b = add_named(model, WidgetKind::Panel, 0, "B");
+				check(!model.rename(a, "") && !model.rename(a, "x/y") && !model.rename(a, "B") && !model.rename(999, "Z"), "edit_rename_rules: an empty name, a path separator, a taken name and a widget that does not exist are refused");
+				check(model.rename(a, "A") && model.rename(b, "C") && model.data().find(b)->Name == "C", "edit_rename_rules: its own name is fine, and a free one is taken");
+			}
+
+			// moving
+			{
+				UiEditModel model{ UiPanelData{} };
+				const UiId a = add_named(model, WidgetKind::Panel, 0, "A");
+				const UiId b = add_named(model, WidgetKind::Panel, a, "B");
+				const UiId c = add_named(model, WidgetKind::Panel, b, "C");
+				check(!model.reparent(a, c, 0) && !model.reparent(a, b, 0) && !model.reparent(a, a, 0), "edit_reparent_cycle_refused: a widget cannot go under itself or its descendants");
+				check(model.data().find(a)->Parent == 0, "edit_reparent_cycle_refused: and nothing changed");
+				check(!model.reparent(c, 999, 0) && !model.reparent(999, a, 0), "edit_reparent_cycle_refused: neither under or of a widget that does not exist");
+
+				const UiId d = add_named(model, WidgetKind::Panel, 0, "D");
+				const UiId e = add_named(model, WidgetKind::Panel, 0, "E");
+				check(model.reparent(e, a, 0) && model.data().find(e)->Parent == a, "edit_reparent: a widget moves to another parent");
+				check(child_names(model, a) == std::vector<std::string>({ "E", "B" }), "edit_reparent: and takes the position it was dropped at");
+				check(model.reparent(d, a, 99) && child_names(model, a) == std::vector<std::string>({ "E", "B", "D" }), "edit_reparent: a position past the end is the end");
+				check(model.reparent(b, a, 0) && child_names(model, a) == std::vector<std::string>({ "B", "E", "D" }) && model.data().find(c)->Parent == b, "edit_reparent: within one parent it reorders, and the children go along");
+
+				const UiId clash = add_named(model, WidgetKind::Panel, 0, "E");
+				check(model.reparent(clash, a, 0) && child_names(model, a) == std::vector<std::string>({ "E 1", "B", "E", "D" }), "edit_reparent: a name that is taken in the new parent is made unique");
+			}
+
+			// removing and duplicating
+			{
+				UiEditModel model{ UiPanelData{} };
+				const UiId root = add_named(model, WidgetKind::VStack, 0, "Root");
+				const UiId button = add_named(model, WidgetKind::Button, root, "Go");
+				const UiId label = add_named(model, WidgetKind::Text, button, "Label");
+				const UiId other = add_named(model, WidgetKind::Panel, 0, "Other");
+				model.set_field(label, "Text", FieldValue(std::string("Hello")));
+
+				const UiId copy = model.duplicate(root);
+				check(copy != 0 && copy != root && model.data().Widgets.size() == 7, "edit_duplicate_subtree_new_ids: the copy has as many widgets as the original");
+				std::set<UiId> ids;
+				for (const UiWidget& widget : model.data().Widgets)
+				{
+					ids.insert(widget.Id);
+				}
+				check(ids.size() == model.data().Widgets.size(), "edit_duplicate_subtree_new_ids: and every widget its own id");
+				check(model.data().find(copy)->Name == "Root 1" && model.data().find(copy)->Parent == 0, "edit_duplicate_subtree_new_ids: the copy is beside the original with a free name");
+				UiId copiedLabel = 0;
+				for (const UiWidget& widget : model.data().Widgets)
+				{
+					if (widget.Name == "Label" && widget.Id != label)
+					{
+						copiedLabel = widget.Id;
+					}
+				}
+				check(copiedLabel != 0 && model.data().find(copiedLabel)->Text == "Hello" && model.data().find(copiedLabel)->Parent != button, "edit_duplicate_subtree_new_ids: the copy keeps the fields and hangs under the copied parent");
+				check(child_names(model, 0) == std::vector<std::string>({ "Root", "Root 1", "Other" }), "edit_duplicate_subtree_new_ids: the copy comes right after the original");
+
+				check(model.remove(root) && model.data().find(root) == nullptr && model.data().find(button) == nullptr && model.data().find(label) == nullptr && model.data().find(other) != nullptr, "edit_remove_subtree: a widget goes with everything under it");
+				check(!model.remove(root) && !model.remove(0) && model.duplicate(999) == 0, "edit_remove_subtree: a widget that is not there cannot be removed or copied");
+			}
+
+			// fields
+			{
+				UiEditModel model{ UiPanelData{} };
+				const UiId id = add_named(model, WidgetKind::Slider, 0, "Volume");
+				const size_t before = model.data().Widgets.size();
+				check(model.set_field(id, "MaxValue", FieldValue(10.0f)) && model.data().find(id)->MaxValue == 10.0f, "edit_set_field: a value of the right type is set");
+				check(!model.set_field(id, "MaxValue", FieldValue(std::string("ten"))) && model.data().find(id)->MaxValue == 10.0f, "edit_set_field_type_mismatch: a value of another type changes nothing");
+				check(!model.set_field(id, "Nope", FieldValue(1.0f)) && !model.set_field(999, "MaxValue", FieldValue(1.0f)), "edit_set_field_type_mismatch: neither does a field or a widget that does not exist");
+				check(!model.set_field(id, "Align", FieldValue(static_cast<i32>(7))), "edit_set_field_type_mismatch: nor an enum value that is not one of its names");
+				check(model.set_field(id, "Name", FieldValue(std::string("Music"))) && model.data().find(id)->Name == "Music" && !model.set_field(id, "Name", FieldValue(std::string("a/b"))), "edit_set_field: Name goes through the rename rules");
+				check(model.data().Widgets.size() == before, "edit_set_field: no widget came or went");
+
+				UiEditModel fresh{ UiPanelData{} };
+				const UiId same = fresh.add(WidgetKind::Slider, 0);
+				const bool setSame = fresh.set_field(same, "MaxValue", FieldValue(fresh.data().find(same)->MaxValue));
+				fresh.undo(); // undoes the add: setting the value it already had was not a step
+				check(setSame && fresh.data().find(same) == nullptr, "edit_set_field: setting the value it has is not a step of its own");
+
+				check(model.set_rect(id, { 0, 0 }, { 1, 0 }, { 10, 20 }, { -10, 60 }), "edit_set_rect_valid: a rect is set");
+				const UiWidget* widget = model.data().find(id);
+				check(widget->AnchorMin == glm::vec2(0, 0) && widget->AnchorMax == glm::vec2(1, 0) && widget->OffsetMin == glm::vec2(10, 20) && widget->OffsetMax == glm::vec2(-10, 60), "edit_set_rect_valid: all four edges");
+				check(!model.set_rect(id, { 0, 0 }, { std::numeric_limits<float>::quiet_NaN(), 0 }, { 0, 0 }, { 1, 1 }) && !model.set_rect(999, { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 }), "edit_set_rect_valid: NaN and a widget that is not there are refused");
+				check(!model.set_reference({ 0.0f, 1080.0f }, 0.5f) && !model.set_reference({ 1920.0f, 1080.0f }, 2.0f) && model.set_reference({ 1280.0f, 720.0f }, 1.0f) && model.data().ReferenceResolution == glm::vec2(1280.0f, 720.0f), "edit_set_reference: a reference resolution needs an area and a match between 0 and 1");
+			}
+
+			// undo, redo and the dirty flag
+			{
+				UiEditModel model{ UiPanelData{} };
+				const UiPanelData original = model.data();
+				const UiId root = add_named(model, WidgetKind::Panel, 0, "Root");
+				check(model.data().find(root) != nullptr, "edit_undo_redo: a widget was added and named");
+				model.rename(root, "Renamed");
+				model.remove(root);
+				check(model.data().Widgets.empty(), "edit_undo_redo: and then renamed and removed");
+
+				model.undo();
+				check(model.data().find(root) != nullptr && model.data().find(root)->Name == "Renamed", "edit_undo_redo: undo brings the widget back");
+				model.undo();
+				model.undo();
+				model.undo();
+				check(model.data().Widgets.empty() && !model.can_undo() && model.data().ReferenceResolution == original.ReferenceResolution, "edit_undo_redo: all the undos are back at the start");
+				model.undo();
+				check(model.data().Widgets.empty(), "edit_undo_redo: undo with nothing to undo does nothing");
+				model.redo();
+				model.redo();
+				check(model.data().find(root) != nullptr && model.data().find(root)->Name == "Root", "edit_undo_redo: redo adds it again");
+				model.redo();
+				model.redo();
+				model.redo();
+				check(model.data().Widgets.empty() && !model.can_redo(), "edit_undo_redo: and goes forward to the end");
+
+				model.undo();
+				model.add(WidgetKind::Text, 0);
+				check(!model.can_redo(), "edit_undo_redo: a new change ends the redo history");
+
+				// ids are not reused, even after an undo
+				UiEditModel ids{ UiPanelData{} };
+				const UiId first = ids.add(WidgetKind::Panel, 0);
+				ids.undo();
+				const UiId again = ids.add(WidgetKind::Panel, 0);
+				check(again != first, "edit_ids_not_reused: an id that was undone is not handed out again");
+			}
+
+			{
+				UiEditModel model{ UiPanelData{} };
+				check(!model.dirty(), "edit_dirty_flag: a fresh model is clean");
+				const UiId id = model.add(WidgetKind::Panel, 0);
+				check(model.dirty(), "edit_dirty_flag: a change makes it dirty");
+				model.mark_saved();
+				check(!model.dirty(), "edit_dirty_flag: saving makes it clean");
+				model.rename(id, "Moved");
+				check(model.dirty(), "edit_dirty_flag: and the next change dirty again");
+				model.undo();
+				check(!model.dirty(), "edit_dirty_flag: undoing back to what was saved is clean again");
+				model.undo();
+				check(model.dirty(), "edit_dirty_flag: undoing past it is dirty");
+				model.redo();
+				check(!model.dirty(), "edit_dirty_flag: and redoing to it is clean");
+			}
+
+			{
+				UiEditModel model{ UiPanelData{} };
+				for (int i = 0; i < 130; i++)
+				{
+					model.add(WidgetKind::Panel, 0);
+				}
+				int undone = 0;
+				while (model.can_undo() && undone < 500)
+				{
+					model.undo();
+					undone++;
+				}
+				check(undone == 100 && model.data().Widgets.size() == 30, "edit_history_cap: only the latest 100 changes can be undone");
+			}
+
+			// what the editor saves is what the importer reads
+			{
+				UiEditModel model{ UiPanelData{} };
+				const UiId root = add_named(model, WidgetKind::VStack, 0, "Menu");
+				const UiId button = add_named(model, WidgetKind::Button, root, "Start");
+				model.set_field(button, "HoverColor", FieldValue(glm::vec4(0.1f, 0.2f, 0.3f, 1.0f)));
+				model.set_field(add_named(model, WidgetKind::Text, button, "Label"), "Text", FieldValue(std::string("Play \xC3\xA9")));
+				model.set_reference({ 1280.0f, 720.0f }, 0.25f);
+
+				std::string error;
+				const std::optional<UiPanelData> back = ui_panel_from_text(ui_panel_to_json(model.data()).dump(2), error);
+				check(back && panels_equal(model.data(), *back), "edit_save_roundtrip: the model's data survives the file");
+			}
+		}
+
 		// A texel of the font's atlas at a position given as a fraction of a glyph's quad.
 		u8 atlas_texel(const FontData& font, const FontGlyph& glyph, float fx, float fy)
 		{
@@ -1524,6 +1751,46 @@ namespace wiwa
 		}
 	}
 
+	std::filesystem::path write_ui_editor_smoke_panel()
+	{
+		UiEditModel model{ UiPanelData{} };
+		const UiId root = model.add(WidgetKind::Panel, 0);
+		model.set_field(root, "Name", FieldValue(std::string("Root")));
+		model.set_rect(root, { 0.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 0.0f }, { 0.0f, 0.0f });
+		model.set_field(root, "Color", FieldValue(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f)));
+
+		const UiId menu = model.add(WidgetKind::VStack, root);
+		model.set_field(menu, "Name", FieldValue(std::string("Menu")));
+		const UiId title = model.add(WidgetKind::Text, menu);
+		model.set_field(title, "Name", FieldValue(std::string("Title")));
+		model.set_field(title, "Text", FieldValue(std::string("Hello, UI")));
+		model.set_field(title, "Outline", FieldValue(0.2f));
+		model.set_field(title, "Shadow", FieldValue(true));
+		model.add(WidgetKind::Button, menu);
+		model.add(WidgetKind::Slider, menu);
+		model.add(WidgetKind::Toggle, menu);
+
+		const UiId bar = model.add(WidgetKind::Bar, root);
+		model.set_field(bar, "Name", FieldValue(std::string("Floating")));
+		model.set_field(bar, "WorldEntity", FieldValue(EntityGuid::generate())); // shown at its stand-in position
+
+		if (AssetManager* assets = Engine::get().get_module<AssetManager>())
+		{
+			if (const std::optional<AssetRef> font = assets->find_asset("Assets/fonts/Lato-Regular.ttf"))
+			{
+				model.set_field(title, "Font", FieldValue(*font));
+			}
+		}
+
+		const std::filesystem::path directory = std::filesystem::temp_directory_path() / "wiwa_ui_editor_smoke";
+		std::error_code error;
+		std::filesystem::create_directories(directory, error);
+		const std::filesystem::path file = directory / "smoke.wuipanel";
+		std::ofstream out(file, std::ios::binary | std::ios::trunc);
+		out << ui_panel_to_json(model.data()).dump(2);
+		return file;
+	}
+
 	bool run_ui_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1537,6 +1804,7 @@ namespace wiwa
 		check_interaction(check);
 		check_module(check, fontHandle.get());
 		check_play_input(check);
+		check_edit_model(check);
 
 		if (check.Failures == 0)
 		{

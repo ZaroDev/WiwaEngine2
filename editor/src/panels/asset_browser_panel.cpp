@@ -466,7 +466,11 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 	}
 	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
 	{
-		if (file.extension() == ".wmat" && m_OpenMaterial)
+		if (file.extension() == ".wuipanel" && m_OpenUiPanel)
+		{
+			m_OpenUiPanel(file);
+		}
+		else if (file.extension() == ".wmat" && m_OpenMaterial)
 		{
 			m_OpenMaterial(file);
 		}
@@ -539,7 +543,11 @@ void AssetBrowserPanel::draw_create_popup()
 		if (!created.empty())
 		{
 			m_Selected = created;
-			if (m_CreateKind == wiwa::CreateKind::Material && m_OpenMaterial)
+			if (m_CreateKind == wiwa::CreateKind::UiPanel && m_OpenUiPanel)
+			{
+				m_OpenUiPanel(created);
+			}
+			else if (m_CreateKind == wiwa::CreateKind::Material && m_OpenMaterial)
 			{
 				m_OpenMaterial(created);
 			}

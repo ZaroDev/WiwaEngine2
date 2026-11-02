@@ -270,6 +270,7 @@ namespace wiwa
 		description.Backbuffer = m_Backend->get_reference_framebuffer();
 		description.Shaders = m_Shaders.get();
 		description.Textures = &m_Textures;
+		description.Cache = m_Cache.get();
 		return description;
 	}
 

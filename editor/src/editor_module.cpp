@@ -9,6 +9,9 @@
 #include <scripting/script_module.h>
 #include <ui/ui_module.h>
 
+#include "ui/ui_editor_panel.h"
+#include "ui/ui_smoke_test.h"
+
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -88,6 +91,7 @@ void EditorModule::init()
 	for (const std::string& argument : wiwa::Engine::get().get_arguments())
 	{
 		m_PlaySmoke = m_PlaySmoke || argument == "--play-smoke";
+		m_UiEditorSmoke = m_UiEditorSmoke || argument == "--ui-editor-smoke";
 		if (argument == "--demo-smoke")
 		{
 			m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
@@ -107,8 +111,13 @@ void EditorModule::init()
 	m_Panels.push_back(browser);
 	// the panels live as long as m_Panels, which holds all of them until shutdown
 	MaterialPanel* materials = materialPanel.get();
+	Ref<UiEditorPanel> uiEditorPanel = CreateRef<UiEditorPanel>(*m_SceneEditor);
+	m_Panels.push_back(uiEditorPanel);
+	UiEditorPanel* uiEditor = uiEditorPanel.get();
+	m_UiEditor = uiEditor;
 	AssetBrowserPanel* browserPanel = browser.get();
 	browser->set_open_material([materials](const std::filesystem::path& wmat) { materials->open(wmat); });
+	browser->set_open_ui_panel([uiEditor](const std::filesystem::path& wuipanel) { uiEditor->open(wuipanel); });
 	wiwa::SceneEditor* sceneEditor = m_SceneEditor.get();
 	browser->set_make_prefab([sceneEditor](entt::entity entity, const std::filesystem::path& folder) { return sceneEditor->make_prefab(entity, folder); });
 	inspector->set_locate([browserPanel](const wiwa::AssetRef& ref) { browserPanel->select_asset(ref); });
@@ -133,6 +142,22 @@ void EditorModule::pre_update(float deltaTime)
 void EditorModule::update(float deltaTime)
 {
 	m_Frame++;
+	if (m_UiEditorSmoke && m_UiEditor != nullptr)
+	{
+		if (m_Frame == 20)
+		{
+			m_UiEditorSmokeFile = wiwa::write_ui_editor_smoke_panel();
+			m_UiEditor->open(m_UiEditorSmokeFile);
+		}
+		if (m_Frame == 150)
+		{
+			const bool passed = m_UiEditor->loaded() && m_UiEditor->previewing();
+			WI_INFO("Editor", "UI editor smoke test {0}", passed ? "passed" : "FAILED: the panel did not load or is not previewing");
+			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+		}
+	}
+
 	if (m_PlaySmoke && m_Frame == 30)
 	{
 		const std::string failure = run_play_smoke();

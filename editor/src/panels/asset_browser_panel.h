@@ -29,6 +29,7 @@ public:
 
 	// What opening a .wmat (a double click, or "New material") calls; the editor points it at the Material panel.
 	void set_open_material(std::function<void(const std::filesystem::path&)> open) { m_OpenMaterial = std::move(open); }
+	void set_open_ui_panel(std::function<void(const std::filesystem::path&)> open) { m_OpenUiPanel = std::move(open); }
 
 	// What an entity dragged here from the Hierarchy calls (payload "WI_ENTITY"): makes a prefab of it in the folder it was dropped on, and
 	// returns why that cannot be done, or an empty string. The editor points it at SceneEditor::make_prefab.
@@ -73,6 +74,7 @@ private:
 	std::filesystem::path m_CurrentDir{};
 	std::filesystem::path m_Selected{};
 	std::function<void(const std::filesystem::path&)> m_OpenMaterial{};
+	std::function<void(const std::filesystem::path&)> m_OpenUiPanel{};
 	std::function<std::string(entt::entity, const std::filesystem::path&)> m_MakePrefab{};
 	std::string m_Status{};             // why the last dropped entity did not become a prefab
 

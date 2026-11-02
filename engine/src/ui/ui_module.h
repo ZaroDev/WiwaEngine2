@@ -56,6 +56,11 @@ namespace wiwa
 		void set_font_provider(FontProvider provider) { m_Fonts = std::move(provider); }
 		void set_texture_size_provider(TextureSizeProvider provider) { m_TextureSizes = std::move(provider); }
 
+		// The font and the size of a texture as the UI draws them, for tools that lay a panel out themselves (the UI editor). Null / nothing
+		// while the asset is loading.
+		const FontData* font_for(const AssetRef& font) const { return m_Fonts ? m_Fonts(font) : nullptr; }
+		std::optional<glm::vec2> texture_size_for(const AssetRef& texture) const { return m_TextureSizes ? m_TextureSizes(texture) : std::nullopt; }
+
 		// The panel asset was cooked again: its canvases ask for it again.
 		void reload_panel(const AssetRef& panel);
 

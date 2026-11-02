@@ -70,6 +70,9 @@ private:
 	Scope<wiwa::PlayMode> m_PlayMode;
 	Scope<wiwa::DemoSmoke> m_DemoSmoke;
 	bool m_PlaySmoke = false;
+	class UiEditorPanel* m_UiEditor = nullptr; // owned by m_Panels
+	bool m_UiEditorSmoke = false;              // --ui-editor-smoke: open a panel in the UI Editor, run for a while, check it is previewing
+	std::filesystem::path m_UiEditorSmokeFile{};
 	wiwa::u32 m_Frame = 0;
 	wiwa::u32 m_PlaySmokeFinalFrame = 0;
 	Ref<wiwa::Scene> m_PlaySmokeEdit{};

@@ -12,6 +12,7 @@ namespace wiwa
 {
 	class ShaderLibrary;
 	class TextureRegistry;
+	class GpuResourceCache;
 	class SceneRenderData;
 	struct DebugDrawData;
 	struct PickState;
@@ -39,6 +40,7 @@ namespace wiwa
 		nvrhi::IFramebuffer* Backbuffer = nullptr; // a backbuffer framebuffer: pipelines are built against it
 		ShaderLibrary* Shaders = nullptr;          // cooked shaders, loaded through the asset system
 		TextureRegistry* Textures = nullptr;       // the textures the UI can draw by id
+		GpuResourceCache* Cache = nullptr;           // the meshes, textures and fonts on the GPU
 	};
 
 	// A render pass records its commands into the command list that the renderer

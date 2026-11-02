@@ -4,6 +4,7 @@
 #include "../engine_assets.h"
 #include "../resources/gpu_resource_cache.h"
 #include "../scene/scene_render_data.h"
+#include "../texture_registry.h"
 
 #define WI_UI_PASS_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
 
@@ -12,6 +13,7 @@ namespace wiwa
 	namespace
 	{
 		constexpr size_t MAX_CACHED_BINDING_SETS = 64;
+		constexpr u32 MAX_PREVIEW_SIZE = 8192;
 
 		// With zero offsets the Vulkan descriptor binding equals the NVRHI slot, which matches the register numbers in the HLSL.
 		nvrhi::VulkanBindingOffsets make_zero_binding_offsets()
@@ -29,6 +31,8 @@ namespace wiwa
 	{
 		m_Device = description.Device;
 		m_Shaders = description.Shaders;
+		m_Textures = description.Textures;
+		m_Cache = description.Cache;
 		if (m_Shaders == nullptr)
 		{
 			WI_UI_PASS_LOG(Error, "The UI pass needs the shader library");
@@ -84,7 +88,71 @@ namespace wiwa
 		}
 	}
 
-	bool UiRenderPass::build_pipeline(nvrhi::IFramebuffer* framebuffer)
+	void UiRenderPass::clear_preview()
+	{
+		m_PreviewList = UiDrawList{};
+		m_PreviewWidth = 0;
+		m_PreviewHeight = 0;
+		m_PreviewFramebuffer = nullptr;
+		m_PreviewTexture = nullptr;
+		m_PreviewSlot = PipelineSlot{};
+		if (m_Textures != nullptr)
+		{
+			m_Textures->set(UI_PREVIEW_TEXTURE_ID, nullptr);
+		}
+	}
+
+	void UiRenderPass::set_preview(UiDrawList list, u32 width, u32 height, const glm::vec4& background)
+	{
+		if (width == 0 || height == 0 || m_Device == nullptr)
+		{
+			clear_preview();
+			return;
+		}
+
+		width = std::min(width, MAX_PREVIEW_SIZE);
+		height = std::min(height, MAX_PREVIEW_SIZE);
+		m_PreviewList = std::move(list);
+		m_PreviewBackground = background;
+
+		if (m_PreviewTexture == nullptr || width != m_PreviewWidth || height != m_PreviewHeight)
+		{
+			nvrhi::TextureDesc description;
+			description.width = width;
+			description.height = height;
+			description.format = nvrhi::Format::RGBA8_UNORM;
+			description.isRenderTarget = true;
+			description.isShaderResource = true;
+			description.initialState = nvrhi::ResourceStates::ShaderResource;
+			description.keepInitialState = true;
+			description.useClearValue = true;
+			description.clearValue = nvrhi::Color(0.0f, 0.0f, 0.0f, 1.0f);
+			description.debugName = "UI preview";
+			nvrhi::TextureHandle texture = m_Device->createTexture(description);
+
+			nvrhi::FramebufferDesc framebufferDescription;
+			framebufferDescription.addColorAttachment(texture);
+			nvrhi::FramebufferHandle framebuffer = texture ? m_Device->createFramebuffer(framebufferDescription) : nvrhi::FramebufferHandle{};
+			if (texture == nullptr || framebuffer == nullptr)
+			{
+				WI_UI_PASS_LOG(Error, "Could not create the UI preview texture");
+				clear_preview();
+				return;
+			}
+
+			m_PreviewTexture = std::move(texture);
+			m_PreviewFramebuffer = std::move(framebuffer);
+			m_PreviewWidth = width;
+			m_PreviewHeight = height;
+			m_PreviewGeneration++;
+			if (m_Textures != nullptr)
+			{
+				m_Textures->set(UI_PREVIEW_TEXTURE_ID, m_PreviewTexture);
+			}
+		}
+	}
+
+	bool UiRenderPass::build_pipeline(nvrhi::IFramebuffer* framebuffer, PipelineSlot& slot)
 	{
 		nvrhi::IShader* vertexShader = m_Shaders->get(engine_assets::UI_SHADER, ShaderStage::Vertex);
 		nvrhi::IShader* pixelShader = m_Shaders->get(engine_assets::UI_SHADER, ShaderStage::Pixel);
@@ -135,7 +203,7 @@ namespace wiwa
 			return false;
 		}
 		m_InputLayout = std::move(inputLayout);
-		m_Pipeline = std::move(pipeline);
+		slot.Pipeline = std::move(pipeline);
 		return true;
 	}
 
@@ -191,31 +259,24 @@ namespace wiwa
 		return set;
 	}
 
-	void UiRenderPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
+	bool UiRenderPass::draw_list(nvrhi::ICommandList* commandList, const UiDrawList& list, nvrhi::IFramebuffer* framebuffer, u32 width, u32 height,
+		u32 targetGeneration, GpuResourceCache& cache, PipelineSlot& slot)
 	{
-		if (m_Failed || frame.Ui == nullptr || frame.Ui->empty() || frame.Scene == nullptr || !frame.Scene->active())
+		if (list.empty() || !(list.CanvasSize.x > 0.0f) || !(list.CanvasSize.y > 0.0f) || width == 0 || height == 0)
 		{
-			return;
-		}
-
-		const UiDrawList& list = *frame.Ui;
-		ViewportTarget* viewport = frame.Scene->viewport();
-		GpuResourceCache* cache = frame.Scene->cache();
-		if (viewport == nullptr || !viewport->valid() || cache == nullptr || !(list.CanvasSize.x > 0.0f) || !(list.CanvasSize.y > 0.0f))
-		{
-			return;
+			return true; // nothing to draw is not a failure
 		}
 
 		const u32 shaderGeneration = m_Shaders->get_generation();
-		if (m_Pipeline == nullptr || shaderGeneration != m_BuiltShaderGeneration || viewport->generation() != m_BuiltViewportGeneration)
+		if (slot.Pipeline == nullptr || shaderGeneration != slot.ShaderGeneration || targetGeneration != slot.TargetGeneration)
 		{
-			m_BuiltShaderGeneration = shaderGeneration;
-			m_BuiltViewportGeneration = viewport->generation();
-			if (!build_pipeline(viewport->ldr_framebuffer()))
+			slot.ShaderGeneration = shaderGeneration;
+			slot.TargetGeneration = targetGeneration;
+			if (!build_pipeline(framebuffer, slot))
 			{
 				WI_UI_PASS_LOG(Error, "Could not create the UI pipeline");
 				m_Failed = true;
-				return;
+				return false;
 			}
 		}
 
@@ -223,13 +284,13 @@ namespace wiwa
 		{
 			WI_UI_PASS_LOG(Error, "Could not create the UI buffers");
 			m_Failed = true;
-			return;
+			return false;
 		}
 		commandList->writeBuffer(m_VertexBuffer, list.Vertices.data(), list.Vertices.size() * sizeof(UiVertex));
 		commandList->writeBuffer(m_IndexBuffer, list.Indices.data(), list.Indices.size() * sizeof(u32));
 
-		const float targetWidth = static_cast<float>(viewport->width());
-		const float targetHeight = static_cast<float>(viewport->height());
+		const float targetWidth = static_cast<float>(width);
+		const float targetHeight = static_cast<float>(height);
 		const glm::vec2 toTarget(targetWidth / list.CanvasSize.x, targetHeight / list.CanvasSize.y);
 
 		// canvas pixels, y pointing down, to clip space
@@ -245,8 +306,8 @@ namespace wiwa
 		vertexBinding.offset = 0;
 
 		nvrhi::GraphicsState state;
-		state.pipeline = m_Pipeline;
-		state.framebuffer = viewport->ldr_framebuffer();
+		state.pipeline = slot.Pipeline;
+		state.framebuffer = framebuffer;
 		state.addVertexBuffer(vertexBinding);
 		state.indexBuffer.buffer = m_IndexBuffer;
 		state.indexBuffer.format = nvrhi::Format::R32_UINT;
@@ -266,8 +327,8 @@ namespace wiwa
 			switch (batch.Kind)
 			{
 			case UiQuadKind::Solid: texture = m_White; break;
-			case UiQuadKind::Image: texture = cache->get_texture(batch.Texture); break;
-			case UiQuadKind::Sdf: texture = cache->get_font_atlas(batch.Texture); break;
+			case UiQuadKind::Image: texture = cache.get_texture(batch.Texture); break;
+			case UiQuadKind::Sdf: texture = cache.get_font_atlas(batch.Texture); break;
 			}
 			if (texture == nullptr)
 			{
@@ -291,16 +352,15 @@ namespace wiwa
 			state.bindings[0] = binding_set_for(texture);
 
 			const bool text = batch.Kind == UiQuadKind::Sdf;
-			constants.Params[0] = batch.SdfRange * batch.PixelScale * (toTarget.x + toTarget.y) * 0.5f;
+			const float averageScale = (toTarget.x + toTarget.y) * 0.5f;
+			constants.Params[0] = batch.SdfRange * batch.PixelScale * averageScale;
 			constants.Params[1] = batch.Outline;
 			constants.Params[2] = text ? 1.0f : 0.0f;
-			constants.Params[3] = batch.PixelScale * (toTarget.x + toTarget.y) * 0.5f;
-			const glm::vec4 outline(static_cast<float>(batch.OutlineColor & 0xFF) / 255.0f, static_cast<float>((batch.OutlineColor >> 8) & 0xFF) / 255.0f,
-				static_cast<float>((batch.OutlineColor >> 16) & 0xFF) / 255.0f, static_cast<float>((batch.OutlineColor >> 24) & 0xFF) / 255.0f);
-			constants.OutlineColor[0] = outline.r;
-			constants.OutlineColor[1] = outline.g;
-			constants.OutlineColor[2] = outline.b;
-			constants.OutlineColor[3] = outline.a;
+			constants.Params[3] = batch.PixelScale * averageScale;
+			constants.OutlineColor[0] = static_cast<float>(batch.OutlineColor & 0xFF) / 255.0f;
+			constants.OutlineColor[1] = static_cast<float>((batch.OutlineColor >> 8) & 0xFF) / 255.0f;
+			constants.OutlineColor[2] = static_cast<float>((batch.OutlineColor >> 16) & 0xFF) / 255.0f;
+			constants.OutlineColor[3] = static_cast<float>((batch.OutlineColor >> 24) & 0xFF) / 255.0f;
 			constants.Extra[0] = batch.Shadow ? 1.0f : 0.0f;
 
 			commandList->setGraphicsState(state);
@@ -312,5 +372,43 @@ namespace wiwa
 			arguments.startVertexLocation = 0;
 			commandList->drawIndexed(arguments);
 		}
+		return true;
+	}
+
+	void UiRenderPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
+	{
+		if (m_Failed)
+		{
+			return;
+		}
+
+		GpuResourceCache* cache = m_Cache != nullptr ? m_Cache : (frame.Scene != nullptr ? frame.Scene->cache() : nullptr);
+		if (cache == nullptr)
+		{
+			return;
+		}
+
+		// the editor's canvas: it needs no scene
+		if (m_PreviewTexture != nullptr && m_PreviewFramebuffer != nullptr)
+		{
+			commandList->clearTextureFloat(m_PreviewTexture, nvrhi::AllSubresources,
+				nvrhi::Color(m_PreviewBackground.r, m_PreviewBackground.g, m_PreviewBackground.b, m_PreviewBackground.a));
+			if (!draw_list(commandList, m_PreviewList, m_PreviewFramebuffer, m_PreviewWidth, m_PreviewHeight, m_PreviewGeneration, *cache, m_PreviewSlot))
+			{
+				return;
+			}
+		}
+
+		// the game's UI, over the scene
+		if (frame.Ui == nullptr || frame.Ui->empty() || frame.Scene == nullptr || !frame.Scene->active())
+		{
+			return;
+		}
+		ViewportTarget* viewport = frame.Scene->viewport();
+		if (viewport == nullptr || !viewport->valid())
+		{
+			return;
+		}
+		draw_list(commandList, *frame.Ui, viewport->ldr_framebuffer(), viewport->width(), viewport->height(), viewport->generation(), *cache, m_ViewportSlot);
 	}
 }

@@ -82,6 +82,8 @@ namespace wiwa
 				m_Renderer->set_pick_channel(&m_Picks);
 
 				// The scene first (depth, shading, the 8-bit image); the UI goes over everything else, so its pass is the last one.
+				Scope<UiRenderPass> uiPass = CreateScope<UiRenderPass>();
+				m_UiPass = uiPass.get();
 				Scope<ImGuiRenderPass> imguiPass = CreateScope<ImGuiRenderPass>();
 				m_ImGuiPass = imguiPass.get();
 				return m_Renderer->add_pass(CreateScope<ShadowPass>())
@@ -98,7 +100,7 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<BloomPass>())
 					&& m_Renderer->add_pass(CreateScope<TonemapPass>())
 					&& m_Renderer->add_pass(CreateScope<FxaaPass>())
-					&& m_Renderer->add_pass(CreateScope<UiRenderPass>())
+					&& m_Renderer->add_pass(std::move(uiPass))
 					&& m_Renderer->add_pass(CreateScope<SelectionOutlinePass>())
 					&& m_Renderer->add_pass(CreateScope<DebugPass>())
 					&& m_Renderer->add_pass(CreateScope<PickPass>())
@@ -173,6 +175,7 @@ namespace wiwa
 		m_Thread.stop();
 		m_Renderer.reset();
 		m_ImGuiPass = nullptr;
+		m_UiPass = nullptr;
 		m_ImGui.shutdown();
 		m_Started = false;
 		m_DebugDraw.set_enabled(false);
@@ -465,6 +468,39 @@ namespace wiwa
 		{
 			m_ImGui.begin_frame();
 		}
+	}
+
+	void RenderModule::set_ui_preview(UiDrawList list, u32 width, u32 height, const glm::vec4& background)
+	{
+		if (!m_Started)
+		{
+			return;
+		}
+		auto shared = std::make_shared<UiDrawList>(std::move(list));
+		UiRenderPass* pass = m_UiPass;
+		submit([pass, shared, width, height, background](RenderWorld&)
+			{
+				if (pass != nullptr)
+				{
+					pass->set_preview(std::move(*shared), width, height, background);
+				}
+			});
+	}
+
+	void RenderModule::clear_ui_preview()
+	{
+		if (!m_Started)
+		{
+			return;
+		}
+		UiRenderPass* pass = m_UiPass;
+		submit([pass](RenderWorld&)
+			{
+				if (pass != nullptr)
+				{
+					pass->clear_preview();
+				}
+			});
 	}
 
 	glm::vec2 RenderModule::get_canvas_size() const
