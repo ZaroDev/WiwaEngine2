@@ -3,6 +3,7 @@
 
 #include <scene/reflection/component_registry.h>
 
+#include "../asset_pipeline/prefab_file.h"
 #include "scene_json.h"
 
 #define WI_EDITOR_LOG(level, ...) WI_LOG(level, "SceneEditor", __VA_ARGS__)
@@ -72,6 +73,7 @@ namespace wiwa
 		m_Dirty = false;
 		m_Selected = entt::null;
 		m_Pending.clear();
+		m_PendingPrefabs.clear();
 	}
 
 	EditorDocument SceneEditor::capture_document() const
@@ -92,6 +94,7 @@ namespace wiwa
 		m_Path = document.Path;
 		m_Dirty = document.Dirty;
 		m_Pending.clear();
+		m_PendingPrefabs.clear();
 		m_Selected = (m_Scene != nullptr && document.Selected.valid()) ? m_Scene->find(document.Selected) : entt::entity{ entt::null };
 	}
 
@@ -142,6 +145,42 @@ namespace wiwa
 			{
 				expand_instance(root, *pending.Prefab.get());
 				m_Pending.erase(m_Pending.begin() + static_cast<std::ptrdiff_t>(i));
+			}
+			else
+			{
+				i++;
+			}
+		}
+
+		for (size_t i = 0; i < m_PendingPrefabs.size();)
+		{
+			const PendingPrefab pending = m_PendingPrefabs[i];
+			const entt::entity original = m_Scene->find(pending.Entity);
+			bool done = true;
+			if (original == entt::null)
+			{
+				// the entity was deleted while the file was being imported: nothing to replace
+			}
+			else if (m_Playing)
+			{
+				WI_EDITOR_LOG(Warning, "{0} was not turned into an instance: the scene started playing", pending.File.filename().string());
+			}
+			else if (const std::optional<AssetRef> prefab = m_Assets.find_asset(pending.File.string()))
+			{
+				finish_prefab(original, *prefab);
+			}
+			else if (std::chrono::steady_clock::now() - pending.Started > std::chrono::seconds(5))
+			{
+				WI_EDITOR_LOG(Warning, "{0} was not imported in time; the entity was left as it is", pending.File.filename().string());
+			}
+			else
+			{
+				done = false;
+			}
+
+			if (done)
+			{
+				m_PendingPrefabs.erase(m_PendingPrefabs.begin() + static_cast<std::ptrdiff_t>(i));
 			}
 			else
 			{
@@ -442,6 +481,129 @@ namespace wiwa
 		queue_expansion(root);
 		mark_dirty();
 		return root;
+	}
+
+	std::string SceneEditor::make_prefab(entt::entity entity, const std::filesystem::path& folder)
+	{
+		if (m_Playing)
+		{
+			return "Stop the scene first";
+		}
+		if (m_Scene == nullptr || !m_Scene->registry().valid(entity))
+		{
+			return "There is no entity to make a prefab of";
+		}
+		if (kind_of(entity) != Kind::Authored)
+		{
+			return "Only entities of the scene itself can become a prefab, not the ones a prefab made";
+		}
+
+		entt::registry& registry = m_Scene->registry();
+		const EntityGuid guid = registry.get<Id>(entity).Guid;
+		for (const PendingPrefab& pending : m_PendingPrefabs)
+		{
+			if (pending.Entity == guid)
+			{
+				return "That entity is already becoming a prefab";
+			}
+		}
+
+		// the entity and everything below it, parents first
+		std::vector<entt::entity> subtree;
+		std::vector<entt::entity> stack{ entity };
+		while (!stack.empty())
+		{
+			const entt::entity current = stack.back();
+			stack.pop_back();
+			if (registry.all_of<PrefabInstance>(current) || registry.all_of<PrefabChild>(current))
+			{
+				return "A prefab cannot hold an instance of another prefab";
+			}
+			subtree.push_back(current);
+
+			std::vector<entt::entity> children;
+			for (entt::entity child = registry.get<Hierarchy>(current).FirstChild; child != entt::null; child = registry.get<Hierarchy>(child).NextSibling)
+			{
+				children.push_back(child);
+			}
+			stack.insert(stack.end(), children.rbegin(), children.rend());
+		}
+
+		std::vector<EntityRecord> records;
+		for (const entt::entity member : subtree)
+		{
+			records.push_back(record_from_entity(*m_Scene, member));
+		}
+		// the instance takes the place and Transform of the entity, so the prefab's own top node sits at its origin
+		records.front().Parent = EntityGuid{};
+		for (ComponentRecord& component : records.front().Components)
+		{
+			if (component.Name == "Transform")
+			{
+				set_record_field(component, "Position", FieldValue(glm::vec3(0.0f)));
+				set_record_field(component, "Rotation", FieldValue(glm::quat(1.0f, 0.0f, 0.0f, 0.0f)));
+				set_record_field(component, "Scale", FieldValue(glm::vec3(1.0f)));
+			}
+		}
+
+		std::string stem;
+		for (const char character : registry.get<Name>(entity).Value)
+		{
+			stem += (std::string_view("<>:\"/\\|?*").find(character) != std::string_view::npos || static_cast<unsigned char>(character) < 32) ? '_' : character;
+		}
+		while (!stem.empty() && (stem.back() == '.' || stem.back() == ' '))
+		{
+			stem.pop_back();
+		}
+		if (stem.empty())
+		{
+			stem = "Prefab";
+		}
+
+		std::error_code error;
+		std::filesystem::path file = folder / (stem + ".wprefab");
+		for (u32 number = 2; std::filesystem::exists(file, error); number++)
+		{
+			file = folder / (stem + " " + std::to_string(number) + ".wprefab");
+		}
+
+		if (!write_prefab_file(file, records, stem))
+		{
+			return "Could not write " + file.string() + " (see the log)";
+		}
+
+		m_PendingPrefabs.push_back(PendingPrefab{ guid, file, std::chrono::steady_clock::now() });
+		return {};
+	}
+
+	void SceneEditor::finish_prefab(entt::entity original, const AssetRef& prefab)
+	{
+		entt::registry& registry = m_Scene->registry();
+		const std::string name = registry.get<Name>(original).Value;
+		const Transform transform = registry.get<Transform>(original);
+		const entt::entity parent = registry.get<Hierarchy>(original).Parent;
+
+		bool selectInstance = false;
+		for (entt::entity ancestor = m_Selected; ancestor != entt::null; ancestor = registry.get<Hierarchy>(ancestor).Parent)
+		{
+			selectInstance = selectInstance || ancestor == original;
+		}
+
+		const entt::entity instance = add_prefab(prefab, parent);
+		if (instance == entt::null)
+		{
+			WI_EDITOR_LOG(Warning, "The prefab of {0} could not be added; the entity was left as it is", name);
+			return;
+		}
+
+		registry.get<Name>(instance).Value = name;
+		registry.get<Transform>(instance) = transform;
+		m_Scene->move_after(instance, original);
+		delete_entity(original);
+		if (selectInstance)
+		{
+			select(instance);
+		}
 	}
 
 	bool SceneEditor::unpack(entt::entity instance)

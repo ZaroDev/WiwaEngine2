@@ -1309,6 +1309,81 @@ namespace wiwa
 			module.set_commit_budget_ms(2.0f);
 		}
 
+		void check_make_prefab(Check& check, AssetPipelineModule& pipeline)
+		{
+			register_scene_components();
+			SmokeAssets assets(pipeline);
+			AssetDatabase& database = pipeline.get_database();
+			AssetManager& manager = *Engine::get().get_module<AssetManager>();
+			SceneModule& module = *Engine::get().get_module<SceneModule>();
+
+			SceneEditor editor(manager, module);
+			editor.set_scene(CreateRef<Scene>(), {});
+			Scene& scene = editor.scene();
+			entt::registry& registry = scene.registry();
+			auto pump = [&]()
+			{
+				for (u32 i = 0; i < 2000 && (editor.has_pending_prefab() || editor.has_pending()); i++)
+				{
+					editor.update();
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+			};
+
+			const entt::entity before = editor.create_entity(entt::null);
+			const entt::entity lamp = editor.create_entity(entt::null);
+			const entt::entity bulb = editor.create_entity(lamp);
+			const entt::entity after = editor.create_entity(entt::null);
+			registry.get<Name>(lamp).Value = "Lamp";
+			registry.get<Name>(bulb).Value = "Bulb";
+			registry.get<Transform>(lamp).Position = glm::vec3(1.0f, 2.0f, 3.0f);
+			registry.emplace<Light>(lamp).Intensity = 7.0f;
+			editor.select(lamp);
+
+			// refusals leave the scene as it was
+			const size_t entityCount = registry.storage<Id>().size();
+			editor.set_playing(true);
+			check(!editor.make_prefab(before, assets.folder()).empty() && !editor.has_pending_prefab(), "make_prefab: refused while the scene plays");
+			editor.set_playing(false);
+			check(!editor.make_prefab(entt::null, assets.folder()).empty(), "make_prefab: refused for no entity");
+
+			// the entity becomes an instance of the prefab, in the same place
+			const std::string refusal = editor.make_prefab(lamp, assets.folder());
+			check(refusal.empty() && editor.has_pending_prefab(), "make_prefab: starts for a plain entity (" + refusal + ")");
+			check(registry.valid(lamp), "make_prefab: the entity stays until the prefab has been imported");
+			database.ensure_imported(assets.folder() / "Lamp.wprefab"); // the editor's file watcher does this
+			pump();
+
+			check(!editor.has_pending_prefab() && !registry.valid(lamp) && !registry.valid(bulb), "make_prefab: the original subtree is gone once the prefab is there");
+			check(scene.roots().size() == 3 && scene.roots()[0] == before && scene.roots()[2] == after, "make_prefab: the instance takes the place of the entity among its siblings");
+			const entt::entity instance = scene.roots().size() == 3 ? scene.roots()[1] : entt::entity{ entt::null };
+			check(instance != entt::null && registry.all_of<PrefabInstance>(instance) && registry.get<Name>(instance).Value == "Lamp", "make_prefab: the instance has the entity's name");
+			check(instance != entt::null && registry.get<Transform>(instance).Position == glm::vec3(1.0f, 2.0f, 3.0f), "make_prefab: the instance has the entity's transform");
+			check(registry.storage<Id>().size() == entityCount - 2 + 3, "make_prefab: an instance root and the two nodes of the prefab replace the two entities (" + std::to_string(registry.storage<Id>().size()) + ")");
+			bool hasLight = false;
+			entt::entity generated = entt::null;
+			for (const entt::entity entity : registry.view<PrefabChild>())
+			{
+				generated = entity;
+				const Light* light = registry.try_get<Light>(entity);
+				hasLight = hasLight || (light != nullptr && light->Intensity == 7.0f);
+			}
+			check(hasLight, "make_prefab: the light of the entity is in the prefab");
+			check(editor.selected() == instance && editor.dirty(), "make_prefab: the instance is selected and the scene is changed");
+
+			// what cannot become a prefab
+			const size_t afterCount = registry.storage<Id>().size();
+			check(instance != entt::null && !editor.make_prefab(instance, assets.folder()).empty(), "make_prefab: an instance is refused");
+			check(generated != entt::null && !editor.make_prefab(generated, assets.folder()).empty(), "make_prefab: an entity a prefab made is refused");
+			check(!editor.has_pending_prefab() && registry.storage<Id>().size() == afterCount, "make_prefab: refusals change nothing");
+
+			// an entity deleted while the prefab is being imported is not brought back
+			check(editor.make_prefab(before, assets.folder()).empty(), "make_prefab: starts for another entity");
+			editor.delete_entity(before);
+			pump();
+			check(!editor.has_pending_prefab() && registry.storage<Id>().size() == afterCount - 1, "make_prefab: a deleted entity is simply dropped from the conversion");
+		}
+
 		void check_scene_editor(Check& check, AssetPipelineModule& pipeline)
 		{
 			register_scene_components();
@@ -1481,6 +1556,7 @@ namespace wiwa
 		check_scene_json(check, pipeline);
 		check_scene_loading(check, pipeline);
 		check_extracted_materials(check, pipeline);
+		check_make_prefab(check, pipeline);
 		check_scene_editor(check, pipeline);
 
 		if (check.Failures == 0)

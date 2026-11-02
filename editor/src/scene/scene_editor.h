@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -97,6 +98,12 @@ namespace wiwa
 
 		// The instance root comes back at once; its children appear in update() when the prefab has loaded.
 		entt::entity add_prefab(AssetRef prefab, entt::entity parent);
+		// Saves the entity and everything below it as a prefab file (<folder>/<name>.wprefab) and, once the file has been imported (update()
+		// notices it, and gives up after a few seconds), replaces them by an instance of the prefab: same name, place and Transform, and the
+		// entity's own components and children are the prefab's. Returns why it cannot be done, or an empty string when it has started.
+		std::string make_prefab(entt::entity entity, const std::filesystem::path& folder);
+		bool has_pending_prefab() const { return !m_PendingPrefabs.empty(); }
+
 		// Turns the instance and everything it generated into ordinary entities.
 		bool unpack(entt::entity instance);
 		// Drops all overrides and generates the instance again from the prefab.
@@ -124,6 +131,15 @@ namespace wiwa
 			EntityGuid Root{};
 			Handle<PrefabData> Prefab{};
 		};
+
+		struct PendingPrefab
+		{
+			EntityGuid Entity{};
+			std::filesystem::path File{};
+			std::chrono::steady_clock::time_point Started{};
+		};
+
+		void finish_prefab(entt::entity original, const AssetRef& prefab);
 
 		std::optional<Generated> generated_of(entt::entity entity) const;
 		PrefabOverride* find_added_override(PrefabInstance& instance, EntityGuid rootId, EntityGuid childId);
@@ -153,6 +169,7 @@ namespace wiwa
 		Ref<JobProgress> m_Opening{};
 		std::string m_OpenPath{};
 		std::vector<PendingInstance> m_Pending{};
+		std::vector<PendingPrefab> m_PendingPrefabs{};
 		std::unordered_map<AssetGuid, Handle<PrefabData>> m_Prefabs{};
 	};
 }
