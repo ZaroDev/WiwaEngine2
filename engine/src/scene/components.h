@@ -107,4 +107,13 @@ namespace wiwa
 		AssetRef Prefab{};
 		std::vector<PrefabOverride> Overrides{};
 	};
+
+	// Shows a UI panel over the scene. Canvases are drawn in the order of SortOrder (the higher on top), and the one on top gets the pointer
+	// first. Every canvas has its own copy of the panel's state, so two canvases of one panel do not share what scripts set.
+	struct UICanvas
+	{
+		AssetRef Panel{};
+		i32 SortOrder = 0;
+		bool Visible = true;
+	};
 }

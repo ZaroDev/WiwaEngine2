@@ -39,5 +39,10 @@ namespace wiwa
 		// The overrides are not a field: the record layer saves and applies them.
 		registry.register_component(WI_COMPONENT(PrefabInstance,
 			WI_FIELD_META(Prefab, FieldMeta::asset(AssetType::Prefab))));
+
+		registry.register_component(WI_COMPONENT(UICanvas,
+			WI_FIELD_META(Panel, FieldMeta::asset(AssetType::UiPanel)),
+			WI_FIELD(SortOrder),
+			WI_FIELD(Visible)));
 	}
 }

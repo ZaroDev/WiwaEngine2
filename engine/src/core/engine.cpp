@@ -8,6 +8,7 @@
 #include <renderer/window.h>
 #include <scene/scene_module.h>
 #include <scripting/script_module.h>
+#include <ui/ui_module.h>
 
 
 
@@ -43,6 +44,7 @@ namespace wiwa
 		m_ModuleManager.add_module<SceneModule>();
 		m_ModuleManager.add_module<Window>();
 		m_ModuleManager.add_module<RenderModule>();
+		m_ModuleManager.add_module<UiModule>(); // before the scripts: the clicks of a frame reach them in that frame
 		m_ModuleManager.add_module<ScriptingModule>();
 
 		on_init();

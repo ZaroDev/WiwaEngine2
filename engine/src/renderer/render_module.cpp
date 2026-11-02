@@ -465,6 +465,24 @@ namespace wiwa
 		}
 	}
 
+	glm::vec2 RenderModule::get_canvas_size() const
+	{
+		if (m_RequestedViewportWidth > 0 && m_RequestedViewportHeight > 0)
+		{
+			return glm::vec2(static_cast<float>(m_RequestedViewportWidth), static_cast<float>(m_RequestedViewportHeight));
+		}
+
+		Window* window = Engine::get().get_module<Window>();
+		if (window == nullptr)
+		{
+			return glm::vec2(0.0f);
+		}
+		int width = 0;
+		int height = 0;
+		window->get_size(width, height);
+		return glm::vec2(static_cast<float>(std::max(width, 0)), static_cast<float>(std::max(height, 0)));
+	}
+
 	void RenderModule::render_update(float deltaTime)
 	{
 		if (!m_Started)
@@ -492,6 +510,8 @@ namespace wiwa
 		batch.Commands = std::move(m_PendingCommands);
 		m_PendingCommands.clear();
 		batch.Debug = m_DebugDraw.seal(deltaTime);
+		batch.Ui = std::move(m_PendingUi);
+		m_PendingUi = UiDrawList{};
 
 		// What the active scene changed, for the render thread's scene mirror.
 		if (SceneModule* scenes = Engine::get().get_module<SceneModule>())

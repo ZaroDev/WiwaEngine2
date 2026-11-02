@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_map>
 
 #include <assets/asset_manager.h>
 #include <assets/wasset_io.h>
@@ -16,6 +17,9 @@
 #include <ui/ui_input.h>
 #include <ui/ui_interaction.h>
 #include <ui/ui_layout.h>
+#include <ui/ui_module.h>
+#include <renderer/scene/render_scene.h>
+#include <scene/scene.h>
 #include <ui/ui_panel_io.h>
 #include <ui/ui_widget.h>
 
@@ -1027,6 +1031,254 @@ namespace wiwa
 			}
 		}
 
+		// A scene with a camera at (0, 0, 5) looking at the origin, and the panels the loader hands out by asset.
+		struct ModuleRig
+		{
+			Ref<Scene> TheScene = std::make_shared<Scene>();
+			UiModule Module{};
+			ScriptedInputSource Source{};
+			std::unordered_map<AssetGuid, Ref<AssetSlot>> Slots{};
+			const FontData* Font = nullptr;
+			entt::entity Camera = entt::null;
+			glm::vec2 Canvas{ 1920.0f, 1080.0f };
+
+			explicit ModuleRig(const FontData* font) : Font(font)
+			{
+				Camera = TheScene->create("Camera");
+				TheScene->registry().get<Transform>(Camera).Position = { 0.0f, 0.0f, 5.0f };
+				TheScene->registry().emplace<::wiwa::Camera>(Camera).Primary = true;
+				TheScene->update_world_transforms();
+
+				Module.set_panel_loader([this](const AssetRef& ref) -> Handle<UiPanelData>
+				{
+					const auto it = Slots.find(ref.Guid);
+					return it == Slots.end() ? Handle<UiPanelData>{} : Handle<UiPanelData>(ref, it->second);
+				});
+				Module.set_font_provider([this](const AssetRef&) { return Font; });
+				Module.set_input_source(&Source);
+			}
+
+			AssetRef add_panel(const UiPanelData& data, LoadState state = LoadState::Ready)
+			{
+				const AssetRef ref{ AssetGuid::generate(), 0 };
+				auto slot = std::make_shared<AssetSlot>();
+				slot->Guid = ref.Guid;
+				slot->Data = std::make_shared<UiPanelData>(data);
+				slot->State = state;
+				Slots[ref.Guid] = slot;
+				return ref;
+			}
+
+			entt::entity add_canvas(const AssetRef& panel, i32 sortOrder = 0)
+			{
+				const entt::entity entity = TheScene->create("Canvas");
+				TheScene->registry().emplace<UICanvas>(entity, UICanvas{ panel, sortOrder, true });
+				return entity;
+			}
+
+			UiDrawList draw()
+			{
+				TheScene->update_world_transforms();
+				Module.update_interaction(*TheScene, Canvas);
+				UiDrawList list;
+				Module.build_draw_list(*TheScene, Canvas, list);
+				return list;
+			}
+		};
+
+		UiPanelData one_widget_panel(const UiWidget& widget)
+		{
+			UiPanelData panel;
+			panel.Widgets = { widget };
+			panel.NextId = widget.Id + 1;
+			return panel;
+		}
+
+		void check_module(Check& check, const FontData* font)
+		{
+			UiWidget red = layout_widget(1, 0, WidgetKind::Panel, "Red", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 });
+			red.Color = { 1.0f, 0.0f, 0.0f, 1.0f };
+			UiWidget blue = red;
+			blue.Name = "Blue";
+			blue.Color = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+			check(Engine::get().get_module<UiModule>() != nullptr, "ui_module_registered: the engine has a UiModule");
+			check(UiModule{}.get_priority() < 0 && UiModule{}.get_priority() > -50, /* scripts are 0, the renderer -50 */ "ui_module_order: UI events are dispatched before scripts update, after the scene and the renderer open the frame");
+
+			// a canvas with no panel
+			{
+				ModuleRig rig(font);
+				rig.add_canvas(AssetRef{});
+				const UiDrawList list = rig.draw();
+				check(list.empty(), "canvas_unset_draws_nothing: a canvas without a panel draws nothing");
+				check(rig.Module.instance_count() == 0, "canvas_unset_draws_nothing: and makes no instance");
+			}
+
+			// loading, ready, failed
+			{
+				ModuleRig rig(font);
+				const AssetRef panel = rig.add_panel(one_widget_panel(red), LoadState::Loading);
+				const entt::entity canvas = rig.add_canvas(panel);
+				check(rig.draw().empty(), "canvas_panel_loading_then_ready: while the panel is loading nothing is drawn");
+				rig.Slots[panel.Guid]->State = LoadState::Ready;
+				const UiDrawList list = rig.draw();
+				check(list.Vertices.size() == 4 && near_rect(quad_rect(list, 0), { 0, 0 }, rig.Canvas), "canvas_panel_loading_then_ready: once it is ready it is drawn");
+				check(rig.Module.instance_of(canvas) != nullptr && rig.Module.instance_of(canvas)->ready(), "canvas_panel_loading_then_ready: the canvas has a ready instance");
+
+				const AssetRef broken = rig.add_panel(one_widget_panel(red), LoadState::Failed);
+				const entt::entity brokenCanvas = rig.add_canvas(broken);
+				rig.draw();
+				rig.draw();
+				const UiPanelInstance* instance = rig.Module.instance_of(brokenCanvas);
+				check(instance != nullptr && !instance->ready() && instance->failure_reports() == 1, "canvas_failed_logs_once: a failed panel is reported once, however many frames pass");
+				check(rig.draw().Vertices.size() == 4, "canvas_failed_logs_once: and the other canvases still draw");
+
+				// the editor cooks it again: the next ask gets the new asset
+				rig.Slots[broken.Guid] = rig.Slots[panel.Guid];
+				rig.Module.reload_panel(broken);
+				check(rig.draw().Vertices.size() == 8, "canvas_failed_logs_once: a failed panel that is cooked again is drawn");
+			}
+
+			// hidden canvas, sort order
+			{
+				ModuleRig rig(font);
+				const AssetRef redPanel = rig.add_panel(one_widget_panel(red));
+				const AssetRef bluePanel = rig.add_panel(one_widget_panel(blue));
+				const entt::entity top = rig.add_canvas(redPanel, 5);
+				rig.add_canvas(bluePanel, 1);
+				UiDrawList list = rig.draw();
+				check(list.Vertices.size() == 8 && list.Vertices[0].Color == pack_color(0, 0, 1, 1) && list.Vertices[4].Color == pack_color(1, 0, 0, 1), "canvas_sort_order: a higher sort order is drawn later");
+
+				rig.TheScene->registry().get<UICanvas>(top).Visible = false;
+				list = rig.draw();
+				check(list.Vertices.size() == 4 && list.Vertices[0].Color == pack_color(0, 0, 1, 1), "canvas_invisible: a canvas that is not visible draws nothing");
+				rig.TheScene->registry().get<UICanvas>(top).Visible = true;
+				rig.Module.instance_of(top)->set_visible(false);
+				check(rig.draw().Vertices.size() == 4, "canvas_invisible: neither does a panel that a script hid");
+
+				rig.Canvas = { 0.0f, 0.0f };
+				check(rig.draw().empty(), "canvas_zero_viewport: a viewport without area draws nothing");
+				rig.Canvas = { 1920.0f, 0.0f };
+				check(rig.draw().empty(), "canvas_zero_viewport: neither does one without height");
+			}
+
+			// state belongs to the instance
+			{
+				ModuleRig rig(font);
+				UiWidget group = layout_widget(1, 0, WidgetKind::VStack, "Menu", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 300, 300 });
+				UiWidget start = layout_widget(2, 1, WidgetKind::Button, "Start", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 100, 30 });
+				UiWidget label = layout_widget(3, 2, WidgetKind::Text, "Label", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 });
+				label.Text = "Start";
+				UiPanelData data;
+				data.Widgets = { group, start, label };
+				data.NextId = 4;
+				const AssetRef panel = rig.add_panel(data);
+				const entt::entity first = rig.add_canvas(panel);
+				const entt::entity second = rig.add_canvas(panel);
+				rig.draw();
+
+				UiPanelInstance* a = rig.Module.instance_of(first);
+				UiPanelInstance* b = rig.Module.instance_of(second);
+				check(a != nullptr && b != nullptr && a != b, "instance_state_isolated: every canvas has its own instance");
+				if (a != nullptr && b != nullptr)
+				{
+					check(a->find("Menu/Start/Label") == std::optional<UiId>(3) && a->find("Menu/Start") == std::optional<UiId>(2) && a->find("Menu") == std::optional<UiId>(1), "instance_find_path: widgets are found by the path of their names");
+					check(!a->find("Menu/Nope").has_value() && !a->find("").has_value() && !a->find("Nope").has_value() && !a->find("Menu//Start").has_value() && !a->find("/").has_value(), "instance_find_path: a path that names nothing finds nothing");
+
+					a->data().Widgets[2].Text = "Changed";
+					check(b->data().Widgets[2].Text == "Start" && std::static_pointer_cast<UiPanelData>(rig.Slots[panel.Guid]->Data)->Widgets[2].Text == "Start", "instance_state_isolated: changing one instance changes neither the other nor the asset");
+
+					// a re-cooked panel keeps what scripts set
+					UiPanelData edited = data;
+					edited.Widgets[0].Spacing = 12.0f;
+					edited.Widgets[2].Text = "From the file";
+					auto slot = std::make_shared<AssetSlot>();
+					slot->Data = std::make_shared<UiPanelData>(edited);
+					slot->State = LoadState::Ready;
+					rig.Slots[panel.Guid] = slot;
+					rig.Module.reload_panel(panel);
+					rig.draw();
+					check(a->data().Widgets[0].Spacing == 12.0f && a->data().Widgets[2].Text == "Changed" && b->data().Widgets[2].Text == "From the file", "instance_reload_keeps_state: a re-cooked panel brings the new layout, keeps the text a script set, and takes the edited text where nothing was set");
+				}
+
+				// clicking through the module
+				rig.Source.move_to({ 50.0f, 15.0f });
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.draw();
+				check(b != nullptr && std::any_of(b->events().begin(), b->events().end(), [](const UiEvent& event) { return event.Kind == UiEventKind::Click && event.Widget == 2; }), "module_input: input from the source reaches the widgets of a canvas");
+				check(a != nullptr && a->events().empty(), "module_input: and the canvas below the one that took the pointer gets nothing");
+				rig.draw();
+				check(b != nullptr && b->events().empty(), "module_input: events last one frame");
+			}
+
+			// scene changes
+			{
+				ModuleRig rig(font);
+				const AssetRef panel = rig.add_panel(one_widget_panel(red));
+				rig.add_canvas(panel);
+				rig.draw();
+				check(rig.Module.instance_count() == 1, "instance_dropped_on_scene_change: a canvas gets an instance");
+				const entt::entity canvas = rig.TheScene->registry().view<UICanvas>().front();
+				rig.TheScene->registry().remove<UICanvas>(canvas);
+				rig.draw();
+				check(rig.Module.instance_count() == 0, "instance_dropped_on_scene_change: the instance goes with the component");
+
+				rig.add_canvas(panel);
+				rig.draw();
+				Scene other;
+				UiDrawList list;
+				rig.Module.update_interaction(other, rig.Canvas);
+				rig.Module.build_draw_list(other, rig.Canvas, list);
+				check(rig.Module.instance_count() == 0 && list.empty(), "instance_dropped_on_scene_change: another scene starts without instances");
+			}
+
+			// world anchors through the module
+			{
+				ModuleRig rig(font);
+				const entt::entity target = rig.TheScene->create("Target");
+				const EntityGuid targetGuid = rig.TheScene->registry().get<Id>(target).Guid;
+
+				UiWidget marker = layout_widget(1, 0, WidgetKind::Panel, "Marker", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 40, 40 });
+				marker.WorldEntity = targetGuid;
+				marker.Color = { 1.0f, 0.0f, 0.0f, 1.0f };
+				const AssetRef panel = rig.add_panel(one_widget_panel(marker));
+				rig.add_canvas(panel);
+
+				UiDrawList list = rig.draw();
+				check(list.Vertices.size() == 4 && near_rect(quad_rect(list, 0), { 940, 520 }, { 980, 560 }, 1.0f), "anchor_follows_entity: the widget is at the projection of the entity");
+				rig.TheScene->registry().get<Transform>(target).Position = { 1.0f, 0.0f, 0.0f };
+				list = rig.draw();
+				check(list.Vertices.size() == 4 && quad_rect(list, 0).Min.x > 960.0f + 20.0f, "anchor_follows_entity: when the entity moves right the widget moves right");
+
+				rig.TheScene->destroy(target);
+				list = rig.draw();
+				check(list.empty(), "anchor_entity_destroyed: when the entity is gone the widget is hidden");
+
+				// the editor's camera instead of the scene's
+				RenderCamera editor;
+				editor.Position = { 0.0f, 0.0f, 50.0f };
+				editor.View = glm::lookAt(editor.Position, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+				editor.Projection = glm::perspectiveRH_ZO(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 1000.0f);
+				const entt::entity second = rig.TheScene->create("Second");
+				rig.TheScene->registry().get<Transform>(second).Position = { 5.0f, 0.0f, 0.0f };
+				const EntityGuid secondGuid = rig.TheScene->registry().get<Id>(second).Guid;
+				UiWidget secondMarker = marker;
+				secondMarker.WorldEntity = secondGuid;
+				const AssetRef panel2 = rig.add_panel(one_widget_panel(secondMarker));
+				rig.add_canvas(panel2);
+				rig.TheScene->update_world_transforms();
+				const float nearX = quad_rect(rig.draw(), 0).Min.x;
+				rig.Module.set_camera_override(editor);
+				const float farX = quad_rect(rig.draw(), 0).Min.x;
+				check(farX < nearX && farX > 960.0f - 21.0f, "module_camera_override: the camera the editor draws with is the one the anchors use (further away is nearer the middle)");
+				rig.Module.set_camera_override(std::nullopt);
+
+				rig.TheScene->destroy(rig.Camera);
+				check(rig.draw().empty(), "anchor_no_camera: without a camera the anchored widgets are hidden");
+			}
+		}
+
 		// A texel of the font's atlas at a position given as a fraction of a glyph's quad.
 		u8 atlas_texel(const FontData& font, const FontGlyph& glyph, float fx, float fy)
 		{
@@ -1193,6 +1445,7 @@ namespace wiwa
 		check_layout(check, fontHandle.get());
 		check_draw(check, fontHandle.get());
 		check_interaction(check);
+		check_module(check, fontHandle.get());
 
 		if (check.Failures == 0)
 		{

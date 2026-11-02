@@ -265,6 +265,7 @@ namespace wiwa
 			const AssetRef materialB{ AssetGuid::generate(), 0 };
 			const AssetRef prefab{ AssetGuid::generate(), 0 };
 			const AssetRef texture{ AssetGuid::generate(), 0 };
+			const AssetRef uiPanel{ AssetGuid::generate(), 0 };
 
 			Scene source;
 			const EntityGuid rootId = EntityGuid::generate();
@@ -296,6 +297,7 @@ namespace wiwa
 			add.Child.Components.push_back(ComponentRecord{ "MeshRenderer", { FieldRecord{ "Mesh", FieldValue(texture) } } });
 			instance.Overrides = { set, add };
 			source.registry().emplace<PrefabInstance>(child, instance);
+			source.registry().emplace<UICanvas>(child, UICanvas{ uiPanel, 3, false });
 
 			const SceneData first = data_from_scene(source, "test");
 			check(first.Entities.size() == 2 && first.Entities[0].Id == rootId && first.Entities[1].Parent == rootId, "a scene becomes records with parents before children");
@@ -322,11 +324,12 @@ namespace wiwa
 			check(copyChild != entt::null && copy.registry().get<Hierarchy>(copyChild).Parent == copyRoot, "the hierarchy survives");
 			check(copy.registry().get<MeshRenderer>(copyChild).Materials == std::vector<AssetRef>({ materialA, materialB }), "a material list survives");
 			check(copy.registry().get<PrefabInstance>(copyChild).Overrides.size() == 2 && copy.registry().get<PrefabInstance>(copyChild).Overrides[0].Value == FieldValue(glm::vec3(9, 8, 7)), "prefab overrides survive");
+			check(copy.registry().all_of<UICanvas>(copyChild) && copy.registry().get<UICanvas>(copyChild).Panel == uiPanel && copy.registry().get<UICanvas>(copyChild).SortOrder == 3 && !copy.registry().get<UICanvas>(copyChild).Visible, "a UICanvas survives");
 
 			const std::vector<AssetRef> references = collect_references(first);
-			check(references.size() == 5, "collect_references finds each referenced asset once (found " + std::to_string(references.size()) + ")");
+			check(references.size() == 6, "collect_references finds each referenced asset once (found " + std::to_string(references.size()) + ")");
 			auto has_reference = [&](const AssetRef& ref) { return std::find(references.begin(), references.end(), ref) != references.end(); };
-			check(has_reference(mesh) && has_reference(materialA) && has_reference(materialB) && has_reference(prefab) && has_reference(texture), "collect_references names the mesh, materials, prefab and the ref inside an override");
+			check(has_reference(mesh) && has_reference(materialA) && has_reference(materialB) && has_reference(prefab) && has_reference(texture) && has_reference(uiPanel), "collect_references names the mesh, materials, prefab, UI panel and the ref inside an override");
 
 			// Things this engine does not know are kept, not dropped.
 			SceneData unknown;

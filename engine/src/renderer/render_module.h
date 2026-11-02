@@ -72,6 +72,13 @@ namespace wiwa
 		// thread makes (or remakes) the viewport target a frame or two later. The result is drawn by ImGui as the texture id below.
 		void set_viewport_size(u32 width, u32 height);
 
+		// The size of what the scene is drawn into, in pixels: the Viewport panel when there is one, else the window. 0 by 0 when there is nothing
+		// to draw into (a minimized window).
+		glm::vec2 get_canvas_size() const;
+
+		// The game UI of the frame being built (UiModule::pre_render_update); it is sent with the next batch and drawn over the scene.
+		void set_ui_draw_list(UiDrawList list) { m_PendingUi = std::move(list); }
+
 		// True when the UI shows the scene in a panel (the editor's Viewport panel says so); false, the default, draws the scene over the
 		// whole window (a game). Takes effect on the render thread a frame or two later.
 		void set_scene_in_viewport(bool inViewport);
@@ -116,6 +123,7 @@ namespace wiwa
 		ImGuiRenderPass* m_ImGuiPass = nullptr; // owned by the renderer; set on the render thread during start
 		std::vector<RenderCommand> m_PendingCommands{};
 		DebugDraw m_DebugDraw{};
+		UiDrawList m_PendingUi{};
 		SceneExtractor m_Extractor{}; // main thread: what the active scene changed since the last batch
 
 		// Assets the editor cooked again, noted by whichever thread reports it and taken by the render thread each frame.
