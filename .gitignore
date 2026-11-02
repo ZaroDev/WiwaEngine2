@@ -86,3 +86,6 @@ editor/assets/
 
 editor/**.json
 docs/superpowers/plans/
+
+# written by the editor for the Lua language server (remove its first line to take it over)
+editor/.luarc.json

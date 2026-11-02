@@ -32,4 +32,18 @@ namespace wiwa
 	// generate_component_stubs from every component registered right now, written to `file` with write_if_changed. Callable from any
 	// thread (calls are serialized).
 	bool write_component_stubs(const std::filesystem::path& file);
+
+	// The project settings LuaLS reads (.luarc.json in the folder the editor runs in): Lua 5.4, the two stub folders as libraries, and
+	// the standard libraries the sandbox does not open switched off. Its first line is a marker: the file is the editor's to rewrite
+	// only while the marker is there.
+	std::string luarc_text();
+
+	enum class LuarcResult
+	{
+		Created,   // there was no file
+		Refreshed, // the editor's own file was out of date
+		LeftAlone, // already current, or a file the user took over (no marker)
+		Failed,    // could not be written (a warning in the log)
+	};
+	LuarcResult ensure_luarc(const std::filesystem::path& file);
 }

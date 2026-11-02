@@ -40,6 +40,8 @@ namespace wiwa
 			}));
 		}
 
+		// LuaLS (the Lua extension of VS Code) finds the stubs through this file
+		ensure_luarc(".luarc.json");
 		m_StubThread = std::thread([this]() { watch_lua_stubs(); });
 	}
 
