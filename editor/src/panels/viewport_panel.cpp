@@ -12,6 +12,7 @@
 #include <core/engine.h>
 #include <gizmo/viewport_selection.h>
 #include <renderer/render_module.h>
+#include <ui/ui_module.h>
 #include <scene/components.h>
 
 using wiwa::LogLevel; // for WI_LOG
@@ -37,8 +38,8 @@ namespace
 	}
 }
 
-ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor)
-	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>()), m_GizmoSettings(wiwa::GizmoSettings::load())
+ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor, wiwa::EditorPlayInputSource& playInput)
+	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_PlayInput(playInput), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>()), m_GizmoSettings(wiwa::GizmoSettings::load())
 {
 }
 
@@ -131,6 +132,7 @@ void ViewportPanel::on_draw()
 			}
 			const bool hovered = ImGui::IsItemHovered();
 			const ImVec2 imageMin = ImGui::GetItemRectMin();
+			m_PlayInput.set_viewport(glm::vec2(imageMin.x, imageMin.y), scale, hovered); // the game UI reads the mouse over the image in play mode
 
 			if (m_UseEditorCamera)
 			{
@@ -149,11 +151,20 @@ void ViewportPanel::on_draw()
 					input.Scroll = io.MouseWheel;
 				}
 				m_Camera.apply(io.DeltaTime, input);
-				render->set_camera_override(m_Camera.get(size.x / std::max(size.y, 1.0f)));
+				const wiwa::RenderCamera camera = m_Camera.get(size.x / std::max(size.y, 1.0f));
+				render->set_camera_override(camera);
+				if (wiwa::UiModule* ui = wiwa::Engine::get().get_module<wiwa::UiModule>())
+				{
+					ui->set_camera_override(camera); // the UI anchors itself to the world with the camera that draws it
+				}
 			}
 			else
 			{
 				render->set_camera_override(std::nullopt);
+				if (wiwa::UiModule* ui = wiwa::Engine::get().get_module<wiwa::UiModule>())
+				{
+					ui->set_camera_override(std::nullopt);
+				}
 			}
 
 			// Over the image, in its corner.

@@ -2,6 +2,7 @@
 #include "ui_smoke_test.h"
 
 #include "../asset_pipeline/asset_database.h"
+#include "editor_play_input.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1279,6 +1280,95 @@ namespace wiwa
 			}
 		}
 
+		void check_play_input(Check& check)
+		{
+			// the window pointer becomes a pixel of the viewport image
+			{
+				EditorPlayInputSource source;
+				source.set_viewport({ 100.0f, 50.0f }, 1.0f, true);
+				UiPointerSample sample;
+				sample.Pointer = { 500.0f, 350.0f };
+				sample.OverImage = true;
+				UiInputFrame frame = source.convert(sample);
+				check(frame.PointerValid && frame.Pointer == glm::vec2(400.0f, 300.0f), "play_input_conversion: the pointer is relative to the image");
+
+				source.set_viewport({ 100.0f, 50.0f }, 2.0f, true);
+				sample.Pointer = { 150.0f, 100.0f };
+				frame = source.convert(sample);
+				check(frame.PointerValid && frame.Pointer == glm::vec2(100.0f, 100.0f), "play_input_hidpi_scale: and in pixels of the image, not points of the window");
+			}
+
+			// outside the image
+			{
+				EditorPlayInputSource source;
+				source.set_viewport({ 100.0f, 50.0f }, 1.0f, false);
+				UiPointerSample sample;
+				sample.Pointer = { 10.0f, 10.0f };
+				sample.OverImage = false;
+				sample.Down[0] = sample.Pressed[0] = true;
+				sample.NavPressed = ui_nav_bit(UiNav::Down);
+				sample.Scroll = 3.0f;
+				const UiInputFrame frame = source.convert(sample);
+				check(!frame.PointerValid && !frame.Pressed[0] && !frame.Down[0] && frame.NavPressed == 0 && frame.Scroll == 0.0f, "play_input_outside_invalid: off the image there is no pointer and nothing is forwarded");
+			}
+
+			// a drag that starts on the image goes on off it, and its release is seen
+			{
+				EditorPlayInputSource source;
+				source.set_viewport({ 0.0f, 0.0f }, 1.0f, true);
+				UiPointerSample sample;
+				sample.Pointer = { 20.0f, 20.0f };
+				sample.OverImage = true;
+				sample.Down[0] = sample.Pressed[0] = true;
+				UiInputFrame frame = source.convert(sample);
+				check(frame.Pressed[0] && frame.Down[0] && frame.PointerValid, "play_input_drag: a press on the image is forwarded");
+
+				sample.Pressed[0] = false;
+				sample.OverImage = false;
+				sample.Pointer = { 900.0f, 20.0f };
+				frame = source.convert(sample);
+				check(frame.Down[0] && frame.PointerValid && frame.Pointer.x == 900.0f, "play_input_drag: the drag goes on off the image, with the pointer where it is");
+
+				sample.Down[0] = false;
+				sample.Released[0] = true;
+				frame = source.convert(sample);
+				check(frame.Released[0] && !frame.Down[0] && frame.PointerValid, "play_input_drag: the release off the image is forwarded");
+
+				sample.Released[0] = false;
+				frame = source.convert(sample);
+				check(!frame.PointerValid && !frame.Down[0], "play_input_drag: and afterwards the pointer is off again");
+			}
+
+			// a press elsewhere that moves over the image is not a press on it
+			{
+				EditorPlayInputSource source;
+				source.set_viewport({ 0.0f, 0.0f }, 1.0f, true);
+				UiPointerSample sample;
+				sample.Pointer = { 900.0f, 20.0f };
+				sample.OverImage = false;
+				sample.Down[0] = sample.Pressed[0] = true;
+				source.convert(sample);
+				sample.Pressed[0] = false;
+				sample.OverImage = true;
+				sample.Pointer = { 20.0f, 20.0f };
+				const UiInputFrame frame = source.convert(sample);
+				check(frame.PointerValid && !frame.Down[0] && !frame.Pressed[0], "play_input_elsewhere: a drag that began off the image does not press what it passes over");
+			}
+
+			// the keys, over the image
+			{
+				EditorPlayInputSource source;
+				source.set_viewport({ 0.0f, 0.0f }, 1.0f, true);
+				UiPointerSample sample;
+				sample.OverImage = true;
+				sample.Pointer = { 5.0f, 5.0f };
+				sample.NavPressed = ui_nav_bit(UiNav::Up) | ui_nav_bit(UiNav::Submit);
+				sample.Scroll = 2.0f;
+				const UiInputFrame frame = source.convert(sample);
+				check(frame.NavPressed == (ui_nav_bit(UiNav::Up) | ui_nav_bit(UiNav::Submit)) && frame.Scroll == 2.0f, "play_input_keys: navigation and scroll over the image are forwarded");
+			}
+		}
+
 		// A texel of the font's atlas at a position given as a fraction of a glyph's quad.
 		u8 atlas_texel(const FontData& font, const FontGlyph& glyph, float fx, float fy)
 		{
@@ -1446,6 +1536,7 @@ namespace wiwa
 		check_draw(check, fontHandle.get());
 		check_interaction(check);
 		check_module(check, fontHandle.get());
+		check_play_input(check);
 
 		if (check.Failures == 0)
 		{

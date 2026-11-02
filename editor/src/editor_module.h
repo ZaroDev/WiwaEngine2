@@ -8,6 +8,7 @@
 #include <play/demo_smoke.h>
 #include <play/play_mode.h>
 #include <scene/scene_editor.h>
+#include <ui/editor_play_input.h>
 
 class EditorModule : public wiwa::IModule
 {
@@ -63,6 +64,7 @@ private:
 	char m_SaveAsName[128] = "";
 	std::string m_SceneStatus{};                 // what went wrong with the last scene action, shown in the bar for a few seconds
 	double m_SceneStatusUntil = 0.0;
+	wiwa::EditorPlayInputSource m_PlayInput{}; // the mouse and keys of play mode, for the game UI
 	Scope<wiwa::SceneEditor> m_SceneEditor;
 	Scope<wiwa::IPlayHost> m_PlayHost;
 	Scope<wiwa::PlayMode> m_PlayMode;

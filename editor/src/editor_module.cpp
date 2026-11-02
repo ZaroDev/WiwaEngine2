@@ -7,6 +7,7 @@
 #include <scene/scene_module.h>
 #include <renderer/window.h>
 #include <scripting/script_module.h>
+#include <ui/ui_module.h>
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -18,8 +19,8 @@ namespace
 	class EditorPlayHost final : public wiwa::IPlayHost
 	{
 	public:
-		EditorPlayHost(wiwa::SceneEditor& editor, wiwa::SceneModule& scenes, wiwa::ScriptingModule& scripts)
-			: m_Editor(editor), m_Scenes(scenes), m_Scripts(scripts) {}
+		EditorPlayHost(wiwa::SceneEditor& editor, wiwa::SceneModule& scenes, wiwa::ScriptingModule& scripts, wiwa::EditorPlayInputSource& input)
+			: m_Editor(editor), m_Scenes(scenes), m_Scripts(scripts), m_Input(input) {}
 
 		virtual Ref<wiwa::Scene> edit_scene() override { return m_Editor.get_scene(); }
 		// not while a scene is opening, a prefab expansion is pending, any scene load is running, or the editor still shows an older scene than
@@ -44,17 +45,27 @@ namespace
 
 		virtual void restore_document(Ref<wiwa::Scene> scene, const wiwa::EditorDocument& document) override { m_Editor.restore_document(std::move(scene), document); }
 		virtual Ref<wiwa::Scene> active_scene() override { return m_Scenes.get_active(); }
-		virtual void start_scripts() override { m_Scripts.start(); }
-		virtual void stop_scripts() override { m_Scripts.stop(); }
+		// the game UI reads the editor's mouse while the game runs, and no input otherwise
+		virtual void start_scripts() override { set_ui_input(&m_Input); m_Scripts.start(); }
+		virtual void stop_scripts() override { m_Scripts.stop(); set_ui_input(nullptr); }
 		virtual void cancel_loads() override { m_Scenes.cancel_loads(); }
 		virtual void time_play() override { wiwa::Engine::get().get_time().play_game(); }
 		virtual void time_stop() override { wiwa::Engine::get().get_time().stop_game(); }
 		virtual void time_pause(bool paused) override { wiwa::Engine::get().get_time().set_game_pause(paused); }
 
 	private:
+		static void set_ui_input(wiwa::IUiInputSource* source)
+		{
+			if (wiwa::UiModule* ui = wiwa::Engine::get().get_module<wiwa::UiModule>())
+			{
+				ui->set_input_source(source);
+			}
+		}
+
 		wiwa::SceneEditor& m_Editor;
 		wiwa::SceneModule& m_Scenes;
 		wiwa::ScriptingModule& m_Scripts;
+		wiwa::EditorPlayInputSource& m_Input;
 	};
 }
 
@@ -72,7 +83,7 @@ void EditorModule::init()
 	m_SceneEditor->set_scene(scenes->get_active());
 	m_SceneEditor->set_follow_module(true);
 
-	m_PlayHost = CreateScope<EditorPlayHost>(*m_SceneEditor, *scenes, *wiwa::Engine::get().get_module<wiwa::ScriptingModule>());
+	m_PlayHost = CreateScope<EditorPlayHost>(*m_SceneEditor, *scenes, *wiwa::Engine::get().get_module<wiwa::ScriptingModule>(), m_PlayInput);
 	m_PlayMode = CreateScope<wiwa::PlayMode>(*m_PlayHost);
 	for (const std::string& argument : wiwa::Engine::get().get_arguments())
 	{
@@ -87,7 +98,7 @@ void EditorModule::init()
 	Ref<InspectorPanel> inspector = CreateRef<InspectorPanel>(*m_SceneEditor);
 	m_Panels.push_back(inspector);
 	m_Panels.push_back(CreateRef<WorldPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor));
+	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor, m_PlayInput));
 	m_Panels.push_back(CreateRef<RendererPanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
 	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());

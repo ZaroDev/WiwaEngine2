@@ -7,6 +7,7 @@
 #include <gizmo/scene_gizmos.h>
 #include <renderer/scene/editor_camera.h>
 #include <scene/scene_editor.h>
+#include <ui/editor_play_input.h>
 
 
 // The "Viewport" panel: the scene as the renderer draws it, filling the window. It tells the renderer how big its content region is
@@ -21,7 +22,7 @@
 class ViewportPanel : public Panel
 {
 public:
-	explicit ViewportPanel(wiwa::SceneEditor& editor);
+	ViewportPanel(wiwa::SceneEditor& editor, wiwa::EditorPlayInputSource& playInput);
 
 	virtual void on_draw() override;
 
@@ -29,6 +30,7 @@ private:
 	void apply_manipulation(entt::entity entity, const glm::mat4& world);
 
 	wiwa::SceneEditor& m_Editor;
+	wiwa::EditorPlayInputSource& m_PlayInput;
 	int m_Operation = ImGuizmo::TRANSLATE;
 	bool m_LocalSpace = false; // the transform gizmo works in the entity's own axes (scale always does)
 	wiwa::SceneGizmos m_SceneGizmos;
