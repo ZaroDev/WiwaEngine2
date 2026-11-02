@@ -3,7 +3,15 @@
 
 #include <imgui.h>
 
+#include <asset_pipeline/build_settings.h>
+#include <asset_pipeline/material_file.h>
+#include <asset_pipeline/meta_file.h>
+
 #include <IconFontCppHeaders/FontIcons/IconsForkAwesome.h>
+
+#include <assets/asset_manager.h>
+#include <core/engine.h>
+#include <renderer/render_module.h>
 
 #ifdef WI_PLATFORM_WINDOWS
 #define WIN32_LEAN_AND_MEAN
@@ -37,6 +45,12 @@ namespace
 #else
 		(void)path;
 #endif
+	}
+
+	bool is_texture_file(const std::filesystem::path& path)
+	{
+		const std::filesystem::path e = path.extension();
+		return e == ".png" || e == L".jpg";
 	}
 }
 
@@ -138,6 +152,54 @@ const AssetBrowserPanel::FolderEntry* AssetBrowserPanel::find_folder(const std::
 		}
 	}
 	return nullptr;
+}
+
+const AssetBrowserPanel::FileEntry* AssetBrowserPanel::find_file(const std::filesystem::path& path) const
+{
+	std::vector<const FolderEntry*> pending;
+	for (const FolderEntry& root : m_Roots)
+	{
+		pending.push_back(&root);
+	}
+	while (!pending.empty())
+	{
+		const FolderEntry* folder = pending.back();
+		pending.pop_back();
+		for (const FileEntry& file : folder->Files)
+		{
+			std::error_code error;
+			if (file.Path.lexically_normal() == path.lexically_normal() || std::filesystem::equivalent(file.Path, path, error))
+			{
+				return &file;
+			}
+		}
+		for (const FolderEntry& child : folder->Children)
+		{
+			pending.push_back(&child);
+		}
+	}
+	return nullptr;
+}
+
+void AssetBrowserPanel::select_asset(const wiwa::AssetRef& ref)
+{
+	const std::optional<std::filesystem::path> source = m_Database.path_of(ref.Guid);
+	if (!source)
+	{
+		return;
+	}
+
+	rescan(); // a file created a moment ago may not be listed yet
+	const FileEntry* file = find_file(*source);
+	if (file == nullptr)
+	{
+		return;
+	}
+
+	m_Open = true;
+	m_Selected = file->Path;
+	m_CurrentDir = file->Path.parent_path();
+	m_Search[0] = '\0'; // a search would list files from the whole tree instead of the folder
 }
 
 const std::filesystem::path* AssetBrowserPanel::find_root(const std::filesystem::path& path) const
@@ -329,7 +391,29 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 	{
 		ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
 	}
-	if (ImGui::Button(ICON_FK_FILE_O, ImVec2(thumbnailSize, thumbnailSize)))
+	bool clicked = false;
+	wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+	const std::optional<wiwa::AssetRef> found = assets != nullptr ? assets->find_asset(file.string()) : std::nullopt;
+
+	// A texture shows its own image once it is on the GPU; until then (and for every other file) the generic icon stands in.
+	wiwa::u32 textureId = 0;
+	if (found && is_texture_file(file))
+	{
+		wiwa::RenderModule* render = wiwa::Engine::get().get_module<wiwa::RenderModule>();
+		textureId = render != nullptr ? render->get_asset_texture_id(*found) : 0;
+	}
+
+	if (textureId != 0)
+	{
+		ImGui::PushID(file.string().c_str());
+		clicked = ImGui::ImageButton("###file", static_cast<ImTextureID>(textureId), ImVec2(thumbnailSize, thumbnailSize));
+		ImGui::PopID();
+	}
+	else
+	{
+		clicked = ImGui::Button(ICON_FK_FILE_O, ImVec2(thumbnailSize, thumbnailSize));
+	}
+	if (clicked)
 	{
 		m_Selected = file;
 	}
@@ -347,7 +431,14 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 	}
 	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
 	{
-		open_externally(file);
+		if (file.extension() == ".wmat" && m_OpenMaterial)
+		{
+			m_OpenMaterial(file);
+		}
+		else
+		{
+			open_externally(file);
+		}
 	}
 	ImGui::TextWrapped("%s", file.filename().string().c_str());
 }
@@ -366,11 +457,48 @@ void AssetBrowserPanel::draw_context_menu()
 		rescan();
 	}
 
+	if (ImGui::MenuItem("New material"))
+	{
+		const std::filesystem::path created = wiwa::create_material_file(m_CurrentDir, "New material");
+		rescan();
+		if (!created.empty())
+		{
+			m_Selected = created;
+			if (m_OpenMaterial)
+			{
+				m_OpenMaterial(created);
+			}
+		}
+	}
+
 	std::error_code error;
 	if (!m_Selected.empty() && std::filesystem::exists(m_Selected, error))
 	{
 		ImGui::Separator();
 		ImGui::TextDisabled("%s", m_Selected.filename().string().c_str());
+
+		// pack it although no packed scene uses it (the Build Settings panel lists these)
+		if (std::optional<wiwa::MetaFile> meta = wiwa::MetaFile::load(wiwa::MetaFile::meta_path_for(m_Selected)))
+		{
+			std::string loadError;
+			wiwa::BuildSettings settings = wiwa::BuildSettings::load(wiwa::BUILD_SETTINGS_FILE, loadError).value_or(wiwa::BuildSettings{});
+			auto listed = std::find(settings.AlwaysInclude.begin(), settings.AlwaysInclude.end(), meta->Guid);
+
+			// a file that cannot be read is left alone: saving would overwrite it
+			if (ImGui::MenuItem("Always include in build", nullptr, listed != settings.AlwaysInclude.end(), loadError.empty()))
+			{
+				if (listed != settings.AlwaysInclude.end())
+				{
+					settings.AlwaysInclude.erase(listed);
+				}
+				else
+				{
+					settings.AlwaysInclude.push_back(meta->Guid);
+				}
+				settings.save(wiwa::BUILD_SETTINGS_FILE);
+			}
+		}
+
 		if (ImGui::MenuItem(ICON_FK_TRASH " Delete"))
 		{
 			// the .meta goes with its file; the database cleans up the cooked files at its next scan

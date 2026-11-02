@@ -19,6 +19,9 @@
 #include "passes/pick_pass.h"
 #include "passes/selection_outline_pass.h"
 #include "passes/fxaa_pass.h"
+#include "passes/motion_blur_pass.h"
+#include "passes/taa_pass.h"
+#include "passes/velocity_pass.h"
 #include "passes/tonemap_pass.h"
 #include "passes/shadow_pass.h"
 #include "passes/sky_pass.h"
@@ -87,6 +90,9 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Opaque))
 					&& m_Renderer->add_pass(CreateScope<SkyPass>())
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Blended))
+					&& m_Renderer->add_pass(CreateScope<VelocityPass>())
+					&& m_Renderer->add_pass(CreateScope<TaaPass>())
+					&& m_Renderer->add_pass(CreateScope<MotionBlurPass>())
 					&& m_Renderer->add_pass(CreateScope<ExposurePass>())
 					&& m_Renderer->add_pass(CreateScope<BloomPass>())
 					&& m_Renderer->add_pass(CreateScope<TonemapPass>())
@@ -226,6 +232,56 @@ namespace wiwa
 		{
 			WI_RENDER_LOG(Warning, "Could not write {0}", QUALITY_FILE);
 		}
+	}
+
+	void RenderModule::reset_temporal_history()
+	{
+		submit([](RenderWorld& world)
+			{
+				world.get_renderer().get_scene_data().request_history_reset();
+			});
+	}
+
+	void RenderModule::set_debug_velocity(bool enabled)
+	{
+		submit([enabled](RenderWorld& world)
+			{
+				world.get_renderer().get_scene_data().set_debug_velocity(enabled);
+			});
+	}
+
+	u32 RenderModule::get_asset_texture_id(const AssetRef& texture)
+	{
+		if (!texture.valid())
+		{
+			return 0;
+		}
+		const auto [it, added] = m_AssetTextureIds.try_emplace(texture.resolved(), m_NextAssetTextureId);
+		if (added)
+		{
+			++m_NextAssetTextureId;
+		}
+		const u32 id = it->second;
+		{
+			std::lock_guard lock(m_AssetTextureMutex);
+			if (m_AssetTexturesReady.contains(id))
+			{
+				return id;
+			}
+		}
+		// Not in the registry yet: the render thread asks the cache (which starts the load) and registers the texture once uploaded.
+		submit([this, texture, id](RenderWorld& world)
+			{
+				nvrhi::ITexture* gpu = world.get_cache().get_texture(texture);
+				if (gpu == nullptr)
+				{
+					return;
+				}
+				world.get_renderer().get_textures().set(id, gpu);
+				std::lock_guard lock(m_AssetTextureMutex);
+				m_AssetTexturesReady.insert(id);
+			});
+		return 0;
 	}
 
 	void RenderModule::set_viewport_size(u32 width, u32 height)

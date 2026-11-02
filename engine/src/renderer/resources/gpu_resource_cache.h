@@ -12,6 +12,7 @@
 #include "gpu_material.h"
 #include "gpu_mesh.h"
 #include "range_allocator.h"
+#include "surface_shader_cache.h"
 
 namespace wiwa
 {
@@ -27,10 +28,16 @@ namespace wiwa
 	// The vertex and index buffers come in pages (a few MiB each; a mesh larger than a page gets one of its own), so growing never
 	// has to copy the GPU data; a GpuMesh says which page it lives in. Freed ranges are reused only after the frames that may still
 	// be reading them have finished.
+	//
+	// A material with a surface shader (MaterialData::Shader) also has a custom record (GpuCustomRecord, same slot) that points at
+	// its parameter block in one byte buffer of all blocks, and a binding set of its own (custom_layout(): its @param textures, the
+	// custom records, the parameter bytes, the user sampler). While its shader is loading the material shows the default record,
+	// once the shader failed the magenta one; either way get_material_shader() is 0 and the custom bit is clear.
 	class GpuResourceCache
 	{
 	public:
-		GpuResourceCache(nvrhi::IDevice* device, AssetManager* assets, UploadQueue* uploads);
+		// api picks the binary target of the surface shaders (SPIR-V for Vulkan, DXBC otherwise).
+		GpuResourceCache(nvrhi::IDevice* device, AssetManager* assets, UploadQueue* uploads, GraphicsApi api);
 		~GpuResourceCache();
 
 		GpuResourceCache(const GpuResourceCache&) = delete;
@@ -47,6 +54,22 @@ namespace wiwa
 		// The record of a slot as the shaders will see it (the default one for a slot that does not exist).
 		const GpuMaterialRecord& material_record(u32 slot) const { return slot < m_Records.size() ? m_Records[slot] : m_Records[0]; }
 		nvrhi::IBindingLayout* material_layout() const { return m_MaterialLayout; }
+
+		// The surface shader index (SurfaceShaderCache) the slot draws with: 0 for built-in materials and for materials whose
+		// shader is loading or failed.
+		u32 get_material_shader(u32 slot) const { return slot < m_SlotShaders.size() ? m_SlotShaders[slot] : 0; }
+		// The custom record of a slot as the shaders will see it (zeros for a slot that draws built-in).
+		const GpuCustomRecord& custom_record(u32 slot) const { return slot < m_CustomRecords.size() ? m_CustomRecords[slot] : m_CustomRecords[0]; }
+		// The custom-material layout (set 3 on Vulkan): t16..t19 the @param textures, t20 custom records, t21 parameter bytes, s15.
+		nvrhi::IBindingLayout* custom_layout() const { return m_CustomLayout; }
+		// The slot's custom-material binding set. Never null: a built-in slot gets one with fallback textures.
+		nvrhi::IBindingSet* get_custom_bindings(u32 slot);
+		SurfaceShaderCache& surface_shaders() { return *m_SurfaceShaders; }
+		// One GpuCustomRecord (16 bytes) per slot; replaced together with material_buffer().
+		nvrhi::IBuffer* custom_record_buffer() const { return m_CustomBuffer; }
+		// Every parameter block, at 16-byte aligned offsets. Replaced when it has to grow: material_generation() changes then.
+		nvrhi::IBuffer* param_buffer() const { return m_ParamBuffer; }
+		u64 param_buffer_size() const { return m_ParamRanges.capacity(); }
 
 		// The uploaded texture, null until it is (and for good if it failed). Asking starts the load.
 		nvrhi::ITexture* get_texture(const AssetRef& texture);
@@ -150,6 +173,24 @@ namespace wiwa
 			AssetRef Textures[4]{}; // base color, normal, ORM, emissive
 			nvrhi::ITexture* Bound[4]{}; // what the binding set was built with
 			bool Settled = false;   // every texture is uploaded or failed
+
+			// The record built from the data (what the slot shows without a shader, or with a ready one plus the custom bit).
+			GpuMaterialRecord Builtin{};
+			// The surface shader (MaterialData::Shader) and its parameters.
+			u32 ShaderIndex = 0;
+			std::vector<u8> ParamBytes{};
+			AssetRef ParamTextures[SURFACE_MAX_TEXTURES]{};
+			nvrhi::ITexture* ParamBound[SURFACE_MAX_TEXTURES]{}; // what the custom binding set was built with
+			u64 ParamOffset = 0;   // the block's range in the parameter buffer, in bytes
+			u64 ParamCapacity = 0; // 0: no block
+			bool WarnedParamSize = false;
+		};
+
+		struct RetiredParams
+		{
+			u64 Offset = 0;
+			u64 Size = 0;
+			u64 Frame = 0;
 		};
 
 		struct RetiredRange
@@ -175,6 +216,14 @@ namespace wiwa
 		nvrhi::ITexture* texture_or_fallback(const AssetRef& ref, u32 index);
 		nvrhi::BindingSetHandle make_bindings(nvrhi::ITexture* const textures[4]);
 		void build_record(MaterialEntry& entry, const MaterialData& data);
+		void compose_record(MaterialEntry& entry);
+		void release_params(MaterialEntry& entry);
+		bool place_params(MaterialEntry& entry, u64 bytes);
+		void grow_param_buffer(u64 atLeast);
+		void write_params(const MaterialEntry& entry);
+		void update_custom_bindings(MaterialEntry& entry, bool force, bool& settled);
+		void rebuild_custom_bindings();
+		nvrhi::BindingSetHandle make_custom_bindings(nvrhi::ITexture* const textures[SURFACE_MAX_TEXTURES]);
 
 		nvrhi::IDevice* m_Device;
 		AssetManager* m_Assets;
@@ -201,6 +250,20 @@ namespace wiwa
 		nvrhi::BufferHandle m_MaterialBuffer{};
 		u32 m_MaterialCapacity = 0;
 		u32 m_MaterialGeneration = 0;
+
+		// Custom materials, per slot: the shader index it draws with (0: built-in), the custom record, the custom binding set.
+		Scope<SurfaceShaderCache> m_SurfaceShaders{};
+		u32 m_SurfaceGeneration = 0; // the shader cache's generation the records were composed with
+		std::vector<u32> m_SlotShaders{};
+		std::vector<GpuCustomRecord> m_CustomRecords{};
+		std::vector<nvrhi::BindingSetHandle> m_CustomBindings{};
+		nvrhi::BufferHandle m_CustomBuffer{};
+		nvrhi::BufferHandle m_ParamBuffer{};
+		RangeAllocator m_ParamRanges{};
+		std::vector<RetiredParams> m_RetiredParams{};
+		nvrhi::BindingLayoutHandle m_CustomLayout{};
+		nvrhi::SamplerHandle m_CustomSampler{};
+		nvrhi::BindingSetHandle m_FallbackCustomBindings{};
 
 		nvrhi::BindingLayoutHandle m_MaterialLayout{};
 		nvrhi::SamplerHandle m_Sampler{};

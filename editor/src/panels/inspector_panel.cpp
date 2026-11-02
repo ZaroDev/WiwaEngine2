@@ -3,7 +3,11 @@
 
 #include <imgui.h>
 
+#include "asset_field.h"
+
 #include <scene/reflection/component_registry.h>
+#include <core/engine.h>
+#include <assets/asset_manager.h>
 
 namespace
 {
@@ -72,7 +76,7 @@ void InspectorPanel::on_draw()
 					{
 						continue;
 					}
-					if (ImGui::MenuItem(info->Name.c_str()))
+					if (ImGui::MenuItem(info->display_name().c_str()))
 					{
 						const std::string name = info->Name;
 						m_Deferred = [this, entity, name]() { m_Editor.add_component(entity, name); };
@@ -95,7 +99,7 @@ void InspectorPanel::on_draw()
 void InspectorPanel::draw_component(entt::entity entity, const wiwa::ComponentInfo& info)
 {
 	ImGui::PushID(info.Name.c_str());
-	const bool open = ImGui::CollapsingHeader(info.Name.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+	const bool open = ImGui::CollapsingHeader(info.display_name().c_str(), ImGuiTreeNodeFlags_DefaultOpen);
 
 	if (!is_mandatory(info.Name) && info.Name != "PrefabInstance" && ImGui::BeginPopupContextItem())
 	{
@@ -241,17 +245,46 @@ bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& 
 	case FieldType::Asset:
 	{
 		const AssetRef& ref = std::get<AssetRef>(current);
-		ImGui::Text("%s: %s", label, describe_ref(ref).c_str());
-		if (ref.valid())
+		std::string dropped;
+		switch (draw_asset_field(label, describe_ref(ref), ref.valid(), dropped))
 		{
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Clear")) { value = AssetRef{}; changed = true; }
+		case AssetFieldEvent::Dropped:
+		{
+			wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+			const std::optional<wiwa::AssetRef> found = assets != nullptr ? assets->find_asset(dropped) : std::nullopt;
+			if (found)
+			{
+				value = *found;
+				changed = true;
+			}
+			break;
+		}
+		case AssetFieldEvent::Cleared: value = AssetRef{}; changed = true; break;
+		default: break;
 		}
 		break;
 	}
 	case FieldType::AssetList:
-		ImGui::Text("%s: %zu asset(s)", label, std::get<std::vector<AssetRef>>(current).size());
+	{
+		// the slots are shown, not edited here; each one can be found in the Asset Browser
+		const std::vector<AssetRef>& refs = std::get<std::vector<AssetRef>>(current);
+		ImGui::Text("%s: %zu asset(s)", label, refs.size());
+		for (size_t i = 0; i < refs.size(); i++)
+		{
+			ImGui::PushID(static_cast<int>(i));
+			ImGui::BulletText("%s", describe_ref(refs[i]).c_str());
+			if (refs[i].valid() && m_Locate)
+			{
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Locate"))
+				{
+					m_Locate(refs[i]);
+				}
+			}
+			ImGui::PopID();
+		}
 		break;
+	}
 	case FieldType::Entity:
 		ImGui::Text("%s: %s", label, std::get<EntityGuid>(current).valid() ? std::get<EntityGuid>(current).to_string().substr(0, 8).c_str() : "(none)");
 		break;

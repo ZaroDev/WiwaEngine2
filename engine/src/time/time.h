@@ -20,9 +20,12 @@ namespace wiwa
 		void start()
 		{
 			Timer = std::chrono::high_resolution_clock::now();
+			LastTime = Timer; // the first delta is the time since the start, not since the clock's epoch
 			FrameCount = 0;
 			TimeScale = 1.0f;
 			IsPlaying = true;
+			DeltaTime = std::chrono::duration<float>::zero();
+			TimeSinceClock = std::chrono::duration<float>::zero();
 		}
 
 		void update()
@@ -30,9 +33,10 @@ namespace wiwa
 			if (IsPlaying)
 			{
 				FrameCount++;
-				DeltaTime = (std::chrono::high_resolution_clock::now() - LastTime) * TimeScale;
-				LastTime = std::chrono::high_resolution_clock::now();
-				TimeSinceClock = (std::chrono::high_resolution_clock::now() - Timer) * TimeScale;
+				const auto now = std::chrono::high_resolution_clock::now();
+				DeltaTime = (now - LastTime) * TimeScale;
+				LastTime = now;
+				TimeSinceClock += DeltaTime; // what the clock ran for: time spent paused is not in it
 			}
 		}
 

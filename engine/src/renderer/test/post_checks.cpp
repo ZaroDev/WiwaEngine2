@@ -3,6 +3,7 @@
 #include <fstream>
 
 #include "../passes/bloom_math.h"
+#include "half_float.h"
 #include "scene_tester.h"
 
 // Checks of the post-processing chain: tone mapping and grading, exposure, bloom, FXAA, ambient occlusion.
@@ -99,27 +100,6 @@ namespace wiwa
 				n.y = xy.y;
 			}
 			return glm::normalize(n);
-		}
-
-		float half_to_float(u16 h)
-		{
-			const int sign = (h >> 15) & 1;
-			const int exponent = (h >> 10) & 31;
-			const int mantissa = h & 1023;
-			float value;
-			if (exponent == 0)
-			{
-				value = std::ldexp(static_cast<float>(mantissa), -24);
-			}
-			else if (exponent == 31)
-			{
-				value = std::numeric_limits<float>::infinity();
-			}
-			else
-			{
-				value = std::ldexp(static_cast<float>(mantissa + 1024), exponent - 25);
-			}
-			return sign ? -value : value;
 		}
 
 		// The normal the prepass wrote at a pixel, decoded.

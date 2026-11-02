@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include "../ibl/atmosphere_environment.h"
+#include "../passes/taa_math.h"
 #include "cascade_math.h"
 #include "frustum_culler.h"
 
@@ -203,6 +204,9 @@ namespace wiwa
 		if (!m_Active)
 		{
 			m_HasCamera = false;
+			m_TemporalActive = false;
+			m_HistoryValid = false;
+			m_PreviousKnown = false;
 			return;
 		}
 
@@ -329,12 +333,48 @@ namespace wiwa
 
 		const std::optional<RenderCamera>& camera = scene.effective_camera();
 		m_HasCamera = camera.has_value();
+		m_TemporalActive = false;
+		m_HistoryValid = false;
+		if (!camera)
+		{
+			m_PreviousKnown = false; // a frame without a camera breaks the history
+		}
 		if (camera)
 		{
 			constants.View = camera->View;
-			constants.Projection = camera->Projection;
-			constants.ViewProjection = camera->Projection * camera->View;
+			// With TAA the projection that rasterises is shifted by a sub-pixel jitter. Culling, picking, debug shapes and the velocity
+			// use the unjittered matrices; the depth buffer, the sky and the AO see the jittered ones.
+			const glm::mat4 unjittered = camera->Projection * camera->View;
+			glm::mat4 projection = camera->Projection;
+			glm::vec2 jitter(0.0f);
+			m_TemporalActive = m_Quality.Taa;
+			if (m_TemporalActive)
+			{
+				jitter = taa_jitter(m_FrameIndex);
+				projection = apply_jitter(projection, jitter, viewport.width(), viewport.height());
+			}
+			constants.Projection = projection;
+			constants.ViewProjection = projection * camera->View;
 			constants.InverseViewProjection = glm::inverse(constants.ViewProjection);
+			constants.UnjitteredViewProjection = unjittered;
+
+			// The previous frame's camera is a history only when nothing between the two frames makes it a different view.
+			const bool cut = m_PreviousKnown && glm::distance(camera->Position, m_PreviousCameraPosition) > CAMERA_CUT_DISTANCE;
+			m_HistoryValid = m_PreviousKnown && !m_HistoryResetRequested && !cut && m_PreviousViewportGeneration == viewport.generation()
+				&& m_PreviousSceneResets == scene.reset_count() && m_PreviousOverride == scene.has_camera_override();
+			if (!m_HistoryValid)
+			{
+				m_HistoryResetCount++;
+			}
+			constants.PreviousViewProjection = m_HistoryValid ? m_PreviousViewProjection : unjittered;
+			constants.JitterInfo = glm::vec4(jitter, m_TemporalActive ? 1.0f : 0.0f, m_HistoryValid ? 1.0f : 0.0f);
+			m_PreviousKnown = true;
+			m_HistoryResetRequested = false;
+			m_PreviousViewProjection = unjittered;
+			m_PreviousCameraPosition = camera->Position;
+			m_PreviousViewportGeneration = viewport.generation();
+			m_PreviousSceneResets = scene.reset_count();
+			m_PreviousOverride = scene.has_camera_override();
 			constants.CameraPosition = glm::vec4(camera->Position, camera->Near);
 			constants.CameraParams = glm::vec4(camera->Far, 0.0f, 0.0f, 0.0f);
 
@@ -343,7 +383,7 @@ namespace wiwa
 			const float sliceScale = static_cast<float>(CLUSTERS_Z) / depthRatio;
 			constants.ClusterParams = glm::vec4(sliceScale, -std::log2(camera->Near) * sliceScale, camera->Projection[3][3] == 1.0f ? 1.0f : 0.0f, m_ClusterCulling ? 0.0f : 1.0f);
 
-			const Frustum frustum(constants.ViewProjection);
+			const Frustum frustum(constants.UnjitteredViewProjection);
 			const std::vector<RenderInstance>& instances = scene.instances();
 			for (u32 slot = 0; slot < instances.size(); slot++)
 			{
@@ -546,7 +586,7 @@ namespace wiwa
 			m_WrittenRevision = ~0ull;
 		}
 
-		if (m_InstanceBuffer && m_WrittenRevision != m_Scene->revision())
+		if (m_InstanceBuffer && (m_WrittenRevision != m_Scene->revision() || m_Scene->previous_stale()))
 		{
 			m_InstanceScratch.assign(std::max<size_t>(instances.size(), 1), GpuInstance{});
 			for (size_t slot = 0; slot < instances.size(); slot++)
@@ -555,6 +595,7 @@ namespace wiwa
 				{
 					m_InstanceScratch[slot].World = instances[slot].World;
 					m_InstanceScratch[slot].Normal = glm::transpose(glm::inverse(instances[slot].World));
+					m_InstanceScratch[slot].PrevWorld = instances[slot].PrevWorld;
 				}
 			}
 			commandList->writeBuffer(m_InstanceBuffer, m_InstanceScratch.data(), m_InstanceScratch.size() * sizeof(GpuInstance));

@@ -243,6 +243,12 @@ namespace wiwa
 		}
 	}
 
+	void archive(BinaryArchive& ar, ScriptData& v)
+	{
+		ar.string(v.Source);
+		ar.string(v.SourcePath);
+	}
+
 	void archive(BinaryArchive& ar, LutData& v)
 	{
 		ar.string(v.Title);
@@ -273,6 +279,52 @@ namespace wiwa
 					ar.fail();
 				}
 			});
+	}
+
+	void archive(BinaryArchive& ar, SurfaceShaderData& v)
+	{
+		ar.string(v.Name);
+		ar.list(v.Params, [&](SurfaceParam& p)
+			{
+				ar.string(p.Name);
+				archive_enum(ar, p.Type, 6);
+				ar.value(p.Offset);
+				ar.value(p.Min);
+				ar.value(p.Max);
+				ar.value(p.Default);
+				archive_flag(ar, p.Color);
+				ar.string(p.Label);
+			});
+		ar.value(v.BlockSize);
+		ar.list(v.Textures, [&](std::string& name) { ar.string(name); });
+		archive_flag(ar, v.HasVertexOffset);
+		ar.value(v.LayoutHash);
+		ar.list(v.Variants, [&](SurfaceVariant& variant)
+			{
+				archive_enum(ar, variant.Kind, SURFACE_VARIANT_COUNT);
+				archive_enum(ar, variant.Stage, 3);
+				archive_enum(ar, variant.Target, 2);
+				ar.pod_vector(variant.Code);
+				if (ar.reading() && ar.ok() && variant.Code.empty())
+				{
+					ar.fail();
+				}
+			});
+
+		if (ar.reading() && ar.ok())
+		{
+			// the renderer trusts these: the block fits its limit and every parameter lies inside it
+			bool valid = v.BlockSize <= SURFACE_BLOCK_MAX_SIZE && v.BlockSize % 16 == 0 && v.Textures.size() <= SURFACE_MAX_TEXTURES;
+			for (const SurfaceParam& p : v.Params)
+			{
+				const u32 size = p.Type == SurfaceParamType::Float2 ? 8 : p.Type == SurfaceParamType::Float3 ? 12 : p.Type == SurfaceParamType::Float4 ? 16 : 4;
+				valid = valid && p.Offset % 4 == 0 && static_cast<u64>(p.Offset) + size <= v.BlockSize;
+			}
+			if (!valid)
+			{
+				ar.fail();
+			}
+		}
 	}
 
 	void archive(BinaryArchive& ar, MeshData& v)
@@ -349,6 +401,19 @@ namespace wiwa
 		ar.value(v.NormalTexture);
 		ar.value(v.OrmTexture);
 		ar.value(v.EmissiveTexture);
+
+		// The shader section was added after the first cooked materials: they end here and load with no shader. Always written.
+		if (ar.reading() && ar.remaining() == 0)
+		{
+			return;
+		}
+		ar.value(v.Shader);
+		ar.pod_vector(v.ParamBytes);
+		ar.value(v.ParamTextures);
+		if (ar.reading() && ar.ok() && v.ParamBytes.size() > SURFACE_BLOCK_MAX_SIZE)
+		{
+			ar.fail();
+		}
 	}
 
 	void archive(BinaryArchive& ar, SkeletonData& v)

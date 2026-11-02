@@ -9,6 +9,7 @@ namespace wiwa
 	{
 		m_RealTimeClock.start();
 		m_EngineTimeClock.start();
+		m_GameClock.start(); // a game runs from the start; the editor stops it until play mode
 	}
 
 	void Time::pre_update()
@@ -48,6 +49,10 @@ namespace wiwa
 
 	void Time::set_game_pause(bool pause)
 	{
+		if (!pause && !m_GameClock.IsPlaying)
+		{
+			m_GameClock.LastTime = std::chrono::steady_clock::now(); // the first frame after a pause is one frame long, not as long as the pause
+		}
 		m_GameClock.IsPlaying = !pause;
 	}
 

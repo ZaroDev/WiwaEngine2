@@ -792,6 +792,8 @@ namespace wiwa
 			s.Tonemap.Operator = TonemapOperator::Reinhard;
 			s.Tonemap.Vignette = 0.5f;
 			s.Ao.Radius = 2.0f;
+			s.Taa.Feedback = 0.85f;
+			s.MotionBlur = { true, 0.02f, 2.0f, 50.0f };
 			return s;
 		}
 
@@ -832,6 +834,10 @@ namespace wiwa
 			check(contains(error, "settings.bloom.enabled"), "a bloom flag of the wrong type is rejected (" + error + ")");
 			error = error_of([](SceneJson& j) { j["settings"]["atmosphere"]["mie"] = true; });
 			check(contains(error, "settings.atmosphere.mie"), "so is one inside the atmosphere block (" + error + ")");
+			error = error_of([](SceneJson& j) { j["settings"]["taa"]["feedback"] = "x"; });
+			check(contains(error, "settings.taa.feedback"), "a TAA feedback of the wrong type is rejected (" + error + ")");
+			error = error_of([](SceneJson& j) { j["settings"]["motionBlur"]["enabled"] = 3; });
+			check(contains(error, "settings.motionBlur.enabled"), "a motion blur flag of the wrong type is rejected (" + error + ")");
 			SceneJson extra = doc;
 			extra["settings"]["somethingNew"] = 1;
 			check(scene_from_json(extra).Scene.has_value(), "unknown keys are ignored");
@@ -960,6 +966,76 @@ namespace wiwa
 
 			SceneBlueprint noPrefab = build_blueprint(data, [](const AssetRef&) { return nullptr; });
 			check(noPrefab.Entities.size() == 3 && !noPrefab.Warnings.empty(), "an instance whose prefab did not load stays as the root alone, with a warning");
+		}
+
+		// prefab_instances_use_extracted_materials: an instance's mesh refers to a .wmat file next to the model, and the
+		// material that loads is the one the file holds.
+		void check_extracted_materials(Check& check, AssetPipelineModule& pipeline)
+		{
+			register_scene_components();
+
+			SmokeAssets assets(pipeline);
+			AssetDatabase& database = pipeline.get_database();
+			AssetManager& manager = *Engine::get().get_module<AssetManager>();
+			SceneModule& module = *Engine::get().get_module<SceneModule>();
+
+			std::string gltf = test_model_gltf();
+			const std::string meshTail = R"("indices":1}]}])";
+			const size_t at = gltf.find(meshTail);
+			check(at != std::string::npos, "the test model has the expected mesh text");
+			if (at == std::string::npos)
+			{
+				return;
+			}
+			gltf.replace(at, meshTail.size(), R"("indices":1,"material":0}]}],"materials":[{"name":"Painted","pbrMetallicRoughness":{"baseColorFactor":[0.25,0.5,0.75,1],"roughnessFactor":0.375}}])");
+
+			const std::filesystem::path model = assets.write("mat_model.gltf", gltf);
+			const std::optional<AssetRef> prefabRef = database.ensure_imported(model);
+			check(prefabRef.has_value(), "the model with a material imports");
+			if (!prefabRef)
+			{
+				return;
+			}
+
+			SceneData level;
+			level.Name = "mat_level";
+			level.Entities = { make_instance(EntityGuid::generate(), *prefabRef) };
+			const std::filesystem::path levelPath = assets.write("mat_level.wscene", scene_to_json(level).dump());
+			const std::optional<AssetRef> levelRef = database.ensure_imported(levelPath);
+			check(levelRef.has_value(), "the level with the model imports");
+			if (!levelRef)
+			{
+				return;
+			}
+
+			Ref<JobProgress> progress = module.load_async(*levelRef);
+			progress->wait();
+			Ref<Scene> loaded = module.get_active();
+			AssetRef meshRef{};
+			if (loaded)
+			{
+				for (entt::entity entity : loaded->registry().view<MeshRenderer>())
+				{
+					meshRef = loaded->registry().get<MeshRenderer>(entity).Mesh;
+				}
+			}
+			check(meshRef.valid(), "the loaded instance has a mesh");
+			if (!meshRef.valid())
+			{
+				return;
+			}
+
+			Handle<MeshData> mesh = manager.load<MeshData>(meshRef);
+			manager.wait_idle();
+			const AssetRef materialRef = (mesh.get() && !mesh.get()->Primitives.empty()) ? mesh.get()->Primitives[0].Material : AssetRef{};
+			const std::optional<std::filesystem::path> materialPath = materialRef.valid() ? database.path_of(materialRef.Guid) : std::nullopt;
+			check(materialPath && materialPath->extension() == ".wmat" && materialPath->parent_path().filename() == "mat_model_materials",
+				"prefab_instances_use_extracted_materials: the mesh refers to a .wmat in the model's material folder");
+
+			Handle<MaterialData> material = manager.load<MaterialData>(materialRef);
+			manager.wait_idle();
+			check(material.get() && material.get()->RoughnessFactor == 0.375f && material.get()->BaseColorFactor == glm::vec4(0.25f, 0.5f, 0.75f, 1.0f),
+				"prefab_instances_use_extracted_materials: the loaded material has the model's values");
 		}
 
 		void check_scene_loading(Check& check, AssetPipelineModule& pipeline)
@@ -1338,6 +1414,7 @@ namespace wiwa
 		check_prefab(check);
 		check_scene_json(check, pipeline);
 		check_scene_loading(check, pipeline);
+		check_extracted_materials(check, pipeline);
 		check_scene_editor(check, pipeline);
 
 		if (check.Failures == 0)

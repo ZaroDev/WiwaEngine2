@@ -29,6 +29,7 @@ namespace wiwa
 		quality.BloomMips = std::clamp(quality.BloomMips, 2u, 6u);
 		quality.AoSlices = std::clamp(quality.AoSlices, 1u, 4u);
 		quality.AoSteps = std::clamp(quality.AoSteps, 4u, 16u);
+		quality.Fxaa = quality.Fxaa && !quality.Taa; // FXAA after a TAA resolve only blurs it
 		return quality;
 	}
 
@@ -87,6 +88,10 @@ namespace wiwa
 		{
 			quality.Fxaa = json["fxaa"].get<bool>();
 		}
+		if (json.contains("taa") && json["taa"].is_boolean())
+		{
+			quality.Taa = json["taa"].get<bool>();
+		}
 		return sanitized(quality);
 	}
 
@@ -105,6 +110,7 @@ namespace wiwa
 		json["aoSlices"] = quality.AoSlices;
 		json["aoSteps"] = quality.AoSteps;
 		json["fxaa"] = quality.Fxaa;
+		json["taa"] = quality.Taa;
 
 		std::ofstream file(path, std::ios::binary | std::ios::trunc);
 		if (!file)

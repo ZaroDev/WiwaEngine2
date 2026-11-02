@@ -88,6 +88,9 @@ namespace wiwa
 		const std::vector<PassTiming>& get_pass_timings() const { return m_Profiler.get_timings(); }
 		bool are_gpu_timings_available() const { return m_Profiler.are_gpu_timings_available(); }
 
+		// The index of the next frame to render: it picks the TAA jitter.
+		u64 get_frame_index() const { return m_FrameIndex; }
+
 	private:
 		bool apply_vsync(u32 width, u32 height);
 		void update_viewport();

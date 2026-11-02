@@ -17,5 +17,8 @@ namespace wiwa
 		database.register_importer(create_shader_importer());
 		database.register_importer(create_model_importer());
 		database.register_importer(create_scene_importer());
+		database.register_importer(create_script_importer());
+		database.register_importer(create_material_importer());
+		database.register_importer(create_surface_shader_importer());
 	}
 }

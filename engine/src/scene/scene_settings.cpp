@@ -104,6 +104,18 @@ namespace wiwa
 		changed = fix(ao.Radius, dao.Radius, 0.01f, 10.0f) || changed;
 		changed = fix(ao.Power, dao.Power, 0.1f, 8.0f) || changed;
 
+		changed = fix(s.Taa.Feedback, defaults.Taa.Feedback, 0.8f, 0.98f) || changed;
+
+		MotionBlurSettings& mb = s.MotionBlur;
+		const MotionBlurSettings& dmb = defaults.MotionBlur;
+		changed = fix(mb.ExposureTime, dmb.ExposureTime, 0.0005f, 0.1f) || changed;
+		changed = fix(mb.Strength, dmb.Strength, 0.0f, 4.0f) || changed;
+		changed = fix(mb.MaxBlurPixels, dmb.MaxBlurPixels, 1.0f, 100.0f) || changed;
+
+		const size_t scripts = s.Scripts.size();
+		std::erase_if(s.Scripts, [](const AssetRef& script) { return !script.valid(); });
+		changed = s.Scripts.size() != scripts || changed;
+
 		if (static_cast<u32>(s.Source) > static_cast<u32>(EnvironmentSource::Atmosphere))
 		{
 			s.Source = EnvironmentSource::None;

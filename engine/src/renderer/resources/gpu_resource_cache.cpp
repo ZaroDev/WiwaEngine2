@@ -13,6 +13,8 @@ namespace wiwa
 		constexpr u64 PAGE_VERTICES = 256 * 1024;
 		constexpr u64 PAGE_INDICES = 768 * 1024;
 		constexpr u32 INITIAL_MATERIAL_CAPACITY = 256;
+		constexpr u64 INITIAL_PARAM_BYTES = 4096; // 16 blocks of the largest size
+		const glm::vec4 MAGENTA{ 1.0f, 0.0f, 1.0f, 1.0f };
 		// A freed range may still be read by the frames in flight: it is reused after this many frames.
 		constexpr u64 RETIRE_FRAMES = 6;
 
@@ -91,9 +93,22 @@ namespace wiwa
 				list.push_back(item);
 			}
 		}
+
+		GpuMaterialRecord magenta_record()
+		{
+			GpuMaterialRecord magenta;
+			magenta.BaseColor = MAGENTA;
+			magenta.Roughness = 1.0f;
+			return magenta;
+		}
+
+		u64 align_param_size(u64 bytes)
+		{
+			return (bytes + PARAM_BLOCK_ALIGNMENT - 1) / PARAM_BLOCK_ALIGNMENT * PARAM_BLOCK_ALIGNMENT;
+		}
 	}
 
-	GpuResourceCache::GpuResourceCache(nvrhi::IDevice* device, AssetManager* assets, UploadQueue* uploads)
+	GpuResourceCache::GpuResourceCache(nvrhi::IDevice* device, AssetManager* assets, UploadQueue* uploads, GraphicsApi api)
 		: m_Device(device)
 		, m_Assets(assets)
 		, m_Uploads(uploads)
@@ -116,10 +131,29 @@ namespace wiwa
 
 		create_fallbacks();
 
+		// The custom-material layout: set 3 on Vulkan (its index among a pipeline's layouts), registers of its own on D3D.
+		nvrhi::BindingLayoutDesc custom;
+		custom.visibility = nvrhi::ShaderType::All; // the parameters are read by VertexOffset too
+		custom.bindingOffsets = make_zero_binding_offsets();
+		for (u32 t = 0; t < SURFACE_MAX_TEXTURES; t++)
+		{
+			custom.addItem(nvrhi::BindingLayoutItem::Texture_SRV(CUSTOM_BINDING_FIRST_TEXTURE + t));
+		}
+		custom.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(CUSTOM_BINDING_RECORDS));
+		custom.addItem(nvrhi::BindingLayoutItem::RawBuffer_SRV(CUSTOM_BINDING_PARAMS));
+		custom.addItem(nvrhi::BindingLayoutItem::Sampler(CUSTOM_BINDING_SAMPLER));
+		m_CustomLayout = m_Device->createBindingLayout(custom);
+
+		m_SurfaceShaders = CreateScope<SurfaceShaderCache>(m_Device, api, m_Assets);
+
 		// Slot 0: the default material, for primitives that name none.
 		m_Records.push_back(GpuMaterialRecord{});
 		m_Bindings.push_back(m_FallbackBindings);
+		m_SlotShaders.push_back(0);
+		m_CustomRecords.push_back(GpuCustomRecord{});
+		m_CustomBindings.push_back(nullptr);
 		ensure_material_capacity(1);
+		grow_param_buffer(INITIAL_PARAM_BYTES); // makes the custom binding sets
 		m_DirtyRecords.push_back(0);
 	}
 
@@ -154,6 +188,20 @@ namespace wiwa
 		}
 		set.addItem(nvrhi::BindingSetItem::Sampler(MATERIAL_BINDING_SAMPLER, m_Sampler));
 		return m_Device->createBindingSet(set, m_MaterialLayout);
+	}
+
+	nvrhi::BindingSetHandle GpuResourceCache::make_custom_bindings(nvrhi::ITexture* const textures[SURFACE_MAX_TEXTURES])
+	{
+		nvrhi::BindingSetDesc set;
+		for (u32 t = 0; t < SURFACE_MAX_TEXTURES; t++)
+		{
+			nvrhi::ITexture* texture = textures[t] != nullptr ? textures[t] : m_FallbackTextures[0].Get(); // white
+			set.addItem(nvrhi::BindingSetItem::Texture_SRV(CUSTOM_BINDING_FIRST_TEXTURE + t, texture));
+		}
+		set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(CUSTOM_BINDING_RECORDS, m_CustomBuffer));
+		set.addItem(nvrhi::BindingSetItem::RawBuffer_SRV(CUSTOM_BINDING_PARAMS, m_ParamBuffer));
+		set.addItem(nvrhi::BindingSetItem::Sampler(CUSTOM_BINDING_SAMPLER, m_Sampler));
+		return m_Device->createBindingSet(set, m_CustomLayout);
 	}
 
 	template<typename T>
@@ -374,6 +422,19 @@ namespace wiwa
 				i++;
 			}
 		}
+
+		for (size_t i = 0; i < m_RetiredParams.size();)
+		{
+			if (m_RetiredParams[i].Frame + RETIRE_FRAMES <= m_Frame)
+			{
+				m_ParamRanges.free(m_RetiredParams[i].Offset, m_RetiredParams[i].Size);
+				m_RetiredParams.erase(m_RetiredParams.begin() + static_cast<std::ptrdiff_t>(i));
+			}
+			else
+			{
+				i++;
+			}
+		}
 	}
 
 	// ---- textures --------------------------------------------------------------------------------------------------------------
@@ -490,20 +551,26 @@ namespace wiwa
 			{
 				// Materials that use it build their binding set again.
 				const AssetGuid guid = entry.Ref.resolved();
+				const auto uses = [&](const AssetRef& used) { return used.valid() && used.resolved() == guid; };
 				for (auto& [materialGuid, material] : m_MaterialEntries)
 				{
-					for (const AssetRef& used : material->Textures)
+					if (std::any_of(std::begin(material->Textures), std::end(material->Textures), uses))
 					{
-						if (used.valid() && used.resolved() == guid)
+						for (nvrhi::ITexture*& bound : material->Bound)
 						{
-							for (nvrhi::ITexture*& bound : material->Bound)
-							{
-								bound = nullptr;
-							}
-							material->Settled = false;
-							push_unique(m_PendingMaterials, material.get());
-							break;
+							bound = nullptr;
 						}
+						material->Settled = false;
+						push_unique(m_PendingMaterials, material.get());
+					}
+					if (std::any_of(std::begin(material->ParamTextures), std::end(material->ParamTextures), uses))
+					{
+						for (nvrhi::ITexture*& bound : material->ParamBound)
+						{
+							bound = nullptr;
+						}
+						material->Settled = false;
+						push_unique(m_PendingMaterials, material.get());
 					}
 				}
 			}
@@ -538,6 +605,9 @@ namespace wiwa
 		entry->Slot = static_cast<u32>(m_Records.size());
 		m_Records.push_back(GpuMaterialRecord{});
 		m_Bindings.push_back(m_FallbackBindings);
+		m_SlotShaders.push_back(0);
+		m_CustomRecords.push_back(GpuCustomRecord{});
+		m_CustomBindings.push_back(m_FallbackCustomBindings);
 		ensure_material_capacity(static_cast<u32>(m_Records.size()));
 		m_DirtyRecords.push_back(entry->Slot);
 		m_PendingMaterials.push_back(entry.get());
@@ -549,6 +619,11 @@ namespace wiwa
 	nvrhi::IBindingSet* GpuResourceCache::get_material_bindings(u32 slot)
 	{
 		return slot < m_Bindings.size() ? m_Bindings[slot].Get() : m_FallbackBindings.Get();
+	}
+
+	nvrhi::IBindingSet* GpuResourceCache::get_custom_bindings(u32 slot)
+	{
+		return slot < m_CustomBindings.size() && m_CustomBindings[slot] ? m_CustomBindings[slot].Get() : m_FallbackCustomBindings.Get();
 	}
 
 	void GpuResourceCache::ensure_material_capacity(u32 slots)
@@ -571,8 +646,18 @@ namespace wiwa
 		description.keepInitialState = true;
 		description.debugName = "Material records";
 		m_MaterialBuffer = m_Device->createBuffer(description);
+
+		nvrhi::BufferDesc customDescription;
+		customDescription.byteSize = static_cast<u64>(capacity) * sizeof(GpuCustomRecord);
+		customDescription.structStride = sizeof(GpuCustomRecord);
+		customDescription.initialState = UploadQueue::resting_state(m_Device);
+		customDescription.keepInitialState = true;
+		customDescription.debugName = "Custom material records";
+		m_CustomBuffer = m_Device->createBuffer(customDescription);
+
 		m_MaterialCapacity = capacity;
 		m_MaterialGeneration++;
+		rebuild_custom_bindings();
 
 		// A new buffer holds nothing: every record is written again.
 		m_DirtyRecords.clear();
@@ -585,6 +670,208 @@ namespace wiwa
 	void GpuResourceCache::write_material_record(u32 slot)
 	{
 		m_Uploads->write_buffer(m_MaterialBuffer, &m_Records[slot], sizeof(GpuMaterialRecord), static_cast<u64>(slot) * sizeof(GpuMaterialRecord));
+		m_Uploads->write_buffer(m_CustomBuffer, &m_CustomRecords[slot], sizeof(GpuCustomRecord), static_cast<u64>(slot) * sizeof(GpuCustomRecord));
+	}
+
+	// ---- custom materials ------------------------------------------------------------------------------------------------------
+
+	// The binding sets name the buffers: a new buffer means new sets (with the textures each set had).
+	void GpuResourceCache::rebuild_custom_bindings()
+	{
+		if (!m_CustomBuffer || !m_ParamBuffer)
+		{
+			return; // the constructor makes them once both buffers exist
+		}
+
+		nvrhi::ITexture* const none[SURFACE_MAX_TEXTURES]{};
+		m_FallbackCustomBindings = make_custom_bindings(none);
+		for (nvrhi::BindingSetHandle& set : m_CustomBindings)
+		{
+			set = m_FallbackCustomBindings;
+		}
+		for (auto& [guid, entry] : m_MaterialEntries)
+		{
+			if (entry->ShaderIndex != 0)
+			{
+				m_CustomBindings[entry->Slot] = make_custom_bindings(entry->ParamBound);
+			}
+		}
+	}
+
+	void GpuResourceCache::release_params(MaterialEntry& entry)
+	{
+		if (entry.ParamCapacity != 0)
+		{
+			// Frames in flight may still read the block: it is reused later.
+			m_RetiredParams.push_back({ entry.ParamOffset, entry.ParamCapacity, m_Frame });
+		}
+		entry.ParamOffset = 0;
+		entry.ParamCapacity = 0;
+	}
+
+	// A larger buffer: every block is placed again (packed from 0) and written, the records follow. The old buffer lives on in
+	// the frames that still use it.
+	void GpuResourceCache::grow_param_buffer(u64 atLeast)
+	{
+		u64 capacity = std::max(INITIAL_PARAM_BYTES, m_ParamRanges.capacity() * 2);
+		while (capacity < atLeast)
+		{
+			capacity *= 2;
+		}
+
+		nvrhi::BufferDesc description;
+		description.byteSize = capacity;
+		description.canHaveRawViews = true;
+		description.initialState = UploadQueue::resting_state(m_Device);
+		description.keepInitialState = true;
+		description.debugName = "Custom material parameters";
+		nvrhi::BufferHandle buffer = m_Device->createBuffer(description);
+		if (!buffer)
+		{
+			WI_CACHE_LOG(Error, "could not allocate the material parameter buffer ({0} bytes)", capacity);
+			return;
+		}
+
+		m_ParamBuffer = std::move(buffer);
+		m_ParamRanges = RangeAllocator(capacity);
+		m_RetiredParams.clear();
+		for (auto& [guid, entry] : m_MaterialEntries)
+		{
+			if (entry->ParamCapacity == 0)
+			{
+				continue;
+			}
+			entry->ParamOffset = *m_ParamRanges.allocate(entry->ParamCapacity); // fits: the new buffer holds at least twice as much
+			write_params(*entry);
+			if (m_SlotShaders[entry->Slot] != 0)
+			{
+				m_CustomRecords[entry->Slot].ParamOffset = static_cast<u32>(entry->ParamOffset);
+				m_DirtyRecords.push_back(entry->Slot);
+			}
+		}
+		m_MaterialGeneration++;
+		rebuild_custom_bindings();
+	}
+
+	bool GpuResourceCache::place_params(MaterialEntry& entry, u64 bytes)
+	{
+		if (entry.ParamCapacity == bytes)
+		{
+			return true;
+		}
+		release_params(entry);
+		if (bytes == 0)
+		{
+			return true;
+		}
+
+		std::optional<u64> offset = m_ParamRanges.allocate(bytes);
+		if (!offset)
+		{
+			grow_param_buffer(m_ParamRanges.used() + bytes);
+			offset = m_ParamRanges.allocate(bytes);
+		}
+		if (!offset)
+		{
+			return false;
+		}
+		entry.ParamOffset = *offset;
+		entry.ParamCapacity = bytes;
+		return true;
+	}
+
+	// The block as the shader reads it: the material's bytes, zeros after them (a block cooked for another layout).
+	void GpuResourceCache::write_params(const MaterialEntry& entry)
+	{
+		if (entry.ParamCapacity == 0)
+		{
+			return;
+		}
+		std::vector<u8> block(entry.ParamCapacity, 0);
+		std::memcpy(block.data(), entry.ParamBytes.data(), std::min<size_t>(entry.ParamBytes.size(), block.size()));
+		m_Uploads->write_buffer(m_ParamBuffer, block.data(), block.size(), entry.ParamOffset);
+	}
+
+	// What the slot shows given its data and its shader's state: the built-in record (no shader), the built-in record with the
+	// custom bit and a custom record (shader ready), the default record (shader loading) or magenta (shader failed).
+	void GpuResourceCache::compose_record(MaterialEntry& entry)
+	{
+		const GpuSurfaceShader* shader = m_SurfaceShaders->get(entry.ShaderIndex);
+		GpuMaterialRecord record = entry.Builtin;
+		GpuCustomRecord custom{};
+		u32 drawShader = 0;
+
+		if (entry.ShaderIndex == 0)
+		{
+			release_params(entry);
+		}
+		else if (shader == nullptr || shader->Loading)
+		{
+			record = GpuMaterialRecord{};
+			release_params(entry);
+		}
+		else if (shader->Failed)
+		{
+			record = magenta_record();
+			release_params(entry);
+		}
+		else
+		{
+			if (entry.ParamBytes.size() != shader->BlockSize && !entry.WarnedParamSize)
+			{
+				entry.WarnedParamSize = true;
+				WI_CACHE_LOG(Warning, "material {0} has {1} parameter bytes, its shader reads {2} (cooked for another version of the shader?)",
+					entry.Ref.Guid.to_string(), entry.ParamBytes.size(), shader->BlockSize);
+			}
+			if (place_params(entry, align_param_size(shader->BlockSize)))
+			{
+				write_params(entry);
+				record.Flags |= MATERIAL_CUSTOM_BIT;
+				custom.ParamOffset = static_cast<u32>(entry.ParamOffset);
+				custom.ParamSize = shader->BlockSize;
+				drawShader = entry.ShaderIndex;
+			}
+			else
+			{
+				record = magenta_record();
+			}
+		}
+
+		m_Records[entry.Slot] = record;
+		m_CustomRecords[entry.Slot] = custom;
+		m_SlotShaders[entry.Slot] = drawShader;
+		m_DirtyRecords.push_back(entry.Slot);
+	}
+
+	// The custom binding set follows the @param textures that have arrived.
+	void GpuResourceCache::update_custom_bindings(MaterialEntry& entry, bool force, bool& settled)
+	{
+		if (entry.ShaderIndex == 0)
+		{
+			m_CustomBindings[entry.Slot] = m_FallbackCustomBindings;
+			return;
+		}
+
+		nvrhi::ITexture* textures[SURFACE_MAX_TEXTURES]{};
+		bool changed = force;
+		for (u32 t = 0; t < SURFACE_MAX_TEXTURES; t++)
+		{
+			textures[t] = texture_or_fallback(entry.ParamTextures[t], 0);
+			changed = changed || textures[t] != entry.ParamBound[t];
+			if (entry.ParamTextures[t].valid())
+			{
+				const TextureEntry& texture = texture_entry(entry.ParamTextures[t]);
+				settled = settled && (texture.Texture || texture.Failed);
+			}
+		}
+		if (changed)
+		{
+			for (u32 t = 0; t < SURFACE_MAX_TEXTURES; t++)
+			{
+				entry.ParamBound[t] = textures[t];
+			}
+			m_CustomBindings[entry.Slot] = make_custom_bindings(textures);
+		}
 	}
 
 	void GpuResourceCache::build_record(MaterialEntry& entry, const MaterialData& data)
@@ -598,13 +885,22 @@ namespace wiwa
 		record.Flags = (data.Alpha == AlphaMode::Mask ? MATERIAL_ALPHA_MASK_BIT : 0) | (data.Alpha == AlphaMode::Blend ? MATERIAL_ALPHA_BLEND_BIT : 0)
 			| (data.DoubleSided ? MATERIAL_DOUBLE_SIDED_BIT : 0);
 		record.Extra = glm::vec4(data.Clearcoat, data.ClearcoatRoughness, data.SheenIntensity, data.Transmission);
-		m_Records[entry.Slot] = record;
-		m_DirtyRecords.push_back(entry.Slot);
+		entry.Builtin = record;
 
 		entry.Textures[0] = data.BaseColorTexture;
 		entry.Textures[1] = data.NormalTexture;
 		entry.Textures[2] = data.OrmTexture;
 		entry.Textures[3] = data.EmissiveTexture;
+
+		entry.ShaderIndex = m_SurfaceShaders->get_shader_index(data.Shader);
+		entry.ParamBytes = data.ParamBytes;
+		entry.WarnedParamSize = false;
+		for (u32 t = 0; t < SURFACE_MAX_TEXTURES; t++)
+		{
+			entry.ParamTextures[t] = data.ParamTextures[t];
+			entry.ParamBound[t] = nullptr;
+		}
+		compose_record(entry);
 	}
 
 	nvrhi::ITexture* GpuResourceCache::texture_or_fallback(const AssetRef& ref, u32 index)
@@ -625,6 +921,7 @@ namespace wiwa
 		for (size_t i = 0; i < m_PendingMaterials.size();)
 		{
 			MaterialEntry& entry = *m_PendingMaterials[i];
+			bool rebuiltCustom = false;
 
 			if (!entry.HasData)
 			{
@@ -643,11 +940,11 @@ namespace wiwa
 						m_FailedCount++;
 						WI_CACHE_LOG(Error, "material {0} failed to load, it shows magenta", entry.Ref.Guid.to_string());
 					}
-					GpuMaterialRecord magenta;
-					magenta.BaseColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f);
-					magenta.Roughness = 1.0f;
-					m_Records[entry.Slot] = magenta;
-					m_DirtyRecords.push_back(entry.Slot);
+					entry.Builtin = magenta_record();
+					entry.ShaderIndex = 0;
+					entry.ParamBytes.clear();
+					compose_record(entry); // magenta, no shader
+					m_CustomBindings[entry.Slot] = m_FallbackCustomBindings;
 					entry.Data.reset();
 					m_PendingMaterials.erase(m_PendingMaterials.begin() + static_cast<std::ptrdiff_t>(i));
 					continue;
@@ -666,6 +963,7 @@ namespace wiwa
 				{
 					bound = nullptr;
 				}
+				rebuiltCustom = true;
 			}
 
 			// The binding set follows what has arrived.
@@ -692,12 +990,13 @@ namespace wiwa
 				{
 					entry.Bound[t] = textures[t];
 				}
-				if (m_Records[entry.Slot].TextureMask != mask)
+				if (entry.Builtin.TextureMask != mask)
 				{
-					m_Records[entry.Slot].TextureMask = mask;
-					m_DirtyRecords.push_back(entry.Slot);
+					entry.Builtin.TextureMask = mask;
+					compose_record(entry);
 				}
 			}
+			update_custom_bindings(entry, rebuiltCustom, settled);
 
 			if (settled)
 			{
@@ -728,9 +1027,23 @@ namespace wiwa
 			m_FallbacksUploaded = true;
 		}
 
+		m_SurfaceShaders->update();
 		update_textures();
 		update_meshes();
 		update_materials();
+
+		// A surface shader appeared, was replaced or failed: the materials that use one show what their shader is now.
+		if (m_SurfaceShaders->generation() != m_SurfaceGeneration)
+		{
+			m_SurfaceGeneration = m_SurfaceShaders->generation();
+			for (auto& [guid, entry] : m_MaterialEntries)
+			{
+				if (entry->HasData && entry->ShaderIndex != 0)
+				{
+					compose_record(*entry);
+				}
+			}
+		}
 
 		if (!m_DirtyRecords.empty())
 		{
@@ -746,6 +1059,8 @@ namespace wiwa
 
 	void GpuResourceCache::invalidate(AssetGuid resolved)
 	{
+		m_SurfaceShaders->invalidate(resolved);
+
 		if (const auto mesh = m_Meshes.find(resolved); mesh != m_Meshes.end())
 		{
 			MeshEntry& entry = *mesh->second;

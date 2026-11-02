@@ -41,6 +41,10 @@ project "wiwa_game"
 		{
 			"WI_PLATFORM_WINDOWS"
 		}
+		postbuildcommands
+		{
+			("{COPY} \"%{cfg.buildtarget.relpath}\" \"%{wks.location}game\"")
+		}
 
 	filter "configurations:Debug"
 		defines "WI_DEBUG"

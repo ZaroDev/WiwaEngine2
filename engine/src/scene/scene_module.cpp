@@ -5,6 +5,7 @@
 #include <future>
 #include <thread>
 
+#include <assets/build_info.h>
 #include <assets/pak_source.h>
 #include <core/engine.h>
 
@@ -77,6 +78,16 @@ namespace wiwa
 				m_StartupLoad = load_async(std::string_view(arguments[i + 1]));
 			}
 		}
+
+		// No --scene: a game starts with the scene its pack was built with.
+		if (m_StartupLoad == nullptr && m_Assets->get_source() != nullptr)
+		{
+			if (const std::optional<BuildInfo> info = read_build_info(*m_Assets->get_source()); info && info->DefaultScene != AssetGuid{})
+			{
+				WI_SCENE_LOG(Info, "Loading default scene {0}", info->DefaultScene.to_string());
+				m_StartupLoad = load_async(AssetRef{ info->DefaultScene, 0 });
+			}
+		}
 	}
 
 	void SceneModule::shutdown()
@@ -123,6 +134,23 @@ namespace wiwa
 			m_Active = std::move(scene);
 		}
 		retire(std::move(old));
+	}
+
+	void SceneModule::cancel_loads()
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		// every op that has not ended is in m_Running (m_Current too): update_commit drops the one it is creating when it sees the request
+		for (const Ref<LoadOp>& op : m_Running)
+		{
+			op->Progress->request_cancel();
+		}
+		if (m_Pending != nullptr)
+		{
+			// asked for, not taken up by update(): nobody else will finish its progress object
+			m_Pending->Progress->set_stage("Cancelled");
+			m_Pending->Progress->finish(false);
+			m_Pending.reset();
+		}
 	}
 
 	bool SceneModule::is_loading() const

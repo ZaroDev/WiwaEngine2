@@ -74,6 +74,27 @@ namespace wiwa
 		m_Pending.clear();
 	}
 
+	EditorDocument SceneEditor::capture_document() const
+	{
+		EditorDocument document;
+		document.Path = m_Path;
+		document.Dirty = m_Dirty;
+		if (m_Scene != nullptr && m_Selected != entt::null && m_Scene->registry().valid(m_Selected))
+		{
+			document.Selected = m_Scene->registry().get<Id>(m_Selected).Guid;
+		}
+		return document;
+	}
+
+	void SceneEditor::restore_document(Ref<Scene> scene, const EditorDocument& document)
+	{
+		m_Scene = std::move(scene);
+		m_Path = document.Path;
+		m_Dirty = document.Dirty;
+		m_Pending.clear();
+		m_Selected = (m_Scene != nullptr && document.Selected.valid()) ? m_Scene->find(document.Selected) : entt::entity{ entt::null };
+	}
+
 	void SceneEditor::select(entt::entity entity)
 	{
 		m_Selected = (m_Scene != nullptr && m_Scene->registry().valid(entity)) ? entity : entt::entity{ entt::null };
@@ -136,12 +157,24 @@ namespace wiwa
 
 	void SceneEditor::new_scene()
 	{
+		if (m_Playing)
+		{
+			WI_EDITOR_LOG(Warning, "A new scene cannot be made while the scene is playing");
+			return;
+		}
+
 		m_Scenes.set_active(CreateRef<Scene>());
 		set_scene(m_Scenes.get_active());
 	}
 
 	void SceneEditor::open(const std::string& sourcePath)
 	{
+		if (m_Playing)
+		{
+			WI_EDITOR_LOG(Warning, "A scene cannot be opened while the scene is playing");
+			return;
+		}
+
 		m_OpenPath = sourcePath;
 		m_Opening = m_Scenes.load_async(std::string_view(sourcePath));
 	}
@@ -164,11 +197,22 @@ namespace wiwa
 
 	bool SceneEditor::save()
 	{
+		if (m_Playing)
+		{
+			WI_EDITOR_LOG(Warning, "The scene cannot be saved while it is playing");
+			return false;
+		}
 		return !m_Path.empty() && save_as(m_Path);
 	}
 
 	bool SceneEditor::save_as(const std::filesystem::path& file)
 	{
+		if (m_Playing)
+		{
+			WI_EDITOR_LOG(Warning, "The scene cannot be saved while it is playing");
+			return false;
+		}
+
 		const std::filesystem::path previous = m_Path;
 		m_Path = file; // the name in the file is the file's
 		const std::string text = scene_to_json(to_scene_data()).dump(2);

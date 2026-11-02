@@ -37,7 +37,9 @@ namespace wiwa
 			quality.AoSlices = defaults.AoSlices;
 			quality.AoSteps = defaults.AoSteps;
 			quality.Fxaa = defaults.Fxaa;
+			quality.Taa = defaults.Taa;
 			m_Renderer.set_quality(quality);
+			m_Renderer.get_scene_data().set_debug_velocity(false);
 			scene().set_camera_override(std::nullopt);
 			scene().set_selection(std::nullopt); // the selection and its look belong to the renderer, not the scene: no check inherits another's
 			scene().set_outline_style(SelectionOutlineStyle{});
@@ -81,6 +83,23 @@ namespace wiwa
 			delta.InstanceUpserts.emplace_back(guid, std::move(instance));
 			scene().apply(std::move(delta));
 			return guid;
+		}
+
+		// Moves an instance that exists: the same mesh and materials with another world matrix.
+		void set_instance_world(EntityGuid guid, const glm::mat4& world)
+		{
+			const std::optional<size_t> slot = scene().find_instance(guid);
+			if (!slot)
+			{
+				return;
+			}
+			RenderInstance instance;
+			instance.World = world;
+			instance.Mesh = scene().instances()[*slot].Mesh;
+			instance.Materials = scene().instances()[*slot].Materials;
+			SceneDelta delta;
+			delta.InstanceUpserts.emplace_back(guid, std::move(instance));
+			scene().apply(std::move(delta));
 		}
 
 		void remove_instance(EntityGuid guid)
@@ -175,6 +194,9 @@ namespace wiwa
 
 		// The frame time that the next frames report (a sixtieth of a second to begin with).
 		void set_delta(float seconds) { m_Delta = seconds; }
+
+		// How many frames this tester has rendered (the index of the next one).
+		u64 frame_count() const { return m_Frame; }
 
 		// One frame, and no more.
 		bool frame()

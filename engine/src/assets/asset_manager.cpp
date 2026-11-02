@@ -35,6 +35,8 @@ namespace wiwa
 			case AssetType::Lut: return make_asset<LutData>(payload);
 			case AssetType::Shader: return make_asset<ShaderData>(payload);
 			case AssetType::Scene: return make_asset<SceneData>(payload);
+			case AssetType::Script: return make_asset<ScriptData>(payload);
+			case AssetType::SurfaceShader: return make_asset<SurfaceShaderData>(payload);
 			default: return nullptr;
 			}
 		}
@@ -134,6 +136,13 @@ namespace wiwa
 		}
 
 		return m_Catalog.find(path);
+	}
+
+	std::vector<AssetCatalog::Entry> AssetManager::catalog_entries()
+	{
+		find_asset({}); // reads the catalog if nobody has yet
+		std::lock_guard<std::mutex> lock(m_CatalogMutex);
+		return m_Catalog.Entries;
 	}
 
 	LoadState AssetManager::get_state(AssetGuid resolvedGuid) const

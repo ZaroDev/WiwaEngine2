@@ -2,7 +2,11 @@
 
 #include <core/module.h>
 
+#include <imgui.h>
+#include <ImGuizmo.h>
 #include <panels/panels.h>
+#include <play/demo_smoke.h>
+#include <play/play_mode.h>
 #include <scene/scene_editor.h>
 
 class EditorModule : public wiwa::IModule
@@ -33,8 +37,21 @@ public:
 private:
 	void dock_space();
 	void main_bar();
+	void play_toolbar();
+	// --play-smoke: plays the scene, changes the copy, stops, and checks that the scene being edited came back untouched.
+	std::string run_play_smoke();
 	void set_theme();
 private:
 	std::vector<Ref<Panel>> m_Panels{};
 	Scope<wiwa::SceneEditor> m_SceneEditor;
+	Scope<wiwa::IPlayHost> m_PlayHost;
+	Scope<wiwa::PlayMode> m_PlayMode;
+	Scope<wiwa::DemoSmoke> m_DemoSmoke;
+	bool m_PlaySmoke = false;
+	wiwa::u32 m_Frame = 0;
+	wiwa::u32 m_PlaySmokeFinalFrame = 0;
+	Ref<wiwa::Scene> m_PlaySmokeEdit{};
+	size_t m_PlaySmokeCount = 0;
+	int m_Operation = ImGuizmo::TRANSLATE;
+	bool m_LocalSpace = false;
 };

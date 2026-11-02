@@ -60,7 +60,7 @@ namespace wiwa
 		{
 			m_Uploads.force_graphics_queue(true);
 		}
-		m_Cache = CreateScope<GpuResourceCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads);
+		m_Cache = CreateScope<GpuResourceCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads, m_Description.Api);
 		m_Jobs = CreateScope<JobSystem>(2);
 		m_Environments = CreateScope<EnvironmentCache>(m_Backend->get_device(), m_Description.Assets, &m_Uploads, m_Jobs.get());
 		m_SceneData.set_environments(m_Environments.get());
@@ -193,6 +193,7 @@ namespace wiwa
 		m_Uploads.submit(m_Backend->get_last_graphics_instance());
 
 		update_viewport();
+		m_SceneData.set_frame_index(m_FrameIndex);
 		m_SceneData.build(m_Scene, *m_Cache, m_Viewport);
 
 		m_CommandList->open();
@@ -227,6 +228,7 @@ namespace wiwa
 				m_Profiler.end_pass(m_CommandList, i);
 			}
 			m_Profiler.end_frame(m_Time);
+				m_Scene.end_frame(); // the next frame's velocity is the motion since this one
 		}
 
 		m_CommandList->close();

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 
 #include "panel.h"
@@ -17,6 +18,9 @@ public:
 
 	virtual void on_draw() override;
 
+	// What the "Locate" button of an asset list slot calls (the editor points it at the Asset Browser).
+	void set_locate(std::function<void(const wiwa::AssetRef&)> locate) { m_Locate = std::move(locate); }
+
 private:
 	void draw_component(entt::entity entity, const wiwa::ComponentInfo& info);
 	// true if the user changed the value (and the new one is in value)
@@ -24,6 +28,7 @@ private:
 
 	wiwa::SceneEditor& m_Editor;
 	std::function<void()> m_Deferred{};
+	std::function<void(const wiwa::AssetRef&)> m_Locate{};
 
 	// A quaternion is edited as Euler angles (degrees); this keeps the angles the user typed while the quaternion they make is the
 	// one on the entity, so that they do not jump around.

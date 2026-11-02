@@ -76,6 +76,9 @@ namespace wiwa
 		for (auto& [guid, instance] : delta.InstanceUpserts)
 		{
 			instance.Guid = guid;
+			// A new instance has no motion; one that exists keeps the matrix of the last rendered frame, however many times it moves before the next.
+			const auto existing = m_InstanceIndex.find(guid);
+			instance.PrevWorld = existing != m_InstanceIndex.end() ? m_Instances[existing->second].PrevWorld : instance.World;
 			upsert(instances, guid, std::move(instance));
 		}
 		for (const EntityGuid& guid : delta.LightRemovals)
@@ -102,6 +105,20 @@ namespace wiwa
 		}
 
 		m_Revision++;
+	}
+
+	void RenderScene::end_frame()
+	{
+		bool moved = false;
+		for (RenderInstance& instance : m_Instances)
+		{
+			if (instance.Alive && instance.PrevWorld != instance.World)
+			{
+				instance.PrevWorld = instance.World;
+				moved = true;
+			}
+		}
+		m_PreviousStale = moved;
 	}
 
 	std::optional<size_t> RenderScene::find_instance(EntityGuid guid) const

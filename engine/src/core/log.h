@@ -51,6 +51,7 @@ namespace wiwa
 		static void log_critical(const std::string& title, const std::string& message);
 
 		static void set_log_callback(LogCallback callback) { s_Callback = callback; }
+		static LogCallback get_log_callback() { return s_Callback; }
 
 	private:
 		static void on_log_event(LogLevel level);

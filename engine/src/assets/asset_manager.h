@@ -51,6 +51,9 @@ namespace wiwa
 		// Thread-safe.
 		std::optional<AssetRef> find_asset(std::string_view path);
 
+		// Every whole asset the catalog lists (a copy), reading the catalog first if it was not read yet. Thread-safe.
+		std::vector<AssetCatalog::Entry> catalog_entries();
+
 		LoadState get_state(AssetGuid resolvedGuid) const;
 
 		// Whether init() reads an assets.wpak next to the program when there is one (a game: yes, the default). A tool that

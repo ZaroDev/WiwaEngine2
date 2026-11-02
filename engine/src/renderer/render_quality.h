@@ -23,6 +23,7 @@ namespace wiwa
 		u32 AoSlices = 2;                 // 1..4: directions searched per pixel
 		u32 AoSteps = 8;                  // 4..16: samples per side of a slice
 		bool Fxaa = false;                // off, like the other effects, until the project turns it on
+		bool Taa = false;                 // temporal anti-aliasing; replaces FXAA when on (sanitized clears Fxaa)
 
 		bool operator==(const RenderQuality&) const = default;
 	};

@@ -17,6 +17,8 @@ namespace wiwa
 		Lut,
 		Shader,
 		Scene,
+		Script,
+		SurfaceShader,
 
 		Last
 	};
@@ -35,6 +37,8 @@ namespace wiwa
 		case AssetType::Lut: return "Lut";
 		case AssetType::Shader: return "Shader";
 		case AssetType::Scene: return "Scene";
+		case AssetType::Script: return "Script";
+		case AssetType::SurfaceShader: return "SurfaceShader";
 		default: return "None";
 		}
 	}

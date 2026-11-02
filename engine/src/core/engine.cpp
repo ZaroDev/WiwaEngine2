@@ -7,8 +7,9 @@
 #include <renderer/render_module.h>
 #include <renderer/window.h>
 #include <scene/scene_module.h>
+#include <scripting/script_module.h>
 
-#include <iostream>
+
 
 #define WI_ENGINE_LOG(level, ...) WI_LOG(level, "Engine", __VA_ARGS__)
 
@@ -42,6 +43,7 @@ namespace wiwa
 		m_ModuleManager.add_module<SceneModule>();
 		m_ModuleManager.add_module<Window>();
 		m_ModuleManager.add_module<RenderModule>();
+		m_ModuleManager.add_module<ScriptingModule>();
 
 		on_init();
 	}

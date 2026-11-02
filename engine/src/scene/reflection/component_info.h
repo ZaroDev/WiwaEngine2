@@ -15,6 +15,7 @@ namespace wiwa
 	struct ComponentInfo
 	{
 		std::string Name{};
+		std::string DisplayName{}; // what the editor shows; empty means Name (a script is named by its asset, shown by its file)
 		std::vector<FieldDescriptor> Fields{};
 
 		std::function<bool(entt::registry&, entt::entity)> Has{};
@@ -26,6 +27,8 @@ namespace wiwa
 		// False, and nothing changes, if the entity lacks the component, the index is out of range, or the value is not valid
 		// for the field.
 		std::function<bool(entt::registry&, entt::entity, size_t, const FieldValue&)> Set{};
+
+		const std::string& display_name() const { return DisplayName.empty() ? Name : DisplayName; }
 
 		// -1 if there is no such field.
 		int field_index(std::string_view name) const

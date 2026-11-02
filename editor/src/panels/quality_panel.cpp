@@ -34,7 +34,12 @@ void QualityPanel::on_draw()
 		ImGui::DragFloat("Spot depth bias", &quality.SpotShadowBias, 0.00005f, 0.0f, 0.05f, "%.5f");
 
 		ImGui::SeparatorText("Post-processing");
-		ImGui::Checkbox("FXAA", &quality.Fxaa);
+		int antiAliasing = quality.Taa ? 2 : (quality.Fxaa ? 1 : 0);
+		if (ImGui::Combo("Anti-aliasing", &antiAliasing, "Off\0FXAA\0TAA\0"))
+		{
+			quality.Fxaa = antiAliasing == 1;
+			quality.Taa = antiAliasing == 2;
+		}
 		int bloomMips = static_cast<int>(quality.BloomMips);
 		if (ImGui::SliderInt("Bloom levels", &bloomMips, 2, 6))
 		{

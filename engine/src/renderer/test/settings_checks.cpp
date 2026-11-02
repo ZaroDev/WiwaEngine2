@@ -42,6 +42,8 @@ namespace wiwa
 			s.Bloom = { true, 2.0f, 0.25f, 0.1f };
 			s.Tonemap = { TonemapOperator::Neutral, 1.2f, 0.8f, 0.3f, -0.3f, 0.5f };
 			s.Ao = { true, 2.5f, 3.0f };
+			s.Taa = { 0.85f };
+			s.MotionBlur = { true, 0.02f, 2.0f, 50.0f };
 			return s;
 		}
 	}
@@ -115,6 +117,46 @@ namespace wiwa
 				context.check(fixed.Exposure.HighPercent > fixed.Exposure.LowPercent, "the percentile range is ordered");
 				context.check(fixed.Tonemap.Operator == TonemapOperator::ACES && fixed.Tonemap.Contrast == 2.5f, "unknown operator and contrast");
 				context.check(fixed.Ao.Radius == 0.01f, "negative radius is clamped");
+			});
+
+		register_render_check("settings_taa_motion_blur_sanitized", [](RenderCheckContext& context)
+			{
+				const float nan = std::numeric_limits<float>::quiet_NaN();
+				SceneSettings bad;
+				bad.Taa.Feedback = 5.0f;
+				bad.MotionBlur.Strength = nan;
+				bad.MotionBlur.ExposureTime = 0.0f;
+				bad.MotionBlur.MaxBlurPixels = 1000.0f;
+				const SceneSettings fixed = sanitized(bad);
+				const SceneSettings defaults;
+				context.check(fixed.Taa.Feedback == 0.98f, "the feedback is clamped");
+				context.check(fixed.MotionBlur.Strength == defaults.MotionBlur.Strength, "NaN strength becomes the default");
+				context.check(fixed.MotionBlur.ExposureTime == 0.0005f && fixed.MotionBlur.MaxBlurPixels == 100.0f, "exposure time and blur length are clamped");
+				context.check(!defaults.MotionBlur.Enabled, "motion blur is off by default");
+			});
+
+		register_render_check("quality_taa", [](RenderCheckContext& context)
+			{
+				RenderQuality both;
+				both.Taa = true;
+				both.Fxaa = true;
+				context.check(!sanitized(both).Fxaa && sanitized(both).Taa, "TAA clears FXAA");
+
+				RenderQuality quality;
+				quality.Taa = true;
+				const std::filesystem::path path = "Library/quality_taa.json";
+				std::filesystem::create_directories("Library");
+				context.check(save_render_quality(path, quality), "save");
+				std::string error;
+				const std::optional<RenderQuality> back = load_render_quality(path, error);
+				context.check(back && back->Taa && *back == quality, "taa survives the file");
+				{
+					std::ofstream file(path, std::ios::trunc);
+					file << "{\"vsync\": false}";
+				}
+				const std::optional<RenderQuality> legacy = load_render_quality(path, error);
+				context.check(legacy && !legacy->Taa, "an old file has TAA off");
+				std::filesystem::remove(path);
 			});
 
 		register_render_check("quality_missing_file", [](RenderCheckContext& context)

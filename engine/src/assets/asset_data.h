@@ -150,6 +150,79 @@ namespace wiwa
 		glm::vec3 BoundsMax{ 0.0f };
 	};
 
+	// A parameter of a user surface shader (.wshader). Offset is in bytes inside the parameter block, packed like an HLSL
+	// cbuffer: a member never straddles a 16-byte boundary. Min == Max means the parameter has no range.
+	constexpr u32 SURFACE_BLOCK_MAX_SIZE = 256; // bytes of the parameter block of a surface shader
+	constexpr u32 SURFACE_MAX_TEXTURES = 4;     // user textures per surface shader
+
+	enum class SurfaceParamType : u32
+	{
+		Float,
+		Float2,
+		Float3,
+		Float4,
+		Int,
+		Bool,
+	};
+
+	struct SurfaceParam
+	{
+		std::string Name{};
+		SurfaceParamType Type = SurfaceParamType::Float;
+		u32 Offset = 0;
+		float Min = 0.0f;
+		float Max = 0.0f;
+		float Default[4] = { 0.0f, 0.0f, 0.0f, 0.0f }; // an Int default is a float too: exact only up to 2^24
+		bool Color = false;
+		std::string Label{};
+	};
+
+	// The passes a material with a surface shader is drawn in; each is one vertex and one pixel shader per target.
+	enum class SurfaceVariantKind : u32
+	{
+		Forward,      // lit color, opaque, masked and blended
+		Depth,        // depth prepass: depth, normal and velocity
+		DepthMasked,  // the same, running Surface for the alpha cutout
+		Velocity,     // the velocity of blended materials, where alpha >= 0.5
+		Shadow,       // shadow casters: depth only
+		ShadowMasked, // shadow casters with the alpha cutout
+	};
+	constexpr u32 SURFACE_VARIANT_COUNT = 6;
+
+	struct SurfaceVariant
+	{
+		SurfaceVariantKind Kind = SurfaceVariantKind::Forward;
+		ShaderStage Stage = ShaderStage::Vertex;
+		ShaderTarget Target = ShaderTarget::Dxbc;
+		std::vector<u8> Code{};
+	};
+
+	// A .wshader cooked: its parameter table and one binary per variant, stage and target (the user file composed into the
+	// engine's entry templates, see surface_contract.hlsli). LayoutHash changes when the parameter block layout or the texture
+	// slots change (not when a default or an annotation does).
+	struct SurfaceShaderData
+	{
+		std::string Name{};
+		std::vector<SurfaceParam> Params{};
+		u32 BlockSize = 0;
+		std::vector<std::string> Textures{};
+		bool HasVertexOffset = false;
+		u64 LayoutHash = 0;
+		std::vector<SurfaceVariant> Variants{};
+
+		const SurfaceVariant* find(SurfaceVariantKind kind, ShaderStage stage, ShaderTarget target) const
+		{
+			for (const SurfaceVariant& variant : Variants)
+			{
+				if (variant.Kind == kind && variant.Stage == stage && variant.Target == target)
+				{
+					return &variant;
+				}
+			}
+			return nullptr;
+		}
+	};
+
 	struct MaterialData
 	{
 		std::string Name{};
@@ -169,6 +242,12 @@ namespace wiwa
 		AssetRef NormalTexture{};
 		AssetRef OrmTexture{};
 		AssetRef EmissiveTexture{};
+
+		// The surface shader (.wshader) of the material and its parameters packed as the shader's block: ParamBytes.size() is the
+		// shader's BlockSize when the shader loaded, else empty. ParamTextures follow the shader's Textures order.
+		AssetRef Shader{};
+		std::vector<u8> ParamBytes{};
+		AssetRef ParamTextures[SURFACE_MAX_TEXTURES]{};
 	};
 
 	// One skin of a model: the joints (node indices of the Prefab) and the matrices that bring a vertex into each joint's space.
@@ -232,5 +311,12 @@ namespace wiwa
 		std::vector<AssetRef> Animations{};
 		glm::vec3 BoundsMin{ 0.0f };
 		glm::vec3 BoundsMax{ 0.0f };
+	};
+
+	// A Lua script as the runtime loads it: the source text, and the catalog path it came from (for error messages).
+	struct ScriptData
+	{
+		std::string Source{};
+		std::string SourcePath{};
 	};
 }

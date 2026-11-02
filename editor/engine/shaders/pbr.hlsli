@@ -40,11 +40,21 @@ struct SurfaceData
 	float Alpha;
 };
 
-// Reads the material at a pixel: factors times textures, with the fallbacks standing in for missing ones.
-SurfaceData LoadSurface(float3 worldPosition, float3 worldNormal, float2 uv, bool frontFace)
+// What the built-in material makes of a pixel before lighting: factors times textures, with the fallbacks standing in for
+// missing ones. The surface shader contract (surface_contract.hlsli) starts from the same values.
+struct BuiltinSurface
 {
-	MaterialRecord material = uMaterials[DrawConstants.MaterialSlot];
+	float3 Albedo;
+	float3 NormalTS;  // tangent space, (0, 0, 1) without a normal map
+	float Metallic;
+	float Roughness;
+	float3 Emissive;
+	float Alpha;
+	float Occlusion;
+};
 
+BuiltinSurface EvaluateBuiltinSurface(MaterialRecord material, float2 uv)
+{
 	float4 baseColor = material.BaseColor * uBaseColor.Sample(uMaterialSampler, uv);
 	float roughness = material.Roughness;
 	float metallic = material.Metallic;
@@ -56,28 +66,11 @@ SurfaceData LoadSurface(float3 worldPosition, float3 worldNormal, float2 uv, boo
 		roughness *= orm.g;
 		metallic *= orm.b;
 	}
-	roughness = clamp(roughness, 0.045, 1.0);
-	metallic = saturate(metallic);
 
-	float3 normal = normalize(worldNormal);
-	if (!frontFace)
-	{
-		normal = -normal;
-	}
+	float3 tangentNormal = float3(0.0, 0.0, 1.0);
 	if ((material.TextureMask & MATERIAL_HAS_NORMAL) != 0u)
 	{
-		// No tangents in the meshes: the tangent frame comes from the screen-space derivatives of position and uv.
-		float3 tangentNormal = uNormal.Sample(uMaterialSampler, uv).xyz * 2.0 - 1.0;
-		float3 dp1 = ddx(worldPosition);
-		float3 dp2 = ddy(worldPosition);
-		float2 duv1 = ddx(uv);
-		float2 duv2 = ddy(uv);
-		float3 dp2perp = cross(dp2, normal);
-		float3 dp1perp = cross(normal, dp1);
-		float3 tangent = dp2perp * duv1.x + dp1perp * duv2.x;
-		float3 bitangent = dp2perp * duv1.y + dp1perp * duv2.y;
-		float invMax = rsqrt(max(max(dot(tangent, tangent), dot(bitangent, bitangent)), 1e-12));
-		normal = normalize(mul(tangentNormal, float3x3(tangent * invMax, bitangent * invMax, normal)));
+		tangentNormal = uNormal.Sample(uMaterialSampler, uv).xyz * 2.0 - 1.0;
 	}
 
 	float3 emissive = material.Emissive;
@@ -86,17 +79,73 @@ SurfaceData LoadSurface(float3 worldPosition, float3 worldNormal, float2 uv, boo
 		emissive *= uEmissive.Sample(uMaterialSampler, uv).rgb;
 	}
 
+	BuiltinSurface surface;
+	surface.Albedo = baseColor.rgb;
+	surface.NormalTS = tangentNormal;
+	surface.Metallic = saturate(metallic);
+	surface.Roughness = clamp(roughness, 0.045, 1.0);
+	surface.Emissive = emissive;
+	surface.Alpha = baseColor.a;
+	surface.Occlusion = occlusion;
+	return surface;
+}
+
+// No tangents in the meshes: the tangent frame comes from the screen-space derivatives of position and uv (pixel shaders only).
+// normal is the unit normal facing the viewer; tangent and bitangent are scaled together so the longer one has unit length.
+void SurfaceTangentFrame(float3 worldPosition, float3 normal, float2 uv, out float3 tangent, out float3 bitangent)
+{
+	float3 dp1 = ddx(worldPosition);
+	float3 dp2 = ddy(worldPosition);
+	float2 duv1 = ddx(uv);
+	float2 duv2 = ddy(uv);
+	float3 dp2perp = cross(dp2, normal);
+	float3 dp1perp = cross(normal, dp1);
+	tangent = dp2perp * duv1.x + dp1perp * duv2.x;
+	bitangent = dp2perp * duv1.y + dp1perp * duv2.y;
+	float invMax = rsqrt(max(max(dot(tangent, tangent), dot(bitangent, bitangent)), 1e-12));
+	tangent *= invMax;
+	bitangent *= invMax;
+}
+
+// What the lighting below takes, from the surface's values (roughness and metallic are brought into their valid range here).
+SurfaceData MakeSurfaceData(float3 worldPosition, float3 normal, float3 albedo, float metallic, float roughness, float occlusion, float3 emissive, float alpha)
+{
+	metallic = saturate(metallic);
+	roughness = clamp(roughness, 0.045, 1.0);
+
 	SurfaceData surface;
 	surface.Position = worldPosition;
 	surface.Normal = normal;
 	surface.View = normalize(CameraPosition.xyz - worldPosition);
-	surface.Diffuse = baseColor.rgb * (1.0 - metallic);
-	surface.F0 = lerp(float3(0.04, 0.04, 0.04), baseColor.rgb, metallic);
+	surface.Diffuse = albedo * (1.0 - metallic);
+	surface.F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
 	surface.Roughness = roughness;
 	surface.Occlusion = occlusion;
 	surface.Emissive = emissive;
-	surface.Alpha = baseColor.a;
+	surface.Alpha = alpha;
 	return surface;
+}
+
+// Reads the built-in material at a pixel.
+SurfaceData LoadSurface(float3 worldPosition, float3 worldNormal, float2 uv, bool frontFace)
+{
+	MaterialRecord material = uMaterials[DrawConstants.MaterialSlot];
+	BuiltinSurface builtin = EvaluateBuiltinSurface(material, uv);
+
+	float3 normal = normalize(worldNormal);
+	if (!frontFace)
+	{
+		normal = -normal;
+	}
+	if ((material.TextureMask & MATERIAL_HAS_NORMAL) != 0u)
+	{
+		float3 tangent;
+		float3 bitangent;
+		SurfaceTangentFrame(worldPosition, normal, uv, tangent, bitangent);
+		normal = normalize(mul(builtin.NormalTS, float3x3(tangent, bitangent, normal)));
+	}
+
+	return MakeSurfaceData(worldPosition, normal, builtin.Albedo, builtin.Metallic, builtin.Roughness, builtin.Occlusion, builtin.Emissive, builtin.Alpha);
 }
 
 // The light from one direction (toTheLight is a unit vector from the surface to the light) with the given radiance.
@@ -284,6 +333,26 @@ float3 AmbientLight(SurfaceData surface)
 
 	float3 hemisphere = lerp(GroundColor.rgb, SkyColor.rgb, surface.Normal.y * 0.5 + 0.5);
 	return hemisphere * (surface.Diffuse + surface.F0 * (1.0 - surface.Roughness) * 0.5) * surface.Occlusion;
+}
+
+// The blurred screen-space ambient occlusion, 1 = open (a white 1x1 texture when it is off). A layout of its own: set 2 on Vulkan.
+VK_BINDING(15, 2) Texture2D<float> uAmbientOcclusion : register(t15);
+
+// The forward pass's light at a pixel (pixel = SV_Position.xy): ambient dimmed by the AO, emission, the sun with its shadow and
+// the clustered lights.
+float3 ForwardLighting(SurfaceData surface, float2 pixel)
+{
+	// The ambient light is dimmed where the surroundings block it; the 1x1 stand-in of "no AO" is white wherever it is read.
+	float ambientOcclusion = uAmbientOcclusion.SampleLevel(uEnvironmentSampler, pixel * ViewportSize.zw, 0);
+	float3 color = AmbientLight(surface) * ambientOcclusion + surface.Emissive;
+	if (SunDirection.w > 0.5)
+	{
+		float3 toTheSun = -SunDirection.xyz;
+		float shadow = SunShadow(surface.Position, surface.Normal, saturate(dot(surface.Normal, toTheSun)));
+		color += DirectLight(surface, toTheSun, SunColor.rgb) * shadow;
+	}
+	color += ClusteredLights(surface, pixel);
+	return color;
 }
 
 #endif // PBR_HLSLI

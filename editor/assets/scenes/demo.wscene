@@ -1,0 +1,1936 @@
+{
+  "name": "Demo",
+  "entities": [
+    {
+      "id": "5292f9da988456dcb2dfe3e56a7f2af3",
+      "components": {
+        "Name": {
+          "Value": "Camera"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            3.4,
+            15.0
+          ],
+          "Rotation": [
+            -0.06459250210652241,
+            0.0,
+            0.0,
+            0.9979117238872479
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Camera": {
+          "Projection": "Perspective",
+          "FovY": 55.0,
+          "Near": 0.1,
+          "Far": 400.0,
+          "OrthoSize": 10.0,
+          "Primary": true
+        }
+      }
+    },
+    {
+      "id": "09fe50b40ec853d99b66f9a9d15844eb",
+      "components": {
+        "Name": {
+          "Value": "Sun"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            20,
+            0
+          ],
+          "Rotation": [
+            -0.13860095579833415,
+            0.446525804963868,
+            0.07023441953637168,
+            0.8811762632218068
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Directional",
+          "Color": [
+            1.0,
+            0.96,
+            0.9,
+            1.0
+          ],
+          "Intensity": 3.5,
+          "CastsShadows": true,
+          "Range": 10.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0
+        }
+      }
+    },
+    {
+      "id": "6492f2f35ee15041a4684602d3154377",
+      "components": {
+        "Name": {
+          "Value": "World"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "b23386b54dd6513b8481241acaceda87",
+      "components": {
+        "Name": {
+          "Value": "Ground"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 36
+          },
+          "Materials": []
+        }
+      },
+      "parent": "6492f2f35ee15041a4684602d3154377"
+    },
+    {
+      "id": "5a065557557852e48b4adcebbbcb46d3",
+      "components": {
+        "Name": {
+          "Value": "Podium"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "cd4702f3bc9753a89f50f95eb08a2978",
+      "components": {
+        "Name": {
+          "Value": "Podium base"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 37
+          },
+          "Materials": []
+        }
+      },
+      "parent": "5a065557557852e48b4adcebbbcb46d3"
+    },
+    {
+      "id": "39d1bbabe2ed533a9281920de0ee08ab",
+      "components": {
+        "Name": {
+          "Value": "Gold knot (prefab instance)"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            2.2,
+            0
+          ],
+          "Rotation": [
+            0.0,
+            0.17364817766693033,
+            0.0,
+            0.984807753012208
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "14ab0bfb4dba59b4a6d18e9916b80fe0",
+            "localId": 0
+          }
+        }
+      },
+      "parent": "5a065557557852e48b4adcebbbcb46d3"
+    },
+    {
+      "id": "9d24d75aa2a2532c96da8c97969075bc",
+      "components": {
+        "Name": {
+          "Value": "Podium spot"
+        },
+        "Transform": {
+          "Position": [
+            -3.5,
+            7.0,
+            4.5
+          ],
+          "Rotation": [
+            -0.40494048094821244,
+            -0.29106474907765145,
+            -0.1377291446719385,
+            0.8557658566697613
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Spot",
+          "Color": [
+            1.0,
+            0.85,
+            0.6,
+            1.0
+          ],
+          "Intensity": 60.0,
+          "Range": 18.0,
+          "InnerAngle": 14.0,
+          "OuterAngle": 24.0,
+          "CastsShadows": true
+        }
+      },
+      "parent": "5a065557557852e48b4adcebbbcb46d3"
+    },
+    {
+      "id": "1fd1880b1ac45290ba953f344e0dcac4",
+      "components": {
+        "Name": {
+          "Value": "Columns"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "e5e95993b6845201b2e55d6476086f7e",
+      "components": {
+        "Name": {
+          "Value": "Column L0"
+        },
+        "Transform": {
+          "Position": [
+            -8.5,
+            0,
+            -4.5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 38
+          },
+          "Materials": []
+        }
+      },
+      "parent": "1fd1880b1ac45290ba953f344e0dcac4"
+    },
+    {
+      "id": "ecd0c4aa9166503a9344dca0765672d1",
+      "components": {
+        "Name": {
+          "Value": "Column R0"
+        },
+        "Transform": {
+          "Position": [
+            8.5,
+            0,
+            -4.5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 38
+          },
+          "Materials": []
+        }
+      },
+      "parent": "1fd1880b1ac45290ba953f344e0dcac4"
+    },
+    {
+      "id": "4f4b44318cf55567b56139f7522ddc1a",
+      "components": {
+        "Name": {
+          "Value": "Column L1"
+        },
+        "Transform": {
+          "Position": [
+            -8.5,
+            0,
+            0.0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 38
+          },
+          "Materials": []
+        }
+      },
+      "parent": "1fd1880b1ac45290ba953f344e0dcac4"
+    },
+    {
+      "id": "11c149e58288509f99210f1c4bfd0c18",
+      "components": {
+        "Name": {
+          "Value": "Column R1"
+        },
+        "Transform": {
+          "Position": [
+            8.5,
+            0,
+            0.0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 38
+          },
+          "Materials": []
+        }
+      },
+      "parent": "1fd1880b1ac45290ba953f344e0dcac4"
+    },
+    {
+      "id": "76f914e120b650ed9019d429e263f6b1",
+      "components": {
+        "Name": {
+          "Value": "Column L2"
+        },
+        "Transform": {
+          "Position": [
+            -8.5,
+            0,
+            4.5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 38
+          },
+          "Materials": []
+        }
+      },
+      "parent": "1fd1880b1ac45290ba953f344e0dcac4"
+    },
+    {
+      "id": "e6719a1e2bc659ff9eed325ca29c8966",
+      "components": {
+        "Name": {
+          "Value": "Column R2"
+        },
+        "Transform": {
+          "Position": [
+            8.5,
+            0,
+            4.5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 38
+          },
+          "Materials": []
+        }
+      },
+      "parent": "1fd1880b1ac45290ba953f344e0dcac4"
+    },
+    {
+      "id": "e59be2531e5d54aca91f477e578cc941",
+      "components": {
+        "Name": {
+          "Value": "Crate A"
+        },
+        "Transform": {
+          "Position": [
+            -5.2,
+            0.7,
+            6.0
+          ],
+          "Rotation": [
+            0.0,
+            0.21643961393810288,
+            0.0,
+            0.9762960071199334
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 40
+          },
+          "Materials": []
+        }
+      },
+      "parent": "1fd1880b1ac45290ba953f344e0dcac4"
+    },
+    {
+      "id": "297ee54d12915f488306f2e177d1a883",
+      "components": {
+        "Name": {
+          "Value": "Crate B"
+        },
+        "Transform": {
+          "Position": [
+            -4.0,
+            0.7,
+            7.4
+          ],
+          "Rotation": [
+            -0.0,
+            -0.13052619222005157,
+            -0.0,
+            0.9914448613738104
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 40
+          },
+          "Materials": []
+        }
+      },
+      "parent": "1fd1880b1ac45290ba953f344e0dcac4"
+    },
+    {
+      "id": "8c97623ccb1c5ef69fd8a2f7ea13e52c",
+      "components": {
+        "Name": {
+          "Value": "Crate C"
+        },
+        "Transform": {
+          "Position": [
+            -4.8,
+            2.1,
+            6.5
+          ],
+          "Rotation": [
+            0.0,
+            0.42261826174069944,
+            0.0,
+            0.9063077870366499
+          ],
+          "Scale": [
+            0.7,
+            0.7,
+            0.7
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 40
+          },
+          "Materials": []
+        }
+      },
+      "parent": "1fd1880b1ac45290ba953f344e0dcac4"
+    },
+    {
+      "id": "9641a809fb4857e485ae2b85fa8597ea",
+      "components": {
+        "Name": {
+          "Value": "Blue ring"
+        },
+        "Transform": {
+          "Position": [
+            6.0,
+            0.95,
+            4.0
+          ],
+          "Rotation": [
+            0.5150380749100542,
+            0.0,
+            0.0,
+            0.8571673007021123
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 41
+          },
+          "Materials": []
+        }
+      },
+      "parent": "1fd1880b1ac45290ba953f344e0dcac4"
+    },
+    {
+      "id": "8011d3ab25c3545687e3ba6b7042f37e",
+      "components": {
+        "Name": {
+          "Value": "PBR grid"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            -9.0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "87a3cd65c09858189b53e98bdd90b4fe",
+      "components": {
+        "Name": {
+          "Value": "Backdrop"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            3.75,
+            -0.7
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 39
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "8495e7b74ba356b483ba22e3d3ddfdff",
+      "components": {
+        "Name": {
+          "Value": "PBR r0 m0"
+        },
+        "Transform": {
+          "Position": [
+            -2.7,
+            0.8,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 48
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "fb16dc60b09355e1839fbc1527ae2575",
+      "components": {
+        "Name": {
+          "Value": "PBR r1 m0"
+        },
+        "Transform": {
+          "Position": [
+            -1.35,
+            0.8,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 49
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "cbe45173597853cc8979494b569f5408",
+      "components": {
+        "Name": {
+          "Value": "PBR r2 m0"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.8,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 50
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "b5a61b7e30c05b259d448240b77c7829",
+      "components": {
+        "Name": {
+          "Value": "PBR r3 m0"
+        },
+        "Transform": {
+          "Position": [
+            1.35,
+            0.8,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 51
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "8bf8958adc1f54b4813a26bfcea310ff",
+      "components": {
+        "Name": {
+          "Value": "PBR r4 m0"
+        },
+        "Transform": {
+          "Position": [
+            2.7,
+            0.8,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 52
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "959d2637b9ba5396b61576e3ba8caa82",
+      "components": {
+        "Name": {
+          "Value": "PBR r0 m1"
+        },
+        "Transform": {
+          "Position": [
+            -2.7,
+            2.1500000000000004,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 53
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "5cf2ad3494245f9ca8d3cad49d9fd467",
+      "components": {
+        "Name": {
+          "Value": "PBR r1 m1"
+        },
+        "Transform": {
+          "Position": [
+            -1.35,
+            2.1500000000000004,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 54
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "0b75dbc3e543551cb0772eb3f16b4e6e",
+      "components": {
+        "Name": {
+          "Value": "PBR r2 m1"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            2.1500000000000004,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 55
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "f9886b3724775fe7a9b75a6be5f384a6",
+      "components": {
+        "Name": {
+          "Value": "PBR r3 m1"
+        },
+        "Transform": {
+          "Position": [
+            1.35,
+            2.1500000000000004,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 56
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "c9a19aac6d035ec9857f97ef2b92d490",
+      "components": {
+        "Name": {
+          "Value": "PBR r4 m1"
+        },
+        "Transform": {
+          "Position": [
+            2.7,
+            2.1500000000000004,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 57
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "b1eeaf8eb5a35010ac7a4a90f8062f7d",
+      "components": {
+        "Name": {
+          "Value": "PBR r0 m2"
+        },
+        "Transform": {
+          "Position": [
+            -2.7,
+            3.5,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 58
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "898d3a085e4c56b3898265e556344597",
+      "components": {
+        "Name": {
+          "Value": "PBR r1 m2"
+        },
+        "Transform": {
+          "Position": [
+            -1.35,
+            3.5,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 59
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "a28d37633b0059fd9a3b75cfdca86cc9",
+      "components": {
+        "Name": {
+          "Value": "PBR r2 m2"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            3.5,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 60
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "d55813aa2e24529c9f76b23628630fc6",
+      "components": {
+        "Name": {
+          "Value": "PBR r3 m2"
+        },
+        "Transform": {
+          "Position": [
+            1.35,
+            3.5,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 61
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "77f0d2a6ec40511cad41dbd8fa000bea",
+      "components": {
+        "Name": {
+          "Value": "PBR r4 m2"
+        },
+        "Transform": {
+          "Position": [
+            2.7,
+            3.5,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 62
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "dd6a988e04c8524abb8392758d34864c",
+      "components": {
+        "Name": {
+          "Value": "PBR r0 m3"
+        },
+        "Transform": {
+          "Position": [
+            -2.7,
+            4.8500000000000005,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 63
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "64b9004a875d55b2805634b800e3d4f3",
+      "components": {
+        "Name": {
+          "Value": "PBR r1 m3"
+        },
+        "Transform": {
+          "Position": [
+            -1.35,
+            4.8500000000000005,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 64
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "f97d9062966754e1ada69ce9a196d40e",
+      "components": {
+        "Name": {
+          "Value": "PBR r2 m3"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            4.8500000000000005,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 65
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "6e9441d7c2c7531980e1ec9094bb0309",
+      "components": {
+        "Name": {
+          "Value": "PBR r3 m3"
+        },
+        "Transform": {
+          "Position": [
+            1.35,
+            4.8500000000000005,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 66
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "928230b492b3524ba90bdd63688e3d07",
+      "components": {
+        "Name": {
+          "Value": "PBR r4 m3"
+        },
+        "Transform": {
+          "Position": [
+            2.7,
+            4.8500000000000005,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 67
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "5a4ebb838d065857a14280125348d56d",
+      "components": {
+        "Name": {
+          "Value": "PBR r0 m4"
+        },
+        "Transform": {
+          "Position": [
+            -2.7,
+            6.2,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 68
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "27deb779c5c754ecae48638422d2d7bc",
+      "components": {
+        "Name": {
+          "Value": "PBR r1 m4"
+        },
+        "Transform": {
+          "Position": [
+            -1.35,
+            6.2,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 69
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "645a8cc0f10455d0a07077367bb77f1a",
+      "components": {
+        "Name": {
+          "Value": "PBR r2 m4"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            6.2,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 70
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "453099eb7e2b504db16eb70025c4bccc",
+      "components": {
+        "Name": {
+          "Value": "PBR r3 m4"
+        },
+        "Transform": {
+          "Position": [
+            1.35,
+            6.2,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 71
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "ae531f75b58556f1af88aa366c5a4864",
+      "components": {
+        "Name": {
+          "Value": "PBR r4 m4"
+        },
+        "Transform": {
+          "Position": [
+            2.7,
+            6.2,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 72
+          },
+          "Materials": []
+        }
+      },
+      "parent": "8011d3ab25c3545687e3ba6b7042f37e"
+    },
+    {
+      "id": "90b38f47874e57d69b53b5b6794506f6",
+      "components": {
+        "Name": {
+          "Value": "Materials"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            7.0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "1a0367f98dbe507fa7ece51896322c8b",
+      "components": {
+        "Name": {
+          "Value": "Car paint"
+        },
+        "Transform": {
+          "Position": [
+            -3.2,
+            0.55,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 42
+          },
+          "Materials": []
+        }
+      },
+      "parent": "90b38f47874e57d69b53b5b6794506f6"
+    },
+    {
+      "id": "67c452b18ee75221a4d059c27bbbba95",
+      "components": {
+        "Name": {
+          "Value": "Glass"
+        },
+        "Transform": {
+          "Position": [
+            -1.6,
+            0.55,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 43
+          },
+          "Materials": []
+        }
+      },
+      "parent": "90b38f47874e57d69b53b5b6794506f6"
+    },
+    {
+      "id": "2214d7268e8656fca19d49f2ab1984bf",
+      "components": {
+        "Name": {
+          "Value": "Cloth"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.55,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 44
+          },
+          "Materials": []
+        }
+      },
+      "parent": "90b38f47874e57d69b53b5b6794506f6"
+    },
+    {
+      "id": "382a86aa3a825e98b023ad7410807f30",
+      "components": {
+        "Name": {
+          "Value": "Neon cyan"
+        },
+        "Transform": {
+          "Position": [
+            1.5,
+            0.55,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 45
+          },
+          "Materials": []
+        }
+      },
+      "parent": "90b38f47874e57d69b53b5b6794506f6"
+    },
+    {
+      "id": "ef4f1b6b128554f28e3be727e2be3181",
+      "components": {
+        "Name": {
+          "Value": "Neon cyan light"
+        },
+        "Transform": {
+          "Position": [
+            1.5,
+            1.6,
+            0.6
+          ],
+          "Rotation": [
+            -4.329780281177467e-17,
+            -0.7071067811865476,
+            -0.7071067811865476,
+            4.329780281177467e-17
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            0.1,
+            0.9,
+            1.0,
+            1.0
+          ],
+          "Intensity": 8.0,
+          "Range": 6.0,
+          "CastsShadows": false,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0
+        }
+      },
+      "parent": "90b38f47874e57d69b53b5b6794506f6"
+    },
+    {
+      "id": "88e92a45689c5bda8ac0c52ea300df69",
+      "components": {
+        "Name": {
+          "Value": "Neon magenta"
+        },
+        "Transform": {
+          "Position": [
+            3.1,
+            0.55,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 46
+          },
+          "Materials": []
+        }
+      },
+      "parent": "90b38f47874e57d69b53b5b6794506f6"
+    },
+    {
+      "id": "3cc59d6465065a20925a0a2568c258d4",
+      "components": {
+        "Name": {
+          "Value": "Neon magenta light"
+        },
+        "Transform": {
+          "Position": [
+            3.1,
+            1.6,
+            0.6
+          ],
+          "Rotation": [
+            -4.329780281177467e-17,
+            -0.7071067811865476,
+            -0.7071067811865476,
+            4.329780281177467e-17
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.1,
+            0.8,
+            1.0
+          ],
+          "Intensity": 8.0,
+          "Range": 6.0,
+          "CastsShadows": false,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0
+        }
+      },
+      "parent": "90b38f47874e57d69b53b5b6794506f6"
+    },
+    {
+      "id": "c0517c6998b455a7aa208e7c3f2ad665",
+      "components": {
+        "Name": {
+          "Value": "Neon orange"
+        },
+        "Transform": {
+          "Position": [
+            4.7,
+            0.55,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.1,
+            1.1,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "b857eea28fb85d1b901ef97f7e88ab3f",
+            "localId": 47
+          },
+          "Materials": []
+        }
+      },
+      "parent": "90b38f47874e57d69b53b5b6794506f6"
+    },
+    {
+      "id": "7f2540e6cf505e62abfec1cda014750c",
+      "components": {
+        "Name": {
+          "Value": "Neon orange light"
+        },
+        "Transform": {
+          "Position": [
+            4.7,
+            1.6,
+            0.6
+          ],
+          "Rotation": [
+            -4.329780281177467e-17,
+            -0.7071067811865476,
+            -0.7071067811865476,
+            4.329780281177467e-17
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.45,
+            0.05,
+            1.0
+          ],
+          "Intensity": 8.0,
+          "Range": 6.0,
+          "CastsShadows": false,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0
+        }
+      },
+      "parent": "90b38f47874e57d69b53b5b6794506f6"
+    }
+  ],
+  "settings": {
+    "source": "atmosphere",
+    "background": "sky",
+    "ambient": 0.45,
+    "atmosphere": {
+      "sunIlluminance": 3.4,
+      "skyBrightness": 3.5
+    },
+    "exposure": {
+      "auto": true,
+      "compensation": -0.3,
+      "minEv": -3.0,
+      "maxEv": 3.0,
+      "adaptSpeed": 2.0
+    },
+    "bloom": {
+      "enabled": true,
+      "threshold": 1.0,
+      "knee": 0.5,
+      "intensity": 0.07
+    },
+    "tonemap": {
+      "operator": "aces",
+      "contrast": 1.06,
+      "saturation": 1.12,
+      "temperature": 0.12,
+      "vignette": 0.25
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1.2,
+      "power": 1.6
+    }
+  }
+}

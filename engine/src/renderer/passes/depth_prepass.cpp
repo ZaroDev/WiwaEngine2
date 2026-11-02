@@ -91,6 +91,7 @@ namespace wiwa
 		const SceneRenderData& data = *frame.Scene;
 		commandList->clearDepthStencilTexture(data.viewport()->depth(), nvrhi::AllSubresources, true, 1.0f, true, 0);
 		commandList->clearTextureFloat(data.viewport()->normal(), nvrhi::AllSubresources, nvrhi::Color(0.0f, 0.0f, 0.0f, 0.0f));
+		commandList->clearTextureFloat(data.viewport()->velocity(), nvrhi::AllSubresources, nvrhi::Color(0.0f, 0.0f, 0.0f, 0.0f));
 
 		if (m_Failed || !data.has_camera() || (data.opaque().empty() && data.masked().empty()))
 		{

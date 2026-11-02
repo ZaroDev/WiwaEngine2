@@ -3,13 +3,19 @@
 
 #include <core/common.h>
 #include <math/math.h>
+#include <IconFontCppHeaders/FontIcons/IconsForkAwesome.h>
+
+
 
 enum class PanelCategory : wiwa::u8
 {
-	Window = BIT(0),
-	Info = BIT(1),
-	Renderer = BIT(2)
+	File = BIT(0),
+	Window = BIT(1),
+	Info = BIT(2),
+	Renderer = BIT(3)
 };
+
+ENUM_CLASS_FLAG_OPERATORS(PanelCategory)
 
 class Panel
 {

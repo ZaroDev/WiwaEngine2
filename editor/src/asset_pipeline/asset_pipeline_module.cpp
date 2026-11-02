@@ -55,7 +55,18 @@ namespace wiwa
 		AssetDatabase* database = m_Database.get();
 		m_PackThread = std::thread([database, outDirectory, progress]()
 		{
-			Packager::pack(*database, outDirectory, progress.get());
+			// What goes into the pack is decided by build_settings.json; without one everything is packed. A file that cannot be
+			// read stops the pack: packing everything instead would ship what the settings meant to leave out.
+			std::string settingsError;
+			std::optional<BuildSettings> settings = BuildSettings::load(BUILD_SETTINGS_FILE, settingsError);
+			if (!settings && !settingsError.empty())
+			{
+				WI_ASSET_LOG(Error, "Packing failed: {0} cannot be read: {1}", BUILD_SETTINGS_FILE, settingsError);
+				progress->begin("Reading the build settings", 0);
+				progress->finish(false);
+				return;
+			}
+			Packager::pack(*database, outDirectory, progress.get(), settings ? &*settings : nullptr);
 		});
 		return progress;
 	}

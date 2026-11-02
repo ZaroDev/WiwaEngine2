@@ -3,6 +3,8 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <assets/asset_guid.h>
@@ -61,6 +63,10 @@ namespace wiwa
 		// thread and saves them to render_quality.json next to the program.
 		const RenderQuality& get_quality() const { return m_Quality; }
 		void set_quality(const RenderQuality& quality);
+		// The next frame starts TAA and motion blur without a history (the panel offers it when the image smears).
+		void reset_temporal_history();
+		// Shows the velocity of every pixel instead of the scene.
+		void set_debug_velocity(bool enabled);
 
 		// The size the scene is rendered at, in pixels; the Viewport panel asks for the size of its content region every frame. The render
 		// thread makes (or remakes) the viewport target a frame or two later. The result is drawn by ImGui as the texture id below.
@@ -85,6 +91,10 @@ namespace wiwa
 		void set_camera_override(const std::optional<RenderCamera>& camera);
 
 		static constexpr u32 get_viewport_texture_id() { return VIEWPORT_TEXTURE_ID; }
+
+		// The id to draw a texture asset with in the UI (ImGui::Image), or 0 until the texture is on the GPU (and for good if it failed).
+		// Asking starts the load; call it every frame the texture is shown. Main thread.
+		u32 get_asset_texture_id(const AssetRef& texture);
 
 		GraphicsApi get_api() const { return m_Description.Api; }
 		// False if the renderer could not start or has failed since.
@@ -121,6 +131,13 @@ namespace wiwa
 		u64 m_LastPickId = 0;
 		std::optional<EntityGuid> m_SentSelection{};
 		SelectionOutlineStyle m_SentOutlineStyle{};
+		// Texture assets shown by the UI: the id handed out per asset (main thread), and the ids the render thread has put in the
+		// texture registry (under the mutex).
+		static constexpr u32 FIRST_ASSET_TEXTURE_ID = 1u << 20;
+		std::unordered_map<AssetGuid, u32> m_AssetTextureIds{};
+		u32 m_NextAssetTextureId = FIRST_ASSET_TEXTURE_ID;
+		std::mutex m_AssetTextureMutex{};
+		std::unordered_set<u32> m_AssetTexturesReady{};
 		u64 m_FrameIndex = 0;
 		u64 m_SmokeCounted = 0;        // frames counted so far (they start once the scene of --scene has loaded)
 		u64 m_SmokeAssetWait = 0;      // frames waited for the scene's assets to reach the GPU

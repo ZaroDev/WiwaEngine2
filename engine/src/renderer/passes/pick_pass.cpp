@@ -250,7 +250,7 @@ namespace wiwa
 			commandList->writeBuffer(m_IconBuffer, m_IconScratch.data(), m_IconScratch.size() * sizeof(PickIconGpu));
 
 			IconConstants constants;
-			constants.ViewProjection = data.constants().ViewProjection;
+			constants.ViewProjection = data.constants().UnjitteredViewProjection;
 			constants.Viewport = glm::vec2(static_cast<float>(viewport.width()), static_cast<float>(viewport.height()));
 
 			nvrhi::GraphicsState state;

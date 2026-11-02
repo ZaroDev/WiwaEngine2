@@ -204,7 +204,7 @@ namespace wiwa
 		}
 
 		PushConstants constants;
-		constants.ViewProjection = frame.Scene->constants().ViewProjection;
+		constants.ViewProjection = frame.Scene->constants().UnjitteredViewProjection; // drawn over the resolved image: no jitter
 		constants.Viewport = glm::vec2(static_cast<float>(viewport.width()), static_cast<float>(viewport.height()));
 
 		nvrhi::GraphicsState state;

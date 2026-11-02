@@ -123,6 +123,8 @@ namespace wiwa
 	void archive(BinaryArchive& ar, AnimationClipData& v);
 	void archive(BinaryArchive& ar, PrefabData& v);
 	void archive(BinaryArchive& ar, SceneData& v);
+	void archive(BinaryArchive& ar, ScriptData& v);
+	void archive(BinaryArchive& ar, SurfaceShaderData& v);
 
 	template<typename T>
 	constexpr AssetType asset_type_of();
@@ -136,6 +138,8 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<AnimationClipData>() { return AssetType::AnimationClip; }
 	template<> constexpr AssetType asset_type_of<PrefabData>() { return AssetType::Prefab; }
 	template<> constexpr AssetType asset_type_of<SceneData>() { return AssetType::Scene; }
+	template<> constexpr AssetType asset_type_of<ScriptData>() { return AssetType::Script; }
+	template<> constexpr AssetType asset_type_of<SurfaceShaderData>() { return AssetType::SurfaceShader; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)
