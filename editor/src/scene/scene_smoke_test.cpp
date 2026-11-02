@@ -1384,6 +1384,83 @@ namespace wiwa
 			check(!editor.has_pending_prefab() && registry.storage<Id>().size() == afterCount - 1, "make_prefab: a deleted entity is simply dropped from the conversion");
 		}
 
+		void check_duplicate_rename(Check& check, AssetPipelineModule& pipeline)
+		{
+			register_scene_components();
+			SmokeAssets assets(pipeline);
+			AssetDatabase& database = pipeline.get_database();
+			AssetManager& manager = *Engine::get().get_module<AssetManager>();
+			SceneModule& module = *Engine::get().get_module<SceneModule>();
+
+			const std::optional<AssetRef> prefabRef = database.ensure_imported(assets.write("dup_model.gltf", test_model_gltf()));
+			check(prefabRef.has_value(), "the model for the duplicate checks imports");
+			if (!prefabRef)
+			{
+				return;
+			}
+
+			SceneEditor editor(manager, module);
+			editor.set_scene(CreateRef<Scene>(), {});
+			Scene& scene = editor.scene();
+			entt::registry& registry = scene.registry();
+			auto pump = [&]()
+			{
+				for (u32 i = 0; i < 2000 && editor.has_pending(); i++)
+				{
+					editor.update();
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+			};
+
+			const entt::entity a = editor.create_entity(entt::null);
+			const entt::entity kid = editor.create_entity(a);
+			const entt::entity c = editor.create_entity(entt::null);
+			registry.get<Name>(a).Value = "Root";
+			registry.get<Name>(kid).Value = "Kid";
+			registry.get<Transform>(a).Position = glm::vec3(4.0f, 5.0f, 6.0f);
+			registry.emplace<Light>(a).Intensity = 3.0f;
+
+			// a subtree is copied with new guids and lands right after the original
+			const size_t before = registry.storage<Id>().size();
+			const entt::entity copy = editor.duplicate_entity(a);
+			check(copy != entt::null && registry.storage<Id>().size() == before + 2, "duplicate: the entity and its child are copied");
+			if (copy != entt::null)
+			{
+				check(registry.get<Name>(copy).Value == "Root (copy)" && registry.get<Transform>(copy).Position == glm::vec3(4.0f, 5.0f, 6.0f), "duplicate: the copy has the name (marked as a copy) and the transform");
+				check(registry.all_of<Light>(copy) && registry.get<Light>(copy).Intensity == 3.0f, "duplicate: the components are copied");
+				check(registry.get<Id>(copy).Guid != registry.get<Id>(a).Guid, "duplicate: the copy has a guid of its own");
+				const entt::entity copiedKid = registry.get<Hierarchy>(copy).FirstChild;
+				check(copiedKid != entt::null && copiedKid != kid && registry.get<Name>(copiedKid).Value == "Kid" && registry.get<Id>(copiedKid).Guid != registry.get<Id>(kid).Guid && registry.get<Hierarchy>(copiedKid).Parent == copy,
+					"duplicate: the child is copied under the copy, with a guid of its own");
+				check(scene.roots().size() == 3 && scene.roots()[0] == a && scene.roots()[1] == copy && scene.roots()[2] == c, "duplicate: the copy comes right after the original");
+				check(editor.selected() == copy && editor.dirty(), "duplicate: the copy is selected and the scene is changed");
+			}
+
+			// an instance is copied with its overrides, and generates its own nodes
+			const entt::entity instance = editor.add_prefab(*prefabRef, entt::null);
+			pump();
+			const size_t generatedBefore = registry.view<PrefabChild>().size();
+			check(generatedBefore == 4, "duplicate: the model's instance has its four nodes");
+			const entt::entity instanceCopy = editor.duplicate_entity(instance);
+			pump();
+			check(instanceCopy != entt::null && registry.all_of<PrefabInstance>(instanceCopy) && registry.view<PrefabChild>().size() == generatedBefore * 2, "duplicate: a copied instance generates its own nodes (" + std::to_string(registry.view<PrefabChild>().size()) + ")");
+
+			// what cannot be copied or renamed
+			entt::entity generated = entt::null;
+			for (const entt::entity entity : registry.view<PrefabChild>())
+			{
+				generated = entity;
+			}
+			const size_t count = registry.storage<Id>().size();
+			check(generated != entt::null && editor.duplicate_entity(generated) == entt::null && editor.duplicate_entity(entt::null) == entt::null && registry.storage<Id>().size() == count, "duplicate: a node a prefab made, and no entity, are refused");
+			check(generated != entt::null && !editor.rename_entity(generated, "x"), "rename: a node a prefab made is refused");
+
+			check(editor.rename_entity(a, "Lamp") && registry.get<Name>(a).Value == "Lamp", "rename: an entity takes its new name");
+			editor.set_playing(true);
+			check(editor.duplicate_entity(a) == entt::null && !editor.rename_entity(a, "Other") && registry.get<Name>(a).Value == "Lamp" && registry.storage<Id>().size() == count, "duplicate and rename: refused while the scene plays");
+			editor.set_playing(false);
+		}
+
 		void check_scene_editor(Check& check, AssetPipelineModule& pipeline)
 		{
 			register_scene_components();
@@ -1557,6 +1634,7 @@ namespace wiwa
 		check_scene_loading(check, pipeline);
 		check_extracted_materials(check, pipeline);
 		check_make_prefab(check, pipeline);
+		check_duplicate_rename(check, pipeline);
 		check_scene_editor(check, pipeline);
 
 		if (check.Failures == 0)

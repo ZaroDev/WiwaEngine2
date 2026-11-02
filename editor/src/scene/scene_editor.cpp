@@ -401,6 +401,88 @@ namespace wiwa
 		return true;
 	}
 
+	entt::entity SceneEditor::duplicate_entity(entt::entity entity)
+	{
+		if (m_Playing || m_Scene == nullptr || !m_Scene->registry().valid(entity) || kind_of(entity) != Kind::Authored)
+		{
+			return entt::null;
+		}
+
+		entt::registry& registry = m_Scene->registry();
+
+		// the entity and the authored entities below it, parents first: the nodes a prefab instance generated are not copied, the copy of
+		// the instance makes its own
+		std::vector<entt::entity> subtree;
+		std::vector<entt::entity> stack{ entity };
+		while (!stack.empty())
+		{
+			const entt::entity current = stack.back();
+			stack.pop_back();
+			subtree.push_back(current);
+
+			std::vector<entt::entity> children;
+			for (entt::entity child = registry.get<Hierarchy>(current).FirstChild; child != entt::null; child = registry.get<Hierarchy>(child).NextSibling)
+			{
+				if (!registry.all_of<PrefabChild>(child))
+				{
+					children.push_back(child);
+				}
+			}
+			stack.insert(stack.end(), children.rbegin(), children.rend());
+		}
+
+		std::unordered_map<EntityGuid, EntityGuid> fresh;
+		std::vector<entt::entity> copies;
+		for (const entt::entity current : subtree)
+		{
+			EntityRecord record = record_from_entity(*m_Scene, current);
+			const EntityGuid id = EntityGuid::generate();
+			fresh.emplace(record.Id, id);
+			record.Id = id;
+			if (current != entity)
+			{
+				record.Parent = fresh.at(record.Parent); // the top copy stays under the parent of the original
+			}
+
+			const entt::entity created = apply_record(*m_Scene, record);
+			if (created == entt::null)
+			{
+				break;
+			}
+			copies.push_back(created);
+			if (registry.all_of<PrefabInstance>(created))
+			{
+				queue_expansion(created);
+			}
+		}
+		if (copies.empty())
+		{
+			return entt::null;
+		}
+
+		registry.get<Name>(copies.front()).Value += " (copy)";
+		m_Scene->move_after(copies.front(), entity);
+		mark_dirty();
+		select(copies.front());
+		return copies.front();
+	}
+
+	bool SceneEditor::rename_entity(entt::entity entity, const std::string& name)
+	{
+		if (m_Playing || m_Scene == nullptr || !m_Scene->registry().valid(entity) || kind_of(entity) != Kind::Authored)
+		{
+			return false;
+		}
+
+		Name& current = m_Scene->registry().get<Name>(entity);
+		if (current.Value != name)
+		{
+			current.Value = name;
+			mark_dirty();
+		}
+		return true;
+	}
+
 	bool SceneEditor::reparent(entt::entity child, entt::entity parent)
 	{
 		if (m_Scene == nullptr || !m_Scene->registry().valid(child) || kind_of(child) != Kind::Authored)

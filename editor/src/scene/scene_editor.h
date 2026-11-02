@@ -93,6 +93,12 @@ namespace wiwa
 		// child, null (not supported).
 		entt::entity create_entity(entt::entity parent);
 		bool delete_entity(entt::entity entity);
+		// A copy of an authored entity and the authored entities below it, with guids of their own, named "<name> (copy)", right after the
+		// original, and selected. A copied prefab instance generates its own nodes (they appear in update()). entt::null for anything
+		// else, and while the scene plays.
+		entt::entity duplicate_entity(entt::entity entity);
+		// Authored entities only; false for anything else, and while the scene plays.
+		bool rename_entity(entt::entity entity, const std::string& name);
 		// Only between authored entities; false if it would make a loop.
 		bool reparent(entt::entity child, entt::entity parent);
 

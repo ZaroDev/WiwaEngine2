@@ -1,6 +1,7 @@
 #include "editor_module.h"
 
 #include <asset_pipeline/asset_pipeline_module.h>
+#include <asset_pipeline/asset_templates.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <scene/scene_module.h>
@@ -82,7 +83,7 @@ void EditorModule::init()
 		}
 	}
 
-	m_Panels.push_back(CreateRef<HierarchyPanel>(*m_SceneEditor));
+	m_Panels.push_back(CreateRef<HierarchyPanel>(*m_SceneEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
 	Ref<InspectorPanel> inspector = CreateRef<InspectorPanel>(*m_SceneEditor);
 	m_Panels.push_back(inspector);
 	m_Panels.push_back(CreateRef<WorldPanel>(*m_SceneEditor));
@@ -163,8 +164,13 @@ void EditorModule::update(float deltaTime)
 		}
 	}
 
+	if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false))
+	{
+		save_scene();
+	}
 	main_bar();
 	export_modal();
+	scene_popups();
 	m_BuildSettings->on_draw();
 	dock_space();
 
@@ -275,6 +281,8 @@ void EditorModule::main_bar()
 	{
 		if (ImGui::BeginMenu("File"))
 		{
+			scene_menu_items();
+			ImGui::Separator();
 			if (ImGui::MenuItem("Build Settings..."))
 			{
 				m_BuildSettings->open();
@@ -397,9 +405,164 @@ void EditorModule::play_toolbar()
 	ImGui::TextDisabled("|");
 	export_button();
 
+	if (!m_SceneStatus.empty() && ImGui::GetTime() < m_SceneStatusUntil)
+	{
+		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "  %s", m_SceneStatus.c_str());
+	}
+
 	if (state != wiwa::PlayState::Edit)
 	{
 		ImGui::TextUnformatted(state == wiwa::PlayState::Paused ? "  Paused (changes to this scene are lost on Stop)" : "  Playing (changes to this scene are lost on Stop)");
+	}
+}
+
+void EditorModule::show_scene_status(const std::string& text)
+{
+	m_SceneStatus = text;
+	m_SceneStatusUntil = ImGui::GetTime() + 5.0;
+}
+
+void EditorModule::save_scene()
+{
+	if (m_SceneEditor->playing())
+	{
+		return;
+	}
+	if (m_SceneEditor->path().empty())
+	{
+		m_SaveAsRequested = true;
+	}
+	else if (!m_SceneEditor->save())
+	{
+		show_scene_status("Could not save " + m_SceneEditor->path().string() + " (see the log)");
+	}
+}
+
+void EditorModule::scene_menu_items()
+{
+	ImGui::BeginDisabled(m_SceneEditor->playing());
+	if (ImGui::MenuItem("New Scene"))
+	{
+		m_SceneEditor->new_scene();
+	}
+	if (ImGui::MenuItem("Open Scene..."))
+	{
+		m_OpenSceneRequested = true;
+	}
+	ImGui::Separator();
+	if (ImGui::MenuItem("Save", "Ctrl+S"))
+	{
+		save_scene();
+	}
+	if (ImGui::MenuItem("Save As..."))
+	{
+		m_SaveAsRequested = true;
+	}
+	ImGui::EndDisabled();
+}
+
+void EditorModule::scene_popups()
+{
+	wiwa::AssetDatabase& database = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database();
+	const std::filesystem::path& root = database.get_assets_root();
+	// a scene is saved next to the one being edited, or in assets/scenes
+	const std::filesystem::path folder = m_SceneEditor->path().empty() ? root / "scenes" : m_SceneEditor->path().parent_path();
+
+	if (m_OpenSceneRequested)
+	{
+		m_OpenSceneRequested = false;
+		m_SceneChoices.clear();
+		std::error_code error;
+		for (std::filesystem::recursive_directory_iterator it(root, error), end; !error && it != end; it.increment(error))
+		{
+			if (it->is_regular_file(error) && it->path().extension() == ".wscene")
+			{
+				m_SceneChoices.push_back(it->path().generic_string());
+			}
+		}
+		std::sort(m_SceneChoices.begin(), m_SceneChoices.end());
+		ImGui::OpenPopup("Open scene");
+	}
+	if (m_SaveAsRequested)
+	{
+		m_SaveAsRequested = false;
+		m_SaveAsFocus = true;
+		std::string name = m_SceneEditor->path().empty() ? "untitled" : m_SceneEditor->path().stem().string() + " copy";
+		const std::string base = name;
+		for (int number = 2; number < 1000 && !wiwa::validate_name(name, folder, wiwa::CreateKind::Scene).empty(); number++)
+		{
+			name = base + " " + std::to_string(number);
+		}
+		std::snprintf(m_SaveAsName, sizeof(m_SaveAsName), "%s", name.c_str());
+		ImGui::OpenPopup("Save scene as");
+	}
+
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Open scene", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		if (m_SceneChoices.empty())
+		{
+			ImGui::TextDisabled("No scenes in the project");
+		}
+		else if (ImGui::BeginChild("##scene_list", ImVec2(420.0f, 220.0f), ImGuiChildFlags_Borders))
+		{
+			for (const std::string& scene : m_SceneChoices)
+			{
+				if (ImGui::Selectable(std::filesystem::path(scene).lexically_relative(root).generic_string().c_str()))
+				{
+					m_SceneEditor->open(scene);
+					ImGui::CloseCurrentPopup();
+				}
+			}
+		}
+		if (!m_SceneChoices.empty())
+		{
+			ImGui::EndChild();
+		}
+		if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Save scene as", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::TextDisabled("in %s", folder.generic_string().c_str());
+		if (m_SaveAsFocus)
+		{
+			ImGui::SetKeyboardFocusHere();
+			m_SaveAsFocus = false;
+		}
+		const bool entered = ImGui::InputText("##save_as_name", m_SaveAsName, sizeof(m_SaveAsName), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+		ImGui::SameLine();
+		ImGui::TextDisabled(".wscene");
+
+		const std::string reason = wiwa::validate_name(m_SaveAsName, folder, wiwa::CreateKind::Scene);
+		if (!reason.empty())
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", reason.c_str());
+		}
+
+		ImGui::BeginDisabled(!reason.empty());
+		const bool confirmed = ImGui::Button("Save") || (entered && reason.empty());
+		ImGui::EndDisabled();
+		if (confirmed)
+		{
+			const std::filesystem::path file = folder / (std::string(m_SaveAsName) + ".wscene");
+			if (!m_SceneEditor->save_as(file))
+			{
+				show_scene_status("Could not save " + file.string() + " (see the log)");
+			}
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
 	}
 }
 
