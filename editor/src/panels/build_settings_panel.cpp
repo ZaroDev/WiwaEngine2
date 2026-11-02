@@ -56,15 +56,17 @@ void BuildSettingsPanel::save()
 
 void BuildSettingsPanel::on_draw()
 {
-	if (!m_Open)
+	if (m_OpenRequested)
 	{
-		return;
+		m_OpenRequested = false;
+		m_Open = true;
+		m_RefreshedAt = -10.0; // what is on disk now, not what was shown last time
+		ImGui::OpenPopup(get_name());
 	}
 
-	ImGui::SetNextWindowSize(ImVec2(360.0f, 340.0f), ImGuiCond_FirstUseEver);
-	if (!ImGui::Begin(get_name(), &m_Open, ImGuiWindowFlags_NoDocking))
+	ImGui::SetNextWindowSize(ImVec2(420.0f, 380.0f), ImGuiCond_FirstUseEver);
+	if (!ImGui::BeginPopupModal(get_name(), &m_Open))
 	{
-		ImGui::End();
 		return;
 	}
 
@@ -166,27 +168,11 @@ void BuildSettingsPanel::on_draw()
 	}
 
 	ImGui::Separator();
-	wiwa::AssetPipelineModule* assets = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>();
-	const Ref<wiwa::JobProgress> progress = assets->get_pack_progress();
-	const bool packing = progress && !progress->finished();
-
-	ImGui::BeginDisabled(packing);
-	if (ImGui::Button("Pack"))
+	ImGui::TextDisabled("Export (in the main bar) packs with these settings.");
+	if (ImGui::Button("Close"))
 	{
-		assets->pack_async("../game/");
-	}
-	ImGui::EndDisabled();
-
-	if (packing)
-	{
-		ImGui::SameLine();
-		ImGui::ProgressBar(progress->fraction(), ImVec2(-1.0f, 0.0f));
-	}
-	else if (progress)
-	{
-		ImGui::SameLine();
-		ImGui::TextDisabled(progress->succeeded() ? "Packed" : "The pack failed (see the console)");
+		ImGui::CloseCurrentPopup();
 	}
 
-	ImGui::End();
+	ImGui::EndPopup();
 }

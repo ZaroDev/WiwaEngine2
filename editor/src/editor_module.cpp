@@ -98,7 +98,7 @@ void EditorModule::init()
 	AssetBrowserPanel* browserPanel = browser.get();
 	browser->set_open_material([materials](const std::filesystem::path& wmat) { materials->open(wmat); });
 	inspector->set_locate([browserPanel](const wiwa::AssetRef& ref) { browserPanel->select_asset(ref); });
-	m_Panels.push_back(CreateRef<BuildSettingsPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
+	m_BuildSettings = CreateScope<BuildSettingsPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 
 	set_theme();
 }
@@ -162,6 +162,8 @@ void EditorModule::update(float deltaTime)
 	}
 
 	main_bar();
+	export_modal();
+	m_BuildSettings->on_draw();
 	dock_space();
 
 	// Adopts the scene the SceneModule loaded (or opened), and expands prefab instances once their prefab is there.
@@ -271,15 +273,9 @@ void EditorModule::main_bar()
 	{
 		if (ImGui::BeginMenu("File"))
 		{
-			for (auto& panel : m_Panels)
+			if (ImGui::MenuItem("Build Settings..."))
 			{
-				if (any(panel->get_category(), PanelCategory::File))
-				{
-					if (ImGui::MenuItem(panel->get_name(), nullptr, panel->is_active()))
-					{
-						panel->switch_active();
-					}
-				}
+				m_BuildSettings->open();
 			}
 			ImGui::EndMenu();
 		}
@@ -396,9 +392,67 @@ void EditorModule::play_toolbar()
 	}
 	ImGui::EndDisabled();
 
+	ImGui::TextDisabled("|");
+	export_button();
+
 	if (state != wiwa::PlayState::Edit)
 	{
 		ImGui::TextUnformatted(state == wiwa::PlayState::Paused ? "  Paused (changes to this scene are lost on Stop)" : "  Playing (changes to this scene are lost on Stop)");
+	}
+}
+
+void EditorModule::export_button()
+{
+	wiwa::AssetPipelineModule* assets = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>();
+	const Ref<wiwa::JobProgress> progress = assets->get_pack_progress();
+	const bool packing = progress && !progress->finished();
+
+	ImGui::BeginDisabled(m_PlayMode->state() != wiwa::PlayState::Edit || packing);
+	if (ImGui::Button("Export"))
+	{
+		assets->pack_async("../game/");
+		m_ExportRequested = true;
+	}
+	ImGui::EndDisabled();
+}
+
+void EditorModule::export_modal()
+{
+	constexpr const char* popup = "Exporting";
+	const Ref<wiwa::JobProgress> progress = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_pack_progress();
+	const bool packing = progress && !progress->finished();
+
+	// Escape closes a modal popup; while the pack runs it comes back
+	if (m_ExportRequested || (m_ExportShown && packing && !ImGui::IsPopupOpen(popup)))
+	{
+		m_ExportRequested = false;
+		m_ExportShown = true;
+		ImGui::OpenPopup(popup);
+	}
+	else if (m_ExportShown && !packing && !ImGui::IsPopupOpen(popup))
+	{
+		m_ExportShown = false;
+	}
+
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal(popup, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+	{
+		if (packing)
+		{
+			const std::string stage = progress->stage();
+			ImGui::TextUnformatted("Exporting the game...");
+			ImGui::ProgressBar(progress->fraction(), ImVec2(360.0f, 0.0f), stage.c_str());
+		}
+		else
+		{
+			ImGui::TextUnformatted(progress && progress->succeeded() ? "Exported" : "The export failed (see the console)");
+			if (ImGui::Button("Close"))
+			{
+				m_ExportShown = false;
+				ImGui::CloseCurrentPopup();
+			}
+		}
+		ImGui::EndPopup();
 	}
 }
 

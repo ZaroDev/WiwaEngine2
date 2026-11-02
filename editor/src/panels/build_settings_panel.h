@@ -9,15 +9,17 @@
 #include <asset_pipeline/asset_database.h>
 #include <asset_pipeline/build_settings.h>
 
-// The "Build Settings" panel: which scenes the pack (assets.wpak) holds, which one the game starts with, and assets to pack although no
+// The "Build Settings" popup: which scenes the pack (assets.wpak) holds, which one the game starts with, and assets to pack although no
 // scene uses them. Every change is saved to build_settings.json at once; the file is read again every second, so the asset browser can
-// edit it too. Main thread, between the ImGui frame's begin and end.
+// edit it too. The editor calls on_draw() every frame and opens it from the File menu; the Export button packs with what is saved here.
+// Main thread, between the ImGui frame's begin and end.
 class BuildSettingsPanel final : public Panel
 {
 public:
 	explicit BuildSettingsPanel(wiwa::AssetDatabase& database)
-		: Panel("Build Settings", PanelCategory::File), m_Database(database) {}
+		: Panel("Build Settings", PanelCategory::None), m_Database(database) { m_Open = false; }
 
+	void open() { m_OpenRequested = true; }
 	void on_draw() override;
 
 private:
@@ -35,4 +37,5 @@ private:
 	std::vector<SceneRow> m_Scenes{};
 	std::string m_LoadError{};
 	double m_RefreshedAt = -10.0;
+	bool m_OpenRequested = false;
 };

@@ -9,6 +9,7 @@
 
 enum class PanelCategory : wiwa::u8
 {
+	None = 0, // not listed in any menu: the editor opens it itself
 	File = BIT(0),
 	Window = BIT(1),
 	Info = BIT(2),
