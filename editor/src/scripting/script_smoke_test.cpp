@@ -2047,6 +2047,55 @@ namespace wiwa
 			{
 				std::ofstream(path, std::ios::binary) << text;
 			};
+			const auto read = [](const std::filesystem::path& path)
+			{
+				std::ifstream file(path, std::ios::binary);
+				return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+			};
+
+			// write_if_changed: written once, left alone while the text is the same, written again when it changes
+			const std::filesystem::path out = dir / "lua" / "out.lua";
+			check(write_if_changed(out, "one") && read(out) == "one", "write_if_changed_writes_a_new_file");
+			const auto stamp = std::filesystem::last_write_time(out);
+			std::this_thread::sleep_for(std::chrono::milliseconds(30));
+			check(!write_if_changed(out, "one") && std::filesystem::last_write_time(out) == stamp, "write_if_changed_leaves_identical_text_alone");
+			check(write_if_changed(out, "two") && read(out) == "two", "write_if_changed_writes_changed_text");
+			check(!std::filesystem::exists(out.string() + ".tmp"), "write_if_changed_leaves_no_temp_file");
+			write(dir / "plain_file", "x");
+			check(!write_if_changed(dir / "plain_file" / "nested.lua", "x"), "write_failure_is_not_fatal");
+
+			// the registered components are written; several threads asking at once leave one whole file
+			ComponentRegistry::get().register_component(stub_component("script:lua_stub_smoke", "LuaStubSmoke", { FieldDescriptor{ "hp", FieldType::Int } }));
+			const std::filesystem::path generated = dir / "generated.lua";
+			check(write_component_stubs(generated) && contains(read(generated), "---@class Comp.LuaStubSmoke"), "registered_components_are_written");
+			std::vector<std::thread> threads;
+			for (int i = 0; i < 8; i++)
+			{
+				threads.emplace_back([&]() { write_component_stubs(generated); });
+			}
+			for (std::thread& thread : threads)
+			{
+				thread.join();
+			}
+			const std::string finalText = read(generated);
+			check(loads_as_lua(finalText) && contains(finalText, "---@class Comp.LuaStubSmoke") && !std::filesystem::exists(generated.string() + ".tmp"), "refresh_is_thread_safe");
+			ComponentRegistry::get().unregister_component("script:lua_stub_smoke");
+
+			// the editor itself keeps library/lua/generated.lua current: written at start, rewritten when a component is registered or removed
+			const auto wait_until = [](const std::function<bool()>& condition)
+			{
+				for (int i = 0; i < 60 && !condition(); i++)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(50));
+				}
+				return condition();
+			};
+			const std::filesystem::path live = "library/lua/generated.lua";
+			check(wait_until([&]() { return std::filesystem::exists(live); }), "editor_writes_the_generated_stub_at_start");
+			ComponentRegistry::get().register_component(stub_component("script:lua_stub_live", "LuaStubLive", { FieldDescriptor{ "hp", FieldType::Int } }));
+			check(wait_until([&]() { return contains(read(live), "Comp.LuaStubLive"); }), "generated_stub_follows_a_registered_component");
+			ComponentRegistry::get().unregister_component("script:lua_stub_live");
+			check(wait_until([&]() { return !contains(read(live), "Comp.LuaStubLive"); }), "generated_stub_follows_a_removed_component");
 
 			const std::filesystem::path meta = dir / "meta.lua";
 			const std::filesystem::path plain = dir / "plain.lua";

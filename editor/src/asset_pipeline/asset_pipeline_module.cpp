@@ -4,7 +4,10 @@
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 
+#include <scene/reflection/component_registry.h>
+
 #include "builtin_importers.h"
+#include "lua_stubs.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -35,6 +38,26 @@ namespace wiwa
 			{
 				database->reimport(file);
 			}));
+		}
+
+		m_StubThread = std::thread([this]() { watch_lua_stubs(); });
+	}
+
+	void AssetPipelineModule::watch_lua_stubs()
+	{
+		const std::vector<const ComponentInfo*>* last = nullptr; // every change of the registry publishes a new snapshot
+		std::unique_lock<std::mutex> lock(m_StubMutex);
+		while (!m_StubStop)
+		{
+			const std::vector<const ComponentInfo*>* current = &ComponentRegistry::get().all();
+			if (current != last)
+			{
+				last = current;
+				lock.unlock();
+				write_component_stubs("library/lua/generated.lua");
+				lock.lock();
+			}
+			m_StubWake.wait_for(lock, std::chrono::milliseconds(500), [this]() { return m_StubStop; });
 		}
 	}
 
@@ -73,6 +96,16 @@ namespace wiwa
 
 	void AssetPipelineModule::shutdown()
 	{
+		{
+			std::lock_guard<std::mutex> lock(m_StubMutex);
+			m_StubStop = true;
+		}
+		m_StubWake.notify_all();
+		if (m_StubThread.joinable())
+		{
+			m_StubThread.join();
+		}
+
 		// Running jobs are asked to stop and joined before the database they use goes away.
 		if (m_PackProgress)
 		{

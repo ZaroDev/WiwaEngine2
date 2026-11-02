@@ -4,8 +4,15 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <cstring>
+#include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
+
+#include <scene/reflection/component_registry.h>
+
+#include "file_utils.h"
 
 namespace wiwa
 {
@@ -213,5 +220,51 @@ namespace wiwa
 		out += "---@param name ComponentName\n---@return boolean\nfunction Entity:has(name) end\n\n";
 		out += "---@param name ComponentName\nfunction Entity:remove(name) end\n";
 		return out;
+	}
+
+	bool write_if_changed(const std::filesystem::path& file, const std::string& text)
+	{
+		std::error_code error;
+		if (const std::optional<std::vector<std::byte>> existing = read_binary_file(file))
+		{
+			if (existing->size() == text.size() && std::memcmp(existing->data(), text.data(), text.size()) == 0)
+			{
+				return false;
+			}
+		}
+
+		if (file.has_parent_path())
+		{
+			std::filesystem::create_directories(file.parent_path(), error);
+		}
+
+		const std::filesystem::path temp = file.string() + ".tmp";
+		{
+			std::ofstream stream(temp, std::ios::binary | std::ios::trunc);
+			stream.write(text.data(), static_cast<std::streamsize>(text.size()));
+			if (!stream)
+			{
+				WI_LOG(Warning, "Assets", "Cannot write {0}: Lua IntelliSense for scripts will be out of date", file.generic_string());
+				stream.close();
+				std::filesystem::remove(temp, error);
+				return false;
+			}
+		}
+
+		std::filesystem::rename(temp, file, error);
+		if (error)
+		{
+			WI_LOG(Warning, "Assets", "Cannot write {0}: {1}", file.generic_string(), error.message());
+			std::filesystem::remove(temp, error);
+			return false;
+		}
+		return true;
+	}
+
+	bool write_component_stubs(const std::filesystem::path& file)
+	{
+		static std::mutex mutex;
+		std::lock_guard<std::mutex> lock(mutex);
+		return write_if_changed(file, generate_component_stubs(ComponentRegistry::get().all()));
 	}
 }

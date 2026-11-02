@@ -22,4 +22,14 @@ namespace wiwa
 	// with the component names, so that e:get("Light").Intensity completes. Components are sorted by display name; the output is
 	// the same for the same components, so it can be compared with what is on disk.
 	std::string generate_component_stubs(const std::vector<const ComponentInfo*>& components);
+
+	// Writes `text` to `file` (creating its folder) only if the file differs: an editor that watches the folder does not re-index for
+	// nothing. The new text goes to <file>.tmp and is renamed over the old, so a reader never sees half a file. True if the file was
+	// written; false if it was already up to date or could not be written (that is a warning in the log, never an error: scripts work
+	// without IntelliSense).
+	bool write_if_changed(const std::filesystem::path& file, const std::string& text);
+
+	// generate_component_stubs from every component registered right now, written to `file` with write_if_changed. Callable from any
+	// thread (calls are serialized).
+	bool write_component_stubs(const std::filesystem::path& file);
 }
