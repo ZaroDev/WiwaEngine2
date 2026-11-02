@@ -357,6 +357,7 @@ void AssetBrowserPanel::draw_file_grid()
 		}
 	}
 
+	bool folderDropHovered = false; // an entity is being dragged over one of the folders of the grid
 	ImGui::BeginChild("##files");
 	const int columns = std::max(1, static_cast<int>(ImGui::GetContentRegionAvail().x / cellSize));
 	if (ImGui::BeginTable("##assets", columns))
@@ -380,6 +381,7 @@ void AssetBrowserPanel::draw_file_grid()
 				accept_entity_drop(folder->Path);
 				ImGui::EndDragDropTarget();
 			}
+			folderDropHovered = folderDropHovered || ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
 			ImGui::TextWrapped("%s", folder->Path.filename().string().c_str());
 			ImGui::PopID();
 			ImGui::TableNextColumn();
@@ -399,8 +401,9 @@ void AssetBrowserPanel::draw_file_grid()
 	draw_context_menu();
 	ImGui::EndChild();
 
-	// an entity dropped on the files makes its prefab in the folder that is open
-	if (ImGui::BeginDragDropTarget())
+	// an entity dropped on the files makes its prefab in the folder that is open; over a folder, the folder's own target must be the one
+	// that is accepted last (ImGui delivers to that one), so this one stays out of the way
+	if (!folderDropHovered && ImGui::BeginDragDropTarget())
 	{
 		accept_entity_drop(m_CurrentDir);
 		ImGui::EndDragDropTarget();

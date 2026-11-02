@@ -1730,6 +1730,14 @@ namespace wiwa
 			check(validate_name("Good name", dir, CreateKind::Script).empty() && validate_name("Console", dir, CreateKind::Script).empty(), "create_asset: an ordinary name is accepted");
 			check(!validate_name(std::string(200, 'a'), dir, CreateKind::Script).empty(), "create_asset: a name that is too long is refused");
 
+			// Windows reserves the part of a name before its first dot
+			check(!validate_name("CON.foo", dir, CreateKind::Script).empty() && !validate_name("nul.x", dir, CreateKind::Script).empty() && !validate_name("Com1.a.b", dir, CreateKind::Script).empty() && validate_name("Console.x", dir, CreateKind::Script).empty(),
+				"create_asset: a device name followed by a dot is refused");
+
+			// a name taken from an entity is made safe instead of refused
+			check(sanitize_file_stem("Lamp") == "Lamp" && sanitize_file_stem("CON") == "_CON" && sanitize_file_stem("com1.x") == "_com1.x" && sanitize_file_stem("a/b:c") == "a_b_c" && sanitize_file_stem("") == "Prefab" &&
+				sanitize_file_stem("bad. ") == "bad" && sanitize_file_stem(std::string(300, 'a')).size() == 100, "sanitize_file_stem: unusable characters, device names, trailing dots and length are fixed");
+
 			// every kind is written, imports and loads
 			struct Case { CreateKind Kind; const char* Name; AssetType Type; };
 			const Case cases[] = {

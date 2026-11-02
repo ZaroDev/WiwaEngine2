@@ -176,6 +176,10 @@ void EditorModule::update(float deltaTime)
 
 	// Adopts the scene the SceneModule loaded (or opened), and expands prefab instances once their prefab is there.
 	m_SceneEditor->update();
+	if (const std::string message = m_SceneEditor->take_message(); !message.empty())
+	{
+		show_scene_status(message);
+	}
 
 	for (auto& panel : m_Panels)
 	{
@@ -577,6 +581,7 @@ void EditorModule::export_button()
 	{
 		assets->pack_async("../game/");
 		m_ExportRequested = true;
+		m_ExportUnsaved = m_SceneEditor->dirty();
 	}
 	ImGui::EndDisabled();
 }
@@ -611,6 +616,13 @@ void EditorModule::export_modal()
 		else
 		{
 			ImGui::TextUnformatted(progress && progress->succeeded() ? "Exported" : "The export failed (see the console)");
+		}
+		if (m_ExportUnsaved)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "The scene has unsaved changes: the export has the saved version.");
+		}
+		if (!packing)
+		{
 			if (ImGui::Button("Close"))
 			{
 				m_ExportShown = false;

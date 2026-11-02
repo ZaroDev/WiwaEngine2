@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <utility>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -109,6 +110,10 @@ namespace wiwa
 		// entity's own components and children are the prefab's. Returns why it cannot be done, or an empty string when it has started.
 		std::string make_prefab(entt::entity entity, const std::filesystem::path& folder);
 		bool has_pending_prefab() const { return !m_PendingPrefabs.empty(); }
+		// How long update() waits for the prefab file to be imported before it gives up (5 seconds).
+		void set_prefab_timeout(std::chrono::milliseconds timeout) { m_PrefabTimeout = timeout; }
+		// What went wrong in the background since the last call (a conversion that was given up), or an empty string. The editor shows it.
+		std::string take_message() { return std::exchange(m_Message, {}); }
 
 		// Turns the instance and everything it generated into ordinary entities.
 		bool unpack(entt::entity instance);
@@ -176,6 +181,8 @@ namespace wiwa
 		std::string m_OpenPath{};
 		std::vector<PendingInstance> m_Pending{};
 		std::vector<PendingPrefab> m_PendingPrefabs{};
+		std::chrono::milliseconds m_PrefabTimeout{ 5000 };
+		std::string m_Message{};
 		std::unordered_map<AssetGuid, Handle<PrefabData>> m_Prefabs{};
 	};
 }

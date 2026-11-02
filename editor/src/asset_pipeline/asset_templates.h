@@ -27,6 +27,10 @@ namespace wiwa
 	// name, and a name that is taken by a file or folder with the same extension.
 	std::string validate_name(const std::string& name, const std::filesystem::path& directory, CreateKind kind);
 
+	// A file name made from any text (an entity's name): unusable characters become '_', trailing dots and spaces go, it is cut to the length
+	// validate_name allows, a device name gets a '_' in front, and nothing left is "Prefab". Does not look at the disk.
+	std::string sanitize_file_stem(const std::string& name);
+
 	// Writes the folder or file, from a template for the kind, and returns its path. Empty (and nothing is overwritten) if the name is
 	// refused by validate_name or the write fails.
 	std::filesystem::path create_asset(CreateKind kind, const std::filesystem::path& directory, const std::string& name);

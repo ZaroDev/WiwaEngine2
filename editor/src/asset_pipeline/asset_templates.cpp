@@ -16,8 +16,10 @@ namespace wiwa
 	{
 		constexpr size_t MAX_NAME_LENGTH = 100;
 
+		// Windows treats everything before the first dot as the device name: "CON.txt" is the console too.
 		bool is_device_name(std::string name)
 		{
+			name = name.substr(0, name.find('.'));
 			std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 			if (name == "CON" || name == "PRN" || name == "AUX" || name == "NUL")
 			{
@@ -151,6 +153,29 @@ namespace wiwa
 		case CreateKind::HlslInclude: return ".hlsli";
 		}
 		return "";
+	}
+
+	std::string sanitize_file_stem(const std::string& name)
+	{
+		std::string stem;
+		for (const char character : name)
+		{
+			stem += (std::string_view("<>:\"/\\|?*").find(character) != std::string_view::npos || static_cast<unsigned char>(character) < 32) ? '_' : character;
+		}
+		stem = stem.substr(0, MAX_NAME_LENGTH);
+		while (!stem.empty() && (stem.back() == '.' || stem.back() == ' '))
+		{
+			stem.pop_back();
+		}
+		while (!stem.empty() && stem.front() == ' ')
+		{
+			stem.erase(stem.begin());
+		}
+		if (stem.empty())
+		{
+			return "Prefab";
+		}
+		return is_device_name(stem) ? "_" + stem : stem;
 	}
 
 	std::string validate_name(const std::string& name, const std::filesystem::path& directory, CreateKind kind)

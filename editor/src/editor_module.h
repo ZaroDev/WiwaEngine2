@@ -54,7 +54,8 @@ private:
 	std::vector<Ref<Panel>> m_Panels{};
 	Scope<BuildSettingsPanel> m_BuildSettings{}; // a popup: not listed in the menus, drawn every frame
 	bool m_ExportRequested = false;
-	bool m_ExportShown = false;                  // the export popup was opened and has not been closed with Close
+	bool m_ExportUnsaved = false;                // the scene had unsaved changes when Export was pressed: they are not in the pack
+	bool m_ExportShown = false;                 // the export popup was opened and has not been closed with Close
 	bool m_OpenSceneRequested = false;           // popups are opened from update(), not from inside the menu that asked for them
 	bool m_SaveAsRequested = false;
 	bool m_SaveAsFocus = false;

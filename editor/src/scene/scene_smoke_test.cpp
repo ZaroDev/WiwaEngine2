@@ -1382,6 +1382,26 @@ namespace wiwa
 			editor.delete_entity(before);
 			pump();
 			check(!editor.has_pending_prefab() && registry.storage<Id>().size() == afterCount - 1, "make_prefab: a deleted entity is simply dropped from the conversion");
+
+			// a name Windows reserves is made safe, not written to the device
+			const entt::entity reserved = editor.create_entity(entt::null);
+			registry.get<Name>(reserved).Value = "CON";
+			std::error_code fileError;
+			check(editor.make_prefab(reserved, assets.folder()).empty() && std::filesystem::exists(assets.folder() / "_CON.wprefab", fileError), "make_prefab: an entity called CON is saved as _CON.wprefab");
+			editor.delete_entity(reserved);
+			editor.update();
+			check(!editor.has_pending_prefab(), "make_prefab: the conversion of a deleted entity ends");
+
+			// a prefab that is not imported in time is given up with a message, and the entity stays
+			const entt::entity ghost = editor.create_entity(entt::null);
+			registry.get<Name>(ghost).Value = "Ghost";
+			check(editor.take_message().empty(), "make_prefab: no message before anything went wrong");
+			editor.set_prefab_timeout(std::chrono::milliseconds(0));
+			check(editor.make_prefab(ghost, assets.folder()).empty(), "make_prefab: starts for an entity whose file will not be imported");
+			editor.update();
+			const std::string message = editor.take_message();
+			check(!editor.has_pending_prefab() && registry.valid(ghost) && !registry.all_of<PrefabInstance>(ghost), "make_prefab: a prefab that is not imported in time leaves the entity as it was");
+			check(message.find("Ghost") != std::string::npos && editor.take_message().empty(), "make_prefab: the user is told, once (" + message + ")");
 		}
 
 		void check_duplicate_rename(Check& check, AssetPipelineModule& pipeline)

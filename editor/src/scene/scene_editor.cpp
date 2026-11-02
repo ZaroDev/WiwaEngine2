@@ -3,6 +3,7 @@
 
 #include <scene/reflection/component_registry.h>
 
+#include "../asset_pipeline/asset_templates.h"
 #include "../asset_pipeline/prefab_file.h"
 #include "scene_json.h"
 
@@ -163,15 +164,17 @@ namespace wiwa
 			}
 			else if (m_Playing)
 			{
-				WI_EDITOR_LOG(Warning, "{0} was not turned into an instance: the scene started playing", pending.File.filename().string());
+				m_Message = "\"" + m_Scene->registry().get<Name>(original).Value + "\" was not made a prefab: the scene started playing";
+				WI_EDITOR_LOG(Warning, "{0}", m_Message);
+			}
+			else if (std::chrono::steady_clock::now() - pending.Started > m_PrefabTimeout)
+			{
+				m_Message = "\"" + m_Scene->registry().get<Name>(original).Value + "\" was not made a prefab: " + pending.File.filename().string() + " was not imported in time (see the console)";
+				WI_EDITOR_LOG(Warning, "{0}", m_Message);
 			}
 			else if (const std::optional<AssetRef> prefab = m_Assets.find_asset(pending.File.string()))
 			{
 				finish_prefab(original, *prefab);
-			}
-			else if (std::chrono::steady_clock::now() - pending.Started > std::chrono::seconds(5))
-			{
-				WI_EDITOR_LOG(Warning, "{0} was not imported in time; the entity was left as it is", pending.File.filename().string());
 			}
 			else
 			{
@@ -628,19 +631,7 @@ namespace wiwa
 			}
 		}
 
-		std::string stem;
-		for (const char character : registry.get<Name>(entity).Value)
-		{
-			stem += (std::string_view("<>:\"/\\|?*").find(character) != std::string_view::npos || static_cast<unsigned char>(character) < 32) ? '_' : character;
-		}
-		while (!stem.empty() && (stem.back() == '.' || stem.back() == ' '))
-		{
-			stem.pop_back();
-		}
-		if (stem.empty())
-		{
-			stem = "Prefab";
-		}
+		const std::string stem = sanitize_file_stem(registry.get<Name>(entity).Value);
 
 		std::error_code error;
 		std::filesystem::path file = folder / (stem + ".wprefab");
@@ -674,7 +665,8 @@ namespace wiwa
 		const entt::entity instance = add_prefab(prefab, parent);
 		if (instance == entt::null)
 		{
-			WI_EDITOR_LOG(Warning, "The prefab of {0} could not be added; the entity was left as it is", name);
+			m_Message = "\"" + name + "\" was not made a prefab: the instance could not be added";
+			WI_EDITOR_LOG(Warning, "{0}", m_Message);
 			return;
 		}
 
