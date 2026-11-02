@@ -304,7 +304,7 @@ namespace wiwa
 			return;
 		}
 		RenderModule* render = Engine::get().get_module<RenderModule>();
-		update_interaction(*scenes->get_active(), render != nullptr ? render->get_canvas_size() : glm::vec2(0.0f));
+		update_interaction(*scenes->get_active(), m_CanvasOverride ? *m_CanvasOverride : (render != nullptr ? render->get_canvas_size() : glm::vec2(0.0f)));
 	}
 
 	void UiModule::pre_render_update(float)
@@ -317,7 +317,7 @@ namespace wiwa
 		}
 
 		UiDrawList list;
-		build_draw_list(*scenes->get_active(), render->get_canvas_size(), list);
+		build_draw_list(*scenes->get_active(), m_CanvasOverride ? *m_CanvasOverride : render->get_canvas_size(), list);
 		render->set_ui_draw_list(std::move(list));
 	}
 }

@@ -51,6 +51,10 @@ namespace wiwa
 		// Draw anchors with this camera instead of the scene's primary one (the editor's fly camera); nothing goes back to the scene's.
 		void set_camera_override(const std::optional<RenderCamera>& camera) { m_CameraOverride = camera; }
 
+		// Lays the UI out for a canvas of this size instead of the size of what the scene is drawn into (a smoke test, so that it does not
+		// depend on the size of the editor's window). Nothing goes back to the real size.
+		void set_canvas_override(const std::optional<glm::vec2>& size) { m_CanvasOverride = size; }
+
 		// How panels, fonts and texture sizes are found. The defaults ask the AssetManager; tests and tools put their own.
 		void set_panel_loader(PanelLoader loader) { m_Loader = std::move(loader); }
 		void set_font_provider(FontProvider provider) { m_Fonts = std::move(provider); }
@@ -93,6 +97,7 @@ namespace wiwa
 		IUiInputSource* m_Input = nullptr;
 		ScriptedInputSource m_Scripted{};
 		std::optional<RenderCamera> m_CameraOverride{};
+		std::optional<glm::vec2> m_CanvasOverride{};
 		PanelLoader m_Loader{};
 		FontProvider m_Fonts{};
 		TextureSizeProvider m_TextureSizes{};

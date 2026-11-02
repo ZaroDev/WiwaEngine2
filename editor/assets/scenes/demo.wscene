@@ -2154,6 +2154,76 @@
                                                           "CastsShadows":  false
                                                       }
                                         }
+                     },
+                     {
+                         "id":  "9ee87b68be6545759a3a79a4529f5d1b",
+                         "components":  {
+                                            "Name":  {
+                                                         "Value":  "Hud"
+                                                     },
+                                            "Transform":  {
+                                                              "Position":  [ 0, 0, 0 ],
+                                                              "Rotation":  [ 0, 0, 0, 1 ],
+                                                              "Scale":  [ 1, 1, 1 ]
+                                                          },
+                                            "UICanvas":  {
+                                                             "Panel":  {
+                                                                           "guid":  "9ae8296b579eb60af5aa1c7f0f3a9ef1",
+                                                                           "localId":  0
+                                                                       },
+                                                             "SortOrder":  0,
+                                                             "Visible":  true
+                                                         },
+                                            "script:e65bbdde1fd6746550c017918bfaaadd":  {
+                                                                                        }
+                                        }
+                     },
+                     {
+                         "id":  "cc46357e8e224135b874237a449d7041",
+                         "components":  {
+                                            "Name":  {
+                                                         "Value":  "Demo light"
+                                                     },
+                                            "Transform":  {
+                                                              "Position":  [ -5, 3, 6 ],
+                                                              "Rotation":  [ 0, 0, 0, 1 ],
+                                                              "Scale":  [ 1, 1, 1 ]
+                                                          },
+                                            "Light":  {
+                                                          "Kind":  "Point",
+                                                          "Color":  [ 0.6, 0.8, 1, 1 ],
+                                                          "Intensity":  2,
+                                                          "Range":  14,
+                                                          "InnerAngle":  20,
+                                                          "OuterAngle":  30,
+                                                          "CastsShadows":  false
+                                                      }
+                                        }
+                     },
+                     {
+                         "id":  "044336c837964bd19c10925db01ba960",
+                         "components":  {
+                                            "Name":  {
+                                                         "Value":  "Beacon"
+                                                     },
+                                            "Transform":  {
+                                                              "Position":  [ -3, 1.5, 3 ],
+                                                              "Rotation":  [ 0, 0, 0, 1 ],
+                                                              "Scale":  [ 0.3, 0.3, 0.3 ]
+                                                          },
+                                            "MeshRenderer":  {
+                                                                 "Mesh":  {
+                                                                              "guid":  "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                                                              "localId":  2
+                                                                          },
+                                                                 "Materials":  [
+                                                                                   {
+                                                                                       "guid":  "4ae7e8927e833b7511667468a3f23eb3",
+                                                                                       "localId":  0
+                                                                                   }
+                                                                               ]
+                                                             }
+                                        }
                      }
                  ],
     "settings":  {

@@ -24,6 +24,8 @@ There is no test framework (the user decided a test suite isn't needed). Verific
 | `--asset-smoke` | editor | import, pack and load round trip, GUID stability |
 | `--scene-smoke` | editor | scene save, cook and load, prefab overrides |
 | `--script-smoke` | editor | Lua script runtime |
+| `--ui-smoke` | editor | game UI: panel files, fonts, layout, draw lists, interaction, UiModule, editor document model |
+| `--ui-editor-smoke` | editor | opens a panel in the UI Editor panel and previews it for 130 frames (ImGui asserts on) |
 | `--play-smoke` / `--demo-smoke` | editor | play mode / demo scene |
 | `--render-test` | any (RenderModule) | GPU checks in `engine/src/renderer/test/*_checks.cpp`, run on the render thread |
 | `--render-smoke <frames>` | any | render N frames, then exit |
@@ -33,7 +35,7 @@ Other flags: `--scene <path>`, `--pack <outdir>`, `--api=vulkan|d3d11|d3d12` (de
 
 ## Architecture
 
-Modules (`IModule`, registered in `Engine` in [engine.cpp](engine/src/core/engine.cpp)): `AssetManager`, `SceneModule`, `Window`, `RenderModule`, `ScriptingModule`. The editor adds `AssetPipelineModule` and `EditorModule`. Other code reaches a module through `Engine::get_module`, except the render thread, which must never call it.
+Modules (`IModule`, registered in `Engine` in [engine.cpp](engine/src/core/engine.cpp)): `AssetManager`, `SceneModule`, `Window`, `RenderModule`, `UiModule`, `ScriptingModule`. The editor adds `AssetPipelineModule` and `EditorModule`. Other code reaches a module through `Engine::get_module`, except the render thread, which must never call it.
 
 **Editor vs game.** The editor and the game are separate projects over the same engine lib. No build-config macro (e.g. `WI_SHIPPING`) may decide editor-vs-game behaviour. Anything that imports or cooks assets (importers, `AssetDatabase`, packager, shader compilation) lives in `editor/src/asset_pipeline`; the engine only has the runtime.
 
@@ -47,6 +49,8 @@ Modules (`IModule`, registered in `Engine` in [engine.cpp](engine/src/core/engin
 
 **Scripting** (`engine/src/scripting`, user docs in [docs/scripting.md](docs/scripting.md)). Sandboxed Lua via sol2, run on the main thread by `ScriptingModule`. Scripts run only while the game clock is playing. The editor's Play mode runs on a clone of the edit scene ([scene_clone.cpp](engine/src/scene/scene_clone.cpp)), and Stop discards it.
 
+**Game UI** (`engine/src/ui`, scripting in [docs/scripting.md](docs/scripting.md)). A `UICanvas` component shows a `.wuipanel` asset (a flat widget tree: Panel, HStack, VStack, Text, Image, Button, Slider, Toggle, Bar; fields are described once by `ui_fields()`). `UiModule` keeps one `UiPanelInstance` (a mutable copy of the panel) per canvas. `update()` (priority -10, before the scripts) feeds the input to the interaction state machine and keeps the events; `ScriptInstances::update` dispatches them to Lua handlers; `pre_render_update()` lays out (anchored rects, stacks, world anchors projected through the primary camera), builds a flat `UiDrawList` and gives it to `RenderModule`. The render thread's `UiRenderPass` draws it into the LDR image after FXAA (SDF text, `editor/engine/shaders/ui.hlsl`); it also draws the UI editor's canvas into its own texture (`set_ui_preview`). Input comes from an `IUiInputSource` (none in the game yet; the editor feeds it from ImGui in play mode). Fonts (`.ttf`/`.otf` to an SDF atlas) and panels are imported by the editor ([font_importer.cpp](editor/src/asset_pipeline/importers/font_importer.cpp), [ui_panel_importer.cpp](editor/src/asset_pipeline/importers/ui_panel_importer.cpp)); the editor UI lives in `editor/src/ui` (`UiEditModel` is the ImGui-free document with undo, `UiEditorPanel` the window).
+
 ## Conventions
 
 - `wiwa` namespace, tabs, `#include <pch.h>` first in engine files, `Ref`/`Scope` smart pointers.
@@ -57,4 +61,4 @@ Modules (`IModule`, registered in `Engine` in [engine.cpp](engine/src/core/engin
 
 ## Design docs
 
-`docs/superpowers/specs/` (design) and `docs/superpowers/plans/` (implementation plans) hold dated per-feature documents: asset system, renderer foundation, scene foundation, render path, environment and settings, post-processing, debug renderer and gizmos, build settings, TAA and motion blur, material assets and shaders, script runtime and editor play mode. Read the relevant spec before changing one of those areas, as the rationale and rejected alternatives are recorded there. Those docs are deliberately **not committed** to git, and neither is `PROMPT.md`.
+`docs/superpowers/specs/` (design) and `docs/superpowers/plans/` (implementation plans) hold dated per-feature documents: asset system, renderer foundation, scene foundation, render path, environment and settings, post-processing, debug renderer and gizmos, build settings, TAA and motion blur, material assets and shaders, script runtime and editor play mode, game UI. Read the relevant spec before changing one of those areas, as the rationale and rejected alternatives are recorded there. Those docs are deliberately **not committed** to git, and neither is `PROMPT.md`.

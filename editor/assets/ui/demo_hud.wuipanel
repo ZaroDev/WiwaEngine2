@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "referenceResolution": [1920, 1080],
+  "match": 0.5,
+  "nextId": 13,
+  "widgets": [
+    {
+      "id": 2, "kind": "VStack",
+      "Name": "Stats",
+      "OffsetMin": [24, 24], "OffsetMax": [344, 184],
+      "Color": [0, 0, 0, 0.35],
+      "Spacing": 8,
+      "Padding": [12, 12, 12, 12]
+    },
+    {
+      "id": 3, "parent": 2, "kind": "Text",
+      "Name": "Title",
+      "OffsetMax": [296, 36],
+      "Text": "WIWA2 UI DEMO",
+      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
+      "FontSize": 30,
+      "Outline": 0.15,
+      "OutlineColor": [0.05, 0.1, 0.3, 1],
+      "Shadow": true
+    },
+    {
+      "id": 4, "parent": 2, "kind": "Text",
+      "Name": "Score",
+      "OffsetMax": [296, 30],
+      "Text": "Score 0",
+      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
+      "Color": [1, 0.85, 0.3, 1]
+    },
+    {
+      "id": 5, "parent": 2, "kind": "Bar",
+      "Name": "Health",
+      "OffsetMax": [296, 22],
+      "Value": 0.75,
+      "Color": [0.9, 0.25, 0.25, 1]
+    },
+    {
+      "id": 6, "kind": "VStack",
+      "Name": "Controls",
+      "AnchorMin": [0, 1], "AnchorMax": [0, 1],
+      "OffsetMin": [24, -148], "OffsetMax": [344, -24],
+      "Color": [0, 0, 0, 0.35],
+      "Spacing": 10,
+      "Padding": [12, 12, 12, 12]
+    },
+    {
+      "id": 7, "parent": 6, "kind": "Button",
+      "Name": "ToggleLight",
+      "OffsetMax": [296, 44],
+      "Color": [0.2, 0.35, 0.6, 1],
+      "HoverColor": [0.3, 0.5, 0.85, 1],
+      "PressedColor": [0.15, 0.25, 0.45, 1]
+    },
+    {
+      "id": 8, "parent": 7, "kind": "Text",
+      "Name": "Label",
+      "AnchorMax": [1, 1],
+      "OffsetMin": [0, 9], "OffsetMax": [0, 0],
+      "Text": "Light: on",
+      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
+      "FontSize": 22,
+      "Align": "Center"
+    },
+    {
+      "id": 9, "parent": 6, "kind": "Slider",
+      "Name": "LightIntensity",
+      "OffsetMax": [296, 24],
+      "Color": [0.95, 0.6, 0.1, 1],
+      "Value": 2,
+      "MaxValue": 20,
+      "Step": 0.5
+    },
+    {
+      "id": 10, "kind": "VStack",
+      "Name": "BeaconTag",
+      "Pivot": [0.5, 1],
+      "OffsetMax": [150, 52],
+      "Color": [0, 0, 0, 0.5],
+      "Spacing": 4,
+      "Padding": [6, 4, 6, 4],
+      "WorldEntity": "044336c837964bd19c10925db01ba960",
+      "WorldOffset": [0, 1.2, 0],
+      "WorldScaleWithDistance": true,
+      "WorldRefDistance": 14,
+      "WorldMinScale": 0.4,
+      "WorldMaxScale": 1.5
+    },
+    {
+      "id": 11, "parent": 10, "kind": "Text",
+      "Name": "BeaconName",
+      "OffsetMax": [138, 22],
+      "Text": "Beacon",
+      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
+      "FontSize": 18,
+      "Align": "Center"
+    },
+    {
+      "id": 12, "parent": 10, "kind": "Bar",
+      "Name": "BeaconBar",
+      "OffsetMax": [138, 14],
+      "Value": 0.3,
+      "Color": [0.2, 0.9, 1, 1],
+      "BackgroundColor": [0.9, 0.2, 0.9, 0.8]
+    }
+  ]
+}

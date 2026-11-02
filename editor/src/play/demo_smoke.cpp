@@ -9,6 +9,8 @@
 #include <scene/reflection/component_registry.h>
 #include <scripting/script_module.h>
 #include <scripting/script_names.h>
+#include <ui/ui_draw_list.h>
+#include <ui/ui_module.h>
 
 namespace wiwa
 {
@@ -182,8 +184,39 @@ namespace wiwa
 				failure = "light_pulse did not change the spot light";
 				return true;
 			}
-			m_Phase = Phase::HotCreate;
+			m_Phase = Phase::Ui;
 			m_PhaseFrames = 0;
+			return false;
+		}
+
+		case Phase::Ui:
+		{
+			if (m_Play.play_scene() == nullptr)
+			{
+				failure = "play stopped by itself";
+				restore_ui();
+				return true;
+			}
+			if (!wait(2400, "the HUD checks", failure))
+			{
+				restore_ui();
+				return true;
+			}
+
+			switch (run_ui_step(failure))
+			{
+			case UiResult::Running:
+				return false;
+			case UiResult::Failed:
+				restore_ui();
+				m_Phase = Phase::Done;
+				return true;
+			case UiResult::Passed:
+				restore_ui();
+				m_Phase = Phase::HotCreate;
+				m_PhaseFrames = 0;
+				return false;
+			}
 			return false;
 		}
 
@@ -267,6 +300,220 @@ namespace wiwa
 			return true;
 		}
 		return true;
+	}
+
+	namespace
+	{
+		// The first quad of the list drawn in this colour, if there is one. The HUD of the demo gives each widget it looks for its own colour.
+		std::optional<UiRect> find_quad(const UiDrawList& list, const glm::vec4& color)
+		{
+			const u32 packed = ui_pack_color(color);
+			for (size_t quad = 0; quad * 4 + 3 < list.Vertices.size(); quad++)
+			{
+				if (list.Vertices[quad * 4].Color == packed)
+				{
+					return UiRect{ list.Vertices[quad * 4].Pos, list.Vertices[quad * 4 + 2].Pos };
+				}
+			}
+			return std::nullopt;
+		}
+
+		// The colours the HUD panel (assets/ui/demo_hud.wuipanel) gives the widgets the smoke test looks for.
+		const glm::vec4 BUTTON_COLOR{ 0.2f, 0.35f, 0.6f, 1.0f };      // ToggleLight, while the pointer is not on it
+		const glm::vec4 SLIDER_FILL_COLOR{ 0.95f, 0.6f, 0.1f, 1.0f }; // LightIntensity
+		const glm::vec4 BEACON_TRACK_COLOR{ 0.9f, 0.2f, 0.9f, 0.8f };  // BeaconBar, which follows the Beacon entity
+
+		const glm::vec2 HUD_CANVAS{ 1920.0f, 1080.0f };
+	}
+
+	void DemoSmoke::restore_ui()
+	{
+		if (!m_UiTouched)
+		{
+			return;
+		}
+		m_UiTouched = false;
+		if (UiModule* ui = Engine::get().get_module<UiModule>())
+		{
+			ui->set_canvas_override(std::nullopt);
+			ui->scripted_input().clear_pointer();
+			ui->set_input_source(m_UiPreviousInput);
+		}
+	}
+
+	// The HUD of the demo: it is drawn, the beacon bar follows its entity, the button and the slider reach the script (through scripted
+	// input, the same path a mouse takes), and the script changes the light and the texts.
+	DemoSmoke::UiResult DemoSmoke::run_ui_step(std::string& failure)
+	{
+		UiModule* ui = Engine::get().get_module<UiModule>();
+		Scene& play = *m_Play.play_scene();
+		const entt::entity hud = find_named(play, "Hud");
+		const entt::entity light = find_named(play, "Demo light");
+		const entt::entity beacon = find_named(play, "Beacon");
+		if (ui == nullptr || hud == entt::null || light == entt::null || beacon == entt::null)
+		{
+			failure = "the demo scene has no HUD (an entity Hud with a UICanvas, a Demo light and a Beacon)";
+			return UiResult::Failed;
+		}
+		const EntityGuid hudGuid = play.registry().get<Id>(hud).Guid;
+
+		const auto intensity = [&]() { return play.registry().get<Light>(light).Intensity; };
+		const auto draw = [&]()
+		{
+			play.update_world_transforms();
+			UiDrawList list;
+			ui->build_draw_list(play, HUD_CANVAS, list);
+			return list;
+		};
+		const auto click_at = [&](const glm::vec2& point)
+		{
+			ui->scripted_input().move_to(point);
+			ui->scripted_input().press(0);
+			ui->scripted_input().release(0);
+		};
+		m_UiStepFrames++;
+
+		switch (m_UiStep)
+		{
+		case UiStep::Setup:
+		{
+			m_UiPreviousInput = ui->input_source();
+			ui->set_canvas_override(HUD_CANVAS);
+			ui->set_input_source(&ui->scripted_input());
+			ui->scripted_input().clear_pointer();
+			m_UiTouched = true;
+			m_UiStep = UiStep::WaitDrawn;
+			m_UiStepFrames = 0;
+			return UiResult::Running;
+		}
+
+		case UiStep::WaitDrawn:
+		{
+			UiPanelInstance* instance = ui->instance_for(play, hudGuid);
+			const UiDrawList list = instance != nullptr && instance->ready() ? draw() : UiDrawList{};
+			const std::optional<UiRect> button = find_quad(list, BUTTON_COLOR);
+			const std::optional<UiRect> slider = find_quad(list, SLIDER_FILL_COLOR);
+			const std::optional<UiRect> track = find_quad(list, BEACON_TRACK_COLOR);
+			const bool text = std::any_of(list.Batches.begin(), list.Batches.end(), [](const UiBatch& batch) { return batch.Kind == UiQuadKind::Sdf; });
+
+			// the script counts the score up once the panel has loaded and it has found its widgets
+			const std::optional<UiId> score = instance != nullptr ? instance->find("Stats/Score") : std::nullopt;
+			const bool counting = score && instance->data().find(*score)->Text.rfind("Score ", 0) == 0 && instance->data().find(*score)->Text != "Score 0";
+
+			if (!button || !slider || !track || !text || !counting || intensity() < 0.5f)
+			{
+				if (m_UiStepFrames > 900)
+				{
+					failure = std::string("the HUD was not drawn: ") + (instance == nullptr ? "no panel instance" : !instance->ready() ? "the panel is not loaded" : list.empty() ? "an empty draw list" :
+						!button ? "no button" : !slider ? "no slider" : !track ? "no beacon bar (is the Beacon on the screen?)" : !text ? "no text (is the font loaded?)" :
+						!counting ? "the script did not count the score up (did demo_ui.lua start without an error?)" : "the light is off at the start");
+					return UiResult::Failed;
+				}
+				return UiResult::Running;
+			}
+
+			m_ButtonCenter = (button->Min + button->Max) * 0.5f;
+			const std::optional<UiId> sliderId = instance->find("Controls/LightIntensity");
+			const UiWidget* sliderWidget = sliderId ? instance->data().find(*sliderId) : nullptr;
+			if (sliderWidget == nullptr)
+			{
+				failure = "the HUD has no Controls/LightIntensity slider";
+				return UiResult::Failed;
+			}
+			const float width = sliderWidget->OffsetMax.x - sliderWidget->OffsetMin.x;
+			m_SliderPoint = glm::vec2(slider->Min.x + width * 0.5f, (slider->Min.y + slider->Max.y) * 0.5f);
+			m_BeaconX = track->Min.x;
+			m_LightLevel = intensity();
+
+			play.registry().get<Transform>(beacon).Position.x += 3.0f;
+			m_UiStep = UiStep::MoveBeacon;
+			m_UiStepFrames = 0;
+			return UiResult::Running;
+		}
+
+		case UiStep::MoveBeacon:
+		{
+			const std::optional<UiRect> track = find_quad(draw(), BEACON_TRACK_COLOR);
+			if (!track)
+			{
+				failure = "the beacon bar vanished when its entity moved";
+				return UiResult::Failed;
+			}
+			if (track->Min.x < m_BeaconX + 20.0f)
+			{
+				failure = "the beacon bar did not follow its entity to the right";
+				return UiResult::Failed;
+			}
+
+			click_at(m_ButtonCenter);
+			m_UiStep = UiStep::ClickOff;
+			m_UiStepFrames = 0;
+			return UiResult::Running;
+		}
+
+		case UiStep::ClickOff:
+		{
+			if (intensity() < 0.01f)
+			{
+				click_at(m_ButtonCenter);
+				m_UiStep = UiStep::ClickOn;
+				m_UiStepFrames = 0;
+			}
+			else if (m_UiStepFrames > 60)
+			{
+				failure = "clicking the button did not switch the light off";
+				return UiResult::Failed;
+			}
+			return UiResult::Running;
+		}
+
+		case UiStep::ClickOn:
+		{
+			if (std::abs(intensity() - m_LightLevel) < 0.01f)
+			{
+				// press on the middle of the slider and hold: the value follows the pointer
+				ui->scripted_input().move_to(m_SliderPoint);
+				ui->scripted_input().press(0);
+				m_UiStep = UiStep::Slide;
+				m_UiStepFrames = 0;
+			}
+			else if (m_UiStepFrames > 60)
+			{
+				failure = "clicking the button again did not switch the light on";
+				return UiResult::Failed;
+			}
+			return UiResult::Running;
+		}
+
+		case UiStep::Slide:
+		{
+			if (std::abs(intensity() - 10.0f) < 0.75f)
+			{
+				ui->scripted_input().release(0);
+				m_UiStep = UiStep::Release;
+				m_UiStepFrames = 0;
+			}
+			else if (m_UiStepFrames > 60)
+			{
+				failure = "dragging the slider to its middle did not set the light to half of its range (it is " + std::to_string(intensity()) + ")";
+				return UiResult::Failed;
+			}
+			return UiResult::Running;
+		}
+
+		case UiStep::Release:
+		{
+			if (m_UiStepFrames > 3)
+			{
+				m_UiStep = UiStep::Finish;
+			}
+			return UiResult::Running;
+		}
+
+		case UiStep::Finish:
+			return UiResult::Passed;
+		}
+		return UiResult::Passed;
 	}
 
 	// The end of a good run: Stop, remove the files the test made, and see that nothing was logged as an error.

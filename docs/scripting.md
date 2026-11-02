@@ -165,6 +165,9 @@ on the scene). Press Play and watch the Console:
 - **light_pulse** (podium spot, neon lights): reads and writes the `Light` component.
 - **camera_sway** (camera): drifts the camera sideways.
 - **scene_overlay** (a scene-level script, in the scene settings): logs on Play and Stop and draws debug shapes around the podium.
+- **demo_ui** (the Hud entity, `assets/ui/demo_hud.wuipanel`): the HUD. The score counts up, a health bar breathes, the button toggles the
+  "Demo light" and the slider sets its intensity (click and drag with the mouse over the Viewport in Play mode), and the tag over the
+  "Beacon" sphere follows it on the screen. It waits for the panel to be `ready` before it looks its widgets up.
 
 Try: Pause, then Step; edit a script into a syntax error and save (the old version keeps running, the Console says why); fix it; add a
 property to `spinner.lua` and see it in the Inspector without stopping.

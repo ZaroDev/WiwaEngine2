@@ -30,6 +30,7 @@ namespace wiwa
 			Open,
 			Play,
 			Run,
+			Ui,
 			HotCreate,
 			HotFirst,
 			HotSecond,
@@ -38,6 +39,16 @@ namespace wiwa
 
 		bool wait(u32 frames, const char* what, std::string& failure);
 		std::string finish_checks();
+
+		// The HUD of the demo scene while it plays (the Ui phase), one step per frame.
+		enum class UiResult
+		{
+			Running,
+			Passed,
+			Failed,
+		};
+		UiResult run_ui_step(std::string& failure);
+		void restore_ui();
 
 		SceneEditor& m_Editor;
 		PlayMode& m_Play;
@@ -56,5 +67,26 @@ namespace wiwa
 
 		EntityGuid m_Probe{};
 		AssetRef m_HotScript{};
+
+		// the Ui phase
+		enum class UiStep
+		{
+			Setup,
+			WaitDrawn,
+			MoveBeacon,
+			ClickOff,
+			ClickOn,
+			Slide,
+			Release,
+			Finish,
+		};
+		UiStep m_UiStep = UiStep::Setup;
+		u32 m_UiStepFrames = 0;
+		bool m_UiTouched = false; // the canvas size and the input source were changed, and have to be put back
+		class IUiInputSource* m_UiPreviousInput = nullptr;
+		glm::vec2 m_ButtonCenter{ 0.0f };
+		glm::vec2 m_SliderPoint{ 0.0f }; // where the middle of the slider's track is
+		float m_BeaconX = 0.0f;
+		float m_LightLevel = 0.0f;
 	};
 }
