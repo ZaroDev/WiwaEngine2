@@ -6,6 +6,7 @@
 #include "assets/asset_catalog.h"
 #include "assets/library_source.h"
 #include "assets/pak_format.h"
+#include "lua_stubs.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -82,7 +83,11 @@ namespace wiwa
 	IImporter* AssetDatabase::find_importer(const std::filesystem::path& source) const
 	{
 		auto found = m_ImporterByExtension.find(lower_extension(source));
-		return found == m_ImporterByExtension.end() ? nullptr : found->second;
+		if (found == m_ImporterByExtension.end() || is_lua_stub_file(source))
+		{
+			return nullptr; // a LuaLS declaration file next to the scripts is editor support, not an asset
+		}
+		return found->second;
 	}
 
 	bool AssetDatabase::has_importer_for(const std::filesystem::path& source) const

@@ -31,6 +31,7 @@
 #include "asset_pipeline/build_settings.h"
 #include "asset_pipeline/builtin_importers.h"
 #include "asset_pipeline/file_utils.h"
+#include "asset_pipeline/lua_stubs.h"
 #include "asset_pipeline/packager.h"
 #include "play/play_mode.h"
 #include "scene/scene_editor.h"
@@ -1932,6 +1933,43 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// The LuaLS support files: stubs the importer must leave alone, the stub the editor writes, and the project settings.
+		void check_lua_stubs(Check& check, AssetPipelineModule& pipeline)
+		{
+			const std::filesystem::path dir = std::filesystem::temp_directory_path() / "wiwa_lua_stubs_smoke";
+			std::filesystem::remove_all(dir);
+			std::filesystem::create_directories(dir);
+
+			const auto write = [](const std::filesystem::path& path, const std::string& text)
+			{
+				std::ofstream(path, std::ios::binary) << text;
+			};
+
+			const std::filesystem::path meta = dir / "meta.lua";
+			const std::filesystem::path plain = dir / "plain.lua";
+			write(meta, "---@meta\nfoo = 1\n");
+			write(plain, "return {}\n");
+			check(is_lua_stub_file(meta), "stub_file_detected");
+			check(!is_lua_stub_file(plain), "plain_lua_is_not_a_stub");
+			check(!is_lua_stub_file(dir / "missing.lua"), "missing_file_is_not_a_stub");
+
+			// a stub inside a source root is not imported: no asset, no .meta sidecar
+			AssetDatabase& database = pipeline.get_database();
+			const std::filesystem::path inRoot = database.get_roots()[1].Source / "lua_stubs_smoke_stub.lua";
+			write(inRoot, "---@meta\nbar = 2\n");
+			database.reimport(inRoot);
+			database.scan();
+			const bool hasMeta = std::filesystem::exists(inRoot.string() + ".meta");
+			std::filesystem::remove(inRoot);
+			std::filesystem::remove(inRoot.string() + ".meta");
+			check(!hasMeta, "stub_file_gets_no_meta");
+
+			std::filesystem::remove_all(dir);
+		}
+	}
+
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1957,6 +1995,7 @@ namespace wiwa
 		check_clone(check);
 		check_editor_document(check);
 		check_play_mode(check);
+		check_lua_stubs(check, pipeline);
 
 		if (check.Failures == 0)
 		{
