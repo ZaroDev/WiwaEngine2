@@ -1,0 +1,26 @@
+{
+  "alpha": "blend",
+  "alphaCutoff": 0.5,
+  "baseColor": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "clearcoat": 0.0,
+  "clearcoatRoughness": 0.0,
+  "doubleSided": false,
+  "emissive": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "metallic": 0.0,
+  "name": "glass",
+  "roughness": 0.04,
+  "sheen": 0.0,
+  "sheenRoughness": 0.0,
+  "textures": {},
+  "transmission": 1.0,
+  "version": 1
+}

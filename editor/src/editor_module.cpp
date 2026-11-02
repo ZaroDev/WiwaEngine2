@@ -90,7 +90,7 @@ void EditorModule::init()
 	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor));
 	m_Panels.push_back(CreateRef<RendererPanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
-	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>();
+	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 	m_Panels.push_back(materialPanel);
 	Ref<AssetBrowserPanel> browser = CreateRef<AssetBrowserPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 	m_Panels.push_back(browser);
@@ -291,6 +291,7 @@ void EditorModule::main_bar()
 			{
 				m_BuildSettings->open();
 			}
+			export_button();
 			ImGui::EndMenu();
 		}
 
@@ -337,56 +338,48 @@ void EditorModule::main_bar()
 			}
 			ImGui::EndMenu();
 		}
-		ImGui::EndMainMenuBar();
-	}
-	ImGuiViewportP* viewport = (ImGuiViewportP*)(void*)ImGui::GetMainViewport();
-	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
-	float height = ImGui::GetFrameHeight();
 
-	// the bar is tinted while the scene plays, so that nobody edits the copy thinking it is the scene
-	const bool playing = m_PlayMode->state() != wiwa::PlayState::Edit;
-	if (playing)
-	{
-		ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4{ 0.55f, 0.28f, 0.05f, 1.0f });
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{ 0.55f, 0.28f, 0.05f, 1.0f });
-	}
-
-	if (ImGui::BeginViewportSideBar("##SecondaryMenuBar", viewport, ImGuiDir_Up, height, window_flags))
-	{
-		if (ImGui::BeginMenuBar())
+		ImGui::SetCursorPosX(ImGui::GetIO().DisplaySize.x / 2 - 15.0f);
+		const bool playing = m_PlayMode->state() != wiwa::PlayState::Edit;
+		
+		// the bar is tinted while the scene plays, so that nobody edits the copy thinking it is the scene
+		if (playing)
 		{
-			play_toolbar();
-			ImGui::EndMenuBar();
+			ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4{ 0.55f, 0.28f, 0.05f, 1.0f });
+			ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{ 0.55f, 0.28f, 0.05f, 1.0f });
 		}
-		ImGui::End();
-	}
+		play_toolbar();
 
-	if (playing)
-	{
-		ImGui::PopStyleColor(2);
-	}
+		if (playing)
+		{
+			ImGui::PopStyleColor(2);
+		}
+
+		ImGui::EndMainMenuBar();
+	}	
 }
 
 void EditorModule::play_toolbar()
 {
 	const wiwa::PlayState state = m_PlayMode->state();
-
+	const bool playing = m_PlayMode->state() != wiwa::PlayState::Edit;
+	const char* play = playing ? ICON_FK_STOP : ICON_FK_PLAY;
 	if (state == wiwa::PlayState::Edit)
 	{
 		ImGui::BeginDisabled(!m_PlayHost->can_play());
-		if (ImGui::Button("Play"))
+		if (ImGui::Button(play))
 		{
 			m_PlayMode->play();
 		}
 		ImGui::EndDisabled();
 	}
-	else if (ImGui::Button("Stop"))
+	else if (ImGui::Button(play))
 	{
 		m_PlayMode->stop();
 	}
 
 	ImGui::BeginDisabled(state == wiwa::PlayState::Edit);
-	if (ImGui::Button(state == wiwa::PlayState::Paused ? "Resume" : "Pause"))
+	if (ImGui::Button(state == wiwa::PlayState::Paused ? ICON_FK_PLAY : ICON_FK_PAUSE))
 	{
 		if (state == wiwa::PlayState::Paused)
 		{
@@ -400,23 +393,16 @@ void EditorModule::play_toolbar()
 	ImGui::EndDisabled();
 
 	ImGui::BeginDisabled(state != wiwa::PlayState::Paused);
-	if (ImGui::Button("Step"))
+	if (ImGui::Button(ICON_FK_STEP_FORWARD))
 	{
 		m_PlayMode->step();
 	}
 	ImGui::EndDisabled();
-
-	ImGui::TextDisabled("|");
-	export_button();
+	
 
 	if (!m_SceneStatus.empty() && ImGui::GetTime() < m_SceneStatusUntil)
 	{
 		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "  %s", m_SceneStatus.c_str());
-	}
-
-	if (state != wiwa::PlayState::Edit)
-	{
-		ImGui::TextUnformatted(state == wiwa::PlayState::Paused ? "  Paused (changes to this scene are lost on Stop)" : "  Playing (changes to this scene are lost on Stop)");
 	}
 }
 
@@ -577,7 +563,7 @@ void EditorModule::export_button()
 	const bool packing = progress && !progress->finished();
 
 	ImGui::BeginDisabled(m_PlayMode->state() != wiwa::PlayState::Edit || packing);
-	if (ImGui::Button("Export"))
+	if (ImGui::MenuItem("Export"))
 	{
 		assets->pack_async("../game/");
 		m_ExportRequested = true;
@@ -610,12 +596,12 @@ void EditorModule::export_modal()
 		if (packing)
 		{
 			const std::string stage = progress->stage();
-			ImGui::TextUnformatted("Exporting the game...");
+			ImGui::Text("Exporting the game...");
 			ImGui::ProgressBar(progress->fraction(), ImVec2(360.0f, 0.0f), stage.c_str());
 		}
 		else
 		{
-			ImGui::TextUnformatted(progress && progress->succeeded() ? "Exported" : "The export failed (see the console)");
+			ImGui::Text(progress && progress->succeeded() ? "Exported" : "The export failed (see the console)");
 		}
 		if (m_ExportUnsaved)
 		{

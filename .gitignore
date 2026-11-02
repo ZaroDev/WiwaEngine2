@@ -82,7 +82,7 @@ editor/wiwa_game.exe
 editor/wiwa_editor.exe
 editor/wiwa.log
 
-editor/assets/
+editor/**.meta
 
 editor/**.json
 docs/superpowers/plans/

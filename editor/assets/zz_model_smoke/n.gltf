@@ -1,0 +1,154 @@
+{
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 3,
+      "max": [
+        1,
+        1,
+        0
+      ],
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5123,
+      "count": 3,
+      "type": "SCALAR"
+    }
+  ],
+  "asset": {
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 36,
+      "byteOffset": 0
+    },
+    {
+      "buffer": 0,
+      "byteLength": 6,
+      "byteOffset": 36
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 44,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAABAAIAAAA="
+    }
+  ],
+  "images": [
+    {
+      "uri": "pixel.png"
+    }
+  ],
+  "materials": [
+    {
+      "name": "",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicFactor": 0.125,
+        "roughnessFactor": 0.375
+      }
+    },
+    {
+      "doubleSided": true,
+      "emissiveFactor": [
+        0.5,
+        0.25,
+        0.125
+      ],
+      "name": "Mat",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "metallicFactor": 0.125,
+        "roughnessFactor": 0.375
+      }
+    },
+    {
+      "doubleSided": true,
+      "emissiveFactor": [
+        0.5,
+        0.25,
+        0.125
+      ],
+      "name": "Mat",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "metallicFactor": 0.125,
+        "roughnessFactor": 0.375
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 1,
+          "material": 0
+        },
+        {
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 1,
+          "material": 1
+        },
+        {
+          "attributes": {
+            "POSITION": 0
+          },
+          "indices": 1,
+          "material": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "name": "Body"
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "source": 0
+    }
+  ]
+}

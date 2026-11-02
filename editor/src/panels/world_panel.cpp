@@ -64,7 +64,8 @@ void WorldPanel::on_draw()
 		section("Ambient occlusion", false, [&]() { ao_rows(settings); });
 		section("Temporal AA", false, [&]() { taa_rows(settings, render); });
 		section("Motion blur", false, [&]() { motion_blur_rows(settings, render); });
-		section("Quality (global, not saved with the scene)", false, [&]() { quality_rows(render); });
+		section("Scripts", false, [&]() { scripts_rows(settings); });
+			section("Quality (global, not saved with the scene)", false, [&]() { quality_rows(render); });
 		if (m_Filtering && !m_AnySection)
 		{
 			ImGui::TextDisabled("No settings match");
@@ -299,6 +300,110 @@ void WorldPanel::motion_blur_rows(wiwa::SceneSettings& settings, wiwa::RenderMod
 			}
 		});
 	note("Replaces the image by the motion of every pixel (red: horizontal, green: vertical).");
+}
+
+void WorldPanel::scripts_rows(wiwa::SceneSettings& settings)
+{
+	wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+	std::vector<wiwa::AssetCatalog::Entry> catalog;
+	if (!m_Collecting && assets != nullptr)
+	{
+		catalog = assets->catalog_entries();
+	}
+
+	// the path shown for a script, or its short id when the catalog does not list it
+	const auto describe = [&](const wiwa::AssetRef& ref)
+	{
+		for (const wiwa::AssetCatalog::Entry& entry : catalog)
+		{
+			if (entry.Guid == ref.Guid)
+			{
+				return entry.Path;
+			}
+		}
+		return ref.Guid.to_string().substr(0, 8);
+	};
+
+	const auto add = [&](const std::string& path)
+	{
+		const std::optional<wiwa::AssetRef> found = assets != nullptr ? assets->find_asset(path) : std::nullopt;
+		if (!found)
+		{
+			m_ScriptStatus = "no such asset";
+		}
+		else if (path.size() < 4 || path.compare(path.size() - 4, 4, ".lua") != 0)
+		{
+			m_ScriptStatus = "not a script (.lua)";
+		}
+		else if (std::find(settings.Scripts.begin(), settings.Scripts.end(), *found) != settings.Scripts.end())
+		{
+			m_ScriptStatus = "already in the list";
+		}
+		else
+		{
+			settings.Scripts.push_back(*found);
+			m_ScriptStatus.clear();
+		}
+	};
+
+	field("Scripts", [&]()
+		{
+			if (settings.Scripts.empty())
+			{
+				ImGui::TextDisabled("No scripts");
+			}
+
+			int move = -1, direction = 0, remove = -1;
+			for (size_t i = 0; i < settings.Scripts.size(); i++)
+			{
+				ImGui::PushID(static_cast<int>(i));
+				ImGui::BeginDisabled(i == 0);
+				if (ImGui::ArrowButton("##up", ImGuiDir_Up)) { move = static_cast<int>(i); direction = -1; }
+				ImGui::EndDisabled();
+				ImGui::SameLine();
+				ImGui::BeginDisabled(i + 1 == settings.Scripts.size());
+				if (ImGui::ArrowButton("##down", ImGuiDir_Down)) { move = static_cast<int>(i); direction = 1; }
+				ImGui::EndDisabled();
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Remove")) { remove = static_cast<int>(i); }
+				ImGui::SameLine();
+				ImGui::TextUnformatted(describe(settings.Scripts[i]).c_str());
+				ImGui::PopID();
+			}
+			if (move >= 0)
+			{
+				std::swap(settings.Scripts[move], settings.Scripts[move + direction]);
+			}
+			if (remove >= 0)
+			{
+				settings.Scripts.erase(settings.Scripts.begin() + remove);
+			}
+		});
+	note("Scene scripts run in this order while the scene plays. They have no entity.");
+
+	field("Add script", [&]()
+		{
+			ImGui::Button("Drop a .lua script here", ImVec2(-FLT_MIN, 0.0f));
+			if (ImGui::BeginDragDropTarget())
+			{
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("WI_ASSET"))
+				{
+					add(reinterpret_cast<const char*>(payload->Data));
+				}
+				ImGui::EndDragDropTarget();
+			}
+
+			const bool entered = ImGui::InputText("##script_path", m_ScriptPath, sizeof(m_ScriptPath), ImGuiInputTextFlags_EnterReturnsTrue);
+			ImGui::SameLine();
+			if (ImGui::Button("Add") || entered)
+			{
+				add(m_ScriptPath);
+			}
+			if (!m_ScriptStatus.empty())
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_ScriptStatus.c_str());
+			}
+		});
 }
 
 void WorldPanel::quality_rows(wiwa::RenderModule* render)
