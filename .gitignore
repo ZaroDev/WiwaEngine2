@@ -75,7 +75,6 @@ Editor/game_assembly/build
 # Asset system
 Library/
 *.wpak
-.superpowers/
 
 # ImGui window layout (per user)
 imgui.ini
@@ -83,7 +82,7 @@ editor/wiwa_game.exe
 editor/wiwa_editor.exe
 editor/wiwa.log
 
-docs/superpowers/
 editor/assets/
 
 editor/**.json
+docs/superpowers/plans/
