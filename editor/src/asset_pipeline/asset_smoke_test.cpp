@@ -15,6 +15,8 @@
 #include "prefab_file.h"
 #include "surface_shader_parser.h"
 
+#include <ui/ui_panel_io.h>
+
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
 namespace wiwa
@@ -89,6 +91,7 @@ namespace wiwa
 			case AssetType::Scene: { auto h = manager.load<SceneData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::Script: { auto h = manager.load<ScriptData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::SurfaceShader: { auto h = manager.load<SurfaceShaderData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::UiPanel: { auto h = manager.load<UiPanelData>(ref); return [h]() { return h.state(); }; }
 			default: return []() { return LoadState::Failed; };
 			}
 		}
@@ -1713,6 +1716,108 @@ namespace wiwa
 			database.scan();
 		}
 
+		// 9b. UI panel files (.wuipanel)
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_uipanel_smoke";
+			std::filesystem::create_directories(dir, error);
+
+			const unsigned char png[] = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0x64, 0xf8, 0xcf, 0x50, 0x0f, 0x00, 0x03, 0x86, 0x01, 0x80, 0x5a, 0x34, 0x7d, 0x6b, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82 };
+			{
+				std::ofstream out(dir / "pixel.png", std::ios::binary);
+				out.write(reinterpret_cast<const char*>(png), sizeof(png));
+			}
+			const std::optional<AssetRef> pixel = database.ensure_imported(dir / "pixel.png");
+			check(pixel.has_value(), "ui_panel: the texture the panel refers to imports");
+
+			// an Image with a real texture and a Text whose font is an asset that does not exist
+			const AssetRef missingFont{ AssetGuid::generate(), 0 };
+			UiPanelData panel;
+			UiWidget image;
+			image.Id = 1;
+			image.Kind = WidgetKind::Image;
+			image.Name = "Logo";
+			image.Texture = pixel.value_or(AssetRef{});
+			UiWidget label;
+			label.Id = 2;
+			label.Kind = WidgetKind::Text;
+			label.Name = "Label";
+			label.Text = "Hello";
+			label.Font = missingFont;
+			panel.Widgets = { image, label };
+			panel.NextId = 3;
+
+			const std::filesystem::path file = dir / "hud.wuipanel";
+			{
+				std::ofstream out(file, std::ios::binary | std::ios::trunc);
+				out << ui_panel_to_json(panel).dump(2);
+			}
+
+			const auto cooked_panel = [&](const std::filesystem::path& source, std::vector<AssetGuid>* dependencies = nullptr, std::vector<std::byte>* bytes = nullptr) -> std::optional<UiPanelData>
+			{
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				if (!meta)
+				{
+					return std::nullopt;
+				}
+				for (const CookedFile& cooked : read_library(database.get_library_root()))
+				{
+					std::span<const std::byte> payload;
+					if (cooked.Guid == meta->Guid && cooked.Type == AssetType::UiPanel && parse_wasset_header(cooked.Bytes, payload))
+					{
+						if (dependencies != nullptr)
+						{
+							*dependencies = cooked.Dependencies;
+						}
+						if (bytes != nullptr)
+						{
+							*bytes = cooked.Bytes;
+						}
+						return deserialize<UiPanelData>(payload);
+					}
+				}
+				return std::nullopt;
+			};
+
+			std::vector<AssetGuid> dependencies;
+			std::vector<std::byte> libraryBytes;
+			const std::optional<AssetRef> ref = database.ensure_imported(file);
+			check(ref.has_value(), "ui_panel_imported: the .wuipanel imports");
+			const std::optional<UiPanelData> cookedPanel = cooked_panel(file, &dependencies, &libraryBytes);
+			check(cookedPanel && cookedPanel->Widgets.size() == 2 && cookedPanel->Widgets[0].Texture == pixel.value_or(AssetRef{}) && cookedPanel->Widgets[1].Text == "Hello",
+				"ui_panel_imported: the cooked panel holds the widgets of the file");
+			check(pixel && std::find(dependencies.begin(), dependencies.end(), pixel->Guid) != dependencies.end(), "ui_panel_dependency_tracked: a texture a widget uses is a dependency");
+			check(std::find(dependencies.begin(), dependencies.end(), missingFont.Guid) == dependencies.end(), "ui_panel_dependency_tracked: a reference to an asset that does not exist is not");
+
+			// it loads through the AssetManager, from the Library and from a pack
+			if (ref)
+			{
+				const std::function<LoadState()> state = request(manager, AssetType::UiPanel, ref->Guid);
+				manager.wait_idle();
+				check(state() == LoadState::Ready, "ui_panel_loads: the cooked panel loads through the AssetManager");
+
+				const std::filesystem::path packDirectory = dir / "pack";
+				check(Packager::pack(database, packDirectory), "ui_panel_packed_loads: packing the Library with a panel in it");
+				PakSource panelPak(packDirectory / "assets.wpak");
+				const std::optional<std::vector<std::byte>> packed = panelPak.valid() ? panelPak.read(ref->Guid) : std::nullopt;
+				check(packed && *packed == libraryBytes, "ui_panel_packed_loads: the pack holds the bytes of the Library");
+				std::span<const std::byte> packedPayload;
+				check(packed && parse_wasset_header(*packed, packedPayload) && deserialize<UiPanelData>(packedPayload).has_value(), "ui_panel_packed_loads: the packed panel decodes");
+			}
+
+			// a damaged file is an import error and leaves no panel
+			const std::filesystem::path broken = dir / "broken.wuipanel";
+			{
+				std::ofstream out(broken, std::ios::binary | std::ios::trunc);
+				out << "{ \"widgets\": [ { \"id\": 1 } ] }";
+			}
+			WI_ASSET_LOG(Info, "Smoke test: the next import error is expected");
+			database.ensure_imported(broken);
+			check(!cooked_panel(broken).has_value(), "ui_panel_invalid_fails_import: a widget without a kind cooks no panel");
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+
 		// 10. assets made from templates (the Asset Browser's Create menu)
 		{
 			const std::filesystem::path dir = database.get_assets_root() / "zz_create_smoke";
@@ -1720,7 +1825,7 @@ namespace wiwa
 
 			check(std::string(extension(CreateKind::Script)) == ".lua" && std::string(extension(CreateKind::Folder)).empty() && std::string(extension(CreateKind::Scene)) == ".wscene" &&
 				std::string(extension(CreateKind::SurfaceShader)) == ".wshader" && std::string(extension(CreateKind::HlslShader)) == ".hlsl" && std::string(extension(CreateKind::HlslInclude)) == ".hlsli" &&
-				std::string(extension(CreateKind::Material)) == ".wmat", "create_asset: every kind has its extension");
+				std::string(extension(CreateKind::Material)) == ".wmat" && std::string(extension(CreateKind::UiPanel)) == ".wuipanel", "create_asset: every kind has its extension");
 
 			// names that cannot be used say why
 			for (const char* bad : { "", "a/b", "a\\b", "a:b", "x?y", "CON", "con", "Com1", "nul", "bad.", "bad ", " ", "tab\tname" })
@@ -1742,7 +1847,8 @@ namespace wiwa
 			struct Case { CreateKind Kind; const char* Name; AssetType Type; };
 			const Case cases[] = {
 				{ CreateKind::Script, "Mover", AssetType::Script }, { CreateKind::Scene, "Level", AssetType::Scene }, { CreateKind::SurfaceShader, "Glow", AssetType::SurfaceShader },
-				{ CreateKind::HlslShader, "Fullscreen", AssetType::Shader }, { CreateKind::HlslInclude, "Helpers", AssetType::Shader }, { CreateKind::Material, "Metal", AssetType::Material } };
+				{ CreateKind::HlslShader, "Fullscreen", AssetType::Shader }, { CreateKind::HlslInclude, "Helpers", AssetType::Shader }, { CreateKind::Material, "Metal", AssetType::Material },
+				{ CreateKind::UiPanel, "Hud", AssetType::UiPanel } };
 			for (const Case& testCase : cases)
 			{
 				const std::string label = std::string("create_asset: ") + testCase.Name;

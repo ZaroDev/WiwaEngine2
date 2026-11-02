@@ -4,6 +4,7 @@
 #include <fstream>
 
 #include <scene/scene_data.h>
+#include <ui/ui_panel_io.h>
 
 #include "../scene/scene_json.h"
 #include "material_file.h"
@@ -102,6 +103,24 @@ namespace wiwa
 			return "#ifndef " + guard + "\n#define " + guard + "\n\n#endif\n";
 		}
 
+		// A panel with one background widget that fills the screen, to put the rest in.
+		std::string ui_panel_template()
+		{
+			UiPanelData panel;
+			UiWidget root;
+			root.Id = 1;
+			root.Kind = WidgetKind::Panel;
+			root.Name = "Root";
+			root.AnchorMin = { 0.0f, 0.0f };
+			root.AnchorMax = { 1.0f, 1.0f };
+			root.OffsetMin = { 0.0f, 0.0f };
+			root.OffsetMax = { 0.0f, 0.0f };
+			root.Color = { 0.0f, 0.0f, 0.0f, 0.0f };
+			panel.Widgets.push_back(root);
+			panel.NextId = 2;
+			return ui_panel_to_json(panel).dump(2);
+		}
+
 		bool write_text(const std::filesystem::path& file, const std::string& text)
 		{
 			std::ofstream out(file, std::ios::binary | std::ios::trunc);
@@ -121,6 +140,7 @@ namespace wiwa
 		case CreateKind::SurfaceShader: return "Surface shader";
 		case CreateKind::HlslShader: return "HLSL shader";
 		case CreateKind::HlslInclude: return "HLSL include";
+		case CreateKind::UiPanel: return "UI panel";
 		}
 		return "";
 	}
@@ -136,6 +156,7 @@ namespace wiwa
 		case CreateKind::SurfaceShader: return "NewSurface";
 		case CreateKind::HlslShader: return "NewShader";
 		case CreateKind::HlslInclude: return "NewInclude";
+		case CreateKind::UiPanel: return "NewPanel";
 		}
 		return "";
 	}
@@ -151,6 +172,7 @@ namespace wiwa
 		case CreateKind::SurfaceShader: return ".wshader";
 		case CreateKind::HlslShader: return ".hlsl";
 		case CreateKind::HlslInclude: return ".hlsli";
+		case CreateKind::UiPanel: return ".wuipanel";
 		}
 		return "";
 	}
@@ -247,6 +269,9 @@ namespace wiwa
 			break;
 		case CreateKind::HlslInclude:
 			written = write_text(path, hlsl_include_template(name));
+			break;
+		case CreateKind::UiPanel:
+			written = write_text(path, ui_panel_template());
 			break;
 		}
 

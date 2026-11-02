@@ -15,6 +15,7 @@ namespace wiwa
 		SurfaceShader, // .wshader
 		HlslShader,    // .hlsl
 		HlslInclude,   // .hlsli
+		UiPanel,       // .wuipanel
 	};
 
 	// What the Create menu calls it, the name it starts with, and the extension the file gets ("" for a folder).

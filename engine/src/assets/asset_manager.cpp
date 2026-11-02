@@ -37,6 +37,7 @@ namespace wiwa
 			case AssetType::Scene: return make_asset<SceneData>(payload);
 			case AssetType::Script: return make_asset<ScriptData>(payload);
 			case AssetType::SurfaceShader: return make_asset<SurfaceShaderData>(payload);
+			case AssetType::UiPanel: return make_asset<UiPanelData>(payload);
 			default: return nullptr;
 			}
 		}
