@@ -3,6 +3,8 @@
 
 #include <fstream>
 
+#include <ui/ui_panel_io.h>
+
 namespace wiwa
 {
 	BinaryArchive::BinaryArchive(bool writing, std::span<const std::byte> bytes) : m_Writing(writing)
@@ -481,6 +483,28 @@ namespace wiwa
 					return;
 				}
 			}
+		}
+	}
+
+	void archive(BinaryArchive& ar, UiPanelData& v)
+	{
+		std::string text;
+		if (!ar.reading())
+		{
+			text = ui_panel_to_json(v).dump();
+		}
+		ar.string(text);
+
+		if (ar.reading() && ar.ok())
+		{
+			std::string error;
+			std::optional<UiPanelData> panel = ui_panel_from_text(text, error);
+			if (!panel)
+			{
+				ar.fail();
+				return;
+			}
+			v = std::move(*panel);
 		}
 	}
 }

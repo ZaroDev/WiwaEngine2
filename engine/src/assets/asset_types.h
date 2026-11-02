@@ -19,6 +19,8 @@ namespace wiwa
 		Scene,
 		Script,
 		SurfaceShader,
+		Font,
+		UiPanel,
 
 		Last
 	};
@@ -39,6 +41,8 @@ namespace wiwa
 		case AssetType::Scene: return "Scene";
 		case AssetType::Script: return "Script";
 		case AssetType::SurfaceShader: return "SurfaceShader";
+		case AssetType::Font: return "Font";
+		case AssetType::UiPanel: return "UiPanel";
 		default: return "None";
 		}
 	}
