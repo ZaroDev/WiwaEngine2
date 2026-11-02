@@ -96,6 +96,16 @@ namespace wiwa
 		return instance == m_Instances.end() ? nullptr : instance->second.get();
 	}
 
+	UiPanelInstance* UiModule::instance_for(const Scene& scene, const EntityGuid& canvas)
+	{
+		if (m_Scene != &scene)
+		{
+			return nullptr;
+		}
+		const auto instance = m_Instances.find(canvas);
+		return instance == m_Instances.end() ? nullptr : instance->second.get();
+	}
+
 	std::vector<UiModule::Active> UiModule::sync(Scene& scene)
 	{
 		if (m_Scene != &scene)

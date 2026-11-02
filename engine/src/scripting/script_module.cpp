@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "script_module.h"
 
+#include <ui/ui_module.h>
+
 #include <algorithm>
 
 #include <core/engine.h>
@@ -24,6 +26,7 @@ namespace wiwa
 		ScriptContext& context = m_Instances->context();
 		context.Assets = assets;
 		context.Scenes = Engine::get().get_module<SceneModule>();
+		context.Ui = Engine::get().get_module<UiModule>();
 		if (RenderModule* renderer = Engine::get().get_module<RenderModule>())
 		{
 			context.Debug = &renderer->get_debug_draw();

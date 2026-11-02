@@ -8,6 +8,7 @@
 #include <iterator>
 #include <set>
 #include <thread>
+#include <unordered_map>
 
 #include <assets/wasset_io.h>
 #include <scene/prefab_expander.h>
@@ -29,6 +30,9 @@
 #include <scripting/script_reload.h>
 #include <scripting/script_requires.h>
 #include <scripting/script_runtime.h>
+#include <ui/ui_draw_list.h>
+#include <ui/ui_layout.h>
+#include <ui/ui_module.h>
 
 #include "asset_pipeline/asset_database.h"
 #include "asset_pipeline/build_settings.h"
@@ -2131,6 +2135,427 @@ namespace wiwa
 
 			std::filesystem::remove_all(dir);
 		}
+
+		bool near_rect(const UiRect& rect, glm::vec2 min, glm::vec2 max, float tolerance = 0.5f)
+		{
+			return glm::length(rect.Min - min) <= tolerance && glm::length(rect.Max - max) <= tolerance;
+		}
+
+		// ---- the UI API ------------------------------------------------------------------------------------------------------------
+
+		UiWidget ui_widget(UiId id, UiId parent, WidgetKind kind, const char* name, glm::vec2 size)
+		{
+			UiWidget widget;
+			widget.Id = id;
+			widget.Parent = parent;
+			widget.Kind = kind;
+			widget.Name = name;
+			widget.OffsetMax = size;
+			return widget;
+		}
+
+		// A scene with a camera, a "Hud" entity that shows a panel (Menu > Start > Label, Volume, Health, Mute, Marker) and the scripts of a test.
+		struct UiHarness
+		{
+			Harness H;
+			UiModule Module{};
+			std::unordered_map<AssetGuid, Ref<AssetSlot>> Slots{};
+			AssetRef Panel{};
+			entt::entity Hud = entt::null;
+			entt::entity Target = entt::null;
+			glm::vec2 Canvas{ 1920.0f, 1080.0f };
+
+			UiHarness()
+			{
+				const entt::entity camera = H.TheScene->create("Camera");
+				H.TheScene->registry().get<Transform>(camera).Position = { 0.0f, 0.0f, 5.0f };
+				H.TheScene->registry().emplace<Camera>(camera).Primary = true;
+				Target = H.TheScene->create("Target");
+
+				UiPanelData data;
+				UiWidget menu = ui_widget(1, 0, WidgetKind::VStack, "Menu", { 300.0f, 300.0f });
+				UiWidget start = ui_widget(2, 1, WidgetKind::Button, "Start", { 100.0f, 30.0f });
+				UiWidget label = ui_widget(3, 2, WidgetKind::Text, "Label", { 0.0f, 0.0f });
+				label.AnchorMax = { 1.0f, 1.0f };
+				label.Text = "Start";
+				UiWidget volume = ui_widget(4, 1, WidgetKind::Slider, "Volume", { 200.0f, 20.0f });
+				UiWidget health = ui_widget(5, 1, WidgetKind::Bar, "Health", { 100.0f, 30.0f });
+				UiWidget mute = ui_widget(6, 1, WidgetKind::Toggle, "Mute", { 30.0f, 30.0f });
+				UiWidget marker = ui_widget(7, 0, WidgetKind::Panel, "Marker", { 40.0f, 40.0f });
+				marker.Color = { 1.0f, 0.0f, 0.0f, 1.0f };
+				marker.AnchorMin = marker.AnchorMax = { 1.0f, 1.0f };
+				marker.OffsetMin = { -40.0f, -40.0f };
+				marker.OffsetMax = { 0.0f, 0.0f };
+				data.Widgets = { menu, start, label, volume, health, mute, marker };
+				data.NextId = 8;
+
+				Panel = AssetRef{ AssetGuid::generate(), 0 };
+				auto slot = std::make_shared<AssetSlot>();
+				slot->Data = std::make_shared<UiPanelData>(data);
+				slot->State = LoadState::Ready;
+				Slots[Panel.Guid] = slot;
+
+				Module.set_panel_loader([this](const AssetRef& ref) -> Handle<UiPanelData>
+				{
+					const auto it = Slots.find(ref.Guid);
+					return it == Slots.end() ? Handle<UiPanelData>{} : Handle<UiPanelData>(ref, it->second);
+				});
+				Module.set_input_source(&Module.scripted_input());
+				H.Instances.context().Ui = &Module;
+
+				Hud = H.TheScene->create("Hud");
+				H.TheScene->registry().emplace<UICanvas>(Hud, UICanvas{ Panel, 0, true });
+			}
+
+			// Adds a script and an entity that has it.
+			entt::entity spawn_script(const std::string& name, const std::string& source)
+			{
+				return H.spawn(name + "_entity", { H.add_script(name, source) });
+			}
+
+			void script(const std::string& name, const std::string& source) { spawn_script(name, source); }
+
+			// One frame as the engine runs it: the UI looks at the input, then the scripts run.
+			void frame()
+			{
+				H.TheScene->update_world_transforms();
+				Module.update_interaction(*H.TheScene, Canvas);
+				H.Instances.update(0.016f);
+			}
+
+			UiDrawList draw()
+			{
+				H.TheScene->update_world_transforms();
+				UiDrawList list;
+				Module.build_draw_list(*H.TheScene, Canvas, list);
+				return list;
+			}
+
+			UiPanelInstance& instance() { return *Module.instance_of(Hud); }
+			void click(float x, float y)
+			{
+				Module.scripted_input().move_to({ x, y });
+				Module.scripted_input().press(0);
+				Module.scripted_input().release(0);
+			}
+		};
+
+		void check_ui(Check& check)
+		{
+			{
+				UiHarness ui;
+				ui.script("finder", R"(return Script:extend{ on_init = function(self)
+					local panel = UI.panel(find_entity('Hud'))
+					local label = panel:find('Menu/Start/Label')
+					record(label.text)
+					label.text = 'Go'
+					record(label.text)
+					record(tostring(panel:find('Menu/Nope')))
+					record(tostring(panel:find('')))
+					record(tostring(UI.panel(find_entity('Camera'))))
+					record(tostring(panel.ready))
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "Start", "Go", "nil", "nil", "nil", "true" }), "ui_lua_find_and_set_text");
+				check(ui.instance().data().Widgets[2].Text == "Go", "ui_lua_find_and_set_text: the instance changed");
+				const UiPanelData* asset = static_cast<const UiPanelData*>(ui.Slots[ui.Panel.Guid]->Data.get());
+				check(asset->Widgets[2].Text == "Start", "ui_lua_find_and_set_text: the asset did not");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("values", R"(return Script:extend{ on_init = function(self)
+					local panel = UI.panel(find_entity('Hud'))
+					local volume = panel:find('Menu/Volume')
+					volume.value = 0.7
+					record(string.format('%.2f', volume.value))
+					record(string.format('%.1f %.1f', volume.min, volume.max))
+					local health = panel:find('Menu/Health')
+					health.value = 0.5
+					health.visible = true
+					health.enabled = false
+					health.color = vec4(0, 1, 0, 1)
+					health.opacity = 0.5
+					record(tostring(health.enabled) .. ' ' .. string.format('%.1f %.1f', health.color.y, health.opacity))
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "0.70", "0.0 1.0", "false 1.0 0.5" }), "ui_lua_value_roundtrip");
+				const UiDrawList list = ui.draw();
+				// the bar: a background quad and a fill quad of half the width, after the 4 quads of the button... find the green one
+				bool halfGreen = false;
+				for (size_t quad = 0; quad * 4 < list.Vertices.size(); quad++)
+				{
+					if (list.Vertices[quad * 4].Color == ui_pack_color({ 0.0f, 1.0f, 0.0f, 0.5f }))
+					{
+						halfGreen = std::abs((list.Vertices[quad * 4 + 1].Pos.x - list.Vertices[quad * 4].Pos.x) - 50.0f) < 0.5f;
+					}
+				}
+				check(halfGreen, "ui_lua_value_roundtrip: the bar is drawn half full in the colour and opacity the script set");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("clicker", R"(return Script:extend{
+					on_init = function(self)
+						local start = UI.panel(find_entity('Hud')):find('Menu/Start')
+						start:on('click', function(me) record('clicked') end)
+					end,
+					on_update = function(self, dt) record('update') end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.H.Events.clear();
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "clicked", "update" }), "ui_lua_click_handler: a click runs the handler once, before that frame's on_update");
+				ui.frame();
+				check(ui.H.count("clicked") == 1, "ui_lua_click_handler: and not again");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("slider", R"(return Script:extend{ on_init = function(self)
+					local volume = UI.panel(find_entity('Hud')):find('Menu/Volume')
+					volume:on('value_changed', function(me, value) record(string.format('%.2f', value)) end)
+					volume:on('hover_enter', function(me) record('enter') end)
+					volume:on('focus', function(me) record('focus') end)
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.Module.scripted_input().move_to({ 50.0f, 40.0f });
+				ui.Module.scripted_input().press(0);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "enter", "focus", "0.25" }), "ui_lua_value_changed_arg: the handlers get their events, and value_changed the new value");
+			}
+
+			{
+				UiHarness ui;
+				const entt::entity ownerEntity = ui.spawn_script("owner", R"(return Script:extend{ on_init = function(self)
+					UI.panel(find_entity('Hud')):find('Menu/Start'):on('click', function(me) record('owner') end)
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.count("owner") == 1, "ui_lua_handler_cleared_on_destroy: the handler works while its script lives");
+
+				ui.H.TheScene->destroy(ownerEntity);
+				ui.frame(); // the script is reaped
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.count("owner") == 1, "ui_lua_handler_cleared_on_destroy: once its entity is gone the handler is gone, and nothing crashes");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("restart", R"(return Script:extend{ on_init = function(self)
+					UI.panel(find_entity('Hud')):find('Menu/Start'):on('click', function(me) record('restart') end)
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.H.Instances.stop();
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.count("restart") == 1, "ui_lua_handler_cleared_on_stop_restart: after a stop and a start the handler is registered once, not twice");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("stale", R"(return Script:extend{
+					on_init = function(self)
+						self.panel = UI.panel(find_entity('Hud'))
+						self.label = self.panel:find('Menu/Start/Label')
+						self.frames = 0
+					end,
+					on_update = function(self, dt)
+						self.frames = self.frames + 1
+						if self.frames == 1 then
+							kill(find_entity('Hud'))
+						elseif self.frames == 2 then
+							record(tostring(self.label.text))
+							self.label.text = 'x'
+							self.label:on('click', function() end)
+							self.label:off('click')
+							self.label:clear_world_anchor()
+							record(tostring(self.panel.visible))
+							record(tostring(self.panel:find('Menu')))
+							record('ok')
+						end
+					end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.frame(); // the canvas is gone
+				check(ui.H.Events == std::vector<std::string>({ "nil", "nil", "nil", "ok" }), "ui_lua_stale_handle_safe: handles to a widget whose canvas is gone read nothing and change nothing, without an error");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("typed", R"(return Script:extend{ on_init = function(self)
+					local label = UI.panel(find_entity('Hud')):find('Menu/Start/Label')
+					local ok, err = pcall(function() label.text = 5 end)
+					record(tostring(ok))
+					record(tostring(string.find(err, 'text', 1, true) ~= nil))
+					local ok2, err2 = pcall(function() label.nonsense = 1 end)
+					record(tostring(ok2))
+					record(tostring((pcall(function() return label.nonsense end))))
+					local start = UI.panel(find_entity('Hud')):find('Menu/Start')
+					local ok3 = pcall(function() start:on('nope', function() end) end)
+					record(tostring(ok3))
+					local ok4 = pcall(function() start:on('click', 5) end)
+					record(tostring(ok4))
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "false", "true", "false", "false", "false", "false" }), "ui_lua_wrong_type_error: a bad value, an unknown property (read or written) or event, and a handler that is not a function are Lua errors");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("anchor", R"(return Script:extend{
+					on_init = function(self)
+						self.marker = UI.panel(find_entity('Hud')):find('Marker')
+					end,
+					on_update = function(self, dt)
+						self.frames = (self.frames or 0) + 1
+						if self.frames == 2 then
+							self.marker.world_anchor = find_entity('Target')
+							record(tostring(self.marker.world_anchor.name))
+						elseif self.frames == 4 then
+							self.marker.world_offset = vec3(0, 1, 0)
+							record(string.format('%.1f', self.marker.world_offset.y))
+						elseif self.frames == 6 then
+							self.marker:clear_world_anchor()
+							record(tostring(self.marker.world_anchor))
+						end
+					end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				const UiDrawList before = ui.draw();
+				ui.frame();
+				const UiDrawList anchored = ui.draw();
+				ui.frame(); // 3
+				ui.frame(); // 4: the offset is set
+				const UiDrawList raised = ui.draw();
+				ui.frame(); // 5
+				ui.frame(); // 6: the anchor is cleared
+				const UiDrawList cleared = ui.draw();
+				auto marker_rect = [](const UiDrawList& list) -> std::optional<UiRect>
+				{
+					for (size_t quad = 0; quad * 4 < list.Vertices.size(); quad++)
+					{
+						if (list.Vertices[quad * 4].Color == ui_pack_color({ 1.0f, 0.0f, 0.0f, 1.0f }))
+						{
+							return UiRect{ list.Vertices[quad * 4].Pos, list.Vertices[quad * 4 + 2].Pos };
+						}
+					}
+					return std::nullopt;
+				};
+				const std::optional<UiRect> a = marker_rect(before);
+				const std::optional<UiRect> b = marker_rect(anchored);
+				const std::optional<UiRect> c = marker_rect(raised);
+				const std::optional<UiRect> d = marker_rect(cleared);
+				check(a && near_rect(*a, { 1880, 1040 }, { 1920, 1080 }), "ui_lua_world_anchor_set: before, the marker is in the corner");
+				check(b && near_rect(*b, { 940, 520 }, { 980, 560 }, 1.0f), "ui_lua_world_anchor_set: after world_anchor = entity it is where the entity is on the screen");
+				check(c && c->Min.y < b->Min.y - 20.0f, "ui_lua_world_anchor_set: world_offset moves it");
+				check(d && near_rect(*d, { 1880, 1040 }, { 1920, 1080 }), "ui_lua_clear_world_anchor: clear_world_anchor puts it back");
+				check(ui.H.Events == std::vector<std::string>({ "Target", "1.0", "nil" }), "ui_lua_world_anchor_set: the properties read back");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("input", R"(return Script:extend{
+					on_init = function(self)
+						UI.panel(find_entity('Hud')):find('Menu/Start'):on('click', function(me) record('click') end)
+					end,
+					on_update = function(self, dt)
+						if self.sent then return end
+						self.sent = true
+						UI.input.move_to(50, 15)
+						UI.input.press(0)
+						UI.input.release(0)
+					end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.frame();
+				check(ui.H.count("click") == 1, "ui_lua_input: input made in Lua reaches the widgets in the next frame");
+
+				UiHarness other;
+				other.script("input2", R"(return Script:extend{ on_init = function(self)
+					UI.input.nav('down')
+					UI.input.nav('submit')
+					UI.input.scroll(1)
+					UI.input.clear_pointer()
+					local ok = pcall(function() UI.input.nav('sideways') end)
+					record(tostring(ok))
+				end })");
+				other.H.Instances.start(other.H.TheScene);
+				other.frame();
+				check(other.H.Events == std::vector<std::string>({ "false" }), "ui_lua_input: navigation, scroll and clear_pointer exist, and an unknown navigation is an error");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("visibility", R"(return Script:extend{ on_init = function(self)
+					local panel = UI.panel(find_entity('Hud'))
+					panel.visible = false
+					record(tostring(panel.visible))
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "false" }) && ui.draw().empty(), "ui_lua_panel_visible: a hidden panel draws nothing");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("off", R"(return Script:extend{ on_init = function(self)
+					local start = UI.panel(find_entity('Hud')):find('Menu/Start')
+					local function once() record('once') end
+					start:on('click', once)
+					start:on('click', function() record('stays') end)
+					start:off('click', once)
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.count("once") == 0 && ui.H.count("stays") == 1, "ui_lua_off: off(event, fn) removes that handler only");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("thrower", R"(return Script:extend{
+					on_init = function(self)
+						local start = UI.panel(find_entity('Hud')):find('Menu/Start')
+						start:on('click', function() error('boom') end)
+						start:on('click', function() record('second') end)
+					end,
+					on_update = function(self, dt) record('update') end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.H.Events.clear();
+				WI_SCRIPT_LOG(Info, "Smoke test: the next script error is expected");
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.count("second") == 1 && ui.H.count("update") == 1, "ui_lua_handler_error: a handler that raises an error does not stop the other handlers or the script's hooks");
+			}
+
+			{
+				Harness h;
+				h.spawn("e", { h.add_script("nomodule", R"(return Script:extend{ on_init = function(self)
+					local ok = pcall(function() return UI.panel(self.entity) end)
+					record(tostring(ok))
+				end })") });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "false" }), "ui_lua_no_module: without a UI module the calls are Lua errors");
+			}
+		}
+
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -2158,6 +2583,7 @@ namespace wiwa
 		check_clone(check);
 		check_editor_document(check);
 		check_play_mode(check);
+		check_ui(check);
 		check_stub_globals(check);
 		check_component_stubs(check);
 		check_lua_stubs(check, pipeline);

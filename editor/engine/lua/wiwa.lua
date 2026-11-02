@@ -254,6 +254,76 @@ function camera.primary() end
 ---@param entity Entity
 function camera.set_primary(entity) end
 
+--------------------------------------------------------------------------------------------------------------------------------
+-- UI
+--------------------------------------------------------------------------------------------------------------------------------
+
+---@alias UiEvent "click"|"value_changed"|"hover_enter"|"hover_exit"|"focus"
+---@alias UiNav "up"|"down"|"left"|"right"|"submit"|"cancel"
+
+--- A widget of a UI panel as one canvas shows it. Reading a widget whose canvas is gone gives nil, and writing it does nothing. The
+--- properties are the fields of the widget, written in snake_case: `text`, `value`, `min`, `max`, `step`, `visible`, `enabled`,
+--- `opacity`, `color`, `font_size`, `world_anchor`, `world_offset`, and so on (the fields of the panel editor's inspector). Vectors are
+--- assigned whole: `w.color = vec4(1, 0, 0, 1)`.
+---@class UiWidget
+---@field text string
+---@field value number
+---@field min number
+---@field max number
+---@field step number
+---@field visible boolean
+---@field enabled boolean
+---@field opacity number
+---@field color vec4
+---@field font_size number
+---@field world_anchor Entity? the entity the widget follows on the screen; nil to stop
+---@field world_offset vec3 world units from the entity
+---@field [string] any
+local UiWidget = {}
+--- Calls `handler(self, ...)` when the widget raises the event. `self` is the script instance; `value_changed` also passes the new value.
+--- Call it from a hook (on_init, on_update, ...): the handler goes away with the script instance.
+---@param event UiEvent
+---@param handler fun(self: ScriptClass, value?: number)
+function UiWidget:on(event, handler) end
+--- Removes this script's handlers for the event, or only `handler`.
+---@param event UiEvent
+---@param handler? function
+function UiWidget:off(event, handler) end
+--- Stops the widget following an entity.
+function UiWidget:clear_world_anchor() end
+
+--- The panel shown by a UICanvas.
+---@class UiPanel
+---@field ready boolean the panel is loaded
+---@field visible boolean? hides the whole panel
+local UiPanel = {}
+--- The widget at a path of names from the root, "Menu/Start". nil if there is none.
+---@param path string
+---@return UiWidget?
+function UiPanel:find(path) end
+
+UI = {}
+--- The panel shown by the entity's UICanvas, or nil if it has none.
+---@param entity Entity
+---@return UiPanel?
+function UI.panel(entity) end
+
+--- Input made by the script. It reaches the UI only while the UI reads scripted input (tests and tools; the game has no input system yet).
+UI.input = {}
+--- Pixels of the canvas.
+---@param x number
+---@param y number
+function UI.input.move_to(x, y) end
+function UI.input.clear_pointer() end
+---@param button integer 0 is the main button
+function UI.input.press(button) end
+---@param button integer
+function UI.input.release(button) end
+---@param name UiNav
+function UI.input.nav(name) end
+---@param amount number
+function UI.input.scroll(amount) end
+
 time = {}
 --- Seconds of the update that is running.
 ---@return number

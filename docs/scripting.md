@@ -80,8 +80,43 @@ or `debug`.
 - **Rendering:** `debug_draw.line / box / sphere / arrow(..., color?, duration?)`; `camera.primary()` and
   `camera.set_primary(entity)`.
 - **Engine:** `time.delta()`, `time.total()`; `log(title, message)`, `log_warning`, `log_error`.
+- **UI:** `UI.panel(entity)`, widgets by path, `widget:on(event, fn)`, `UI.input` (see "UI" below).
 
-Input and physics are not bound yet.
+Physics and keyboard input are not bound yet (the UI has its own input, below).
+
+## UI
+
+A `UICanvas` component on an entity shows a UI panel (a `.wuipanel` asset made in the UI editor). Scripts find the panel through the
+entity, then widgets by the path of their names:
+
+```lua
+local panel = UI.panel(find_entity("Hud"))          -- nil if the entity has no UICanvas
+local score = panel:find("Stats/Score")             -- nil if there is no such widget
+score.text = "Score " .. 10
+panel:find("Stats/Health").value = 0.5
+
+local start = panel:find("Menu/Start")
+start:on("click", function(self) log("UI", "start") end)
+panel:find("Menu/Volume"):on("value_changed", function(self, value) self.volume = value end)
+```
+
+- **Widgets.** Each canvas has its own copy of the panel, so changing a widget never changes the asset or another canvas. Properties are the
+  fields of the widget in snake_case (`text`, `value`, `min`, `max`, `step`, `visible`, `enabled`, `opacity`, `color`, `font_size`,
+  `world_anchor`, `world_offset`, ... all the fields the editor's inspector shows). A name that is not a property is an error; `name` is
+  read only. Assign vectors whole (`w.color = vec4(1, 0, 0, 1)`). A handle to a widget whose canvas is gone reads `nil` and ignores
+  writes. `panel.visible = false` hides the whole panel; `panel.ready` tells whether the asset has loaded.
+- **Events.** `widget:on(event, fn)` with `click`, `value_changed`, `hover_enter`, `hover_exit` and `focus`; `fn(self, value)` gets the
+  script instance first (and the new value for `value_changed`). Register from a hook (`on_init`, ...): handlers belong to the instance
+  and go away with it (destroy, stop, reload that restarts it). `widget:off(event)` removes this script's handlers for the event, or
+  `widget:off(event, fn)` one of them. A handler that raises an error is logged and removed; the others and your hooks carry on.
+- **Order in a frame.** The UI looks at the input and raises its events *before* the scripts update, so a click in a frame runs its
+  handlers before that frame's `on_update`. What scripts change is laid out and drawn in the same frame, after they ran.
+- **World anchors.** `w.world_anchor = entity` makes the widget follow the entity on the screen (the widget's pivot sits on its projected
+  position, `w.world_offset` is in world units); `w.world_anchor = nil` or `w:clear_world_anchor()` puts it back. Any widget can be
+  anchored, containers included: their children come with them. It is a billboard: drawn over the scene, never hidden by geometry.
+- **Input.** There is no input system yet. In the editor's play mode the Game viewport's mouse works on the UI. `UI.input` (`move_to`,
+  `press`, `release`, `nav`, `scroll`, `clear_pointer`) writes to a scripted input source, which only reaches the UI while it is the one in
+  use (tests and tools). When an input system exists it only has to implement `IUiInputSource`.
 
 ## `require` and builds
 

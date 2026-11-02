@@ -44,6 +44,8 @@ namespace wiwa
 
 		// Where the pointer and navigation come from. Null (the default) is no input at all. Not owned.
 		void set_input_source(IUiInputSource* source) { m_Input = source; }
+		// An input source that code fills in (tests, tools, UI.input in Lua). It is only read while it is the input source in use.
+		ScriptedInputSource& scripted_input() { return m_Scripted; }
 		IUiInputSource* input_source() const { return m_Input; }
 
 		// Draw anchors with this camera instead of the scene's primary one (the editor's fly camera); nothing goes back to the scene's.
@@ -59,6 +61,9 @@ namespace wiwa
 
 		// The instance of the canvas on this entity of the scene that was last looked at, or null.
 		UiPanelInstance* instance_of(entt::entity canvas);
+
+		// The instance of the canvas on this entity of the scene the UI module looked at last, or null (also when the scene is another one).
+		UiPanelInstance* instance_for(const Scene& scene, const EntityGuid& canvas);
 		size_t instance_count() const { return m_Instances.size(); }
 
 		// The two halves of a frame. canvasSize is the size of what the scene is drawn into, in pixels.
@@ -81,6 +86,7 @@ namespace wiwa
 		std::vector<AssetGuid> m_ReloadQueue{};
 
 		IUiInputSource* m_Input = nullptr;
+		ScriptedInputSource m_Scripted{};
 		std::optional<RenderCamera> m_CameraOverride{};
 		PanelLoader m_Loader{};
 		FontProvider m_Fonts{};

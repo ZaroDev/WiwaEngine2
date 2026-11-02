@@ -5,6 +5,7 @@
 
 #include <scene/reflection/component_registry.h>
 #include <scene/reflection/value_bag.h>
+#include <ui/ui_module.h>
 #include "bindings/bindings.h"
 #include "script_names.h"
 
@@ -18,7 +19,9 @@ namespace wiwa
 		bind_scene(m_Runtime, m_Context);
 		bind_assets(m_Runtime, m_Context);
 		bind_render(m_Runtime, m_Context);
+		m_Context.UiHandlers = &m_UiHandlers;
 		bind_engine(m_Runtime, m_Context);
+		bind_ui(m_Runtime, m_Context);
 	}
 
 	ScriptInstances::~ScriptInstances()
@@ -53,6 +56,7 @@ namespace wiwa
 			instances->clear();
 		}
 		m_Known.clear();
+		m_UiHandlers.clear();
 		m_Context.ActiveScene = nullptr;
 		m_Scene.reset();
 	}
@@ -96,6 +100,14 @@ namespace wiwa
 
 	bool ScriptInstances::call_hook(Instance& instance, const char* hook, const float* deltaTime)
 	{
+		// handlers that the hook registers belong to this instance
+		struct CurrentOwner
+		{
+			UiHandlerTable& Table;
+			CurrentOwner(UiHandlerTable& table, const sol::table* self) : Table(table) { Table.set_current(self); }
+			~CurrentOwner() { Table.set_current(nullptr); }
+		} currentOwner(m_UiHandlers, &instance.Self);
+
 		sol::object member;
 		std::string lookupError;
 		if (!m_Runtime.protected_get(instance.Class->Class, sol::make_object(m_Runtime.state().lua_state(), hook), member, lookupError))
@@ -163,6 +175,7 @@ namespace wiwa
 				{
 					call_hook(instance, "on_destroy", nullptr);
 				}
+				m_UiHandlers.remove_owner(instance.Self);
 				m_Known.erase({ instance.Entity, instance.Script });
 				instances->erase(instances->begin() + static_cast<std::ptrdiff_t>(i));
 			}
@@ -360,11 +373,56 @@ namespace wiwa
 					const bool reloaded = std::any_of(scripts.begin(), scripts.end(), [&](const AssetRef& script) { return script.resolved() == instance.Script; });
 					if (reloaded && instance.Failed)
 					{
+						m_UiHandlers.remove_owner(instance.Self);
 						m_Known.erase({ instance.Entity, instance.Script });
 						return true;
 					}
 					return false;
 				});
+		}
+	}
+
+	// The widgets' events of this frame, to the functions scripts registered with widget:on. They run before the scripts' on_update, so a
+	// script sees this frame's click in this frame.
+	void ScriptInstances::dispatch_ui_events()
+	{
+		if (m_Context.Ui == nullptr || m_Scene == nullptr || m_UiHandlers.empty())
+		{
+			return;
+		}
+
+		// a handler may create and destroy entities: the canvases are collected first
+		std::vector<EntityGuid> canvases;
+		for (const auto [entity, id, canvas] : m_Scene->registry().view<Id, UICanvas>().each())
+		{
+			canvases.push_back(id.Guid);
+		}
+
+		for (const EntityGuid& canvas : canvases)
+		{
+			UiPanelInstance* instance = m_Context.Ui->instance_for(*m_Scene, canvas);
+			if (instance == nullptr)
+			{
+				continue;
+			}
+
+			const std::vector<UiEvent> events = instance->events();
+			for (const UiEvent& event : events)
+			{
+				for (const UiHandler& handler : m_UiHandlers.matching(canvas, event.Widget, event.Kind))
+				{
+					sol::protected_function_result result = event.Kind == UiEventKind::ValueChanged
+						? m_Runtime.call(handler.Function, handler.Owner, event.Value)
+						: m_Runtime.call(handler.Function, handler.Owner);
+					if (!result.valid())
+					{
+						// the handler that failed is dropped; the others and the script's hooks go on
+						sol::error failure = result;
+						WI_SCRIPT_LOG(Error, "A UI handler failed and was removed: {0}", failure.what());
+						m_UiHandlers.remove(handler.Owner, canvas, handler.Widget, handler.Kind, sol::object(handler.Function));
+					}
+				}
+			}
 		}
 	}
 
@@ -379,6 +437,7 @@ namespace wiwa
 		m_Context.TotalTime += deltaTime;
 
 		reap();
+		dispatch_ui_events();
 		discover();
 
 		for (std::vector<Instance>* instances : { &m_SceneInstances, &m_Instances })

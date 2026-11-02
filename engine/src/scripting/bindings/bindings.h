@@ -26,6 +26,9 @@ namespace wiwa
 	// time.delta / time.total.
 	void bind_engine(ScriptRuntime& runtime, ScriptContext& context);
 
+	// UI.panel(entity), panels and their widgets (properties, on / off), UI.input.
+	void bind_ui(ScriptRuntime& runtime, ScriptContext& context);
+
 	// A field's value as Lua holds it. A vector or quaternion keeps `link` so that writes to its parts reach the field.
 	sol::object field_to_lua(sol::state_view lua, const FieldValue& value, const FieldDescriptor& field, const FieldLink& link);
 
