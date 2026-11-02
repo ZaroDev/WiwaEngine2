@@ -11,6 +11,7 @@
 #include "file_utils.h"
 #include "material_file.h"
 #include "packager.h"
+#include "prefab_file.h"
 #include "surface_shader_parser.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
@@ -1615,6 +1616,97 @@ namespace wiwa
 				check(brokenMaterial && brokenMaterial->Shader.valid() && brokenMaterial->ParamBytes.empty(),
 					"material_missing_shader_still_imports: a shader that fails to compile keeps the reference with no block");
 			}
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+
+		// 9. prefab files (.wprefab)
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_prefab_smoke";
+			std::filesystem::create_directories(dir, error);
+
+			const unsigned char png[] = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0x64, 0xf8, 0xcf, 0x50, 0x0f, 0x00, 0x03, 0x86, 0x01, 0x80, 0x5a, 0x34, 0x7d, 0x6b, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82 };
+			{
+				std::ofstream out(dir / "pixel.png", std::ios::binary);
+				out.write(reinterpret_cast<const char*>(png), sizeof(png));
+			}
+			const std::optional<AssetRef> pixel = database.ensure_imported(dir / "pixel.png");
+			check(pixel.has_value(), "prefab_file: the texture the prefab refers to imports");
+
+			EntityRecord root;
+			root.Id = EntityGuid::generate();
+			root.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Root")) } } });
+			EntityRecord lamp;
+			lamp.Id = EntityGuid::generate();
+			lamp.Parent = root.Id;
+			lamp.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Lamp")) } } });
+			lamp.Components.push_back(ComponentRecord{ "Light", { FieldRecord{ "Intensity", FieldValue(5.0f) } } });
+			lamp.Components.push_back(ComponentRecord{ "MeshRenderer", { FieldRecord{ "Mesh", FieldValue(pixel.value_or(AssetRef{})) } } });
+
+			const std::filesystem::path file = dir / "lamp.wprefab";
+			check(write_prefab_file(file, { root, lamp }, "Lamp"), "prefab_file: the file is written");
+
+			// the cooked prefab of a source file, straight from the Library, with its dependencies
+			const auto cooked_prefab = [&](const std::filesystem::path& source, std::vector<AssetGuid>* dependencies = nullptr) -> std::optional<PrefabData>
+			{
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				if (!meta)
+				{
+					return std::nullopt;
+				}
+				for (const CookedFile& cooked : read_library(database.get_library_root()))
+				{
+					std::span<const std::byte> payload;
+					if (cooked.Guid == meta->Guid && cooked.Type == AssetType::Prefab && parse_wasset_header(cooked.Bytes, payload))
+					{
+						if (dependencies != nullptr)
+						{
+							*dependencies = cooked.Dependencies;
+						}
+						return deserialize<PrefabData>(payload);
+					}
+				}
+				return std::nullopt;
+			};
+
+			std::vector<AssetGuid> dependencies;
+			const std::optional<AssetRef> ref = database.ensure_imported(file);
+			check(ref.has_value(), "prefab_file: the .wprefab imports");
+			std::optional<PrefabData> prefab = cooked_prefab(file, &dependencies);
+			check(prefab && prefab->Nodes.size() == 2 && prefab->Nodes[0].Name == "Root" && prefab->Nodes[0].Parent == -1 && prefab->Nodes[1].Name == "Lamp" && prefab->Nodes[1].Parent == 0,
+				"prefab_file: the cooked prefab has the nodes and the parent of the file");
+			check(prefab && prefab->Nodes.size() == 2 && prefab->Nodes[0].StableId != 0 && prefab->Nodes[1].StableId != 0 && prefab->Nodes[0].StableId != prefab->Nodes[1].StableId, "prefab_file: every node has its own id");
+			check(prefab && prefab->Nodes.size() == 2 && prefab->Nodes[1].Components.size() == 2 && prefab->Nodes[1].Components[0].Name == "Light" && prefab->Nodes[1].Components[1].Name == "MeshRenderer",
+				"prefab_file: the components of a node are kept, and Name and Transform are not among them");
+			check(pixel && std::find(dependencies.begin(), dependencies.end(), pixel->Guid) != dependencies.end(), "prefab_file: an asset a component refers to is a dependency");
+
+			// the same file imported again gives the same node ids
+			const std::vector<u64> firstIds = prefab ? std::vector<u64>{ prefab->Nodes[0].StableId, prefab->Nodes[1].StableId } : std::vector<u64>{};
+			if (ref)
+			{
+				database.reimport(file, true);
+			}
+			std::optional<PrefabData> again = cooked_prefab(file);
+			check(again && again->Nodes.size() == 2 && firstIds.size() == 2 && again->Nodes[0].StableId == firstIds[0] && again->Nodes[1].StableId == firstIds[1], "prefab_file: a forced re-import gives the same node ids");
+
+			// a damaged file is an import error and leaves no prefab
+			const std::filesystem::path broken = dir / "broken.wprefab";
+			{
+				std::ofstream out(broken, std::ios::binary | std::ios::trunc);
+				out << "{";
+			}
+			WI_ASSET_LOG(Info, "Smoke test: the next import error is expected");
+			database.ensure_imported(broken);
+			check(!cooked_prefab(broken).has_value(), "prefab_file: a file that is not JSON cooks no prefab");
+
+			// a prefab file cannot hold an instance of a prefab
+			EntityRecord nested;
+			nested.Id = EntityGuid::generate();
+			nested.Components.push_back(ComponentRecord{ "PrefabInstance", { FieldRecord{ "Prefab", FieldValue(pixel.value_or(AssetRef{})) } } });
+			std::string conversionError;
+			check(!prefab_from_records({ nested }, "Nested", conversionError).has_value() && !conversionError.empty(), "prefab_file: a nested prefab instance is refused with a reason");
+			check(!prefab_from_records({}, "Empty", conversionError).has_value(), "prefab_file: no entities is refused");
 
 			std::filesystem::remove_all(dir, error);
 			database.scan();
