@@ -1,7 +1,15 @@
 #include <editor_common.h>
 #include "ui_smoke_test.h"
 
+#include "../asset_pipeline/asset_database.h"
+
+#include <algorithm>
+#include <cmath>
+
+#include <assets/asset_manager.h>
 #include <assets/wasset_io.h>
+#include <core/engine.h>
+#include <ui/ui_font.h>
 #include <ui/ui_panel_io.h>
 #include <ui/ui_widget.h>
 
@@ -187,6 +195,145 @@ namespace wiwa
 			check(ui_panel_from_json(UiJson::object(), error).has_value(), "an empty object is an empty panel");
 		}
 
+		// A texel of the font's atlas at a position given as a fraction of a glyph's quad.
+		u8 atlas_texel(const FontData& font, const FontGlyph& glyph, float fx, float fy)
+		{
+			const float u = glyph.UvMin.x + (glyph.UvMax.x - glyph.UvMin.x) * fx;
+			const float v = glyph.UvMin.y + (glyph.UvMax.y - glyph.UvMin.y) * fy;
+			const u32 x = std::min(static_cast<u32>(u * static_cast<float>(font.AtlasWidth)), font.AtlasWidth - 1);
+			const u32 y = std::min(static_cast<u32>(v * static_cast<float>(font.AtlasHeight)), font.AtlasHeight - 1);
+			return font.Atlas[static_cast<size_t>(y) * font.AtlasWidth + x];
+		}
+
+		size_t distinct_rows(const std::vector<TextGlyphQuad>& quads)
+		{
+			std::vector<float> rows;
+			for (const TextGlyphQuad& quad : quads)
+			{
+				const float row = std::round(quad.Max.y);
+				if (std::find(rows.begin(), rows.end(), row) == rows.end())
+				{
+					rows.push_back(row);
+				}
+			}
+			return rows.size();
+		}
+
+		void check_fonts(Check& check, AssetPipelineModule& pipeline)
+		{
+			AssetDatabase& database = pipeline.get_database();
+			AssetManager& manager = *Engine::get().get_module<AssetManager>();
+
+			const std::optional<AssetRef> ref = database.ensure_imported(database.get_assets_root() / "fonts" / "Lato-Regular.ttf");
+			check(ref.has_value(), "font_imported: the shipped font imports");
+			if (!ref)
+			{
+				return;
+			}
+			Handle<FontData> handle = manager.load<FontData>(*ref);
+			manager.wait_idle();
+			const FontData* fontPointer = handle.get();
+			check(fontPointer != nullptr, "font_imported: the cooked font loads");
+			if (fontPointer == nullptr)
+			{
+				return;
+			}
+			const FontData& font = *fontPointer;
+
+			const FontGlyph* letterA = font.find('A');
+			const FontGlyph* letterI = font.find('I');
+			check(letterA != nullptr && letterA->Advance > 0.0f, "font_imported: the glyph A is there with an advance");
+			check(font.find(' ') != nullptr && font.find(0xE9) != nullptr && font.find(0x4E2D) == nullptr, "font_imported: ASCII and Latin-1 are in, other scripts are not");
+			check(font.AtlasWidth > 0 && font.AtlasHeight > 0 && font.Atlas.size() == static_cast<size_t>(font.AtlasWidth) * font.AtlasHeight, "font_imported: the atlas is one byte per texel");
+			check(font.PixelSize > 0.0f && font.SdfRange > 0.0f && font.LineHeight > font.PixelSize * 0.5f && font.Ascent > 0.0f, "font_imported: the metrics are set");
+
+			if (letterI != nullptr)
+			{
+				check(atlas_texel(font, *letterI, 0.5f, 0.5f) > 128, "font_atlas_has_sdf: inside the stem of an I is above the edge value");
+				check(atlas_texel(font, *letterI, 0.0f, 0.0f) < 128, "font_atlas_has_sdf: the corner of the quad, outside the glyph, is below the edge value");
+			}
+
+			// every glyph lies inside the atlas and no two share texels
+			bool inside = true;
+			std::vector<u8> used(font.Atlas.size(), 0);
+			bool overlap = false;
+			for (const FontGlyph& glyph : font.Glyphs)
+			{
+				inside = inside && glyph.UvMin.x >= 0.0f && glyph.UvMin.y >= 0.0f && glyph.UvMax.x <= 1.0f && glyph.UvMax.y <= 1.0f;
+				const u32 x0 = static_cast<u32>(std::round(glyph.UvMin.x * static_cast<float>(font.AtlasWidth)));
+				const u32 x1 = static_cast<u32>(std::round(glyph.UvMax.x * static_cast<float>(font.AtlasWidth)));
+				const u32 y0 = static_cast<u32>(std::round(glyph.UvMin.y * static_cast<float>(font.AtlasHeight)));
+				const u32 y1 = static_cast<u32>(std::round(glyph.UvMax.y * static_cast<float>(font.AtlasHeight)));
+				for (u32 y = y0; y < y1 && y < font.AtlasHeight; y++)
+				{
+					for (u32 x = x0; x < x1 && x < font.AtlasWidth; x++)
+					{
+						u8& flag = used[static_cast<size_t>(y) * font.AtlasWidth + x];
+						overlap = overlap || flag != 0;
+						flag = 1;
+					}
+				}
+			}
+			check(inside, "font_atlas_packing: every glyph is inside the atlas");
+			check(!overlap, "font_atlas_packing: no two glyphs share texels");
+
+			const std::vector<std::byte> blob = serialize(font);
+			const std::optional<FontData> back = deserialize<FontData>(blob);
+			check(back && back->Atlas == font.Atlas && back->Glyphs.size() == font.Glyphs.size() && back->AtlasWidth == font.AtlasWidth && back->LineHeight == font.LineHeight,
+				"font_roundtrip: the atlas, the glyphs and the metrics survive");
+			check(!deserialize<FontData>(std::span<const std::byte>(blob.data(), blob.size() / 2)).has_value(), "a truncated cooked font is rejected");
+
+			// text
+			const float margin = font.SdfRange * (24.0f / font.PixelSize) + 1.0f; // a quad reaches the SDF margin past the pen box
+			const glm::vec2 small = measure_text(font, "Hello", 24.0f, 0.0f, false);
+			const glm::vec2 large = measure_text(font, "Hello", 48.0f, 0.0f, false);
+			const glm::vec2 longer = measure_text(font, "Hello world", 24.0f, 0.0f, false);
+			check(small.x > 0.0f && longer.x > small.x, "text_measure_monotonic: a longer string is wider");
+			check(std::abs(large.x - 2.0f * small.x) < small.x * 0.01f && std::abs(large.y - 2.0f * small.y) < small.y * 0.01f, "text_measure_monotonic: twice the size is twice the extent");
+
+			const glm::vec2 none = measure_text(font, "", 24.0f, 0.0f, false);
+			check(none.x == 0.0f && layout_text(font, "", 24.0f, { 100.0f, 50.0f }, UiTextAlign::Left, false).empty(), "text_empty: an empty string has no size and no quads");
+
+			const std::vector<TextGlyphQuad> single = layout_text(font, "AB", 24.0f, { 200.0f, 50.0f }, UiTextAlign::Left, false);
+			check(single.size() == 2 && single[1].Min.x > single[0].Min.x, "text_layout: one quad per visible glyph, in order");
+
+			const std::vector<TextGlyphQuad> twoWords = layout_text(font, "hello world hello world", 24.0f, { 100.0f, 200.0f }, UiTextAlign::Left, true);
+			check(distinct_rows(twoWords) >= 2, "text_wrap: a box narrower than the text makes more than one line");
+			bool wrapFits = !twoWords.empty();
+			for (const TextGlyphQuad& quad : twoWords)
+			{
+				wrapFits = wrapFits && quad.Max.x <= 100.0f + margin;
+			}
+			check(wrapFits, "text_wrap: wrapped lines stay inside the box");
+			check(distinct_rows(layout_text(font, "hello world hello world", 24.0f, { 100.0f, 200.0f }, UiTextAlign::Left, false)) == 1, "text_wrap: without Wrap it stays on one line");
+			check(distinct_rows(layout_text(font, "one\ntwo", 24.0f, { 500.0f, 200.0f }, UiTextAlign::Left, false)) == 2, "text_wrap: a line break starts a new line");
+
+			const std::vector<TextGlyphQuad> longWord = layout_text(font, "WWWWWWWWWWWWWWWWWWWWWWWWWWWW", 24.0f, { 50.0f, 400.0f }, UiTextAlign::Left, true);
+			bool longFits = !longWord.empty() && distinct_rows(longWord) >= 2;
+			for (const TextGlyphQuad& quad : longWord)
+			{
+				longFits = longFits && quad.Max.x <= 50.0f + margin;
+			}
+			check(longFits && longWord.size() == 28, "text_wrap: a word wider than the box breaks by character and every glyph is drawn");
+
+			const std::vector<TextGlyphQuad> missing = layout_text(font, "\xE4\xB8\xAD", 24.0f, { 100.0f, 50.0f }, UiTextAlign::Left, false);
+			const std::vector<TextGlyphQuad> question = layout_text(font, "?", 24.0f, { 100.0f, 50.0f }, UiTextAlign::Left, false);
+			check(missing.size() == 1 && question.size() == 1 && missing[0].UvMin == question[0].UvMin, "text_missing_glyph: a glyph the font lacks draws the fallback");
+
+			check(layout_text(font, "\xC3\x28", 24.0f, { 100.0f, 50.0f }, UiTextAlign::Left, false).size() >= 1, "text_invalid_utf8: broken UTF-8 draws something and does not crash");
+			check(!layout_text(font, "\xFF\xFE\xF0\x9F", 24.0f, { 100.0f, 50.0f }, UiTextAlign::Left, true).empty(), "text_invalid_utf8: bytes that are never UTF-8 are replaced");
+
+			if (letterA != nullptr)
+			{
+				const float scale = 24.0f / font.PixelSize;
+				const glm::vec2 width = measure_text(font, "AB", 24.0f, 0.0f, false);
+				const std::vector<TextGlyphQuad> centered = layout_text(font, "AB", 24.0f, { 400.0f, 50.0f }, UiTextAlign::Center, false);
+				const std::vector<TextGlyphQuad> right = layout_text(font, "AB", 24.0f, { 400.0f, 50.0f }, UiTextAlign::Right, false);
+				check(centered.size() == 2 && std::abs((centered[0].Min.x - letterA->Bearing.x * scale) - (400.0f - width.x) * 0.5f) < 1.0f, "text_align: centered text starts half the free width in");
+				check(right.size() == 2 && std::abs((right[0].Min.x - letterA->Bearing.x * scale) - (400.0f - width.x)) < 1.0f, "text_align: right aligned text ends at the box edge");
+			}
+		}
+
 		void check_field_table(Check& check)
 		{
 			const UiWidget defaults;
@@ -205,11 +352,11 @@ namespace wiwa
 
 	bool run_ui_smoke_test(AssetPipelineModule& pipeline)
 	{
-		(void)pipeline;
 		Check check;
 
 		check_field_table(check);
 		check_panel_files(check);
+		check_fonts(check, pipeline);
 
 		if (check.Failures == 0)
 		{

@@ -128,6 +128,7 @@ namespace wiwa
 	void archive_component_list(BinaryArchive& ar, std::vector<ComponentRecord>& list);
 	void archive(BinaryArchive& ar, ScriptData& v);
 	void archive(BinaryArchive& ar, SurfaceShaderData& v);
+	void archive(BinaryArchive& ar, FontData& v);
 	// A panel is kept as its JSON text, so that ui_panel_io is the one description of the format.
 	void archive(BinaryArchive& ar, UiPanelData& v);
 
@@ -145,6 +146,7 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<SceneData>() { return AssetType::Scene; }
 	template<> constexpr AssetType asset_type_of<ScriptData>() { return AssetType::Script; }
 	template<> constexpr AssetType asset_type_of<SurfaceShaderData>() { return AssetType::SurfaceShader; }
+	template<> constexpr AssetType asset_type_of<FontData>() { return AssetType::Font; }
 	template<> constexpr AssetType asset_type_of<UiPanelData>() { return AssetType::UiPanel; }
 
 	template<typename T>
