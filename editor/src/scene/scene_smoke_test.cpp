@@ -528,6 +528,71 @@ namespace wiwa
 			check(stable, "a forced re-import gives the same node ids");
 		}
 
+		const FieldValue* find_field(const std::vector<ComponentRecord>& components, std::string_view component, std::string_view field)
+		{
+			for (const ComponentRecord& candidate : components)
+			{
+				if (candidate.Name != component)
+				{
+					continue;
+				}
+				for (const FieldRecord& value : candidate.Fields)
+				{
+					if (value.Name == field)
+					{
+						return &value.Value;
+					}
+				}
+			}
+			return nullptr;
+		}
+
+		void check_node_components(Check& check)
+		{
+			register_scene_components();
+
+			PrefabData prefab;
+			prefab.Name = "lamp";
+			PrefabNode lamp = make_node("Lamp", -1);
+			lamp.Components.push_back(ComponentRecord{ "Light", { FieldRecord{ "Intensity", FieldValue(5.0f) } } });
+			prefab.Nodes = { lamp };
+			assign_stable_ids(prefab.Nodes);
+			const u64 nodeId = prefab.Nodes[0].StableId;
+
+			const std::vector<std::byte> bytes = serialize(prefab);
+			std::optional<PrefabData> back = deserialize<PrefabData>(bytes);
+			const FieldValue* intensity = back && back->Nodes.size() == 1 ? find_field(back->Nodes[0].Components, "Light", "Intensity") : nullptr;
+			check(intensity != nullptr && std::get_if<float>(intensity) != nullptr && *std::get_if<float>(intensity) == 5.0f, "node_components: a node's components survive the cooked format");
+
+			EntityRecord root;
+			root.Id = EntityGuid::generate();
+			const ExpandResult expanded = expand_prefab(root, prefab);
+			const FieldValue* expandedIntensity = expanded.Entities.size() == 2 ? find_field(expanded.Entities[1].Components, "Light", "Intensity") : nullptr;
+			check(expandedIntensity != nullptr && std::get_if<float>(expandedIntensity) != nullptr && *std::get_if<float>(expandedIntensity) == 5.0f, "node_components: expanding the prefab gives the node its components");
+			check(find_field(expanded.Entities[1].Components, "Name", "Value") != nullptr && find_field(expanded.Entities[1].Components, "Transform", "Position") != nullptr, "node_components: the node keeps its Name and Transform");
+
+			const std::optional<FieldValue> value = prefab_value(prefab, nodeId, "Light", "Intensity");
+			check(value && std::get_if<float>(&*value) != nullptr && *std::get_if<float>(&*value) == 5.0f, "node_components: the prefab's value of a component field is found for override checks");
+
+			// a prefab cooked before nodes had components ends after the bounds: it still loads, with none
+			PrefabData plain;
+			plain.Name = "plain";
+			plain.Nodes = { make_node("A", -1), make_node("B", 0) };
+			assign_stable_ids(plain.Nodes);
+			std::vector<std::byte> old = serialize(plain);
+			old.resize(old.size() - 2 * sizeof(u64)); // the empty component list of each node
+			std::optional<PrefabData> loadedOld = deserialize<PrefabData>(old);
+			check(loadedOld && loadedOld->Nodes.size() == 2 && loadedOld->Nodes[0].Components.empty(), "node_components: a prefab without the component section still loads");
+
+			PrefabData crowded = plain;
+			crowded.Nodes.resize(1);
+			for (u32 i = 0; i < SCENE_MAX_COMPONENTS_PER_ENTITY + 1; i++)
+			{
+				crowded.Nodes[0].Components.push_back(ComponentRecord{ "C" + std::to_string(i), {} });
+			}
+			check(!deserialize<PrefabData>(serialize(crowded)).has_value(), "node_components: more components than a node may have is rejected");
+		}
+
 		EntityRecord make_instance(EntityGuid id, AssetRef prefab)
 		{
 			EntityRecord record;
@@ -1411,6 +1476,7 @@ namespace wiwa
 		check_render_components(check);
 		check_scene_data(check);
 		check_node_ids(check, pipeline);
+		check_node_components(check);
 		check_prefab(check);
 		check_scene_json(check, pipeline);
 		check_scene_loading(check, pipeline);

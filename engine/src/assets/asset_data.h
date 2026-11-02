@@ -8,6 +8,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <math/math.h>
+#include <scene/scene_data.h>
 #include "asset_guid.h"
 
 // CPU-side data of every asset type. Nothing here knows about the GPU: the renderer builds its own resources
@@ -301,6 +302,9 @@ namespace wiwa
 		std::vector<float> MorphWeights{};
 		AssetRef Mesh{};     // invalid when the node holds no mesh
 		AssetRef Skeleton{}; // invalid when the node is not skinned
+		// Every other reflected component of the node, for prefabs made from scene entities (a model's nodes have none). A component
+		// named here replaces the one the fields above would give the node.
+		std::vector<ComponentRecord> Components{};
 	};
 
 	// The hierarchy of an imported model; it points to the meshes, skeletons and clips by reference.

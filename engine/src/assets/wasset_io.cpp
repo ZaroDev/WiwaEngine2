@@ -462,6 +462,15 @@ namespace wiwa
 		ar.value(v.BoundsMin);
 		ar.value(v.BoundsMax);
 
+		// The nodes' components were added after the first cooked prefabs: those end here and load with none. Always written.
+		if (!(ar.reading() && ar.ok() && ar.remaining() == 0))
+		{
+			for (PrefabNode& n : v.Nodes)
+			{
+				archive_component_list(ar, n.Components);
+			}
+		}
+
 		if (ar.reading() && ar.ok())
 		{
 			for (const PrefabNode& n : v.Nodes)

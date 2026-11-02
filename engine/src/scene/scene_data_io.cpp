@@ -210,6 +210,11 @@ namespace wiwa
 		}
 	}
 
+	void archive_component_list(BinaryArchive& ar, std::vector<ComponentRecord>& list)
+	{
+		bounded_list(ar, list, SCENE_MAX_COMPONENTS_PER_ENTITY, 16, [&](ComponentRecord& component) { archive_component(ar, component); });
+	}
+
 	void archive(BinaryArchive& ar, SceneData& v)
 	{
 		ar.string(v.Name);
