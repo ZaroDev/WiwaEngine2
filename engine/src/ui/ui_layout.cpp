@@ -115,6 +115,7 @@ namespace wiwa
 		result.Scale.assign(count, 0.0f);
 		result.Distance.assign(count, 0.0f);
 		result.CanvasScale = ui_canvas_scale(panel, input.CanvasSize);
+		result.CanvasSize = input.CanvasSize;
 		if (count == 0 || result.CanvasScale <= 0.0f)
 		{
 			return result;

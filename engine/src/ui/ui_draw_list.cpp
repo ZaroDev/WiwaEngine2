@@ -36,99 +36,29 @@ namespace wiwa
 			return color;
 		}
 
+		bool clips_children(const UiWidget& widget)
+		{
+			const bool container = widget.Kind == WidgetKind::Panel || widget.Kind == WidgetKind::HStack || widget.Kind == WidgetKind::VStack || widget.Kind == WidgetKind::Button;
+			return container && widget.ClipChildren;
+		}
+
 		class Builder
 		{
 		public:
 			Builder(UiDrawList& list, const UiPanelData& panel, const std::vector<UiInteractionState>& interaction, const UiLayoutResult& layout, const UiLayoutInput& input)
 				: m_List(list), m_Panel(panel), m_Interaction(interaction), m_Layout(layout), m_Input(input)
 			{
-				m_Children.resize(panel.Widgets.size());
-				std::unordered_map<UiId, size_t> indexOf;
-				for (size_t i = 0; i < panel.Widgets.size(); i++)
-				{
-					indexOf[panel.Widgets[i].Id] = i;
-				}
-				for (size_t i = 0; i < panel.Widgets.size(); i++)
-				{
-					const auto parent = panel.Widgets[i].Parent != 0 ? indexOf.find(panel.Widgets[i].Parent) : indexOf.end();
-					(parent == indexOf.end() ? m_Roots : m_Children[parent->second]).push_back(i);
-				}
-				m_Screen = glm::vec4(0.0f, 0.0f, input.CanvasSize.x, input.CanvasSize.y);
 			}
 
 			void build()
 			{
-				if (m_Panel.Widgets.empty())
+				for (const UiDrawItem& item : ui_draw_order(m_Panel, m_Layout, m_Input.CanvasSize))
 				{
-					return;
-				}
-
-				// the widgets fixed to the screen; world anchored subtrees are left for later
-				std::vector<size_t> worldRoots;
-				for (const size_t root : m_Roots)
-				{
-					draw_tree(root, m_Screen, &worldRoots);
-				}
-
-				// far to near; widgets at the same distance keep the order of the panel
-				std::stable_sort(worldRoots.begin(), worldRoots.end(), [this](size_t a, size_t b) { return m_Layout.Distance[a] > m_Layout.Distance[b]; });
-				for (const size_t root : worldRoots)
-				{
-					draw_tree(root, m_Screen, nullptr);
+					draw_widget(item.Index, item.Clip);
 				}
 			}
 
 		private:
-			struct Item
-			{
-				size_t Index;
-				glm::vec4 Clip;
-			};
-
-			// Draws a subtree in tree order. With worldRoots set, a world anchored widget is not drawn but collected (the root itself too,
-			// when it is one); without it every widget is drawn.
-			void draw_tree(size_t root, const glm::vec4& clip, std::vector<size_t>* worldRoots)
-			{
-				std::vector<Item> stack{ Item{ root, clip } };
-				while (!stack.empty())
-				{
-					const Item item = stack.back();
-					stack.pop_back();
-					const size_t i = item.Index;
-
-					if (worldRoots != nullptr && m_Panel.Widgets[i].world_anchored())
-					{
-						worldRoots->push_back(i);
-						continue;
-					}
-
-					if (!m_Layout.Visible[i] || !(m_Layout.Opacity[i] > 0.0f))
-					{
-						continue; // children are hidden with it
-					}
-
-					draw_widget(i, item.Clip);
-
-					glm::vec4 childClip = item.Clip;
-					if (clips_children(m_Panel.Widgets[i]))
-					{
-						const UiRect& rect = m_Layout.Rects[i];
-						childClip = glm::vec4(std::max(childClip.x, rect.Min.x), std::max(childClip.y, rect.Min.y), std::min(childClip.z, rect.Max.x), std::min(childClip.w, rect.Max.y));
-					}
-					const std::vector<size_t>& kids = m_Children[i];
-					for (auto it = kids.rbegin(); it != kids.rend(); ++it)
-					{
-						stack.push_back(Item{ *it, childClip });
-					}
-				}
-			}
-
-			static bool clips_children(const UiWidget& widget)
-			{
-				const bool container = widget.Kind == WidgetKind::Panel || widget.Kind == WidgetKind::HStack || widget.Kind == WidgetKind::VStack || widget.Kind == WidgetKind::Button;
-				return container && widget.ClipChildren;
-			}
-
 			UiInteractionState state_of(size_t i) const
 			{
 				return i < m_Interaction.size() ? m_Interaction[i] : UiInteractionState::Normal;
@@ -407,10 +337,81 @@ namespace wiwa
 			const std::vector<UiInteractionState>& m_Interaction;
 			const UiLayoutResult& m_Layout;
 			const UiLayoutInput& m_Input;
-			std::vector<std::vector<size_t>> m_Children{};
-			std::vector<size_t> m_Roots{};
-			glm::vec4 m_Screen{ 0.0f };
 		};
+	}
+
+	std::vector<UiDrawItem> ui_draw_order(const UiPanelData& panel, const UiLayoutResult& layout, const glm::vec2& canvasSize)
+	{
+		std::vector<UiDrawItem> order;
+		const size_t count = panel.Widgets.size();
+		if (count == 0 || layout.Rects.size() != count || layout.Distance.size() != count)
+		{
+			return order;
+		}
+
+		std::unordered_map<UiId, size_t> indexOf;
+		for (size_t i = 0; i < count; i++)
+		{
+			indexOf[panel.Widgets[i].Id] = i;
+		}
+		std::vector<std::vector<size_t>> children(count);
+		std::vector<size_t> roots;
+		for (size_t i = 0; i < count; i++)
+		{
+			const auto parent = panel.Widgets[i].Parent != 0 ? indexOf.find(panel.Widgets[i].Parent) : indexOf.end();
+			(parent == indexOf.end() ? roots : children[parent->second]).push_back(i);
+		}
+
+		const glm::vec4 screen(0.0f, 0.0f, canvasSize.x, canvasSize.y);
+		std::vector<size_t> worldRoots;
+
+		// A subtree in tree order. With collect set, a world anchored widget is not visited but collected, and without it everything is.
+		const auto walk = [&](size_t root, bool collect)
+		{
+			std::vector<UiDrawItem> stack{ UiDrawItem{ root, screen } };
+			while (!stack.empty())
+			{
+				const UiDrawItem item = stack.back();
+				stack.pop_back();
+				const size_t i = item.Index;
+
+				if (collect && panel.Widgets[i].world_anchored())
+				{
+					worldRoots.push_back(i);
+					continue;
+				}
+				if (!layout.Visible[i] || !(layout.Opacity[i] > 0.0f))
+				{
+					continue; // its children are hidden with it
+				}
+
+				order.push_back(item);
+
+				glm::vec4 childClip = item.Clip;
+				if (clips_children(panel.Widgets[i]))
+				{
+					const UiRect& rect = layout.Rects[i];
+					childClip = glm::vec4(std::max(childClip.x, rect.Min.x), std::max(childClip.y, rect.Min.y), std::min(childClip.z, rect.Max.x), std::min(childClip.w, rect.Max.y));
+				}
+				for (auto it = children[i].rbegin(); it != children[i].rend(); ++it)
+				{
+					stack.push_back(UiDrawItem{ *it, childClip });
+				}
+			}
+		};
+
+		for (const size_t root : roots)
+		{
+			walk(root, true);
+		}
+
+		// far to near; widgets at the same distance keep the order of the panel
+		std::stable_sort(worldRoots.begin(), worldRoots.end(), [&layout](size_t a, size_t b) { return layout.Distance[a] > layout.Distance[b]; });
+		for (const size_t root : worldRoots)
+		{
+			walk(root, false);
+		}
+		return order;
 	}
 
 	u32 ui_pack_color(const glm::vec4& color)

@@ -52,6 +52,7 @@ namespace wiwa
 		std::vector<float> Scale{};    // pixels per reference pixel at this widget: the canvas scale times the distance scales above it
 		std::vector<float> Distance{}; // from the camera to the anchored entity, for a visible world anchored widget; else 0
 		float CanvasScale = 0.0f;
+		glm::vec2 CanvasSize{ 0.0f };
 	};
 
 	// How the canvas is scaled to the reference resolution of the panel: width^(1-match) * height^match of the ratios.

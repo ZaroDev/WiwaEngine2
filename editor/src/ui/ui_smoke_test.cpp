@@ -13,6 +13,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <ui/ui_font.h>
 #include <ui/ui_draw_list.h>
+#include <ui/ui_input.h>
+#include <ui/ui_interaction.h>
 #include <ui/ui_layout.h>
 #include <ui/ui_panel_io.h>
 #include <ui/ui_widget.h>
@@ -667,6 +669,364 @@ namespace wiwa
 			check(list.Vertices.size() == 8 && list.Vertices[0].Color == pack_color(0, 1, 0, 1), "draw_order_world: world widgets are drawn after the widgets that are fixed to the screen");
 		}
 
+		// A panel, a scripted pointer and the interaction state machine, stepped by hand.
+		struct Rig
+		{
+			UiPanelData Panel{};
+			UiInteraction Interaction{};
+			std::vector<UiInteractionState> States{};
+			ScriptedInputSource Source{};
+			std::vector<UiEvent> Events{};
+			UiLayoutInput Input{};
+			UiCameraView Camera{};
+			glm::vec3 AnchorPosition{ 0.0f };
+			EntityGuid Anchor{};
+
+			Rig()
+			{
+				Input.CanvasSize = { 1920.0f, 1080.0f };
+				Camera = test_camera();
+				Anchor = EntityGuid::generate();
+				Input.Camera = &Camera;
+				Input.WorldPosition = [this](const EntityGuid& guid) -> std::optional<glm::vec3>
+				{
+					return guid == Anchor ? std::optional<glm::vec3>(AnchorPosition) : std::nullopt;
+				};
+			}
+
+			void step()
+			{
+				const UiLayoutResult layout = compute_layout(Panel, Input);
+				States.resize(Panel.Widgets.size(), UiInteractionState::Normal);
+				Interaction.update(Panel, layout, States, Source.poll(), Events);
+			}
+
+			size_t count(UiEventKind kind, UiId widget) const
+			{
+				return static_cast<size_t>(std::count_if(Events.begin(), Events.end(), [&](const UiEvent& event) { return event.Kind == kind && event.Widget == widget; }));
+			}
+
+			UiWidget& widget(UiId id) { return *Panel.find(id); }
+		};
+
+		UiWidget button_at(UiId id, float x, float y, float w = 100.0f, float h = 30.0f)
+		{
+			return layout_widget(id, 0, WidgetKind::Button, "Button", { 0, 0 }, { 0, 0 }, { x, y }, { x + w, y + h });
+		}
+
+		void check_interaction(Check& check)
+		{
+			// the scripted source
+			{
+				ScriptedInputSource source;
+				UiInputFrame frame = source.poll();
+				check(!frame.PointerValid && !frame.Down[0] && !frame.Pressed[0] && frame.NavPressed == 0, "input_scripted: a fresh source has no pointer and nothing pressed");
+				source.move_to({ 10.0f, 20.0f });
+				source.press(0);
+				frame = source.poll();
+				check(frame.PointerValid && frame.Pointer == glm::vec2(10.0f, 20.0f) && frame.Down[0] && frame.Pressed[0] && !frame.Released[0], "input_scripted: a press is down, and a press edge");
+				frame = source.poll();
+				check(frame.Down[0] && !frame.Pressed[0] && frame.PointerValid, "input_scripted: the press edge lasts one poll, the button stays down");
+				source.release(0);
+				frame = source.poll();
+				check(!frame.Down[0] && frame.Released[0], "input_scripted: a release is up, and a release edge");
+				frame = source.poll();
+				check(!frame.Down[0] && !frame.Released[0], "input_scripted: the release edge lasts one poll");
+				source.press(0);
+				source.release(0);
+				frame = source.poll();
+				check(frame.Pressed[0] && frame.Released[0] && !frame.Down[0], "input_scripted: a press and a release between two polls are both seen");
+				source.nav(UiNav::Down);
+				source.nav(UiNav::Submit);
+				frame = source.poll();
+				check((frame.NavPressed & ui_nav_bit(UiNav::Down)) != 0 && (frame.NavPressed & ui_nav_bit(UiNav::Submit)) != 0 && (frame.NavPressed & ui_nav_bit(UiNav::Up)) == 0 && source.poll().NavPressed == 0, "input_scripted: navigation presses last one poll");
+				source.press(7);
+				check(!source.poll().Pressed[0], "input_scripted: a button that does not exist is ignored");
+				NullInputSource none;
+				check(!none.poll().PointerValid, "input_null: the null source has no pointer");
+			}
+
+			// hover and click
+			{
+				Rig rig;
+				rig.Panel.Widgets = { button_at(1, 100, 100) };
+				rig.Source.move_to({ 150.0f, 115.0f });
+				rig.step();
+				check(rig.count(UiEventKind::HoverEnter, 1) == 1 && rig.States[0] == UiInteractionState::Hover, "ui_hover_enter_exit: moving onto a button hovers it");
+				rig.step();
+				check(rig.count(UiEventKind::HoverEnter, 1) == 1, "ui_hover_enter_exit: hovering again says nothing new");
+				rig.Source.move_to({ 500.0f, 500.0f });
+				rig.step();
+				check(rig.count(UiEventKind::HoverExit, 1) == 1 && rig.States[0] == UiInteractionState::Normal, "ui_hover_enter_exit: moving away ends the hover");
+
+				rig.Source.move_to({ 150.0f, 115.0f });
+				rig.step();
+				rig.Source.press(0);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 1) == 0 && rig.States[0] == UiInteractionState::Pressed, "ui_click_fires_on_release: pressing does not click, and shows pressed");
+				rig.Source.release(0);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 1) == 1 && rig.States[0] == UiInteractionState::Hover, "ui_click_fires_on_release: releasing over the button clicks it once");
+				rig.step();
+				check(rig.count(UiEventKind::Click, 1) == 1, "ui_click_fires_on_release: and not again");
+
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 1) == 2, "ui_click_one_frame: a press and a release in one frame is a click");
+
+				rig.Source.press(0);
+				rig.step();
+				rig.Source.move_to({ 500.0f, 500.0f });
+				rig.step();
+				rig.Source.release(0);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 1) == 2, "ui_press_release_elsewhere_no_click: pressing on a button and releasing off it is not a click");
+
+				rig.Source.move_to({ 500.0f, 500.0f });
+				rig.Source.press(0);
+				rig.step();
+				rig.Source.move_to({ 150.0f, 115.0f });
+				rig.Source.release(0);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 1) == 2, "ui_press_release_elsewhere_no_click: pressing off a button and releasing on it is not a click");
+			}
+
+			// what cannot be clicked
+			{
+				Rig rig;
+				UiWidget disabled = button_at(1, 100, 100);
+				disabled.Enabled = false;
+				rig.Panel.Widgets = { disabled };
+				rig.Source.move_to({ 150.0f, 115.0f });
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 1) == 0 && rig.count(UiEventKind::HoverEnter, 1) == 0 && rig.States[0] == UiInteractionState::Normal, "ui_disabled_not_clickable: a disabled button neither hovers nor clicks");
+
+				UiWidget parent = layout_widget(1, 0, WidgetKind::Panel, "Parent", { 0, 0 }, { 1, 1 }, { 0, 0 }, { 0, 0 });
+				parent.Enabled = false;
+				UiWidget child = button_at(2, 100, 100);
+				child.Parent = 1;
+				rig.Panel.Widgets = { parent, child };
+				rig.Events.clear();
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 2) == 0, "ui_disabled_not_clickable: a button in a disabled parent cannot be clicked");
+
+				UiWidget hidden = button_at(1, 100, 100);
+				hidden.Visible = false;
+				rig.Panel.Widgets = { hidden };
+				rig.Events.clear();
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.step();
+				check(rig.Events.empty(), "ui_hidden_not_clickable: a hidden button gets no events");
+
+				UiWidget clear = button_at(1, 100, 100);
+				clear.Opacity = 0.0f;
+				rig.Panel.Widgets = { clear };
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.step();
+				check(rig.Events.empty(), "ui_hidden_not_clickable: a button with an opacity of 0 gets no events");
+
+				UiWidget clipper = layout_widget(1, 0, WidgetKind::Panel, "Clip", { 0, 0 }, { 0, 0 }, { 100, 100 }, { 200, 200 });
+				clipper.ClipChildren = true;
+				UiWidget clipped = button_at(2, 0, 0, 400, 400);
+				clipped.Parent = 1;
+				rig.Panel.Widgets = { clipper, clipped };
+				rig.Source.move_to({ 250.0f, 150.0f }); // inside the button, outside the clipping parent
+				rig.step();
+				check(rig.Events.empty(), "ui_clip_blocks_hit: the part of a button outside its clipping parent cannot be hit");
+				rig.Source.move_to({ 150.0f, 150.0f });
+				rig.step();
+				check(rig.count(UiEventKind::HoverEnter, 2) == 1, "ui_clip_blocks_hit: the part inside can");
+			}
+
+			// overlap
+			{
+				Rig rig;
+				rig.Panel.Widgets = { button_at(1, 100, 100), button_at(2, 150, 100) };
+				rig.Source.move_to({ 175.0f, 115.0f });
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 2) == 1 && rig.count(UiEventKind::Click, 1) == 0, "ui_overlap_topmost_wins: the widget drawn last gets the click");
+			}
+
+			// sliders
+			{
+				Rig rig;
+				UiWidget slider = layout_widget(1, 0, WidgetKind::Slider, "Volume", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 200, 20 });
+				rig.Panel.Widgets = { slider };
+				rig.Source.move_to({ 50.0f, 10.0f });
+				rig.Source.press(0);
+				rig.step();
+				check(std::abs(rig.widget(1).Value - 0.25f) < 1e-4f && rig.count(UiEventKind::ValueChanged, 1) == 1, "ui_slider_drag: pressing on the track sets the value there");
+				rig.Source.move_to({ 500.0f, 400.0f });
+				rig.step();
+				check(std::abs(rig.widget(1).Value - 1.0f) < 1e-4f && rig.States[0] == UiInteractionState::Pressed, "ui_slider_drag: dragging off the end keeps following, clamped");
+				rig.Source.release(0);
+				rig.step();
+				rig.Source.move_to({ 100.0f, 10.0f });
+				rig.step();
+				check(std::abs(rig.widget(1).Value - 1.0f) < 1e-4f, "ui_slider_drag: after the release the pointer no longer moves it");
+				check(rig.count(UiEventKind::Click, 1) == 0, "ui_slider_drag: a slider does not click");
+
+				rig.widget(1).Direction = UiDirection::RightToLeft;
+				rig.Source.move_to({ 50.0f, 10.0f });
+				rig.Source.press(0);
+				rig.step();
+				check(std::abs(rig.widget(1).Value - 0.75f) < 1e-4f, "ui_slider_drag: RightToLeft counts from the right");
+				rig.Source.release(0);
+				rig.step();
+
+				rig.widget(1).Direction = UiDirection::LeftToRight;
+				rig.widget(1).Step = 0.25f;
+				rig.Source.move_to({ 60.0f, 10.0f });
+				rig.Source.press(0);
+				rig.step();
+				check(std::abs(rig.widget(1).Value - 0.25f) < 1e-4f, "ui_slider_step_snap: 30 percent snaps to the step below");
+				rig.Source.move_to({ 80.0f, 10.0f });
+				rig.step();
+				check(std::abs(rig.widget(1).Value - 0.5f) < 1e-4f, "ui_slider_step_snap: 40 percent snaps up");
+				rig.Source.release(0);
+				rig.step();
+
+				rig.widget(1).MinValue = 5.0f;
+				rig.widget(1).MaxValue = 5.0f;
+				rig.widget(1).Value = 5.0f;
+				rig.Events.clear();
+				rig.Source.move_to({ 50.0f, 10.0f });
+				rig.Source.press(0);
+				rig.step();
+				check(rig.widget(1).Value == 5.0f && rig.count(UiEventKind::ValueChanged, 1) == 0, "ui_slider_degenerate: min equal to max never changes the value");
+				rig.widget(1).MaxValue = std::numeric_limits<float>::infinity();
+				rig.step();
+				check(std::isfinite(rig.widget(1).Value), "ui_slider_degenerate: an infinite range never makes the value NaN or infinite");
+			}
+
+			// toggles
+			{
+				Rig rig;
+				UiWidget toggle = layout_widget(1, 0, WidgetKind::Toggle, "Mute", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 30, 30 });
+				rig.Panel.Widgets = { toggle };
+				rig.Source.move_to({ 10.0f, 10.0f });
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.step();
+				check(rig.widget(1).Value > 0.5f && rig.count(UiEventKind::ValueChanged, 1) == 1 && rig.count(UiEventKind::Click, 1) == 1, "ui_toggle_flips: a click turns it on");
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.step();
+				check(rig.widget(1).Value < 0.5f && rig.count(UiEventKind::ValueChanged, 1) == 2, "ui_toggle_flips: and the next click turns it off");
+			}
+
+			// navigation
+			{
+				Rig rig;
+				UiWidget second = button_at(2, 100, 200);
+				UiWidget first = button_at(1, 100, 100);
+				UiWidget third = button_at(3, 100, 300);
+				rig.Panel.Widgets = { first, second, third };
+				rig.Source.nav(UiNav::Down);
+				rig.step();
+				check(rig.Interaction.focused() == 1 && rig.count(UiEventKind::Focus, 1) == 1 && rig.States[0] == UiInteractionState::Focused, "ui_nav_moves_focus: with nothing focused, Down focuses the first widget");
+				rig.Source.nav(UiNav::Down);
+				rig.step();
+				rig.Source.nav(UiNav::Down);
+				rig.step();
+				check(rig.Interaction.focused() == 3, "ui_nav_moves_focus: Down moves to the next one below");
+				rig.Source.nav(UiNav::Down);
+				rig.step();
+				check(rig.Interaction.focused() == 3, "ui_nav_moves_focus: at the last one Down stays");
+				rig.Source.nav(UiNav::Up);
+				rig.step();
+				check(rig.Interaction.focused() == 2, "ui_nav_moves_focus: Up goes back");
+				rig.Source.nav(UiNav::Right);
+				rig.step();
+				check(rig.Interaction.focused() == 2, "ui_nav_moves_focus: Right with nothing to the right stays");
+
+				rig.Source.nav(UiNav::Submit);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 2) == 1, "ui_submit_clicks_focused: Submit clicks the focused button");
+
+				rig.Source.nav(UiNav::Cancel);
+				rig.step();
+				check(rig.Interaction.focused() == 0 && rig.States[1] == UiInteractionState::Normal, "ui_nav_cancel: Cancel clears the focus");
+
+				rig.widget(2).Enabled = false;
+				rig.Source.nav(UiNav::Down);
+				rig.step();
+				rig.Source.nav(UiNav::Down);
+				rig.step();
+				check(rig.Interaction.focused() == 3, "ui_nav_skips_disabled: a disabled widget cannot take the focus");
+
+				rig.widget(2).Enabled = true;
+				rig.Source.move_to({ 150.0f, 215.0f });
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.step();
+				check(rig.Interaction.focused() == 2, "ui_click_focuses: clicking a widget focuses it");
+
+				rig.widget(2).Visible = false;
+				rig.Source.nav(UiNav::Submit);
+				rig.step();
+				check(rig.Interaction.focused() == 0 && rig.count(UiEventKind::Click, 2) == 2, "ui_nav_focus_lost: a focused widget that gets hidden loses the focus and does not click");
+			}
+
+			// a slider with the focus
+			{
+				Rig rig;
+				UiWidget slider = layout_widget(1, 0, WidgetKind::Slider, "Volume", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 200, 20 });
+				slider.Step = 0.1f;
+				slider.Value = 0.5f;
+				rig.Panel.Widgets = { slider };
+				rig.Source.nav(UiNav::Down);
+				rig.step();
+				rig.Source.nav(UiNav::Right);
+				rig.step();
+				check(std::abs(rig.widget(1).Value - 0.6f) < 1e-4f && rig.count(UiEventKind::ValueChanged, 1) == 1, "ui_nav_slider: Right on a focused slider adds one step");
+				rig.Source.nav(UiNav::Left);
+				rig.Source.nav(UiNav::Left);
+				rig.step();
+				check(std::abs(rig.widget(1).Value - 0.4f) < 1e-4f || std::abs(rig.widget(1).Value - 0.5f) < 1e-4f, "ui_nav_slider: Left lowers it");
+			}
+
+			// a widget that goes away while it is pressed
+			{
+				Rig rig;
+				rig.Panel.Widgets = { button_at(1, 100, 100) };
+				rig.Source.move_to({ 150.0f, 115.0f });
+				rig.Source.press(0);
+				rig.step();
+				rig.Panel.Widgets.clear();
+				rig.Source.release(0);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 1) == 0 && rig.Interaction.captured() == 0, "ui_widget_removed_while_pressed: no click, and the capture is dropped");
+			}
+
+			// world anchored
+			{
+				Rig rig;
+				UiWidget marker = button_at(1, 0, 0, 100, 30);
+				marker.WorldEntity = rig.Anchor;
+				rig.Panel.Widgets = { marker };
+				rig.Source.move_to({ 960.0f, 540.0f }); // the anchor is in front of the camera: the middle of the screen
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 1) == 1, "ui_world_anchored_clickable: a button anchored in the world is hit where it is drawn");
+				rig.Source.move_to({ 100.0f, 100.0f });
+				rig.Source.press(0);
+				rig.Source.release(0);
+				rig.step();
+				check(rig.count(UiEventKind::Click, 1) == 1, "ui_world_anchored_clickable: and not where it is not");
+			}
+		}
+
 		// A texel of the font's atlas at a position given as a fraction of a glyph's quad.
 		u8 atlas_texel(const FontData& font, const FontGlyph& glyph, float fx, float fy)
 		{
@@ -832,6 +1192,7 @@ namespace wiwa
 		check_fonts(check, pipeline, fontHandle);
 		check_layout(check, fontHandle.get());
 		check_draw(check, fontHandle.get());
+		check_interaction(check);
 
 		if (check.Failures == 0)
 		{

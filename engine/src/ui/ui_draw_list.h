@@ -53,6 +53,17 @@ namespace wiwa
 	// RGBA8 of a colour with components in 0..1 (outside it is clamped).
 	u32 ui_pack_color(const glm::vec4& color);
 
+	// A widget to draw (or to hit test), with the rect that clips it: the canvas, cut down by the clipping widgets above it.
+	struct UiDrawItem
+	{
+		size_t Index = 0;
+		glm::vec4 Clip{ 0.0f }; // min x, min y, max x, max y in canvas pixels
+	};
+
+	// The widgets that take part, back to front: the ones fixed to the screen in tree order, then the world anchored ones far to near
+	// (each with its subtree in tree order). Hidden widgets and widgets with an opacity of 0 are left out together with their children.
+	std::vector<UiDrawItem> ui_draw_order(const UiPanelData& panel, const UiLayoutResult& layout, const glm::vec2& canvasSize);
+
 	// Adds the quads of a panel to the list: the widgets that are fixed to the screen in tree order, then the ones anchored in the world,
 	// far to near. interaction has the state of each widget by index (missing entries are Normal). Hidden widgets, widgets with an
 	// opacity of 0 and quads without an area make nothing. A Text whose font is not loaded (input.Fonts gives null) makes nothing.
