@@ -5,6 +5,7 @@
 namespace wiwa::engine_assets
 {
 	inline constexpr const char* IMGUI_SHADER = "engine/shaders/imgui.hlsl";
+	inline constexpr const char* UI_SHADER = "engine/shaders/ui.hlsl";
 	inline constexpr const char* DEPTH_SHADER = "engine/shaders/depth.hlsl";
 	inline constexpr const char* DEPTH_MASK_SHADER = "engine/shaders/depth_mask.hlsl";
 	inline constexpr const char* LIGHT_CULL_SHADER = "engine/shaders/light_cull.hlsl";

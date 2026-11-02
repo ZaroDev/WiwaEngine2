@@ -12,6 +12,7 @@
 #include "passes/depth_prepass.h"
 #include "passes/forward_pass.h"
 #include "passes/imgui_pass.h"
+#include "passes/ui_pass.h"
 #include "passes/light_cull_pass.h"
 #include "passes/ao_pass.h"
 #include "passes/bloom_pass.h"
@@ -97,6 +98,7 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<BloomPass>())
 					&& m_Renderer->add_pass(CreateScope<TonemapPass>())
 					&& m_Renderer->add_pass(CreateScope<FxaaPass>())
+					&& m_Renderer->add_pass(CreateScope<UiRenderPass>())
 					&& m_Renderer->add_pass(CreateScope<SelectionOutlinePass>())
 					&& m_Renderer->add_pass(CreateScope<DebugPass>())
 					&& m_Renderer->add_pass(CreateScope<PickPass>())

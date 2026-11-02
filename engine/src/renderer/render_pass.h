@@ -4,6 +4,8 @@
 
 #include <math/math.h>
 
+#include <ui/ui_draw_list.h>
+
 #include "imgui_draw_data.h"
 
 namespace wiwa
@@ -27,6 +29,7 @@ namespace wiwa
 		bool SceneInViewport = false; // the UI shows the scene in a panel; otherwise it fills the window (the blit pass draws it)
 		PickState* Pick = nullptr; // the click waiting to be answered, and where its answer goes
 		const DebugDrawData* Debug = nullptr; // the debug shapes of this frame (null when there are none)
+		const UiDrawList* Ui = nullptr; // the game UI of this frame (null when there is none)
 		const SceneRenderData* Scene = nullptr; // the scene's draw lists and buffers for this frame (null when there is nothing to draw)
 	};
 

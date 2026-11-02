@@ -79,6 +79,8 @@ namespace wiwa
 	void register_temporal_checks();
 	// Custom materials: surface shader cache, custom records, parameter bytes (material_checks.cpp).
 	void register_material_checks();
+	// The UI pass: quads, clipping, images, SDF text (ui_checks.cpp).
+	void register_ui_checks();
 
 	// `--render-test`: runs every check once on the render thread. True when all passed.
 	bool run_render_checks(RenderWorld& world);
