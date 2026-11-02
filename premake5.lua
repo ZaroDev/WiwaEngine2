@@ -8,10 +8,8 @@ workspace "Wiwa2"
 		"Shipping"
 	}
 
-	flags
-	{
-		"MultiProcessorCompile"
-	}
+	multiprocessorcompile "On"
+	
 
 	defines
 	{

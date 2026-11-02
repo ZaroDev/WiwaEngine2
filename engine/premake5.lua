@@ -62,7 +62,7 @@ project "wiwa"
 	}
 
 	filter "files:vendor/imguizmo/**.cpp"
-		flags {"NoPCH"}
+		enablepch "Off"
 
 	-- the sol2 usertypes of the Lua bindings make big object files
 	filter "files:src/scripting/bindings/**.cpp"
