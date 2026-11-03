@@ -2224,6 +2224,151 @@
                                                                                ]
                                                              }
                                         }
+                     },
+                     {
+                         "id":  "552c39691eb7de2f4475a53ceed20380",
+                         "components":  {
+                                            "Name":  { "Value":  "Physics demo" },
+                                            "Transform":  { "Position":  [ 0, 0, 0 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 1, 1, 1 ] }
+                                        }
+                     },
+                     {
+                         "id":  "7700ac03747bf4f41399f87af103d498",
+                         "components":  {
+                                            "Name":  { "Value":  "Ground collider" },
+                                            "Transform":  { "Position":  [ 0, -0.5, 0 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 80, 1, 80 ] },
+                                            "Collider":  { "Shape": "Box", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ] }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "f0811f570cdded1f4fd2a6800ef3c052",
+                         "components":  {
+                                            "Name":  { "Value":  "Ramp" },
+                                            "Transform":  { "Position":  [ 10.2, 1.1, 1.5 ], "Rotation":  [ 0, 0, -0.17364817766693033, 0.984807753012208 ], "Scale":  [ 4, 0.3, 3 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 1 }, "Materials": [ { "guid": "ae6798e27316997a8c7cb0b819be8e9a", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Box", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ] }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "5c5d57d9ddd2def385c22b5cbc05023c",
+                         "components":  {
+                                            "Name":  { "Value":  "Back wall" },
+                                            "Transform":  { "Position":  [ 14.6, 0.6, 1.5 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 0.3, 1.2, 3.4 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 1 }, "Materials": [ { "guid": "ae6798e27316997a8c7cb0b819be8e9a", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Box", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ] }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "248fb9759efd35e94e2f53587ecc6355",
+                         "components":  {
+                                            "Name":  { "Value":  "Side wall 0" },
+                                            "Transform":  { "Position":  [ 11.2, 0.6, 0 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 7, 1.2, 0.2 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 1 }, "Materials": [ { "guid": "ae6798e27316997a8c7cb0b819be8e9a", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Box", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ] }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "67e1dadd151be199917d93b50083c709",
+                         "components":  {
+                                            "Name":  { "Value":  "Side wall 3" },
+                                            "Transform":  { "Position":  [ 11.2, 0.6, 3 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 7, 1.2, 0.2 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 1 }, "Materials": [ { "guid": "ae6798e27316997a8c7cb0b819be8e9a", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Box", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ] }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "54ee4420d798713615e084ee198570fa",
+                         "components":  {
+                                            "Name":  { "Value":  "Crate 1" },
+                                            "Transform":  { "Position":  [ 13.6, 0.4, 1.0 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 0.8, 0.8, 0.8 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 1 }, "Materials": [ { "guid": "603d84a8d1d2225094f02730986fb069", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Box", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ] },
+                                            "RigidBody":  { "Motion": "Dynamic", "ReportContacts": true }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "289cd2173f581d816ab14637cf152fdf",
+                         "components":  {
+                                            "Name":  { "Value":  "Crate 2" },
+                                            "Transform":  { "Position":  [ 13.6, 0.4, 2.0 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 0.8, 0.8, 0.8 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 1 }, "Materials": [ { "guid": "603d84a8d1d2225094f02730986fb069", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Box", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ] },
+                                            "RigidBody":  { "Motion": "Dynamic" }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "46954618c941a2c0e3a2cf6a75c3e606",
+                         "components":  {
+                                            "Name":  { "Value":  "Crate 3" },
+                                            "Transform":  { "Position":  [ 13.6, 1.25, 1.5 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 0.8, 0.8, 0.8 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 1 }, "Materials": [ { "guid": "603d84a8d1d2225094f02730986fb069", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Box", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ] },
+                                            "RigidBody":  { "Motion": "Dynamic" }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "37eeb86fc4263795685dc4b81272065c",
+                         "components":  {
+                                            "Name":  { "Value":  "Crate 4" },
+                                            "Transform":  { "Position":  [ 12.7, 0.4, 1.5 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 0.8, 0.8, 0.8 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 1 }, "Materials": [ { "guid": "603d84a8d1d2225094f02730986fb069", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Box", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ] },
+                                            "RigidBody":  { "Motion": "Dynamic" }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "3f51c2371ce5046412ba818da1032f3c",
+                         "components":  {
+                                            "Name":  { "Value":  "Hopper" },
+                                            "Transform":  { "Position":  [ 8.9, 3.2, 1.5 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 0.8, 0.8, 0.8 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 2 }, "Materials": [ { "guid": "4ae7e8927e833b7511667468a3f23eb3", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Sphere", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ] },
+                                            "RigidBody":  { "Motion": "Dynamic" },
+                                            "script:94866b5f3a5c4afccbf7c0c13c4b1abf":  { "interval": 3, "speed": 6 }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "9aab116c3b839b77fe622f9beb47ebac",
+                         "components":  {
+                                            "Name":  { "Value":  "Bouncy ball 1" },
+                                            "Transform":  { "Position":  [ 8.6, 5, 1 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 0.6, 0.6, 0.6 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 2 }, "Materials": [ { "guid": "2dbad0e89dad4905669b41cf505f133f", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Sphere", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ], "Material": { "guid": "31d17d25d84d11d650c856f7d0fec477", "localId": 0 } },
+                                            "RigidBody":  { "Motion": "Dynamic" }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "c774f574c9ed71802b318dfa56de78ba",
+                         "components":  {
+                                            "Name":  { "Value":  "Bouncy ball 2" },
+                                            "Transform":  { "Position":  [ 9.2, 7, 2 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 0.6, 0.6, 0.6 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 2 }, "Materials": [ { "guid": "2dbad0e89dad4905669b41cf505f133f", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Sphere", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ], "Material": { "guid": "31d17d25d84d11d650c856f7d0fec477", "localId": 0 } },
+                                            "RigidBody":  { "Motion": "Dynamic" }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "eade002c897ba8b2f1c641c0f89d9422",
+                         "components":  {
+                                            "Name":  { "Value":  "Bouncy ball 3" },
+                                            "Transform":  { "Position":  [ 9.6, 9, 1.5 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 0.6, 0.6, 0.6 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 2 }, "Materials": [ { "guid": "2dbad0e89dad4905669b41cf505f133f", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Sphere", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ], "Material": { "guid": "31d17d25d84d11d650c856f7d0fec477", "localId": 0 } },
+                                            "RigidBody":  { "Motion": "Dynamic" }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
                      }
                  ],
     "settings":  {
