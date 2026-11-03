@@ -53,6 +53,7 @@ IncludeDirs["recastnavigation"] = "%{wks.location}/Wiwa/vendor/recastnavigation/
 IncludeDirs["OpenCV"] = "%{wks.location}/Wiwa/vendor/opencv-4.7.0/include"
 IncludeDirs["sol2"] = "%{wks.location}/engine/vendor/sol2/include"
 IncludeDirs["lua"] = "%{wks.location}/engine/vendor/lua"
+IncludeDirs["Jolt"] = "%{wks.location}/engine/vendor/JoltPhysics"
 
 LibraryDirs = {}
 LibraryDirs["VulkanSDK"] = "%{VULKAN_SDK}/Lib"
@@ -123,6 +124,16 @@ Library["opencv_videoio_debug"] = "%{LibraryDirs.OpenCV}/opencv_videoio470d.lib"
 Library["opencv_ts470_debug"] = "%{LibraryDirs.OpenCV}/opencv_ts470d.lib"
 
 
+-- Jolt compile definitions: identical for the Jolt lib and for every project that includes Jolt headers (a mismatch is an ODR bug).
+-- JPH_OBJECT_STREAM is deliberately not defined and cross-platform determinism is off.
+function JoltDefines()
+	filter "configurations:Debug"
+		defines { "JPH_DEBUG_RENDERER", "JPH_PROFILE_ENABLED", "JPH_ENABLE_ASSERTS" }
+	filter "configurations:Release"
+		defines { "JPH_DEBUG_RENDERER", "JPH_PROFILE_ENABLED" }
+	filter {}
+end
+
 group "Dependencies"
 	include "engine/vendor/GLFW"
 	include "engine/vendor/nvrhi"
@@ -131,6 +142,7 @@ group "Dependencies"
 	include "engine/vendor/lz4"
 	include "engine/vendor/ufbx"
 	include "engine/vendor/lua"
+	include "engine/vendor/JoltPhysics"
 	-- include "Wiwa/vendor/Optick"
 	-- include "Wiwa/vendor/imguizmo"
 group ""

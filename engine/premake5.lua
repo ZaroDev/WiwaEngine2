@@ -37,6 +37,7 @@ project "wiwa"
 		"%{IncludeDirs.NJSON}",
 		"%{IncludeDirs.lua}",
 		"%{IncludeDirs.sol2}",
+		"%{IncludeDirs.Jolt}",
 	}
 
 	links
@@ -51,7 +52,8 @@ project "wiwa"
 		"dxguid",
 		"vk-bootstrap",
 		"ImGui",
-		"lua"
+		"lua",
+		"Jolt"
 		-- "Optick",
 		-- "ImGuizmo",
 	}
@@ -60,6 +62,9 @@ project "wiwa"
 	{
 		"VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1"
 	}
+
+	-- must match the Jolt library defines
+	JoltDefines()
 
 	filter "files:vendor/imguizmo/**.cpp"
 		enablepch "Off"
