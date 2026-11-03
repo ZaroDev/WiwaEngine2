@@ -1,8 +1,12 @@
 #include <editor_common.h>
 #include "input_smoke_test.h"
 
+#include <core/engine.h>
 #include <input/input_codes.h>
+#include <input/input_module.h>
 #include <input/input_state.h>
+#include <scripting/script_module.h>
+#include <ui/ui_module.h>
 #include <input/scripted_input_backend.h>
 
 #define WI_INPUT_LOG(level, ...) WI_LOG(level, "Input", __VA_ARGS__)
@@ -165,6 +169,38 @@ namespace wiwa
 					"raw_names: axis classification");
 			}
 		}
+
+		void input_module(Check& check)
+		{
+			Engine& engine = Engine::get();
+			InputModule* module = engine.get_module<InputModule>();
+			check(module != nullptr, "module_registered: the engine has an InputModule");
+
+			UiModule* ui = engine.get_module<UiModule>();
+			ScriptingModule* scripting = engine.get_module<ScriptingModule>();
+			InputModule probe;
+			// Modules update in ascending priority order (ModuleManager::begin sorts with <), so a lower value runs first.
+			check(ui && scripting && probe.get_priority() < ui->get_priority() && probe.get_priority() < scripting->get_priority(),
+				"module_priority: input updates before the UI and the scripts");
+
+			// A separate module instance: the engine's own one is updated by the main loop at the same time.
+			InputModule local;
+			ScriptedInputBackend scripted;
+			check(local.backend() == nullptr, "module_scripted_swap: no backend without init");
+			local.set_backend(&scripted);
+			scripted.key(Key::W, true);
+			local.update(0.0f);
+			check(local.state().down(control(Key::W)) && local.state().pressed(control(Key::W)), "module_scripted_swap: the injected backend feeds the state");
+			local.set_backend(nullptr);
+			check(local.backend() == nullptr, "module_scripted_swap: null restores the default backend");
+
+			local.set_backend(&scripted);
+			local.set_cursor_mode(CursorMode::Locked);
+			check(scripted.cursor_mode() == CursorMode::Locked, "module_cursor_mode: reaches the backend");
+			local.set_capture(false);
+			local.update(0.0f);
+			check(!local.state().down(control(Key::W)), "module_capture: capture off hides the keyboard");
+		}
 	}
 
 	bool run_input_smoke_test(AssetPipelineModule& pipeline)
@@ -173,6 +209,7 @@ namespace wiwa
 
 		Check check;
 		raw_input(check);
+		input_module(check);
 
 		if (check.Failures == 0)
 		{

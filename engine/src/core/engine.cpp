@@ -4,6 +4,7 @@
 #include "memory.h"
 
 #include <assets/asset_manager.h>
+#include <input/input_module.h>
 #include <physics/physics_module.h>
 #include <renderer/render_module.h>
 #include <renderer/window.h>
@@ -45,6 +46,7 @@ namespace wiwa
 		m_ModuleManager.add_module<SceneModule>();
 		m_ModuleManager.add_module<PhysicsModule>(); // after the scene, before the scripts
 		m_ModuleManager.add_module<Window>();
+		m_ModuleManager.add_module<InputModule>(); // after the window (it listens to it), before the render module whose ImGui backend chains onto its callbacks
 		m_ModuleManager.add_module<RenderModule>();
 		m_ModuleManager.add_module<UiModule>(); // before the scripts: the clicks of a frame reach them in that frame
 		m_ModuleManager.add_module<ScriptingModule>();
