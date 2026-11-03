@@ -72,6 +72,9 @@ private:
 	bool m_PlaySmoke = false;
 	class UiEditorPanel* m_UiEditor = nullptr; // owned by m_Panels
 	bool m_UiEditorSmoke = false;              // --ui-editor-smoke: open a panel in the UI Editor, run for a while, check it is previewing
+	class PhysicsPanel* m_PhysicsPanel = nullptr; // owned by m_Panels
+	bool m_PhysicsPanelSmoke = false;            // --physics-panel-smoke: draw the Physics panel for a while with ImGui asserts on, edit the matrix, check it was saved
+	std::filesystem::path m_PhysicsPanelFile{};
 	std::filesystem::path m_UiEditorSmokeFile{};
 	wiwa::u32 m_Frame = 0;
 	wiwa::u32 m_PlaySmokeFinalFrame = 0;

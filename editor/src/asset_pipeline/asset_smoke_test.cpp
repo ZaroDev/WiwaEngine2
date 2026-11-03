@@ -13,6 +13,8 @@
 #include "material_file.h"
 #include "packager.h"
 #include "physics_material_file.h"
+#include "physics_settings_file.h"
+#include <physics/physics_project_settings.h>
 #include "prefab_file.h"
 #include "surface_shader_parser.h"
 
@@ -1939,6 +1941,46 @@ namespace wiwa
 
 			std::filesystem::remove_all(dir, error);
 			database.scan();
+		}
+
+		// 9b. the project's physics settings: physics.wsettings round-trips, goes into the pack and comes back from it
+		{
+			const std::filesystem::path dir = std::filesystem::temp_directory_path() / "wiwa_physics_settings_smoke";
+			std::filesystem::remove_all(dir, error);
+			std::filesystem::create_directories(dir, error);
+			const std::filesystem::path file = dir / "physics.wsettings";
+
+			PhysicsLayers layers;
+			layers.Names[1] = "Player";
+			layers.Names[2] = "Enemy";
+			layers.set_collides(1, 2, false);
+			layers.set_collides(0, 2, false);
+			std::string saveError;
+			check(save_physics_layers(file, layers, saveError), "physics_settings_save: the file is written");
+
+			PhysicsLayers loaded;
+			check(load_physics_layers(file, loaded, saveError) && loaded.Names == layers.Names && loaded.Matrix == layers.Matrix, "physics_settings_roundtrip: the names and the matrix come back");
+			check(!loaded.collides(1, 2) && !loaded.collides(2, 1) && !loaded.collides(0, 2) && loaded.collides(0, 1) && loaded.collides(1, 1), "physics_settings_cell: a cleared cell stays cleared and the others stay set");
+
+			PhysicsLayers missing;
+			check(load_physics_layers(dir / "none.wsettings", missing, saveError) && missing.Names[0] == "Default" && missing.collides(3, 4), "physics_settings_missing: no file gives the default layers");
+			PhysicsLayers refused;
+			check(!physics_layers_from_text("{ \"matrix\": [1, 2, 3] }", refused, saveError) && !physics_layers_from_text("not json", refused, saveError) &&
+				!physics_layers_from_text("{ \"layers\": [ 5 ] }", refused, saveError), "physics_settings_invalid: a matrix of the wrong size, text that is not JSON and a layer without a name are refused");
+
+			// the pack carries them, and a game reads them back with the module's reader
+			const std::filesystem::path packDirectory = dir / "pack";
+			check(Packager::pack(database, packDirectory, nullptr, nullptr, file), "physics_settings_packed: packing with a settings file");
+			PakSource pak(packDirectory / "assets.wpak");
+			const std::optional<PhysicsLayers> fromPack = pak.valid() ? read_physics_layers(pak) : std::nullopt;
+			check(fromPack && fromPack->Names == layers.Names && fromPack->Matrix == layers.Matrix, "physics_settings_packed: the pack holds the names and the matrix, a cleared cell included");
+
+			const std::filesystem::path noFilePack = dir / "pack_without";
+			check(Packager::pack(database, noFilePack, nullptr, nullptr, dir / "none.wsettings"), "physics_settings_packed: packing without a settings file");
+			PakSource plain(noFilePack / "assets.wpak");
+			check(plain.valid() && !read_physics_layers(plain).has_value(), "physics_settings_packed: a pack made without a file has no settings (the game uses the defaults)");
+
+			std::filesystem::remove_all(dir, error);
 		}
 
 		// 10. assets made from templates (the Asset Browser's Create menu)

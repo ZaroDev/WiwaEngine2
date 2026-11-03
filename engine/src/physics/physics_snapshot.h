@@ -57,5 +57,9 @@ namespace wiwa
 		// The world as this step left it, for the queries (raycast, overlap, shape cast) of the step's handlers. Null in the snapshot a world
 		// publishes before its first step.
 		Ref<const QuerySnapshot> Query{};
+		// What the step cost and how big the world is, for the editor's Physics panel.
+		u32 BodyCount = 0;
+		u32 ActiveBodies = 0;   // awake (not sleeping)
+		float StepMs = 0.0f;    // wall time of PhysicsSystem::Update
 	};
 }

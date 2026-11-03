@@ -4,10 +4,52 @@
 #include <algorithm>
 
 #include <core/engine.h>
+#include <assets/asset_manager.h>
 #include <scene/scene_module.h>
+
+#include "physics_project_settings.h"
 
 namespace wiwa
 {
+	void PhysicsModule::init()
+	{
+		// a game: the layers the editor packed with it (the editor has none in its Library and loads physics.wsettings itself)
+		AssetManager* assets = Engine::get().get_module<AssetManager>();
+		if (assets != nullptr && assets->get_source() != nullptr)
+		{
+			if (const std::optional<PhysicsLayers> layers = read_physics_layers(*assets->get_source()))
+			{
+				m_Layers = *layers;
+			}
+		}
+	}
+
+	void PhysicsModule::set_layers(const PhysicsLayers& layers)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		m_Layers = layers;
+		if (m_Thread.is_running())
+		{
+			m_Thread.push(SetLayers{ m_Layers }, m_Sync.generation());
+		}
+	}
+
+	PhysicsModule::Stats PhysicsModule::stats() const
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		Stats stats;
+		stats.Running = m_Thread.is_running();
+		stats.StepsLastFrame = static_cast<u32>(m_Steps.size());
+		stats.DroppedSteps = m_Thread.folded_steps();
+		if (m_Latest != nullptr)
+		{
+			stats.Bodies = m_Latest->BodyCount;
+			stats.ActiveBodies = m_Latest->ActiveBodies;
+			stats.StepMs = m_Latest->StepMs;
+		}
+		return stats;
+	}
+
 	void PhysicsModule::shutdown()
 	{
 		stop_world();
@@ -28,6 +70,7 @@ namespace wiwa
 			WI_PHYSICS_LOG(Error, "The physics world could not start");
 			return false;
 		}
+		m_Thread.push(SetLayers{ m_Layers });
 		return true;
 	}
 
@@ -60,6 +103,7 @@ namespace wiwa
 		}
 		m_Thread.set_paused(!Engine::get().get_time().get_game_clock().IsPlaying); // the world follows the game clock from its first step
 		m_Sync.build(*scene, m_Thread);
+		m_Thread.push(SetLayers{ m_Layers }, m_Sync.generation());
 		m_Scene = scene;
 		m_HasScene = true;
 		m_SettingsRevision = scene->settings_revision();

@@ -31,6 +31,7 @@ namespace wiwa
 		PhysicsModule() = default;
 		virtual ~PhysicsModule() override = default;
 
+		virtual void init() override;
 		virtual void shutdown() override;
 		virtual void update(float deltaTime) override;
 		virtual void pre_render_update(float deltaTime) override;
@@ -83,6 +84,22 @@ namespace wiwa
 		void set_gravity(glm::vec3 gravity);
 		void set_kinematic_target(BodyKey key, glm::vec3 position, glm::quat rotation);
 
+		// The project's physics layers (names and which pairs collide). A world starts with them and a running one takes the change at once.
+		// A game reads them from its pack when the module starts; the editor sets them from physics.wsettings.
+		const PhysicsLayers& layers() const { return m_Layers; }
+		void set_layers(const PhysicsLayers& layers);
+
+		struct Stats
+		{
+			u32 Bodies = 0;
+			u32 ActiveBodies = 0;
+			float StepMs = 0.0f;       // of the newest step
+			u32 StepsLastFrame = 0;    // steps update() took in its last call
+			u64 DroppedSteps = 0;      // folded into a later one because the main thread did not take them (see PhysicsThread::folded_steps)
+			bool Running = false;
+		};
+		Stats stats() const;
+
 		// The velocities of a body in the newest step; none when there is no such body in it.
 		std::optional<glm::vec3> velocity(BodyKey key) const;
 		std::optional<glm::vec3> angular_velocity(BodyKey key) const;
@@ -107,6 +124,7 @@ namespace wiwa
 		bool m_HasScene = false;
 		std::weak_ptr<Scene> m_FailedScene{}; // auto start does not try the same scene again
 		bool m_AutoStart = true;
+		PhysicsLayers m_Layers{};
 		u64 m_SettingsRevision = 0;
 
 		std::vector<Ref<const PhysicsStepSnapshot>> m_Steps{}; // the steps completed since the previous frame

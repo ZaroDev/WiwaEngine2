@@ -7,6 +7,7 @@
 #include <assets/asset_catalog.h>
 #include <assets/build_info.h>
 #include <assets/pak_format.h>
+#include <physics/physics_project_settings.h>
 #include <assets/wasset_io.h>
 
 #include <unordered_set>
@@ -72,7 +73,7 @@ namespace wiwa
 		return selected;
 	}
 
-	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings)
+	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile)
 	{
 		JobProgress local;
 		if (progress == nullptr)
@@ -297,6 +298,25 @@ namespace wiwa
 			BuildInfo info;
 			info.DefaultScene = settings->DefaultScene;
 			ok = add_blob(BUILD_INFO_GUID, 0, serialize(info), "build info") && ok;
+		}
+
+		// The project's physics layers, if the editor has saved any.
+		{
+			std::error_code exists;
+			if (std::filesystem::exists(physicsSettingsFile, exists))
+			{
+				PhysicsLayers layers;
+				std::string layersError;
+				if (load_physics_layers(physicsSettingsFile, layers, layersError))
+				{
+					ok = add_blob(PHYSICS_SETTINGS_GUID, 0, serialize(layers), "physics settings") && ok;
+				}
+				else
+				{
+					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", physicsSettingsFile.string(), layersError);
+					ok = false;
+				}
+			}
 		}
 
 		header.EntryCount = static_cast<u32>(index.size());

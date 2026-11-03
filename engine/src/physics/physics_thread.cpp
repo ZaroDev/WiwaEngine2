@@ -4,6 +4,7 @@
 #include "jolt_runtime.h"
 #include "physics_world.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdarg>
@@ -250,7 +251,9 @@ namespace wiwa
 						execute_queued();
 
 						const double dt = world->fixed_dt();
+						const Clock::time_point stepBegan = Clock::now();
 						world->step();
+						const float stepMs = std::chrono::duration<float, std::milli>(Clock::now() - stepBegan).count();
 
 						stepIndex++;
 						time += dt;
@@ -263,6 +266,9 @@ namespace wiwa
 						snapshot->Time = time;
 						snapshot->FixedDt = static_cast<float>(dt);
 						world->write_poses(*snapshot);
+						snapshot->BodyCount = static_cast<u32>(snapshot->Poses.size());
+						snapshot->ActiveBodies = static_cast<u32>(std::count_if(snapshot->Poses.begin(), snapshot->Poses.end(), [](const BodyPose& pose) { return pose.Active; }));
+						snapshot->StepMs = stepMs;
 						world->take_events(*snapshot);
 						world->write_query(*snapshot);
 						publish(std::move(snapshot));

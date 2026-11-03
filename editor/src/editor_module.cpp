@@ -2,6 +2,7 @@
 
 #include <asset_pipeline/asset_pipeline_module.h>
 #include <asset_pipeline/asset_templates.h>
+#include <asset_pipeline/physics_settings_file.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <physics/physics_module.h>
@@ -108,6 +109,7 @@ void EditorModule::init()
 	{
 		m_PlaySmoke = m_PlaySmoke || argument == "--play-smoke";
 		m_UiEditorSmoke = m_UiEditorSmoke || argument == "--ui-editor-smoke";
+		m_PhysicsPanelSmoke = m_PhysicsPanelSmoke || argument == "--physics-panel-smoke";
 		if (argument == "--demo-smoke")
 		{
 			m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
@@ -118,6 +120,16 @@ void EditorModule::init()
 	Ref<InspectorPanel> inspector = CreateRef<InspectorPanel>(*m_SceneEditor);
 	m_Panels.push_back(inspector);
 	m_Panels.push_back(CreateRef<WorldPanel>(*m_SceneEditor));
+	// the smoke edits the matrix: it must not touch the project's physics.wsettings
+	m_PhysicsPanelFile = m_PhysicsPanelSmoke ? std::filesystem::temp_directory_path() / "wiwa_physics_panel_smoke.wsettings" : std::filesystem::path(wiwa::PHYSICS_SETTINGS_FILE);
+	if (m_PhysicsPanelSmoke)
+	{
+		std::error_code removed;
+		std::filesystem::remove(m_PhysicsPanelFile, removed);
+	}
+	Ref<PhysicsPanel> physicsPanel = CreateRef<PhysicsPanel>(*m_SceneEditor, m_PhysicsPanelFile);
+	m_PhysicsPanel = physicsPanel.get();
+	m_Panels.push_back(physicsPanel);
 	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor, m_PlayInput));
 	m_Panels.push_back(CreateRef<RendererPanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
@@ -169,6 +181,30 @@ void EditorModule::update(float deltaTime)
 		{
 			const bool passed = m_UiEditor->loaded() && m_UiEditor->previewing();
 			WI_INFO("Editor", "UI editor smoke test {0}", passed ? "passed" : "FAILED: the panel did not load or is not previewing");
+			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+		}
+	}
+
+	if (m_PhysicsPanelSmoke && m_PhysicsPanel != nullptr)
+	{
+		if (m_Frame == 40)
+		{
+			// a click in the matrix: layers 0 and 1 stop colliding (a layer is named first so that the matrix shows it)
+			m_PhysicsPanel->set_layer_name(1, "Smoke");
+			m_PhysicsPanel->set_collides(0, 1, false);
+		}
+		if (m_Frame == 130)
+		{
+			wiwa::PhysicsLayers saved;
+			std::string error;
+			const bool read = wiwa::load_physics_layers(m_PhysicsPanelFile, saved, error);
+			wiwa::PhysicsModule* physics = wiwa::Engine::get().get_module<wiwa::PhysicsModule>();
+			const bool passed = m_PhysicsPanel->frames_drawn() >= 100 && read && saved.Names[1] == "Smoke" && !saved.collides(0, 1) && saved.collides(0, 0) && saved.collides(1, 1) &&
+				physics != nullptr && !physics->layers().collides(0, 1) && m_PhysicsPanel->last_error().empty();
+			WI_INFO("Editor", "Physics panel smoke test {0}", passed ? "passed" : "FAILED: the panel did not draw, or the edited matrix was not saved and applied");
+			std::error_code removed;
+			std::filesystem::remove(m_PhysicsPanelFile, removed);
 			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
 			wiwa::Engine::get().request_quit();
 		}
