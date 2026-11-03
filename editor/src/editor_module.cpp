@@ -26,8 +26,8 @@ namespace
 	class EditorPlayHost final : public wiwa::IPlayHost
 	{
 	public:
-		EditorPlayHost(wiwa::SceneEditor& editor, wiwa::SceneModule& scenes, wiwa::ScriptingModule& scripts, wiwa::EditorPlayInputSource& input)
-			: m_Editor(editor), m_Scenes(scenes), m_Scripts(scripts), m_Input(input) {}
+		EditorPlayHost(wiwa::SceneEditor& editor, wiwa::SceneModule& scenes, wiwa::ScriptingModule& scripts)
+			: m_Editor(editor), m_Scenes(scenes), m_Scripts(scripts) {}
 
 		virtual Ref<wiwa::Scene> edit_scene() override { return m_Editor.get_scene(); }
 		// not while a scene is opening, a prefab expansion is pending, any scene load is running, or the editor still shows an older scene than
@@ -67,14 +67,24 @@ namespace
 				physics->stop_world();
 			}
 		}
-		virtual void start_scripts() override { set_ui_input(&m_Input); m_Scripts.start(); }
-		virtual void stop_scripts() override { m_Scripts.stop(); set_ui_input(nullptr); }
+		virtual void start_scripts() override { set_ui_input(input() != nullptr ? &input()->ui_source() : nullptr); m_Scripts.start(); }
+		virtual void stop_scripts() override
+		{
+			m_Scripts.stop();
+			set_ui_input(nullptr);
+			if (input() != nullptr)
+			{
+				input()->set_capture(false); // ImGui has the keyboard and the mouse again
+			}
+		}
 		virtual void cancel_loads() override { m_Scenes.cancel_loads(); }
 		virtual void time_play() override { wiwa::Engine::get().get_time().play_game(); }
 		virtual void time_stop() override { wiwa::Engine::get().get_time().stop_game(); }
 		virtual void time_pause(bool paused) override { wiwa::Engine::get().get_time().set_game_pause(paused); }
 
 	private:
+		static wiwa::InputModule* input() { return wiwa::Engine::get().get_module<wiwa::InputModule>(); }
+
 		static void set_ui_input(wiwa::IUiInputSource* source)
 		{
 			if (wiwa::UiModule* ui = wiwa::Engine::get().get_module<wiwa::UiModule>())
@@ -86,7 +96,6 @@ namespace
 		wiwa::SceneEditor& m_Editor;
 		wiwa::SceneModule& m_Scenes;
 		wiwa::ScriptingModule& m_Scripts;
-		wiwa::EditorPlayInputSource& m_Input;
 	};
 }
 
@@ -94,6 +103,9 @@ void EditorModule::init()
 {
 	const std::string editorTitle = fmt::format("Wiwa2 Editor - ({0}) <{1}>", "Default project", WI_BUILD_CONFIGURATION);
 	wiwa::Engine::get().get_module<wiwa::Window>()->set_title(editorTitle);
+
+	// ImGui owns the keyboard and the mouse; the Viewport hands them to the game while a scene plays
+	wiwa::Engine::get().get_module<wiwa::InputModule>()->set_capture(false);
 
 	// scripts run in play mode only; editing a scene does not run them
 	wiwa::Engine::get().get_module<wiwa::ScriptingModule>()->set_auto_start(false);
@@ -120,7 +132,7 @@ void EditorModule::init()
 	m_SceneEditor->set_scene(scenes->get_active());
 	m_SceneEditor->set_follow_module(true);
 
-	m_PlayHost = CreateScope<EditorPlayHost>(*m_SceneEditor, *scenes, *wiwa::Engine::get().get_module<wiwa::ScriptingModule>(), m_PlayInput);
+	m_PlayHost = CreateScope<EditorPlayHost>(*m_SceneEditor, *scenes, *wiwa::Engine::get().get_module<wiwa::ScriptingModule>());
 	m_PlayMode = CreateScope<wiwa::PlayMode>(*m_PlayHost);
 	for (const std::string& argument : wiwa::Engine::get().get_arguments())
 	{
@@ -147,7 +159,7 @@ void EditorModule::init()
 	Ref<PhysicsPanel> physicsPanel = CreateRef<PhysicsPanel>(*m_SceneEditor, m_PhysicsPanelFile);
 	m_PhysicsPanel = physicsPanel.get();
 	m_Panels.push_back(physicsPanel);
-	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor, m_PlayInput));
+	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor));
 	m_Panels.push_back(CreateRef<RendererPanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
 	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
@@ -187,6 +199,10 @@ void EditorModule::pre_update(float deltaTime)
 void EditorModule::update(float deltaTime)
 {
 	m_Frame++;
+	if (!m_SceneEditor->playing())
+	{
+		wiwa::Engine::get().get_module<wiwa::InputModule>()->set_capture(false); // the Viewport turns it on while it draws, in play mode
+	}
 	if (m_UiEditorSmoke && m_UiEditor != nullptr)
 	{
 		if (m_Frame == 20)

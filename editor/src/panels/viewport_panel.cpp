@@ -11,6 +11,7 @@
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <gizmo/viewport_selection.h>
+#include <input/input_module.h>
 #include <renderer/render_module.h>
 #include <ui/ui_module.h>
 #include <scene/components.h>
@@ -38,8 +39,8 @@ namespace
 	}
 }
 
-ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor, wiwa::EditorPlayInputSource& playInput)
-	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_PlayInput(playInput), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>()), m_GizmoSettings(wiwa::GizmoSettings::load())
+ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor)
+	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>()), m_GizmoSettings(wiwa::GizmoSettings::load())
 {
 }
 
@@ -75,6 +76,34 @@ void ViewportPanel::apply_manipulation(entt::entity entity, const glm::mat4& wor
 	{
 		m_Editor.set_field(entity, "Transform", "Scale", wiwa::FieldValue(glm::make_vec3(scale)));
 	}
+}
+
+// While a scene plays the game reads the keyboard and the mouse as long as the Viewport has the focus or the pointer is over it.
+// Escape or Shift+F1 hands them back to the editor (typing in the panels works again) until the image is clicked.
+void ViewportPanel::update_game_input(const glm::vec2& imageMin, float scale, bool hovered)
+{
+	wiwa::InputModule* input = wiwa::Engine::get().get_module<wiwa::InputModule>();
+	if (input == nullptr)
+	{
+		return;
+	}
+
+	const bool playing = m_Editor.playing();
+	if (!playing)
+	{
+		m_GameReleased = false;
+	}
+	else if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+	{
+		m_GameReleased = false;
+	}
+	else if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || (ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_F1, false)))
+	{
+		m_GameReleased = true;
+	}
+
+	input->ui_source().set_viewport(imageMin, scale, hovered);
+	input->set_capture(playing && !m_GameReleased && (hovered || ImGui::IsWindowFocused()));
 }
 
 void ViewportPanel::on_draw()
@@ -132,7 +161,7 @@ void ViewportPanel::on_draw()
 			}
 			const bool hovered = ImGui::IsItemHovered();
 			const ImVec2 imageMin = ImGui::GetItemRectMin();
-			m_PlayInput.set_viewport(glm::vec2(imageMin.x, imageMin.y), scale, hovered); // the game UI reads the mouse over the image in play mode
+			update_game_input(glm::vec2(imageMin.x, imageMin.y), scale, hovered);
 
 			if (m_UseEditorCamera)
 			{

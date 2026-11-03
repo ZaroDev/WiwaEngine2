@@ -16,8 +16,8 @@ namespace wiwa
 		u32 NavPressed = 0;
 	};
 
-	// Feeds the game UI from the editor's mouse and keyboard in play mode, until the game has an input system. The Viewport panel tells it
-	// where the image is every frame. Only a press that starts on the image counts, and a drag that started there goes on (and ends) off it.
+	// The editor's mouse and keyboard as a UI input source. Play mode no longer uses it (the InputModule does, see input/input_ui_source.h); it is kept
+	// as the ImGui-fed source for tools and the UI smoke test. Only a press that starts on the image counts, and a drag that started there goes on (and ends) off it.
 	class EditorPlayInputSource final : public IUiInputSource
 	{
 	public:

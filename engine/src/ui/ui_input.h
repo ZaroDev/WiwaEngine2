@@ -2,9 +2,8 @@
 
 #include <math/math.h>
 
-// What the UI needs from an input system, and nothing more. There is no input system yet; when there is one it only has to implement
-// IUiInputSource. Until then the game has the null source, tests and scripts have the scripted one, and the editor feeds it from ImGui
-// in play mode.
+// What the UI needs from an input system, and nothing more. The game and the editor's play mode use the InputModule's InputUiSource
+// (input/input_ui_source.h); tests and scripts have the scripted source, and a UI without any input has the null one.
 namespace wiwa
 {
 	enum class UiNav : u32
@@ -43,7 +42,7 @@ namespace wiwa
 		virtual UiInputFrame poll() = 0;
 	};
 
-	// No pointer, no keys: what the game uses until it has an input system.
+	// No pointer, no keys.
 	class NullInputSource final : public IUiInputSource
 	{
 	public:

@@ -12,6 +12,7 @@
 #include <input/action_system.h>
 #include <input/action_types.h>
 #include <input/input_codes.h>
+#include <input/input_ui_source.h>
 #include <input/input_map_io.h>
 #include <input/input_overrides.h>
 #include <input/input_project_settings.h>
@@ -1212,6 +1213,150 @@ namespace wiwa
 			}
 		}
 
+		void action_button_direction(Check& check)
+		{
+			ActionMap dir;
+			dir.Name = "Dir";
+			dir.Actions.push_back({ "Up", ActionType::Button, { pad_control(PadAxis::LeftY) } });
+			dir.Actions.push_back({ "Down", ActionType::Button, { pad_control(PadAxis::LeftY, 1.0f, 0.0f, true) } });
+
+			ActionRig rig;
+			rig.Actions.set_maps({ dir });
+			rig.Actions.push_map("Dir");
+			rig.Backend.connect_pad(0, true);
+			rig.Backend.pad_axis(0, PadAxis::LeftY, 0.8f);
+			rig.frame();
+			check(rig.Actions.state("Dir", "Up").Down && !rig.Actions.state("Dir", "Down").Down, "act_button_direction: a stick pushed up presses Up only");
+			rig.Backend.pad_axis(0, PadAxis::LeftY, -0.8f);
+			rig.frame();
+			check(!rig.Actions.state("Dir", "Up").Down && rig.Actions.state("Dir", "Down").Down, "act_button_direction: a stick pushed down presses Down only (invert)");
+		}
+
+		struct UiRig
+		{
+			InputModule Module;
+			ScriptedInputBackend Backend;
+
+			UiRig()
+			{
+				Module.set_backend(&Backend);
+				Module.add_ui_nav_map();
+			}
+
+			UiInputFrame poll()
+			{
+				Module.update(0.016f);
+				return Module.ui_source().poll();
+			}
+		};
+
+		void ui_input_source(Check& check)
+		{
+			{
+				UiRig rig;
+				rig.Backend.move_cursor({ 100.0f, 50.0f });
+				rig.Backend.mouse_button(MouseButton::Left, true);
+				UiInputFrame frame = rig.poll();
+				check(frame.PointerValid && near_equal(frame.Pointer.x, 100.0f) && near_equal(frame.Pointer.y, 50.0f), "ui_pointer: the cursor is the pointer");
+				check(frame.Down[0] && frame.Pressed[0] && !frame.Released[0] && !frame.Down[1], "ui_pointer: the left button presses");
+				frame = rig.poll();
+				check(frame.Down[0] && !frame.Pressed[0], "ui_pointer: held");
+				rig.Backend.mouse_button(MouseButton::Left, false);
+				frame = rig.poll();
+				check(!frame.Down[0] && frame.Released[0], "ui_pointer: released");
+				rig.Backend.mouse_button(MouseButton::Right, true);
+				rig.Backend.mouse_button(MouseButton::Middle, true);
+				rig.Backend.scroll({ 0.0f, 3.0f });
+				frame = rig.poll();
+				check(frame.Down[1] && frame.Down[2] && near_equal(frame.Scroll, 3.0f), "ui_pointer: right and middle buttons and the scroll");
+			}
+
+			{
+				UiRig rig;
+				rig.Backend.move_cursor({ 100.0f, 50.0f });
+				rig.Module.ui_source().set_viewport({ 0.0f, 0.0f }, 1.0f, false);
+				check(!rig.poll().PointerValid, "ui_pointer_outside: not hovered gives no pointer");
+			}
+
+			{
+				UiRig rig;
+				rig.Backend.move_cursor({ 60.0f, 70.0f });
+				rig.Module.ui_source().set_viewport({ 10.0f, 20.0f }, 2.0f, true);
+				const UiInputFrame frame = rig.poll();
+				check(frame.PointerValid && near_equal(frame.Pointer.x, 100.0f) && near_equal(frame.Pointer.y, 100.0f), "ui_viewport_origin: (cursor - origin) * scale");
+			}
+
+			{
+				UiRig rig;
+				rig.Backend.key(Key::Enter, true);
+				UiInputFrame frame = rig.poll();
+				check((frame.NavPressed & ui_nav_bit(UiNav::Submit)) != 0 && (frame.NavPressed & ui_nav_bit(UiNav::Up)) == 0, "ui_nav_keyboard: Enter submits");
+				frame = rig.poll();
+				check(frame.NavPressed == 0, "ui_nav_keyboard: a held key navigates once");
+				rig.Backend.key(Key::Enter, false);
+				rig.Backend.key(Key::Up, true);
+				rig.Backend.key(Key::Escape, true);
+				frame = rig.poll();
+				check((frame.NavPressed & ui_nav_bit(UiNav::Up)) != 0 && (frame.NavPressed & ui_nav_bit(UiNav::Cancel)) != 0, "ui_nav_keyboard: arrows and Escape");
+			}
+
+			{
+				UiRig rig;
+				rig.Backend.connect_pad(0, true);
+				rig.Backend.pad_button(0, PadButton::DPadDown, true);
+				UiInputFrame frame = rig.poll();
+				check((frame.NavPressed & ui_nav_bit(UiNav::Down)) != 0, "ui_nav_pad: the d-pad moves down");
+				frame = rig.poll();
+				check(frame.NavPressed == 0, "ui_nav_pad: once");
+				rig.Backend.pad_button(0, PadButton::DPadDown, false);
+				rig.poll();
+				rig.Backend.pad_axis(0, PadAxis::LeftY, -0.6f);
+				frame = rig.poll();
+				check((frame.NavPressed & ui_nav_bit(UiNav::Down)) != 0, "ui_nav_pad: a stick at 0.6 pushed down moves down");
+				rig.Backend.pad_axis(0, PadAxis::LeftY, 0.0f);
+				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.3f);
+				frame = rig.poll();
+				check(frame.NavPressed == 0, "ui_nav_pad: a small stick movement does nothing");
+				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.0f);
+				rig.Backend.pad_button(0, PadButton::A, true);
+				rig.Backend.pad_button(0, PadButton::B, true);
+				frame = rig.poll();
+				check((frame.NavPressed & ui_nav_bit(UiNav::Submit)) != 0 && (frame.NavPressed & ui_nav_bit(UiNav::Cancel)) != 0, "ui_nav_pad: A submits and B cancels");
+			}
+
+			{
+				UiRig rig;
+				check(rig.Module.actions().rebind("UI", "Submit", 0, control(Key::Space)), "ui_nav_rebind: the nav bindings can be rebound");
+				rig.Backend.key(Key::Space, true);
+				UiInputFrame frame = rig.poll();
+				check((frame.NavPressed & ui_nav_bit(UiNav::Submit)) != 0, "ui_nav_rebind: Space submits");
+				rig.Backend.key(Key::Space, false);
+				rig.Backend.key(Key::Enter, true);
+				frame = rig.poll();
+				check((frame.NavPressed & ui_nav_bit(UiNav::Submit)) == 0, "ui_nav_rebind: Enter no longer does");
+			}
+
+			{
+				UiRig rig;
+				rig.Module.set_capture(false);
+				rig.Backend.move_cursor({ 100.0f, 50.0f });
+				rig.Backend.mouse_button(MouseButton::Left, true);
+				rig.Backend.scroll({ 0.0f, 2.0f });
+				rig.Backend.key(Key::Enter, true);
+				rig.Backend.connect_pad(0, true);
+				rig.Backend.pad_button(0, PadButton::DPadDown, true);
+				const UiInputFrame frame = rig.poll();
+				check(!frame.PointerValid && !frame.Down[0] && !frame.Pressed[0] && near_equal(frame.Scroll, 0.0f), "ui_capture_off: no pointer, buttons or scroll");
+				check((frame.NavPressed & ui_nav_bit(UiNav::Submit)) == 0 && (frame.NavPressed & ui_nav_bit(UiNav::Down)) != 0, "ui_capture_off: the keyboard is muted but the pad still navigates");
+			}
+
+			{
+				InputModule* module = Engine::get().get_module<InputModule>();
+				check(module && module->actions().find_map("UI") != nullptr && module->actions().map_active("UI"), "ui_game_wiring: the engine's input module has the UI nav map active");
+				check(module && module->actions().has_action("UI", "NavUp") && module->actions().has_action("UI", "Submit") && module->actions().has_action("UI", "Cancel"), "ui_game_wiring: with its nav actions");
+			}
+		}
+
 		void input_module(Check& check)
 		{
 			Engine& engine = Engine::get();
@@ -1255,10 +1400,12 @@ namespace wiwa
 		action_evaluation(check);
 		action_rebinding(check);
 		action_listen(check);
+		action_button_direction(check);
 		last_device(check);
 		input_persistence(check, pipeline);
 		input_importer(check, pipeline);
 		lua_input(check);
+		ui_input_source(check);
 
 		if (check.Failures == 0)
 		{

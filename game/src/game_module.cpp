@@ -2,12 +2,21 @@
 #include "imgui.h"
 #include <renderer/render_module.h>
 #include <core/engine.h>
+#include <input/input_module.h>
+#include <ui/ui_module.h>
 #include <time/time.h>
 
 #define WI_GAME_DEBUG_STATS WI_DEBUG || WI_RELEASE
 
 void GameModule::init()
 {
+	// the game UI reads the mouse, keys and gamepads through the input module
+	wiwa::UiModule* ui = wiwa::Engine::get().get_module<wiwa::UiModule>();
+	wiwa::InputModule* input = wiwa::Engine::get().get_module<wiwa::InputModule>();
+	if (ui != nullptr && input != nullptr)
+	{
+		ui->set_input_source(&input->ui_source());
+	}
 }
 
 void GameModule::shutdown()

@@ -36,6 +36,7 @@ namespace wiwa
 			}
 		}
 
+		add_ui_nav_map();
 		m_OverridesPending = true;
 	}
 
@@ -109,6 +110,12 @@ namespace wiwa
 		{
 			source->set_cursor_mode(mode);
 		}
+	}
+
+	void InputModule::add_ui_nav_map()
+	{
+		add_maps({ ui_nav_action_map() });
+		m_Actions.push_map(UI_NAV_MAP);
 	}
 
 	void InputModule::add_maps(std::vector<ActionMap> maps)

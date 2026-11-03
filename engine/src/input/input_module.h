@@ -8,6 +8,7 @@
 #include "action_system.h"
 #include "input_backend.h"
 #include "input_state.h"
+#include "input_ui_source.h"
 
 namespace wiwa
 {
@@ -41,6 +42,13 @@ namespace wiwa
 		CursorMode cursor_mode() const { return m_CursorMode; }
 		void set_capture(bool keyboardMouse) { m_State.set_capture(keyboardMouse); }
 
+		// The game UI reads its pointer and navigation from here (UiModule::set_input_source). The game sets it at start-up; the editor while
+		// a scene plays.
+		InputUiSource& ui_source() { return m_UiSource; }
+
+		// Registers the "UI" navigation map (ui_nav_action_map) and puts it on the stack. init() does this; it is below any map pushed later.
+		void add_ui_nav_map();
+
 		// Registers maps made in code (they are defaults like the asset's); they survive the default asset arriving.
 		void add_maps(std::vector<ActionMap> maps);
 
@@ -62,6 +70,7 @@ namespace wiwa
 
 		InputState m_State;
 		ActionSystem m_Actions;
+		InputUiSource m_UiSource{ *this };
 		Scope<IInputBackend> m_Glfw;
 		IInputBackend* m_External = nullptr;
 		CursorMode m_CursorMode = CursorMode::Normal;

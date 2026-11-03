@@ -114,9 +114,12 @@ panel:find("Menu/Volume"):on("value_changed", function(self, value) self.volume 
 - **World anchors.** `w.world_anchor = entity` makes the widget follow the entity on the screen (the widget's pivot sits on its projected
   position, `w.world_offset` is in world units); `w.world_anchor = nil` or `w:clear_world_anchor()` puts it back. Any widget can be
   anchored, containers included: their children come with them. It is a billboard: drawn over the scene, never hidden by geometry.
-- **Input.** There is no input system yet. In the editor's play mode the Game viewport's mouse works on the UI. `UI.input` (`move_to`,
+- **Input.** The game UI reads the mouse, the keyboard and the gamepads through the input module (see [Input](#input)): the cursor is the
+  pointer, and the navigation (arrows, d-pad and left stick, `Enter` / pad `A` to submit, `Escape` / pad `B` to cancel) comes from the
+  built-in `UI` action map, so it can be rebound. In the editor's play mode the Viewport gives the game the keyboard and the mouse while it
+  has the focus or the pointer (`Escape` or `Shift+F1` hands them back, a click on the image takes them again). `UI.input` (`move_to`,
   `press`, `release`, `nav`, `scroll`, `clear_pointer`) writes to a scripted input source, which only reaches the UI while it is the one in
-  use (tests and tools). When an input system exists it only has to implement `IUiInputSource`.
+  use (tests and tools).
 
 ## Physics
 

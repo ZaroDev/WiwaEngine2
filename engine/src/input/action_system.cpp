@@ -104,7 +104,8 @@ namespace wiwa
 				rawPressed = rawPressed || result.RawPressed;
 				rawReleased = rawReleased || result.RawReleased;
 
-				const float magnitude = vector ? glm::length(result.Vector) : std::abs(result.Value);
+				// A Button is pressed in one direction: a stick pushed up presses a binding as it is, pushed down it needs Invert.
+				const float magnitude = vector ? glm::length(result.Vector) : action.Type == ActionType::Button ? std::max(result.Value, 0.0f) : std::abs(result.Value);
 				if (magnitude > best)
 				{
 					best = magnitude;
