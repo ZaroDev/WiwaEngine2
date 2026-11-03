@@ -2,6 +2,7 @@
 #include "input_smoke_test.h"
 
 #include <core/engine.h>
+#include <input/action_system.h>
 #include <input/action_types.h>
 #include <input/input_codes.h>
 #include <input/input_map_io.h>
@@ -291,6 +292,230 @@ namespace wiwa
 			}
 		}
 
+		struct ActionRig
+		{
+			ScriptedInputBackend Backend;
+			InputState State;
+			ActionSystem Actions;
+
+			void frame()
+			{
+				State.update(Backend);
+				Actions.evaluate(State);
+			}
+		};
+
+		Binding pad_control(PadAxis axis, float scale = 1.0f, float deadzone = 0.0f, bool invert = false)
+		{
+			Binding binding;
+			binding.BindingKind = Binding::Kind::Control;
+			binding.Parts[0] = control(axis);
+			binding.Scale = scale;
+			binding.Deadzone = deadzone;
+			binding.Invert = invert;
+			return binding;
+		}
+
+		std::vector<ActionMap> action_test_maps()
+		{
+			ActionMap gameplay;
+			gameplay.Name = "Gameplay";
+			gameplay.Actions.push_back({ "Jump", ActionType::Button, { control_binding(Key::Space) } });
+			gameplay.Actions.push_back({ "Throttle", ActionType::Axis1D, { composite1d(Key::A, Key::D) } });
+			gameplay.Actions.push_back({ "Move", ActionType::Axis2D, { composite2d(Key::W, Key::S, Key::A, Key::D) } });
+			gameplay.Actions.push_back({ "Look", ActionType::Axis1D, { pad_control(PadAxis::LeftX, 1.0f, 0.2f) } });
+			gameplay.Actions.push_back({ "Boost", ActionType::Axis1D, { pad_control(PadAxis::RightX, 2.0f, 0.0f, true) } });
+			gameplay.Actions.push_back({ "Slow", ActionType::Axis1D, { control_binding(Key::Up, 0.5f) } });
+			gameplay.Actions.push_back({ "Forward", ActionType::Axis1D, { control_binding(Key::W), pad_control(PadAxis::LeftY) } });
+			gameplay.Actions.push_back({ "Fire", ActionType::Button, { pad_control(PadAxis::RightTrigger) } });
+			gameplay.Actions.push_back({ "Aim", ActionType::Axis2D, { pair2d(PadAxis::LeftX, PadAxis::LeftY, 0.2f) } });
+
+			ActionMap ui;
+			ui.Name = "UI";
+			ui.Consume = true;
+			ui.Actions.push_back({ "Submit", ActionType::Button, { control_binding(Key::Space) } });
+
+			ActionMap menu;
+			menu.Name = "Menu";
+			return { gameplay, ui, menu };
+		}
+
+		void action_evaluation(Check& check)
+		{
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+
+				rig.Backend.key(Key::Space, true);
+				rig.frame();
+				ActionState jump = rig.Actions.state("Gameplay", "Jump");
+				check(jump.Down && jump.Pressed && !jump.Released, "act_button: first frame is down + pressed");
+				rig.frame();
+				jump = rig.Actions.state("Gameplay", "Jump");
+				check(jump.Down && !jump.Pressed, "act_button: held is down only");
+				rig.Backend.key(Key::Space, false);
+				rig.frame();
+				jump = rig.Actions.state("Gameplay", "Jump");
+				check(!jump.Down && jump.Released && !jump.Pressed, "act_button: release");
+				rig.frame();
+				check(!rig.Actions.state("Gameplay", "Jump").Released, "act_button: the release lasts one frame");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+
+				rig.Backend.key(Key::Space, true);
+				rig.Backend.key(Key::Space, false);
+				rig.frame();
+				const ActionState jump = rig.Actions.state("Gameplay", "Jump");
+				check(jump.Pressed && jump.Released && !jump.Down, "act_tap: a press and release inside one frame gives both edges");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+
+				rig.Backend.key(Key::D, true);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Throttle").Value, 1.0f), "act_axis1d: positive key is +1");
+				rig.Backend.key(Key::D, false);
+				rig.Backend.key(Key::A, true);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Throttle").Value, -1.0f), "act_axis1d: negative key is -1");
+				rig.Backend.key(Key::D, true);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Throttle").Value, 0.0f), "act_axis1d: both keys cancel");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+
+				rig.Backend.key(Key::W, true);
+				rig.Backend.key(Key::D, true);
+				rig.frame();
+				const ActionState move = rig.Actions.state("Gameplay", "Move");
+				check(near_equal(move.Vector.x, 0.70710678f) && near_equal(move.Vector.y, 0.70710678f) && near_equal(glm::length(move.Vector), 1.0f),
+					"act_axis2d_wasd: W+D is a unit diagonal");
+				rig.Backend.key(Key::D, false);
+				rig.frame();
+				const ActionState forward = rig.Actions.state("Gameplay", "Move");
+				check(near_equal(forward.Vector.x, 0.0f) && near_equal(forward.Vector.y, 1.0f), "act_axis2d_wasd: W alone is straight up");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+
+				rig.Backend.connect_pad(0, true);
+				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.1f);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Look").Value, 0.0f), "act_stick_deadzone: inside the deadzone is zero");
+				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.6f);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Look").Value, (0.6f - 0.2f) / 0.8f), "act_stick_deadzone: outside is rescaled");
+				rig.Backend.pad_axis(0, PadAxis::LeftX, -0.6f);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Look").Value, -(0.6f - 0.2f) / 0.8f), "act_stick_deadzone: keeps the sign");
+
+				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.1f);
+				rig.Backend.pad_axis(0, PadAxis::LeftY, 0.1f);
+				rig.frame();
+				check(glm::length(rig.Actions.state("Gameplay", "Aim").Vector) < 1e-5f, "act_stick_deadzone: the pair has a radial deadzone");
+				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.6f);
+				rig.Backend.pad_axis(0, PadAxis::LeftY, 0.0f);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Aim").Vector.x, 0.5f), "act_stick_deadzone: radial rescale");
+
+				rig.Backend.pad_axis(0, PadAxis::RightX, 0.5f);
+				rig.Backend.key(Key::Up, true);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Boost").Value, -1.0f), "act_scale_invert: scale 2 and invert");
+				check(near_equal(rig.Actions.state("Gameplay", "Slow").Value, 0.5f), "act_scale_invert: a key with scale 0.5");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+
+				rig.Backend.connect_pad(0, true);
+				rig.Backend.key(Key::W, true);
+				rig.Backend.pad_axis(0, PadAxis::LeftY, 0.3f);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Forward").Value, 1.0f), "act_largest_wins: keyboard 1.0 beats stick 0.3");
+				rig.Backend.key(Key::W, false);
+				rig.Backend.pad_axis(0, PadAxis::LeftY, 0.9f);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Forward").Value, 0.9f), "act_largest_wins: stick 0.9 beats an idle key");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+
+				rig.Backend.connect_pad(0, true);
+				rig.Backend.pad_axis(0, PadAxis::RightTrigger, 0.6f);
+				rig.frame();
+				check(rig.Actions.state("Gameplay", "Fire").Down && rig.Actions.state("Gameplay", "Fire").Pressed, "act_trigger_button: 0.6 presses");
+				rig.Backend.pad_axis(0, PadAxis::RightTrigger, 0.4f);
+				rig.frame();
+				check(!rig.Actions.state("Gameplay", "Fire").Down && rig.Actions.state("Gameplay", "Fire").Released, "act_trigger_button: 0.4 releases");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+				rig.Backend.key(Key::Space, true);
+				rig.frame();
+
+				const ActionState unknown = rig.Actions.state("Gameplay", "Nope");
+				const ActionState unknownMap = rig.Actions.state("Nope", "Jump");
+				check(!unknown.Down && near_equal(unknown.Value, 0.0f) && !unknownMap.Down && near_equal(unknownMap.Value, 0.0f), "act_unknown: unknown names give a zero state");
+				check(!rig.Actions.has_action("Gameplay", "Nope") && !rig.Actions.has_action("Nope", "Jump") && rig.Actions.has_action("Gameplay", "Jump"), "act_unknown: has_action");
+				check(!rig.Actions.state("UI", "Submit").Down, "act_unknown: an inactive map reads zero");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+				rig.Actions.push_map("UI");
+				rig.Actions.push_map("Menu");
+				check(rig.Actions.map_active("Gameplay") && rig.Actions.map_active("UI") && rig.Actions.map_active("Menu") && !rig.Actions.map_active("Nope"), "act_stack: pushed maps are active");
+				check(rig.Actions.active_maps() == std::vector<std::string>({ "Menu", "UI", "Gameplay" }), "act_stack: top first");
+				rig.Actions.pop_map("UI");
+				check(rig.Actions.active_maps() == std::vector<std::string>({ "Menu", "Gameplay" }) && !rig.Actions.map_active("UI"), "act_stack: pop works from the middle");
+				rig.Actions.pop_map("Nope");
+				check(rig.Actions.active_maps().size() == 2, "act_stack: popping an inactive map does nothing");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+				rig.Backend.key(Key::Space, true);
+				rig.frame();
+				check(rig.Actions.state("Gameplay", "Jump").Down, "act_consume: Jump reads Space before the UI map");
+
+				rig.Actions.push_map("UI");
+				rig.frame();
+				check(!rig.Actions.state("Gameplay", "Jump").Down && near_equal(rig.Actions.state("Gameplay", "Jump").Value, 0.0f) && rig.Actions.state("UI", "Submit").Down,
+					"act_consume: the consuming UI map takes Space from Gameplay");
+				rig.Actions.pop_map("UI");
+				rig.frame();
+				check(rig.Actions.state("Gameplay", "Jump").Down, "act_consume: Gameplay reads Space again after the pop");
+			}
+		}
+
 		void input_module(Check& check)
 		{
 			Engine& engine = Engine::get();
@@ -332,6 +557,7 @@ namespace wiwa
 		raw_input(check);
 		input_module(check);
 		input_map_format(check);
+		action_evaluation(check);
 
 		if (check.Failures == 0)
 		{
