@@ -1,5 +1,10 @@
 #include "editor_module.h"
 
+#include <fstream>
+#include <sstream>
+
+#include <input/input_map_io.h>
+
 #include <asset_pipeline/asset_pipeline_module.h>
 #include <asset_pipeline/asset_templates.h>
 #include <asset_pipeline/input_settings_file.h>
@@ -139,6 +144,7 @@ void EditorModule::init()
 		m_PlaySmoke = m_PlaySmoke || argument == "--play-smoke";
 		m_UiEditorSmoke = m_UiEditorSmoke || argument == "--ui-editor-smoke";
 		m_PhysicsPanelSmoke = m_PhysicsPanelSmoke || argument == "--physics-panel-smoke";
+		m_InputPanelSmoke = m_InputPanelSmoke || argument == "--input-panel-smoke";
 		if (argument == "--demo-smoke")
 		{
 			m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
@@ -159,6 +165,10 @@ void EditorModule::init()
 	Ref<PhysicsPanel> physicsPanel = CreateRef<PhysicsPanel>(*m_SceneEditor, m_PhysicsPanelFile);
 	m_PhysicsPanel = physicsPanel.get();
 	m_Panels.push_back(physicsPanel);
+	// the smoke check saves a default map: it must not touch the project's input.wsettings
+	Ref<InputPanel> inputPanel = CreateRef<InputPanel>(m_InputPanelSmoke ? std::filesystem::temp_directory_path() / "wiwa_input_panel_smoke.wsettings" : std::filesystem::path(wiwa::INPUT_SETTINGS_FILE));
+	m_InputPanel = inputPanel.get();
+	m_Panels.push_back(inputPanel);
 	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor));
 	m_Panels.push_back(CreateRef<RendererPanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
@@ -242,6 +252,51 @@ void EditorModule::update(float deltaTime)
 			WI_INFO("Editor", "Physics panel smoke test {0} (frames {1}, read {2}, layer 1 \"{3}\", 0-1 collide {4}, error \"{5}\")", passed ? "passed" : "FAILED", m_PhysicsPanel->frames_drawn(), read, saved.Names[1], saved.collides(0, 1), m_PhysicsPanel->last_error());
 			std::error_code removed;
 			std::filesystem::remove(m_PhysicsPanelFile, removed);
+			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+		}
+	}
+
+	if (m_InputPanelSmoke && m_InputPanel != nullptr)
+	{
+		if (m_Frame == 10)
+		{
+			m_InputPanel->request_focus();
+		}
+		if (m_Frame == 100)
+		{
+			// open a map, add an action with a binding through the model, and save it
+			m_InputPanelFile = std::filesystem::temp_directory_path() / "wiwa_input_panel_smoke.winput";
+			{
+				std::ofstream out(m_InputPanelFile, std::ios::binary | std::ios::trunc);
+				out << R"({"version":1,"maps":[{"name":"Gameplay","actions":[{"name":"Jump","type":"Button","bindings":[{"control":"Key.Space"}]}]}]})";
+			}
+			if (m_InputPanel->open_path(m_InputPanelFile) && m_InputPanel->model() != nullptr)
+			{
+				wiwa::InputEditModel* model = m_InputPanel->model();
+				wiwa::Binding binding;
+				binding.Parts[0] = wiwa::control(wiwa::Key::F9);
+				const size_t action = model->add_action(0, "Smoke", wiwa::ActionType::Button);
+				model->add_binding(0, action, binding);
+				m_InputPanel->save();
+			}
+		}
+		if (m_Frame == 130)
+		{
+			std::ifstream in(m_InputPanelFile, std::ios::binary);
+			std::stringstream text;
+			text << in.rdbuf();
+			wiwa::InputMapData saved;
+			std::string error;
+			const bool read = wiwa::input_map_from_text(text.str(), saved, error);
+			const wiwa::Action* added = read && !saved.Maps.empty() && saved.Maps[0].Actions.size() == 2 ? &saved.Maps[0].Actions[1] : nullptr;
+			const bool passed = m_InputPanel->frames_drawn() >= 100 && read && added != nullptr && added->Name == "Smoke" && added->Bindings.size() == 1 &&
+				added->Bindings[0].Parts[0] == wiwa::control(wiwa::Key::F9) && m_InputPanel->last_error().empty() &&
+				m_InputPanel->model() != nullptr && !m_InputPanel->model()->dirty();
+			WI_INFO("Editor", "Input panel smoke test {0} (frames {1}, read {2}, actions {3}, error \"{4}\")", passed ? "passed" : "FAILED", m_InputPanel->frames_drawn(), read,
+				read && !saved.Maps.empty() ? saved.Maps[0].Actions.size() : 0, m_InputPanel->last_error());
+			std::error_code removed;
+			std::filesystem::remove(m_InputPanelFile, removed);
 			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
 			wiwa::Engine::get().request_quit();
 		}

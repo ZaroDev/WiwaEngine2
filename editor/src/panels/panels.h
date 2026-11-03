@@ -2,6 +2,7 @@
 #include "asset_browser_panel.h"
 #include "build_settings_panel.h"
 #include "material_panel.h"
+#include "input_panel.h"
 #include "physics_panel.h"
 #include "hierarchy_panel.h"
 #include "inspector_panel.h"

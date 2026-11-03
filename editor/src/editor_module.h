@@ -73,6 +73,9 @@ private:
 	class PhysicsPanel* m_PhysicsPanel = nullptr; // owned by m_Panels
 	bool m_PhysicsPanelSmoke = false;            // --physics-panel-smoke: draw the Physics panel for a while with ImGui asserts on, edit the matrix, check it was saved
 	std::filesystem::path m_PhysicsPanelFile{};
+	class InputPanel* m_InputPanel = nullptr;     // owned by m_Panels
+	bool m_InputPanelSmoke = false;              // --input-panel-smoke: draw the Input panel for a while with ImGui asserts on, edit a map through the panel, check it was saved
+	std::filesystem::path m_InputPanelFile{};
 	std::filesystem::path m_UiEditorSmokeFile{};
 	wiwa::u32 m_Frame = 0;
 	wiwa::u32 m_PlaySmokeFinalFrame = 0;
