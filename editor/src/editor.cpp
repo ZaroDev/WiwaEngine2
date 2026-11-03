@@ -92,9 +92,9 @@ protected:
 			}
 			else if (m_Args[i] == "--physics-smoke")
 			{
-				m_CommandThread = std::thread([this]()
+				m_CommandThread = std::thread([this, assets]()
 				{
-					m_CommandResult = wiwa::run_physics_smoke_test() ? 0 : 1;
+					m_CommandResult = wiwa::run_physics_smoke_test(*assets) ? 0 : 1;
 				});
 			}
 			else if (m_Args[i] == "--asset-smoke")

@@ -1,12 +1,16 @@
 #include <editor_common.h>
 #include "physics_smoke_test.h"
 
+#include "../asset_pipeline/asset_database.h"
+
 #include <atomic>
 #include <chrono>
+#include <fstream>
 #include <cmath>
 #include <string>
 #include <thread>
 
+#include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <physics/physics_module.h>
 #include <physics/physics_sync.h>
@@ -455,7 +459,131 @@ namespace wiwa
 		}
 	}
 
-	bool run_physics_smoke_test()
+	namespace
+	{
+		// Peak height of the first bounce above the resting height, measured from the snapshot poses: the body falls, hits (its velocity
+		// turns upwards) and rises to the top of the first bounce.
+		struct BounceTracker
+		{
+			bool Bounced = false;  // the body has been moving up
+			bool Peaked = false;   // and has turned down again
+			float Peak = 0.0f;     // highest y since the first upward move
+
+			void sample(const BodyPose& pose)
+			{
+				if (!Bounced && pose.LinearVelocity.y > 0.5f)
+				{
+					Bounced = true;
+				}
+				if (Bounced && !Peaked)
+				{
+					Peak = std::max(Peak, pose.Position.y);
+					if (pose.LinearVelocity.y < -0.1f)
+					{
+						Peaked = true;
+					}
+				}
+			}
+		};
+
+		bool write_text_file(const std::filesystem::path& path, const std::string& text)
+		{
+			std::ofstream out(path, std::ios::binary | std::ios::trunc);
+			out << text;
+			return static_cast<bool>(out);
+		}
+
+		// Check 5: physics materials. Four balls (radius 0.5) fall 4 m onto a ground with the default material (resting height 1.0):
+		//  - Dead: a .wphysmat with restitution 0; Bouncy: restitution 0.8 combined with Max; both from the start;
+		//  - Late: no material at first, Bouncy is assigned while it falls (the asset arrives after the body was made: SetMaterial);
+		//  - Missing: a reference to an asset that does not exist (the default material is used, the body still works).
+		// The first bounce of Bouncy is about 0.8^2 * 4 = 2.56 m high, Dead's none.
+		void check_materials(Check& check, AssetPipelineModule& pipeline)
+		{
+			AssetDatabase& database = pipeline.get_database();
+			const std::filesystem::path dir = database.get_assets_root() / "zz_physmat_phys_smoke";
+			std::error_code error;
+			std::filesystem::remove_all(dir, error);
+			std::filesystem::create_directories(dir, error);
+			check(write_text_file(dir / "dead.wphysmat", "{ \"friction\": 0.5, \"restitution\": 0.0 }") &&
+				write_text_file(dir / "bouncy.wphysmat", "{ \"friction\": 0.5, \"restitution\": 0.8, \"restitutionCombine\": \"Max\" }"), "materials_files: the material files are written");
+			const std::optional<AssetRef> dead = database.ensure_imported(dir / "dead.wphysmat");
+			const std::optional<AssetRef> bouncy = database.ensure_imported(dir / "bouncy.wphysmat");
+			check(dead.has_value() && bouncy.has_value(), "materials_import: both material files import");
+
+			Scene scene;
+			add_ground(scene);
+			const auto ball = [&](const char* name, float x, AssetRef material)
+			{
+				const entt::entity entity = add_entity(scene, name, glm::vec3(x, 5.0f, 0.0f));
+				add_body(scene, entity, MotionType::Dynamic);
+				Collider& collider = add_box_collider(scene, entity, glm::vec3(0.5f));
+				collider.Shape = ColliderShape::Sphere;
+				collider.Material = material;
+				return entity;
+			};
+			const entt::entity deadBall = ball("Dead", -6.0f, dead.value_or(AssetRef{}));
+			const entt::entity bouncyBall = ball("Bouncy", -2.0f, bouncy.value_or(AssetRef{}));
+			const entt::entity lateBall = ball("Late", 2.0f, AssetRef{});
+			const entt::entity missingBall = ball("Missing", 6.0f, AssetRef{ AssetGuid::generate(), 0 });
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "materials_start: the world starts");
+
+			BounceTracker deadTrack, bouncyTrack, lateTrack, missingTrack;
+			const auto sample_all = [&](const Ref<const PhysicsStepSnapshot>& snapshot)
+			{
+				const std::pair<entt::entity, BounceTracker*> balls[] = { { deadBall, &deadTrack }, { bouncyBall, &bouncyTrack }, { lateBall, &lateTrack }, { missingBall, &missingTrack } };
+				for (const auto& [entity, track] : balls)
+				{
+					if (const BodyPose* pose = find_pose(snapshot.get(), key_of(scene, entity)))
+					{
+						track->sample(*pose);
+					}
+				}
+			};
+
+			// the material arrives while the late ball falls (about 0.9 s from drop to the ground)
+			run_for(thread, sync, scene, 0.3);
+			if (bouncy)
+			{
+				scene.registry().get<Collider>(lateBall).Material = *bouncy;
+			}
+			for (u32 step = 0; step < 240 && !(deadTrack.Peaked && bouncyTrack.Peaked && lateTrack.Peaked); step++)
+			{
+
+				sample_all(run_for(thread, sync, scene, 1.0 / 120.0));
+			}
+
+			const auto height = [](const BounceTracker& track) { return track.Bounced ? track.Peak - 1.0f : 0.0f; }; // no bounce at all: 0
+			const float deadHeight = height(deadTrack);
+			const float bouncyHeight = height(bouncyTrack);
+			const float lateHeight = height(lateTrack);
+			WI_PHYSICS_LOG(Info, "physics smoke: first bounce heights dead {0}, bouncy {1}, late {2}, missing {3} (peaked: {4}, {5}, {6})", deadHeight, bouncyHeight, lateHeight,
+				height(missingTrack), deadTrack.Peaked, bouncyTrack.Peaked, lateTrack.Peaked);
+			check(bouncyTrack.Bounced && bouncyTrack.Peaked, "materials_bouncy_bounces: the ball with restitution 0.8 bounces");
+			check(bouncyHeight - deadHeight > 0.5f, "materials_restitution_differs: the first bounce of restitution 0.8 is more than 0.5 m higher than restitution 0, got " +
+				std::to_string(bouncyHeight) + " vs " + std::to_string(deadHeight));
+			check(bouncyHeight > 1.5f && bouncyHeight < 3.2f, "materials_bounce_height: restitution 0.8 (Max) bounces about 2.5 m, got " + std::to_string(bouncyHeight));
+			check(deadHeight < 0.2f, "materials_dead_stays: restitution 0 does not bounce, got " + std::to_string(deadHeight));
+			check(lateTrack.Bounced && lateHeight > 1.5f, "materials_late_asset_applies: a material that arrives while the body falls applies (SetMaterial), got " +
+				std::to_string(lateHeight));
+			check(height(missingTrack) < 0.2f, "materials_missing_default: a reference to a missing asset uses the default material (no bounce)");
+
+			// after a while every ball rests, the missing one included (it is a working body)
+			const Ref<const PhysicsStepSnapshot> later = run_for(thread, sync, scene, 1.0);
+			const BodyPose* missingPose = find_pose(later.get(), key_of(scene, missingBall));
+			check(missingPose != nullptr && std::abs(missingPose->Position.y - 1.0f) < 0.05f && sync.has_body(key_of(scene, missingBall)),
+				"materials_missing_works: the body of a missing material rests on the ground");
+			thread.stop();
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+	}
+
+	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
 
@@ -467,6 +595,7 @@ namespace wiwa
 		check_compound(check);
 		check_replay_no_stale_bodies(check);
 		check_paused_queue(check);
+		check_materials(check, pipeline);
 
 		if (check.Failures == 0)
 		{

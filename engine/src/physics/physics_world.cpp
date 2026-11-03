@@ -18,6 +18,7 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 
 #include "physics_layers_jolt.h"
+#include "physics_material_jolt.h"
 #include "shape_builder.h"
 
 namespace wiwa
@@ -90,12 +91,6 @@ namespace wiwa
 			return static_cast<JPH::EAllowedDOFs>(dofs);
 		}
 
-		// The material of a body: Jolt has one friction and restitution per body (per-part materials come with material assets).
-		const ShapeMaterial& body_material(const ShapeDesc& shape)
-		{
-			return shape.Kind == ShapeKind::Compound && !shape.Children.empty() ? shape.Children.front().Material : shape.Material;
-		}
-
 		// Everything Jolt that one world needs. Created, used and destroyed on the physics thread, never seen by any other.
 		class PhysicsWorld final : public IPhysicsWorld
 		{
@@ -104,6 +99,9 @@ namespace wiwa
 			{
 				m_System.Init(kMaxBodies, 0, kMaxBodyPairs, kMaxContactConstraints, m_BroadPhase, m_ObjectVsBroad, m_Pairs);
 				apply(settings);
+				// the friction and restitution of a contact come from the two shapes' materials (physics_material_jolt.h), not from the bodies
+				m_System.SetCombineFriction(&combine_friction);
+				m_System.SetCombineRestitution(&combine_restitution);
 				m_Placeholder = new JPH::SphereShape(ShapeBuilder::MIN_SHAPE_SIZE);
 			}
 
@@ -141,6 +139,10 @@ namespace wiwa
 					else if constexpr (std::is_same_v<T, SetKinematicTarget>)
 					{
 						set_kinematic_target(c.Key, c.Pos, c.Rot);
+					}
+					else if constexpr (std::is_same_v<T, SetMaterial>)
+					{
+						set_material(c.Key, c.Material);
 					}
 					else if constexpr (std::is_same_v<T, ReplaceShape>)
 					{
@@ -200,6 +202,7 @@ namespace wiwa
 				i32 Layer = 0;
 				bool IsTrigger = false;
 				bool ReportContacts = false;
+				ShapeDesc Shape{};                         // as last built, for SetMaterial
 			};
 
 			enum class BodyWarning : u32 { AllLocked, Placeholder };
@@ -272,6 +275,7 @@ namespace wiwa
 				entry.Layer = desc.Layer;
 				entry.IsTrigger = desc.IsTrigger;
 				entry.ReportContacts = desc.ReportContacts;
+				entry.Shape = desc.Shape;
 
 				JPH::BodyCreationSettings settings(placeholder ? m_Placeholder.GetPtr() : shape.GetPtr(), to_jolt(desc.Position), to_jolt(desc.Rotation),
 					to_jolt(entry.Motion), to_object_layer(desc.Layer, category(entry, placeholder)));
@@ -282,9 +286,6 @@ namespace wiwa
 				settings.mMotionQuality = desc.ContinuousCollision ? JPH::EMotionQuality::LinearCast : JPH::EMotionQuality::Discrete;
 				settings.mAllowSleeping = desc.AllowSleeping;
 				settings.mIsSensor = desc.IsTrigger;
-				const ShapeMaterial& material = body_material(desc.Shape);
-				settings.mFriction = std::isfinite(material.Friction) ? std::max(material.Friction, 0.0f) : 0.5f;
-				settings.mRestitution = std::isfinite(material.Restitution) ? std::max(material.Restitution, 0.0f) : 0.0f;
 				if (entry.Requested == MotionType::Dynamic && dofs != JPH::EAllowedDOFs::None)
 				{
 					settings.mAllowedDOFs = dofs; // also for a placeholder that is kinematic for now: the locks hold once it is dynamic
@@ -352,6 +353,23 @@ namespace wiwa
 				}
 			}
 
+			// Every part of the body's shape gets the material, then the shape is rebuilt like ReplaceShape does (the density changes the mass).
+			void set_material(BodyKey key, const PhysicsMaterialData& material)
+			{
+				const auto it = m_Bodies.find(key);
+				if (it == m_Bodies.end())
+				{
+					return;
+				}
+				ShapeDesc shape = it->second.Shape;
+				shape.Material = material;
+				for (ShapeDesc& child : shape.Children)
+				{
+					child.Material = material;
+				}
+				replace_shape(key, shape);
+			}
+
 			void replace_shape(BodyKey key, const ShapeDesc& desc)
 			{
 				const auto it = m_Bodies.find(key);
@@ -360,6 +378,7 @@ namespace wiwa
 					return;
 				}
 				BodyEntry& entry = it->second;
+				entry.Shape = desc;
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
 
 				JPH::RefConst<JPH::Shape> shape = m_Shapes.build(desc);

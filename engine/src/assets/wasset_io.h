@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <scene/scene_data.h>
+#include <physics/physics_material_asset.h>
 #include <ui/ui_widget.h>
 #include "asset_data.h"
 #include "asset_types.h"
@@ -131,6 +132,8 @@ namespace wiwa
 	void archive(BinaryArchive& ar, FontData& v);
 	// A panel is kept as its JSON text, so that ui_panel_io is the one description of the format.
 	void archive(BinaryArchive& ar, UiPanelData& v);
+	// A version, then the values; refuses an unknown version and values physics_material_valid refuses (physics_material_asset.cpp).
+	void archive(BinaryArchive& ar, PhysicsMaterialData& v);
 
 	template<typename T>
 	constexpr AssetType asset_type_of();
@@ -148,6 +151,7 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<SurfaceShaderData>() { return AssetType::SurfaceShader; }
 	template<> constexpr AssetType asset_type_of<FontData>() { return AssetType::Font; }
 	template<> constexpr AssetType asset_type_of<UiPanelData>() { return AssetType::UiPanel; }
+	template<> constexpr AssetType asset_type_of<PhysicsMaterialData>() { return AssetType::PhysicsMaterial; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)

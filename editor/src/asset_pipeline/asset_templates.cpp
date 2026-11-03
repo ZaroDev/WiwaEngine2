@@ -8,6 +8,7 @@
 
 #include "../scene/scene_json.h"
 #include "material_file.h"
+#include "physics_material_file.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -141,6 +142,7 @@ namespace wiwa
 		case CreateKind::HlslShader: return "HLSL shader";
 		case CreateKind::HlslInclude: return "HLSL include";
 		case CreateKind::UiPanel: return "UI panel";
+		case CreateKind::PhysicsMaterial: return "Physics Material";
 		}
 		return "";
 	}
@@ -157,6 +159,7 @@ namespace wiwa
 		case CreateKind::HlslShader: return "NewShader";
 		case CreateKind::HlslInclude: return "NewInclude";
 		case CreateKind::UiPanel: return "NewPanel";
+		case CreateKind::PhysicsMaterial: return "New physics material";
 		}
 		return "";
 	}
@@ -173,6 +176,7 @@ namespace wiwa
 		case CreateKind::HlslShader: return ".hlsl";
 		case CreateKind::HlslInclude: return ".hlsli";
 		case CreateKind::UiPanel: return ".wuipanel";
+		case CreateKind::PhysicsMaterial: return ".wphysmat";
 		}
 		return "";
 	}
@@ -272,6 +276,9 @@ namespace wiwa
 			break;
 		case CreateKind::UiPanel:
 			written = write_text(path, ui_panel_template());
+			break;
+		case CreateKind::PhysicsMaterial:
+			written = write_text(path, physics_material_to_json(default_physics_material()).dump(2));
 			break;
 		}
 

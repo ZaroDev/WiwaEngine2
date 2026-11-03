@@ -39,6 +39,7 @@ namespace wiwa
 			case AssetType::SurfaceShader: return make_asset<SurfaceShaderData>(payload);
 			case AssetType::Font: return make_asset<FontData>(payload);
 			case AssetType::UiPanel: return make_asset<UiPanelData>(payload);
+				case AssetType::PhysicsMaterial: return make_asset<PhysicsMaterialData>(payload);
 			default: return nullptr;
 			}
 		}

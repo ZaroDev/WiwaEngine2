@@ -3,6 +3,7 @@
 #include <variant>
 #include <vector>
 
+#include "physics_material_asset.h"
 #include "physics_types.h"
 
 namespace wiwa
@@ -17,16 +18,6 @@ namespace wiwa
 	// exist): the body is made but collides with nothing. Compound: the Children are the parts.
 	enum class ShapeKind : u32 { Box, Sphere, Capsule, Cylinder, Placeholder, Compound };
 
-	// The surface of a shape. The built-in default material until physics material assets exist.
-	struct ShapeMaterial
-	{
-		float Friction = 0.5f;
-		float Restitution = 0.0f;
-		float Density = 1000.0f; // kg/m3
-
-		bool operator==(const ShapeMaterial&) const = default;
-	};
-
 	// One shape of a body, plain data. Size is as the Collider says (box: half extents; sphere: radius in x; capsule and cylinder: radius
 	// in x, half height of the cylinder part in y), before the scale; the physics thread applies Scale (the entity's world scale) and
 	// clamps. Offset and Rotation place the shape in the body's frame (its entity's world position and rotation, no scale), Offset
@@ -39,7 +30,7 @@ namespace wiwa
 		glm::vec3 Offset{ 0.0f };
 		glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
 		glm::vec3 Scale{ 1.0f };
-		ShapeMaterial Material{};
+		PhysicsMaterialData Material{}; // the Collider's PhysicsMaterial asset, or the default; plain data, resolved by the main thread
 		EntityGuid Source{}; // the entity whose Collider this is, for warnings that are logged once per collider
 		std::vector<ShapeDesc> Children{};
 	};
@@ -99,7 +90,15 @@ namespace wiwa
 		ShapeDesc Shape{};
 	};
 
+	// Gives every part of a body's shape this material (a Collider's material asset finished loading, or was changed). The shape is
+	// rebuilt, so the mass follows the new density.
+	struct SetMaterial
+	{
+		BodyKey Key{};
+		PhysicsMaterialData Material{};
+	};
+
 	// Plain-data commands from the main thread to the physics thread, applied at the start of the next step in submission order.
 	// New kinds are added as new alternatives. Commands for a key that has no body are ignored.
-	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape>;
+	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial>;
 }

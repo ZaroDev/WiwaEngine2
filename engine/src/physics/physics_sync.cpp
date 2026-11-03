@@ -3,7 +3,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <vector>
+
+#include <assets/asset_manager.h>
+#include <core/engine.h>
 
 namespace wiwa
 {
@@ -133,7 +137,7 @@ namespace wiwa
 		};
 
 		// The bodies the scene asks for now, by key. Needs current WorldTransforms.
-		std::unordered_map<BodyKey, Collected> collect(const Scene& scene)
+		std::unordered_map<BodyKey, Collected> collect(const Scene& scene, const std::function<PhysicsMaterialData(AssetRef)>& resolve_material)
 		{
 			const entt::registry& registry = scene.registry();
 
@@ -201,6 +205,7 @@ namespace wiwa
 					part.Kind = shape_kind(collider.Shape);
 					part.Size = collider.Size;
 					part.Source = registry.get<Id>(entity).Guid;
+					part.Material = resolve_material(collider.Material);
 					if (entity == owner)
 					{
 						part.Scale = body.Scale;
@@ -247,7 +252,7 @@ namespace wiwa
 	void PhysicsSync::push_changes(Scene& scene, PhysicsThread& thread)
 	{
 		const entt::registry& registry = scene.registry();
-		std::unordered_map<BodyKey, Collected> wanted = collect(scene);
+		std::unordered_map<BodyKey, Collected> wanted = collect(scene, [this](AssetRef ref) { return resolve_material(ref); });
 
 		// gone: the entity was destroyed, or lost its collider, or its colliders now belong to another body
 		for (auto it = m_Bodies.begin(); it != m_Bodies.end();)
@@ -278,7 +283,17 @@ namespace wiwa
 			Tracked& tracked = it->second;
 			if (!same_shape(tracked.Desc.Shape, collected.Desc.Shape))
 			{
-				thread.push(ReplaceShape{ key, collected.Desc.Shape }, m_Generation);
+				// only the material of a single shape changed (its asset finished loading): the cheap command says so
+				ShapeDesc sameMaterial = collected.Desc.Shape;
+				sameMaterial.Material = tracked.Desc.Shape.Material;
+				if (collected.Desc.Shape.Kind != ShapeKind::Compound && same_shape(tracked.Desc.Shape, sameMaterial))
+				{
+					thread.push(SetMaterial{ key, collected.Desc.Shape.Material }, m_Generation);
+				}
+				else
+				{
+					thread.push(ReplaceShape{ key, collected.Desc.Shape }, m_Generation);
+				}
 				tracked.Desc.Shape = std::move(collected.Desc.Shape);
 			}
 
@@ -359,8 +374,49 @@ namespace wiwa
 		}
 	}
 
+	PhysicsMaterialData PhysicsSync::resolve_material(AssetRef ref)
+	{
+		if (!ref.valid())
+		{
+			return default_physics_material();
+		}
+
+		const AssetGuid key = ref.resolved();
+		auto it = m_Materials.find(key);
+		if (it == m_Materials.end())
+		{
+			AssetManager* assets = Engine::get().get_module<AssetManager>();
+			if (assets == nullptr)
+			{
+				return default_physics_material();
+			}
+			it = m_Materials.emplace(key, MaterialEntry{ assets->load<PhysicsMaterialData>(ref) }).first;
+		}
+
+		MaterialEntry& entry = it->second;
+		switch (entry.Material.state())
+		{
+		case LoadState::Ready:
+			if (const PhysicsMaterialData* data = entry.Material.get(); data != nullptr && physics_material_valid(*data))
+			{
+				return *data;
+			}
+			[[fallthrough]];
+		case LoadState::Failed:
+			if (!entry.Warned)
+			{
+				entry.Warned = true;
+				WI_PHYSICS_LOG(Warning, "Physics material {0} is missing or could not be loaded: the default material is used", ref.Guid.to_string());
+			}
+			return default_physics_material();
+		default:
+			return default_physics_material(); // still loading
+		}
+	}
+
 	void PhysicsSync::clear()
 	{
 		m_Bodies.clear();
+		m_Materials.clear();
 	}
 }

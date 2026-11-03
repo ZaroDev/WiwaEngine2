@@ -12,6 +12,7 @@
 #include "file_utils.h"
 #include "material_file.h"
 #include "packager.h"
+#include "physics_material_file.h"
 #include "prefab_file.h"
 #include "surface_shader_parser.h"
 
@@ -93,6 +94,7 @@ namespace wiwa
 			case AssetType::SurfaceShader: { auto h = manager.load<SurfaceShaderData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::UiPanel: { auto h = manager.load<UiPanelData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::Font: { auto h = manager.load<FontData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::PhysicsMaterial: { auto h = manager.load<PhysicsMaterialData>(ref); return [h]() { return h.state(); }; }
 			default: return []() { return LoadState::Failed; };
 			}
 		}
@@ -1814,6 +1816,125 @@ namespace wiwa
 			WI_ASSET_LOG(Info, "Smoke test: the next import error is expected");
 			database.ensure_imported(broken);
 			check(!cooked_panel(broken).has_value(), "ui_panel_invalid_fails_import: a widget without a kind cooks no panel");
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+
+		// 9c. physics material files (.wphysmat)
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_physmat_smoke";
+			std::filesystem::remove_all(dir, error);
+			std::filesystem::create_directories(dir, error);
+
+			const std::filesystem::path file = dir / "bouncy.wphysmat";
+			const auto write_source = [&](const std::filesystem::path& path, const std::string& text)
+			{
+				std::ofstream out(path, std::ios::binary | std::ios::trunc);
+				out << text;
+			};
+			write_source(file, "{ \"friction\": 0.25, \"restitution\": 0.75, \"density\": 2500, \"frictionCombine\": \"Min\", \"restitutionCombine\": \"Multiply\" }");
+
+			const auto cooked_material = [&](const std::filesystem::path& source, std::vector<std::byte>* bytes = nullptr) -> std::optional<PhysicsMaterialData>
+			{
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				if (!meta)
+				{
+					return std::nullopt;
+				}
+				for (const CookedFile& cooked : read_library(database.get_library_root()))
+				{
+					std::span<const std::byte> payload;
+					if (cooked.Guid == meta->Guid && cooked.Type == AssetType::PhysicsMaterial && parse_wasset_header(cooked.Bytes, payload))
+					{
+						if (bytes != nullptr)
+						{
+							*bytes = cooked.Bytes;
+						}
+						return deserialize<PhysicsMaterialData>(payload);
+					}
+				}
+				return std::nullopt;
+			};
+
+			PhysicsMaterialData expected;
+			expected.Friction = 0.25f;
+			expected.Restitution = 0.75f;
+			expected.Density = 2500.0f;
+			expected.FrictionCombine = CombineMode::Min;
+			expected.RestitutionCombine = CombineMode::Multiply;
+
+			std::vector<std::byte> libraryBytes;
+			const std::optional<AssetRef> ref = database.ensure_imported(file);
+			check(ref.has_value(), "physics_material_imported: the .wphysmat imports");
+			const std::optional<PhysicsMaterialData> cooked = cooked_material(file, &libraryBytes);
+			check(cooked && *cooked == expected, "physics_material_imported: the cooked material holds the values of the file");
+
+			// it loads through the AssetManager, from the Library and from a pack
+			if (ref)
+			{
+				Handle<PhysicsMaterialData> handle = manager.load<PhysicsMaterialData>(*ref);
+				manager.wait_idle();
+				check(handle.state() == LoadState::Ready && handle.get() != nullptr && *handle.get() == expected, "physics_material_loads: the cooked material loads through the AssetManager with equal values");
+
+				const std::filesystem::path packDirectory = dir / "pack";
+				check(Packager::pack(database, packDirectory), "physics_material_packed_loads: packing the Library with a material in it");
+				PakSource pak(packDirectory / "assets.wpak");
+				const std::optional<std::vector<std::byte>> packed = pak.valid() ? pak.read(ref->Guid) : std::nullopt;
+				check(packed && *packed == libraryBytes, "physics_material_packed_loads: the pack holds the bytes of the Library");
+				std::span<const std::byte> packedPayload;
+				const std::optional<PhysicsMaterialData> fromPack = packed && parse_wasset_header(*packed, packedPayload) ? deserialize<PhysicsMaterialData>(packedPayload) : std::nullopt;
+				check(fromPack && *fromPack == expected, "physics_material_packed_loads: the packed material decodes to equal values");
+			}
+
+			// the guid survives an edit and a re-import
+			write_source(file, "{ \"friction\": 0.5, \"restitution\": 0.1 }");
+			database.reimport(file);
+			const std::optional<AssetRef> again = database.ensure_imported(file);
+			check(ref && again && again->Guid == ref->Guid, "physics_material_guid_stable: a re-import keeps the guid");
+			const std::optional<PhysicsMaterialData> edited = cooked_material(file);
+			check(edited && edited->Friction == 0.5f && edited->Restitution == 0.1f && edited->Density == 1000.0f && edited->FrictionCombine == CombineMode::Average,
+				"physics_material_defaults: keys that are missing take the defaults");
+
+			// the binary payload has a version field and refuses anything else
+			{
+				std::vector<std::byte> payload = serialize(expected);
+				check(payload.size() >= sizeof(u32), "physics_material_version: the payload starts with a version");
+				std::vector<std::byte> wrongVersion = payload;
+				wrongVersion[0] = std::byte{ 99 };
+				check(!deserialize<PhysicsMaterialData>(wrongVersion).has_value(), "physics_material_version: an unknown version is refused");
+				check(!deserialize<PhysicsMaterialData>(std::span<const std::byte>(payload.data(), payload.size() - 1)).has_value(), "physics_material_version: a truncated payload is refused");
+			}
+
+			// a damaged file is an import error and leaves no .wasset
+			WI_ASSET_LOG(Info, "Smoke test: the next import errors are expected");
+			const auto count_cooked_materials = [&]()
+			{
+				size_t count = 0;
+				for (const CookedFile& cooked : read_library(database.get_library_root()))
+				{
+					count += cooked.Type == AssetType::PhysicsMaterial ? 1 : 0;
+				}
+				return count;
+			};
+			const size_t cookedBefore = count_cooked_materials();
+			for (const auto& [name, text] : std::vector<std::pair<std::string, std::string>>{
+				{ "broken_json", "{ \"friction\": " }, { "negative", "{ \"friction\": -1 }" }, { "bad_mode", "{ \"frictionCombine\": \"Sum\" }" },
+				{ "wrong_type", "{ \"density\": \"heavy\" }" } })
+			{
+				const std::filesystem::path broken = dir / (name + ".wphysmat");
+				write_source(broken, text);
+				database.ensure_imported(broken);
+				check(!cooked_material(broken).has_value(), "physics_material_invalid_fails_import: " + name + " cooks no material");
+			}
+			check(count_cooked_materials() == cookedBefore, "physics_material_invalid_fails_import: no .wasset was written for any of them");
+
+			// the Create menu makes a file that imports as the default material
+			check(std::string(extension(CreateKind::PhysicsMaterial)) == ".wphysmat", "physics_material_template: the Create menu kind has the extension");
+			const std::filesystem::path created = create_asset(CreateKind::PhysicsMaterial, dir, "Made");
+			check(!created.empty() && database.ensure_imported(created).has_value(), "physics_material_template: the created file imports");
+			const std::optional<PhysicsMaterialData> made = cooked_material(created);
+			check(made && *made == default_physics_material(), "physics_material_template: the created file is the default material");
 
 			std::filesystem::remove_all(dir, error);
 			database.scan();

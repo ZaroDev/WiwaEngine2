@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "shape_builder.h"
 
+#include "physics_material_jolt.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -106,27 +108,36 @@ namespace wiwa
 			}
 		};
 
+		// the surface of this part: friction and restitution reach the contact through it, the density sets the mass
+		PhysicsMaterialData surface = desc.Material;
+		if (!physics_material_valid(surface))
+		{
+			warn_once(desc.Source, Warning::Failed, "the physics material has values that are not allowed, the default is used");
+			surface = default_physics_material();
+		}
+		const JPH::Ref<JPH::PhysicsMaterial> material = new WiwaPhysicsMaterial(surface);
+
 		JPH::Ref<JPH::ConvexShape> convex;
 		switch (desc.Kind)
 		{
 		case ShapeKind::Box:
 		{
 			const JPH::Vec3 half(dimension(size.x * scale.x), dimension(size.y * scale.y), dimension(size.z * scale.z));
-			convex = new JPH::BoxShape(half, std::min(JPH::cDefaultConvexRadius, 0.5f * half.ReduceMin()));
+			convex = new JPH::BoxShape(half, std::min(JPH::cDefaultConvexRadius, 0.5f * half.ReduceMin()), material);
 			break;
 		}
 		case ShapeKind::Sphere:
 		{
 			const float largest = std::max({ scale.x, scale.y, scale.z });
 			uniform(largest);
-			convex = new JPH::SphereShape(dimension(size.x * largest));
+			convex = new JPH::SphereShape(dimension(size.x * largest), material);
 			break;
 		}
 		case ShapeKind::Capsule:
 		{
 			const float largest = std::max({ scale.x, scale.y, scale.z });
 			uniform(largest);
-			convex = new JPH::CapsuleShape(dimension(size.y * largest), dimension(size.x * largest));
+			convex = new JPH::CapsuleShape(dimension(size.y * largest), dimension(size.x * largest), material);
 			break;
 		}
 		case ShapeKind::Cylinder:
@@ -138,7 +149,7 @@ namespace wiwa
 			}
 			const float halfHeight = dimension(size.y * scale.y);
 			const float radius = dimension(size.x * radial);
-			convex = new JPH::CylinderShape(halfHeight, radius, std::min(JPH::cDefaultConvexRadius, 0.5f * std::min(halfHeight, radius)));
+			convex = new JPH::CylinderShape(halfHeight, radius, std::min(JPH::cDefaultConvexRadius, 0.5f * std::min(halfHeight, radius)), material);
 			break;
 		}
 		case ShapeKind::Placeholder:
@@ -153,7 +164,7 @@ namespace wiwa
 			warn_once(desc.Source, Warning::Clamped, "a size below " + std::to_string(MIN_SHAPE_SIZE) + " m was raised to it");
 		}
 
-		const float density = std::isfinite(desc.Material.Density) ? desc.Material.Density : 1000.0f;
+		const float density = surface.Density;
 		convex->SetDensity(std::max(density, 1e-3f));
 
 		const glm::vec3 offset = finite(desc.Offset) ? desc.Offset : glm::vec3(0.0f);

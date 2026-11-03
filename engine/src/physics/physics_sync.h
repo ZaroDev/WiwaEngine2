@@ -2,8 +2,11 @@
 
 #include <unordered_map>
 
+#include <assets/handle.h>
+
 #include <scene/scene.h>
 
+#include "physics_material_asset.h"
 #include "physics_snapshot.h"
 #include "physics_thread.h"
 
@@ -22,7 +25,7 @@ namespace wiwa
 		void build(Scene& scene, PhysicsThread& thread);
 
 		// Once per frame, after the scene moved: bodies whose entity was destroyed (or lost its collider) are destroyed, new ones are made,
-		// changed colliders send ReplaceShape, a changed RigidBody makes the body again, and static and kinematic bodies follow their
+		// changed colliders send ReplaceShape (SetMaterial when only the material asset changed), a changed RigidBody makes the body again, and static and kinematic bodies follow their
 		// entity's WorldTransform (SetTransform, SetKinematicTarget).
 		void push_changes(Scene& scene, PhysicsThread& thread);
 
@@ -33,6 +36,12 @@ namespace wiwa
 
 		// Forgets every body (the world is gone).
 		void clear();
+
+		// What a Collider's Material reference means for the world, on the main thread (the physics thread never sees the AssetManager). A
+		// reference that is not set gives the default material. One still loading also gives the default for now: the next push_changes sees
+		// it ready and sends the shape again with the real values (SetMaterial when only the material changed, else ReplaceShape). One that
+		// failed to load or does not exist gives the default and logs one warning per world.
+		PhysicsMaterialData resolve_material(AssetRef ref);
 
 		u64 generation() const { return m_Generation; }
 		size_t body_count() const { return m_Bodies.size(); }
@@ -45,7 +54,14 @@ namespace wiwa
 			glm::mat4 LastWorld{ 1.0f }; // the body entity's WorldTransform when last sent
 		};
 
+		struct MaterialEntry
+		{
+			Handle<PhysicsMaterialData> Material{};
+			bool Warned = false;
+		};
+
 		std::unordered_map<BodyKey, Tracked> m_Bodies{};
+		std::unordered_map<AssetGuid, MaterialEntry> m_Materials{}; // by the guid the asset is stored under
 		u64 m_Generation = 0;
 	};
 }
