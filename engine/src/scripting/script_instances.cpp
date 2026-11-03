@@ -23,6 +23,7 @@ namespace wiwa
 		m_Context.UiHandlers = &m_UiHandlers;
 		bind_engine(m_Runtime, m_Context);
 		bind_ui(m_Runtime, m_Context);
+		bind_physics(m_Runtime, m_Context);
 	}
 
 	ScriptInstances::~ScriptInstances()

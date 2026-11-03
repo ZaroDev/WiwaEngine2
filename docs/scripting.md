@@ -53,7 +53,7 @@ Every frame, after the scene module updated:
 
 1. instances whose entity or component is gone get `on_destroy`;
 2. scripts that are new (found by looking at the scene, so entities created by a script during a frame included) get `on_init`;
-3. scene-level scripts run `on_update`, then entity scripts do (the order between entities is undefined);
+3. the physics steps that completed (see Physics), then scene-level scripts run `on_update`, then entity scripts do (the order between entities is undefined);
 4. world transforms are recomputed.
 
 A script that raises an error is logged (script, entity, hook, line) and that instance is disabled; everything else keeps running.
@@ -117,6 +117,52 @@ panel:find("Menu/Volume"):on("value_changed", function(self, value) self.volume 
 - **Input.** There is no input system yet. In the editor's play mode the Game viewport's mouse works on the UI. `UI.input` (`move_to`,
   `press`, `release`, `nav`, `scroll`, `clear_pointer`) writes to a scripted input source, which only reaches the UI while it is the one in
   use (tests and tools). When an input system exists it only has to implement `IUiInputSource`.
+
+## Physics
+
+Entities with a `Collider` (and a `RigidBody` for anything that moves) are simulated by Jolt on its own thread at a fixed rate (60 Hz by
+default). Scripts see the world in whole steps, on the main thread, and only while the game clock plays.
+
+Each frame, before `on_update`, every physics step that completed since the last frame is delivered in order: first its collision and
+trigger handlers, then `on_physics_update(self, dt)` of every script (`dt` is the fixed step). If the game falls far behind, only the newest
+32 steps get `on_physics_update`; the older ones still deliver their enters and exits (never their stays).
+
+| Hook | Called on | Arguments |
+| --- | --- | --- |
+| `on_physics_update` | every script | `dt` |
+| `on_collision_enter` / `on_collision_exit` | scripts on the two entities of a touching pair | `other` (Entity), `contact` |
+| `on_collision_stay` | the same, once per step, only if one of the bodies has `ReportContacts` | `other`, `contact` |
+| `on_trigger_enter` / `on_trigger_exit` | scripts on the two entities when either collider is a trigger | `other` |
+
+`contact` is described from the receiver's side: `point` (world space), `normal` (unit, from the other entity towards the receiver, the
+way it is pushed out), `impulse` (an estimate of the normal impulse, kg m/s) and `relative_velocity` (the receiver's velocity relative to the
+other's, before the contact was resolved). `impulse`, `point` and `normal` are not set on exits. Events for an entity that was destroyed
+meanwhile are dropped.
+
+**Queries** run against the step being delivered (so inside `on_physics_update` and the collision handlers they see exactly that step), and
+against the newest step elsewhere. Triggers and shapes that do not collide are not hit. `layer_mask` has bit n set for physics layer n
+(`nil` is every layer).
+
+- `physics.raycast(origin, direction, max_distance, layer_mask)` is `{ entity, point, normal, distance }` or `nil`; `physics.raycast_all(...)` is an array of them, nearest first.
+- `physics.overlap_sphere(center, radius, layer_mask)` and `physics.overlap_box(center, half_extents, rotation, layer_mask)` are arrays of entities.
+- `physics.shape_cast(shape, from, to, layer_mask)` with `shape` as `{ kind = "sphere", radius = r }`, `{ kind = "box", half_extents = vec3 }` or `{ kind = "capsule", radius = r, half_height = h }`, is the first hit like `raycast`.
+
+**Body control** goes to the physics thread and is applied at the start of the next step, so what you do in step N shows in the
+snapshot of step N+1: `entity:body()` is a `Body` with `add_force` (during one step), `add_impulse`, `add_torque`, `set_velocity`,
+`set_angular_velocity`, `get_velocity`, `get_angular_velocity` (the newest step; `nil` without a body), `set_kinematic_target(position, rotation)` and `wake()`.
+`physics.set_gravity(vec3)` changes the world's gravity. A command for a body that no longer exists is ignored.
+
+```lua
+return Script:extend{
+  on_collision_enter = function(self, other, contact)
+    if contact.impulse > 50 then log("hard landing on " .. other.name) end
+  end,
+  on_physics_update = function(self, dt)
+    local hit = physics.raycast(self.entity:get("Transform").position, vec3(0, -1, 0), 1.2)
+    if hit and input_jump then self.entity:body():add_impulse(vec3(0, 300, 0)) end
+  end,
+}
+```
 
 ## `require` and builds
 

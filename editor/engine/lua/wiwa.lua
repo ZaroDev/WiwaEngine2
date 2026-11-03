@@ -255,6 +255,94 @@ function camera.primary() end
 function camera.set_primary(entity) end
 
 --------------------------------------------------------------------------------------------------------------------------------
+-- Physics
+--------------------------------------------------------------------------------------------------------------------------------
+
+--- What a ray or a shape cast hit.
+---@class PhysicsHit
+---@field entity Entity
+---@field point vec3
+---@field normal vec3 unit, pointing away from the entity that was hit
+---@field distance number metres from the origin of the ray (the start of the cast)
+
+--- The contact of a collision event, from the point of view of the script that receives it.
+---@class PhysicsContact
+---@field point vec3 world space
+---@field normal vec3 unit, from the other entity towards this one (the way this one is pushed out)
+---@field impulse number estimated normal impulse, kg m/s
+---@field relative_velocity vec3 this entity's velocity relative to the other's, before the contact was resolved
+
+--- A shape for physics.shape_cast: { kind = "sphere", radius = r }, { kind = "box", half_extents = vec3 } or { kind = "capsule", radius = r, half_height = h }.
+---@alias PhysicsShape table
+
+--- The rigid body of an entity (`entity:body()`). Commands are applied at the start of the next physics step, so what they do shows one step later.
+---@class Body
+local Body = {}
+---@param force vec3 newtons, world space; acts during one step
+function Body:add_force(force) end
+---@param impulse vec3 newton seconds, world space
+function Body:add_impulse(impulse) end
+---@param torque vec3
+function Body:add_torque(torque) end
+---@param velocity vec3 m/s
+function Body:set_velocity(velocity) end
+---@param angular vec3 rad/s
+function Body:set_angular_velocity(angular) end
+--- The velocity in the newest physics step; nil when the entity has no body in the world.
+---@return vec3?
+function Body:get_velocity() end
+---@return vec3?
+function Body:get_angular_velocity() end
+--- Moves a kinematic body to the pose over the next step (it pushes what it meets). Without a rotation the body keeps its own.
+---@param position vec3
+---@param rotation? quat
+function Body:set_kinematic_target(position, rotation) end
+--- Wakes a sleeping body.
+function Body:wake() end
+
+--- The entity's rigid body.
+---@return Body
+function Entity:body() end
+
+--- Queries run against the physics step the handler was called for (on_physics_update and the collision handlers), else the newest step.
+--- `layer_mask` has bit n set for physics layer n (nil: every layer). Triggers are not hit.
+physics = {}
+---@param origin vec3
+---@param direction vec3
+---@param max_distance number
+---@param layer_mask? integer
+---@return PhysicsHit?
+function physics.raycast(origin, direction, max_distance, layer_mask) end
+--- Every hit, nearest first.
+---@param origin vec3
+---@param direction vec3
+---@param max_distance number
+---@param layer_mask? integer
+---@return PhysicsHit[]
+function physics.raycast_all(origin, direction, max_distance, layer_mask) end
+---@param center vec3
+---@param radius number
+---@param layer_mask? integer
+---@return Entity[]
+function physics.overlap_sphere(center, radius, layer_mask) end
+---@param center vec3
+---@param half_extents vec3
+---@param rotation? quat
+---@param layer_mask? integer
+---@return Entity[]
+function physics.overlap_box(center, half_extents, rotation, layer_mask) end
+--- Sweeps a shape from `from` to `to` and gives the first hit (distance along the path).
+---@param shape PhysicsShape
+---@param from vec3
+---@param to vec3
+---@param layer_mask? integer
+---@return PhysicsHit?
+function physics.shape_cast(shape, from, to, layer_mask) end
+--- Sets the gravity of the world (the scene's setting applies again when the scene restarts).
+---@param gravity vec3
+function physics.set_gravity(gravity) end
+
+--------------------------------------------------------------------------------------------------------------------------------
 -- UI
 --------------------------------------------------------------------------------------------------------------------------------
 
@@ -374,6 +462,22 @@ function ScriptClass:on_init() end
 ---@param dt number seconds
 function ScriptClass:on_update(dt) end
 function ScriptClass:on_destroy() end
+--- Once per completed physics step (a fixed rate, 60 Hz by default), before the collision handlers of the next one. dt is the step.
+---@param dt number
+function ScriptClass:on_physics_update(dt) end
+---@param other Entity
+---@param contact PhysicsContact
+function ScriptClass:on_collision_enter(other, contact) end
+---@param other Entity
+---@param contact PhysicsContact
+function ScriptClass:on_collision_stay(other, contact) end
+---@param other Entity
+---@param contact PhysicsContact
+function ScriptClass:on_collision_exit(other, contact) end
+---@param other Entity
+function ScriptClass:on_trigger_enter(other) end
+---@param other Entity
+function ScriptClass:on_trigger_exit(other) end
 ---@param definition? ScriptDefinition
 ---@return ScriptClass
 function ScriptClass:extend(definition) end

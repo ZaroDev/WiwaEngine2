@@ -54,6 +54,10 @@ namespace wiwa
 		// Stops the thread and frees the world. Does nothing when no world runs.
 		void stop_world();
 
+		// What update() does with the steps, without following the SceneModule or the game clock: takes the steps the world completed since the last
+		// call (for dispatch_steps) and the newest one (for query and the poses). For a world started with start_world and driven by its owner.
+		void pump();
+
 		// The scene the world was built for; null when none.
 		Ref<Scene> world_scene() const;
 
@@ -92,6 +96,7 @@ namespace wiwa
 		void submit(PhysicsCommand&& command);
 		std::optional<BodyPose> newest_pose(BodyKey key) const;
 
+		void pump_locked();
 		bool start_locked(const Ref<Scene>& scene);
 		void stop_locked();
 

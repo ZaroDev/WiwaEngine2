@@ -97,6 +97,21 @@ namespace wiwa
 		{
 			start_locked(active);
 		}
+		pump_locked();
+		if (m_HasScene)
+		{
+			m_Thread.set_paused(!playing);
+		}
+	}
+
+	void PhysicsModule::pump()
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		pump_locked();
+	}
+
+	void PhysicsModule::pump_locked()
+	{
 		// every step completed since the last frame, in order, with its events (a world that follows no scene: taken and dropped, so
 		// they do not pile up)
 		m_Steps.clear();
@@ -114,8 +129,6 @@ namespace wiwa
 		{
 			return;
 		}
-
-		m_Thread.set_paused(!playing);
 
 		// the newest step, and the one just before it for interpolation
 		const Ref<const PhysicsStepSnapshot> latest = m_Thread.latest();

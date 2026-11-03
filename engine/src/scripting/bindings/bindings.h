@@ -26,6 +26,9 @@ namespace wiwa
 	// time.delta / time.total.
 	void bind_engine(ScriptRuntime& runtime, ScriptContext& context);
 
+	// physics.raycast / raycast_all / overlap_sphere / overlap_box / shape_cast / set_gravity, and entity:body() with its Body methods.
+	void bind_physics(ScriptRuntime& runtime, ScriptContext& context);
+
 	// UI.panel(entity), panels and their widgets (properties, on / off), UI.input.
 	void bind_ui(ScriptRuntime& runtime, ScriptContext& context);
 

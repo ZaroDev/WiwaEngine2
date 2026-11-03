@@ -30,6 +30,7 @@
 #include <scripting/script_reload.h>
 #include <scripting/script_requires.h>
 #include <scripting/script_runtime.h>
+#include <physics/physics_module.h>
 #include <ui/ui_draw_list.h>
 #include <ui/ui_layout.h>
 #include <ui/ui_module.h>
@@ -2560,6 +2561,73 @@ namespace wiwa
 
 	}
 
+	namespace
+	{
+		// Check 6: Lua and physics. A script on a ball that falls onto the ground gets on_collision_enter with the ground as `other` and a
+		// normal that pushes the ball up; physics.raycast from a script returns the entity it hit; the ball's script also has on_physics_update.
+		// A script on another entity whose on_physics_update raises an error stops, and the ball's script goes on.
+		void check_physics_scripts(Check& check)
+		{
+			Harness h;
+			PhysicsModule physics;
+			physics.set_auto_start(false);
+			h.Instances.context().Physics = &physics;
+
+			const entt::entity ground = h.TheScene->create("Ground");
+			Collider groundCollider;
+			groundCollider.Size = glm::vec3(20.0f, 0.5f, 20.0f);
+			h.TheScene->registry().emplace<Collider>(ground, groundCollider);
+
+			const AssetRef ballScript = h.add_script("ball", R"(return Script:extend{
+				on_collision_enter = function(self, other, contact)
+					record('enter:' .. other.name .. ':' .. tostring(contact.normal.y > 0.9) .. ':' .. tostring(contact.impulse > 0) .. ':' .. tostring(contact.point.y > 0.4 and contact.point.y < 0.6))
+				end,
+				on_physics_update = function(self, dt)
+					record('tick')
+					if not self.rayDone then
+						self.rayDone = true
+						local hit = physics.raycast(vec3(20, 10, 0), vec3(0, -1, 0), 100)
+						record('ray:' .. (hit and hit.entity.name or 'nil'))
+						local none = physics.raycast(vec3(20, 10, 0), vec3(0, 1, 0), 100)
+						record('rayup:' .. tostring(none))
+						local overlap = physics.overlap_sphere(vec3(0, 0.5, 0), 0.4)
+						record('overlap:' .. #overlap)
+					end
+				end })");
+			const AssetRef badScript = h.add_script("bad", R"(return Script:extend{
+				on_physics_update = function(self, dt) record('bad'); error('boom') end })");
+
+			const entt::entity ball = h.spawn("Ball", { ballScript });
+			h.TheScene->registry().get<Transform>(ball).Position = glm::vec3(0.0f, 3.0f, 0.0f);
+			h.TheScene->registry().emplace<RigidBody>(ball, RigidBody{ MotionType::Dynamic });
+			Collider ballCollider;
+			ballCollider.Shape = ColliderShape::Sphere;
+			ballCollider.Size = glm::vec3(0.5f);
+			h.TheScene->registry().emplace<Collider>(ball, ballCollider);
+			h.spawn("Bad", { badScript });
+
+			check(physics.start_world(h.TheScene), "physics_scripts_world: the world starts");
+			physics.thread().set_paused(false); // the editor's game clock is not playing in this check
+			h.Instances.start(h.TheScene);
+			for (int frame = 0; frame < 400 && h.count("tick") < 90; frame++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(16));
+				physics.pump();
+				h.Instances.dispatch_physics(physics);
+				h.Instances.update(0.016f);
+			}
+			h.Instances.stop();
+			physics.stop_world();
+
+			check(h.count("enter:Ground:true:true:true") == 1, "physics_scripts_enter: on_collision_enter(self, other, contact) arrives once with the ground, an upward normal, an impulse and the point on the ground, got " + [&]() { std::string all; for (const std::string& e : h.Events) { if (e.rfind("enter", 0) == 0) { all += e + " "; } } return all; }());
+			check(h.count("ray:Ground") == 1, "physics_scripts_raycast: physics.raycast returns the entity it hit");
+			check(h.count("rayup:nil") == 1, "physics_scripts_raycast_miss: a ray that hits nothing gives nil");
+			check(h.count("overlap:1") == 1 || h.count("overlap:0") == 1, "physics_scripts_overlap: physics.overlap_sphere returns a table");
+			check(h.count("tick") >= 20, "physics_scripts_update: on_physics_update runs every step, got " + std::to_string(h.count("tick")));
+			check(h.count("bad") == 1, "physics_scripts_error_isolated: a script that raises in on_physics_update runs once and is disabled, got " + std::to_string(h.count("bad")));
+		}
+	}
+
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -2586,6 +2654,7 @@ namespace wiwa
 		check_editor_document(check);
 		check_play_mode(check);
 		check_ui(check);
+		check_physics_scripts(check);
 		check_stub_globals(check);
 		check_component_stubs(check);
 		check_lua_stubs(check, pipeline);
