@@ -2,6 +2,7 @@
 #include "physics_smoke_test.h"
 
 #include "../asset_pipeline/asset_database.h"
+#include "../asset_pipeline/meta_file.h"
 
 #include <algorithm>
 #include <atomic>
@@ -711,6 +712,149 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		std::string base64(const std::vector<u8>& bytes)
+		{
+			static const char* const digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+			std::string text;
+			for (size_t i = 0; i < bytes.size(); i += 3)
+			{
+				const u32 a = bytes[i], b = i + 1 < bytes.size() ? bytes[i + 1] : 0, c = i + 2 < bytes.size() ? bytes[i + 2] : 0;
+				const u32 chunk = (a << 16) | (b << 8) | c;
+				text.push_back(digits[(chunk >> 18) & 63]);
+				text.push_back(digits[(chunk >> 12) & 63]);
+				text.push_back(i + 1 < bytes.size() ? digits[(chunk >> 6) & 63] : '=');
+				text.push_back(i + 2 < bytes.size() ? digits[chunk & 63] : '=');
+			}
+			return text;
+		}
+
+		// A glTF with one mesh: a slab (box) 20 m by 20 m, 1 m thick, centred at the origin (its top at y = 0.5).
+		std::string slab_gltf()
+		{
+			std::vector<u8> bytes;
+			const auto push = [&bytes](const void* data, size_t size) { const u8* p = static_cast<const u8*>(data); bytes.insert(bytes.end(), p, p + size); };
+			for (int v = 0; v < 8; v++)
+			{
+				const float position[3] = { (v & 1) ? 10.0f : -10.0f, (v & 2) ? 0.5f : -0.5f, (v & 4) ? 10.0f : -10.0f };
+				push(position, sizeof(position));
+			}
+			const u16 indices[36] = { 2, 6, 7, 2, 7, 3, 0, 1, 5, 0, 5, 4, 1, 3, 7, 1, 7, 5, 0, 4, 6, 0, 6, 2, 4, 5, 7, 4, 7, 6, 0, 2, 3, 0, 3, 1 };
+			push(indices, sizeof(indices));
+			nlohmann::json root = {
+				{ "asset", { { "version", "2.0" } } }, { "scene", 0 }, { "scenes", { { { "nodes", { 0 } } } } },
+				{ "nodes", { { { "name", "Slab" }, { "mesh", 0 } } } },
+				{ "meshes", { { { "primitives", { { { "attributes", { { "POSITION", 0 } } }, { "indices", 1 } } } } } } },
+				{ "accessors", { { { "bufferView", 0 }, { "componentType", 5126 }, { "count", 8 }, { "type", "VEC3" }, { "min", { -10, -0.5, -10 } }, { "max", { 10, 0.5, 10 } } },
+					{ { "bufferView", 1 }, { "componentType", 5123 }, { "count", 36 }, { "type", "SCALAR" } } } },
+				{ "bufferViews", { { { "buffer", 0 }, { "byteOffset", 0 }, { "byteLength", 96 } }, { { "buffer", 0 }, { "byteOffset", 96 }, { "byteLength", 72 } } } },
+				{ "buffers", { { { "byteLength", static_cast<int>(bytes.size()) }, { "uri", "data:application/octet-stream;base64," + base64(bytes) } } } } };
+			return root.dump(2);
+		}
+
+		// Check 10: cooked shapes. A model imported with generatePhysicsShapes gets a convex hull and a triangle mesh shape per mesh, at the
+		// mesh's local id plus the offsets. A ball dropped on a Mesh collider and on a ConvexHull collider of the slab rests on it (y = 1.0);
+		// a collider whose mesh does not exist, or whose model has no shapes, does not collide and does not crash.
+		void check_cooked_shapes(Check& check, AssetPipelineModule& pipeline)
+		{
+			AssetDatabase& database = pipeline.get_database();
+			const std::filesystem::path dir = database.get_assets_root() / "zz_cooked_phys_smoke";
+			std::error_code error;
+			std::filesystem::remove_all(dir, error);
+			std::filesystem::create_directories(dir, error);
+			check(write_text_file(dir / "slab.gltf", slab_gltf()) && write_text_file(dir / "plain.gltf", slab_gltf()), "cooked_files: the model files are written");
+
+			const nlohmann::json withShapes = { { "generatePhysicsShapes", true } };
+			const std::optional<AssetRef> slab = database.ensure_imported(dir / "slab.gltf", &withShapes);
+			const std::optional<AssetRef> plain = database.ensure_imported(dir / "plain.gltf");
+			check(slab.has_value() && plain.has_value(), "cooked_import: both models import");
+			if (!slab || !plain)
+			{
+				return;
+			}
+
+			const auto mesh_ref = [](const std::filesystem::path& source) -> AssetRef
+			{
+				const std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				if (!meta || !meta->SubAssets.contains("mesh/0"))
+				{
+					return AssetRef{};
+				}
+				return AssetRef{ meta->Guid, meta->SubAssets.at("mesh/0") };
+			};
+			const AssetRef slabMesh = mesh_ref(dir / "slab.gltf");
+			const AssetRef plainMesh = mesh_ref(dir / "plain.gltf");
+			check(slabMesh.valid() && plainMesh.valid(), "cooked_mesh_refs: the meshes have sub-asset ids");
+			{
+				const std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(dir / "slab.gltf"));
+				check(meta && meta->SubAssets.contains("physics/hull/0") && meta->SubAssets.at("physics/hull/0") == slabMesh.LocalId + PHYSICS_HULL_LOCAL_ID_OFFSET &&
+					meta->SubAssets.contains("physics/mesh/0") && meta->SubAssets.at("physics/mesh/0") == slabMesh.LocalId + PHYSICS_MESH_LOCAL_ID_OFFSET,
+					"cooked_ids: the shapes sit at the mesh's local id plus the offsets");
+				const std::optional<MetaFile> plainMeta = MetaFile::load(MetaFile::meta_path_for(dir / "plain.gltf"));
+				check(plainMeta && !plainMeta->SubAssets.contains("physics/mesh/0"), "cooked_off_by_default: a model imported without the option has no physics shapes");
+			}
+
+			// the cooked shapes load as PhysicsShape assets
+			AssetManager* assets = Engine::get().get_module<AssetManager>();
+			if (assets != nullptr)
+			{
+				const Handle<CookedShapeData> hull = assets->load<CookedShapeData>(cooked_shape_ref(slabMesh, CookedShapeKind::ConvexHull));
+				const Handle<CookedShapeData> mesh = assets->load<CookedShapeData>(cooked_shape_ref(slabMesh, CookedShapeKind::Mesh));
+				const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(5);
+				while (Clock::now() < giveUp && (hull.state() == LoadState::Loading || mesh.state() == LoadState::Loading))
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				}
+				check(hull.state() == LoadState::Ready && hull.get() != nullptr && hull.get()->Kind == CookedShapeKind::ConvexHull && !hull.get()->Bytes.empty(),
+					"cooked_hull_loads: the convex hull shape loads");
+				check(mesh.state() == LoadState::Ready && mesh.get() != nullptr && mesh.get()->Kind == CookedShapeKind::Mesh && !mesh.get()->Bytes.empty(),
+					"cooked_mesh_loads: the triangle mesh shape loads");
+			}
+
+			Scene scene;
+			const auto ball = [&](const char* name, float x, float z)
+			{
+				const entt::entity entity = add_entity(scene, name, glm::vec3(x, 5.0f, z));
+				add_body(scene, entity, MotionType::Dynamic);
+				add_box_collider(scene, entity, glm::vec3(0.5f)).Shape = ColliderShape::Sphere;
+				return entity;
+			};
+			const auto slab_at = [&](const char* name, float x, float z, ColliderShape shape, AssetRef mesh)
+			{
+				const entt::entity entity = add_entity(scene, name, glm::vec3(x, 0.0f, z));
+				scene.registry().get<Transform>(entity).Scale = glm::vec3(0.4f, 1.0f, 0.4f); // a smaller slab, 8 m by 8 m: the scale applies to the shape
+				Collider& collider = add_box_collider(scene, entity, glm::vec3(0.5f));
+				collider.Shape = shape;
+				collider.Mesh = mesh;
+				return entity;
+			};
+			slab_at("MeshSlab", 0.0f, 0.0f, ColliderShape::Mesh, slabMesh);
+			slab_at("HullSlab", 20.0f, 0.0f, ColliderShape::ConvexHull, slabMesh);
+			slab_at("MissingSlab", 40.0f, 0.0f, ColliderShape::Mesh, AssetRef{ AssetGuid::generate(), 3 });
+			slab_at("PlainSlab", 60.0f, 0.0f, ColliderShape::Mesh, plainMesh);
+			const entt::entity onMesh = ball("OnMesh", 0.0f, 0.0f);
+			const entt::entity onHull = ball("OnHull", 20.0f, 0.0f);
+			const entt::entity onMissing = ball("OnMissing", 40.0f, 0.0f);
+			const entt::entity onPlain = ball("OnPlain", 60.0f, 0.0f);
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "cooked_start: the world starts");
+			run_for(thread, sync, scene, 3.0);
+			thread.stop();
+
+			const auto height = [&](entt::entity entity) { return scene.registry().get<Transform>(entity).Position.y; };
+			check(std::abs(height(onMesh) - 1.0f) < 0.05f, "cooked_ball_on_mesh: a ball rests on a Mesh collider (y = 1.0), got " + std::to_string(height(onMesh)));
+			check(std::abs(height(onHull) - 1.0f) < 0.05f, "cooked_ball_on_hull: a ball rests on a ConvexHull collider (y = 1.0), got " + std::to_string(height(onHull)));
+			check(height(onMissing) < -3.0f, "cooked_missing_mesh: a collider whose mesh does not exist does not collide, got " + std::to_string(height(onMissing)));
+			check(height(onPlain) < -3.0f, "cooked_no_shapes: a collider of a model without shapes does not collide, got " + std::to_string(height(onPlain)));
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -726,6 +870,7 @@ namespace wiwa
 		check_materials(check, pipeline);
 		check_trigger_events(check);
 		check_layers(check);
+		check_cooked_shapes(check, pipeline);
 
 		if (check.Failures == 0)
 		{

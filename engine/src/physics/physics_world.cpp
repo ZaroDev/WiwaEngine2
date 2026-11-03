@@ -228,7 +228,18 @@ namespace wiwa
 				ShapeDesc Shape{};                        // as last built, for SetMaterial
 			};
 
-			enum class BodyWarning : u32 { AllLocked, Placeholder };
+			enum class BodyWarning : u32 { AllLocked, Placeholder, MustBeStatic };
+
+			// A triangle mesh cannot move: a body that asks to is left without a shape (it becomes a non-colliding placeholder).
+			JPH::RefConst<JPH::Shape> movable_or_null(BodyKey key, MotionType requested, JPH::RefConst<JPH::Shape> shape)
+			{
+				if (shape != nullptr && requested != MotionType::Static && shape->MustBeStatic())
+				{
+					warn_once(key, BodyWarning::MustBeStatic, "a Mesh collider cannot be on a moving body (use a ConvexHull); it does not collide");
+					return nullptr;
+				}
+				return shape;
+			}
 
 			void apply(const PhysicsSettings& settings)
 			{
@@ -286,7 +297,7 @@ namespace wiwa
 			{
 				destroy_body(key); // a CreateBody for a key that has a body replaces it
 
-				JPH::RefConst<JPH::Shape> shape = m_Shapes.build(desc.Shape);
+				JPH::RefConst<JPH::Shape> shape = movable_or_null(key, desc.Motion, m_Shapes.build(desc.Shape));
 				const bool placeholder = shape == nullptr;
 				const JPH::EAllowedDOFs dofs = allowed_dofs(desc);
 
@@ -407,7 +418,7 @@ namespace wiwa
 				entry.Shape = desc;
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
 
-				JPH::RefConst<JPH::Shape> shape = m_Shapes.build(desc);
+				JPH::RefConst<JPH::Shape> shape = movable_or_null(key, entry.Requested, m_Shapes.build(desc));
 				const bool placeholder = shape == nullptr;
 				entry.Placeholder = placeholder;
 				const MotionType motion = effective_motion(key, entry.Requested, placeholder, entry.Dofs);

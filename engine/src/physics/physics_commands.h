@@ -1,8 +1,10 @@
 #pragma once
 
+#include <memory>
 #include <variant>
 #include <vector>
 
+#include "cooked_shape.h"
 #include "physics_layers.h"
 #include "physics_material_asset.h"
 #include "physics_types.h"
@@ -15,9 +17,9 @@ namespace wiwa
 		PhysicsSettings Settings{};
 	};
 
-	// What a shape is made of. Placeholder: a shape the physics world cannot build (a ConvexHull or Mesh collider until cooked shapes
-	// exist): the body is made but collides with nothing. Compound: the Children are the parts.
-	enum class ShapeKind : u32 { Box, Sphere, Capsule, Cylinder, Placeholder, Compound };
+	// What a shape is made of. Placeholder: a shape the physics world cannot build (a ConvexHull or Mesh collider whose cooked shape is
+	// missing or failed): the body is made but collides with nothing. Compound: the Children are the parts.
+	enum class ShapeKind : u32 { Box, Sphere, Capsule, Cylinder, Placeholder, Compound, ConvexHull, Mesh };
 
 	// One shape of a body, plain data. Size is as the Collider says (box: half extents; sphere: radius in x; capsule and cylinder: radius
 	// in x, half height of the cylinder part in y), before the scale; the physics thread applies Scale (the entity's world scale) and
@@ -33,6 +35,7 @@ namespace wiwa
 		glm::vec3 Scale{ 1.0f };
 		PhysicsMaterialData Material{}; // the Collider's PhysicsMaterial asset, or the default; plain data, resolved by the main thread
 		EntityGuid Source{}; // the entity whose Collider this is, for warnings that are logged once per collider
+		std::shared_ptr<const CookedShapeData> Cooked{}; // ConvexHull and Mesh: the cooked shape (null while it loads or when it failed: the part does not collide)
 		std::vector<ShapeDesc> Children{};
 	};
 

@@ -22,6 +22,7 @@ namespace wiwa
 		Font,
 		UiPanel,
 		PhysicsMaterial,
+		PhysicsShape,
 
 		Last
 	};
@@ -45,6 +46,7 @@ namespace wiwa
 		case AssetType::Font: return "Font";
 		case AssetType::UiPanel: return "UiPanel";
 		case AssetType::PhysicsMaterial: return "PhysicsMaterial";
+		case AssetType::PhysicsShape: return "PhysicsShape";
 		default: return "None";
 		}
 	}

@@ -5,10 +5,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Core/StreamWrapper.h>
+#include <Jolt/Physics/Collision/Shape/ConvexShape.h>
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/ScaledShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
@@ -35,6 +40,18 @@ namespace wiwa
 			}
 			q /= length;
 			return JPH::Quat(q.x, q.y, q.z, q.w);
+		}
+
+		// The shape in the body's frame: the collider's Offset and Rotation.
+		JPH::RefConst<JPH::Shape> place(JPH::RefConst<JPH::Shape> shape, const ShapeDesc& desc)
+		{
+			const glm::vec3 offset = finite(desc.Offset) ? desc.Offset : glm::vec3(0.0f);
+			const JPH::Quat rotation = to_jolt(desc.Rotation);
+			if (glm::length(offset) < 1e-6f && rotation.IsClose(JPH::Quat::sIdentity(), 1e-10f))
+			{
+				return shape;
+			}
+			return new JPH::RotatedTranslatedShape(JPH::Vec3(offset.x, offset.y, offset.z), rotation, shape);
 		}
 	}
 
@@ -117,6 +134,11 @@ namespace wiwa
 		}
 		const JPH::Ref<JPH::PhysicsMaterial> material = new WiwaPhysicsMaterial(surface);
 
+		if (desc.Kind == ShapeKind::ConvexHull || desc.Kind == ShapeKind::Mesh)
+		{
+			return build_cooked(desc, surface, material);
+		}
+
 		JPH::Ref<JPH::ConvexShape> convex;
 		switch (desc.Kind)
 		{
@@ -153,10 +175,10 @@ namespace wiwa
 			break;
 		}
 		case ShapeKind::Placeholder:
-			warn_once(desc.Source, Warning::Unsupported, "this shape kind is not supported yet (ConvexHull and Mesh need cooked shapes); it does not collide");
-			return nullptr;
 		case ShapeKind::Compound:
-			return nullptr;
+		case ShapeKind::ConvexHull:
+		case ShapeKind::Mesh:
+			return nullptr; // a placeholder was reported where it was made (the sync knows why its asset is missing)
 		}
 
 		if (clamped)
@@ -166,13 +188,63 @@ namespace wiwa
 
 		const float density = surface.Density;
 		convex->SetDensity(std::max(density, 1e-3f));
+		return place(JPH::RefConst<JPH::Shape>(convex.GetPtr()), desc);
+	}
 
-		const glm::vec3 offset = finite(desc.Offset) ? desc.Offset : glm::vec3(0.0f);
-		const JPH::Quat rotation = to_jolt(desc.Rotation);
-		if (glm::length(offset) < 1e-6f && rotation.IsClose(JPH::Quat::sIdentity(), 1e-10f))
+	JPH::RefConst<JPH::Shape> ShapeBuilder::build_cooked(const ShapeDesc& desc, const PhysicsMaterialData& surface, const JPH::PhysicsMaterial* material)
+	{
+		if (desc.Cooked == nullptr || desc.Cooked->Bytes.empty())
 		{
-			return JPH::RefConst<JPH::Shape>(convex.GetPtr());
+			return nullptr; // still loading, or it failed (the sync said so)
 		}
-		return new JPH::RotatedTranslatedShape(JPH::Vec3(offset.x, offset.y, offset.z), rotation, convex);
+
+		std::stringstream stream(std::string(reinterpret_cast<const char*>(desc.Cooked->Bytes.data()), desc.Cooked->Bytes.size()), std::ios::in | std::ios::binary);
+		JPH::StreamInWrapper wrapper(stream);
+		JPH::Shape::ShapeResult restored = JPH::Shape::sRestoreFromBinaryState(wrapper);
+		if (restored.HasError())
+		{
+			warn_once(desc.Source, Warning::Failed, std::string("the cooked shape could not be read: ") + restored.GetError().c_str());
+			return nullptr;
+		}
+
+		JPH::Ref<JPH::Shape> shape = restored.Get();
+		if (desc.Kind == ShapeKind::ConvexHull && shape->GetType() == JPH::EShapeType::Convex)
+		{
+			JPH::ConvexShape* hull = static_cast<JPH::ConvexShape*>(shape.GetPtr());
+			hull->SetMaterial(material);
+			hull->SetDensity(std::max(surface.Density, 1e-3f));
+		}
+		else if (desc.Kind == ShapeKind::Mesh && shape->GetSubType() == JPH::EShapeSubType::Mesh)
+		{
+			const JPH::PhysicsMaterialRefC slot(material);
+			shape->RestoreMaterialState(&slot, 1);
+		}
+		else
+		{
+			warn_once(desc.Source, Warning::Failed, "the cooked shape is not of the kind the collider asks for");
+			return nullptr;
+		}
+
+		// a zero or invalid scale axis would make the shape degenerate: it is raised like the size of a primitive is
+		glm::vec3 scale = safe_scale(desc.Scale);
+		bool clamped = false;
+		for (int axis = 0; axis < 3; axis++)
+		{
+			if (scale[axis] < MIN_SHAPE_SIZE)
+			{
+				scale[axis] = MIN_SHAPE_SIZE;
+				clamped = true;
+			}
+		}
+		if (clamped)
+		{
+			warn_once(desc.Source, Warning::Clamped, "a scale below " + std::to_string(MIN_SHAPE_SIZE) + " was raised to it");
+		}
+		JPH::RefConst<JPH::Shape> result(shape.GetPtr());
+		if (!nearly(scale.x, 1.0f) || !nearly(scale.y, 1.0f) || !nearly(scale.z, 1.0f))
+		{
+			result = new JPH::ScaledShape(result, JPH::Vec3(scale.x, scale.y, scale.z));
+		}
+		return place(result, desc);
 	}
 }

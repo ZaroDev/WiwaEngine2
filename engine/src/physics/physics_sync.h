@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+#include <set>
 #include <unordered_map>
 
 #include <assets/handle.h>
@@ -44,6 +46,11 @@ namespace wiwa
 		// failed to load or does not exist gives the default and logs one warning per world.
 		PhysicsMaterialData resolve_material(AssetRef ref);
 
+		// The cooked shape of a Collider's Mesh reference (a mesh of a model imported with physics shapes). Null while it loads (the next
+		// push_changes sees it ready and sends the shape again), and null with one warning per collider when the reference is not set, the
+		// model has no such shape or it failed to load: the collider then collides with nothing.
+		std::shared_ptr<const CookedShapeData> resolve_shape(AssetRef mesh, CookedShapeKind kind, EntityGuid collider);
+
 		u64 generation() const { return m_Generation; }
 		size_t body_count() const { return m_Bodies.size(); }
 		bool has_body(BodyKey key) const { return m_Bodies.contains(key); }
@@ -61,8 +68,16 @@ namespace wiwa
 			bool Warned = false;
 		};
 
+		struct ShapeEntry
+		{
+			Handle<CookedShapeData> Shape{};
+			std::shared_ptr<const CookedShapeData> Data{}; // a copy for the physics thread, made once the asset is ready
+		};
+
 		std::unordered_map<BodyKey, Tracked> m_Bodies{};
 		std::unordered_map<AssetGuid, MaterialEntry> m_Materials{}; // by the guid the asset is stored under
+		std::unordered_map<AssetGuid, ShapeEntry> m_Shapes{};           // by the guid the shape asset is stored under
+		std::set<EntityGuid> m_WarnedColliders{};
 		u64 m_Generation = 0;
 	};
 }

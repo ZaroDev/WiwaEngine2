@@ -67,7 +67,9 @@ namespace wiwa
 			case ColliderShape::Sphere: return ShapeKind::Sphere;
 			case ColliderShape::Capsule: return ShapeKind::Capsule;
 			case ColliderShape::Cylinder: return ShapeKind::Cylinder;
-			default: return ShapeKind::Placeholder; // ConvexHull and Mesh come with cooked shapes
+			case ColliderShape::ConvexHull: return ShapeKind::ConvexHull;
+			case ColliderShape::Mesh: return ShapeKind::Mesh;
+			default: return ShapeKind::Placeholder;
 			}
 		}
 
@@ -92,7 +94,7 @@ namespace wiwa
 		// The same shape, give or take the float noise of taking world matrices apart (a turning body's scale is never exactly 1).
 		bool same_shape(const ShapeDesc& a, const ShapeDesc& b)
 		{
-			if (a.Kind != b.Kind || a.Source != b.Source || !(a.Material == b.Material) || a.Children.size() != b.Children.size()
+			if (a.Kind != b.Kind || a.Source != b.Source || !(a.Material == b.Material) || a.Cooked != b.Cooked || a.Children.size() != b.Children.size()
 				|| !close_to(a.Size, b.Size) || !close_to(a.Offset, b.Offset) || !close_to(a.Rotation, b.Rotation) || !close_to(a.Scale, b.Scale))
 			{
 				return false;
@@ -137,7 +139,9 @@ namespace wiwa
 		};
 
 		// The bodies the scene asks for now, by key. Needs current WorldTransforms.
-		std::unordered_map<BodyKey, Collected> collect(const Scene& scene, const std::function<PhysicsMaterialData(AssetRef)>& resolve_material)
+		using ShapeResolver = std::function<std::shared_ptr<const CookedShapeData>(AssetRef mesh, CookedShapeKind kind, EntityGuid collider)>;
+
+		std::unordered_map<BodyKey, Collected> collect(const Scene& scene, const std::function<PhysicsMaterialData(AssetRef)>& resolve_material, const ShapeResolver& resolve_shape)
 		{
 			const entt::registry& registry = scene.registry();
 
@@ -206,6 +210,10 @@ namespace wiwa
 					part.Size = collider.Size;
 					part.Source = registry.get<Id>(entity).Guid;
 					part.Material = resolve_material(collider.Material);
+					if (part.Kind == ShapeKind::ConvexHull || part.Kind == ShapeKind::Mesh)
+					{
+						part.Cooked = resolve_shape(collider.Mesh, part.Kind == ShapeKind::Mesh ? CookedShapeKind::Mesh : CookedShapeKind::ConvexHull, part.Source);
+					}
 					if (entity == owner)
 					{
 						part.Scale = body.Scale;
@@ -252,7 +260,8 @@ namespace wiwa
 	void PhysicsSync::push_changes(Scene& scene, PhysicsThread& thread)
 	{
 		const entt::registry& registry = scene.registry();
-		std::unordered_map<BodyKey, Collected> wanted = collect(scene, [this](AssetRef ref) { return resolve_material(ref); });
+		std::unordered_map<BodyKey, Collected> wanted = collect(scene, [this](AssetRef ref) { return resolve_material(ref); },
+			[this](AssetRef mesh, CookedShapeKind kind, EntityGuid collider) { return resolve_shape(mesh, kind, collider); });
 
 		// gone: the entity was destroyed, or lost its collider, or its colliders now belong to another body
 		for (auto it = m_Bodies.begin(); it != m_Bodies.end();)
@@ -419,9 +428,55 @@ namespace wiwa
 		}
 	}
 
+	std::shared_ptr<const CookedShapeData> PhysicsSync::resolve_shape(AssetRef mesh, CookedShapeKind kind, EntityGuid collider)
+	{
+		const auto warn = [&](const char* text)
+		{
+			if (m_WarnedColliders.insert(collider).second)
+			{
+				WI_PHYSICS_LOG(Warning, "Collider {0}: {1}; it does not collide", collider.to_string(), text);
+			}
+			return nullptr;
+		};
+		if (!mesh.valid())
+		{
+			return warn("a ConvexHull or Mesh collider needs a Mesh");
+		}
+
+		const AssetRef shapeRef = cooked_shape_ref(mesh, kind);
+		const AssetGuid key = shapeRef.resolved();
+		auto it = m_Shapes.find(key);
+		if (it == m_Shapes.end())
+		{
+			AssetManager* assets = Engine::get().get_module<AssetManager>();
+			if (assets == nullptr)
+			{
+				return nullptr;
+			}
+			it = m_Shapes.emplace(key, ShapeEntry{ assets->load<CookedShapeData>(shapeRef), nullptr }).first;
+		}
+
+		ShapeEntry& entry = it->second;
+		switch (entry.Shape.state())
+		{
+		case LoadState::Ready:
+			if (entry.Data == nullptr && entry.Shape.get() != nullptr)
+			{
+				entry.Data = std::make_shared<const CookedShapeData>(*entry.Shape.get());
+			}
+			return entry.Data;
+		case LoadState::Failed:
+			return warn("the mesh has no cooked physics shape (import the model with Generate Physics Shapes on)");
+		default:
+			return nullptr; // still loading
+		}
+	}
+
 	void PhysicsSync::clear()
 	{
 		m_Bodies.clear();
 		m_Materials.clear();
+		m_Shapes.clear();
+		m_WarnedColliders.clear();
 	}
 }
