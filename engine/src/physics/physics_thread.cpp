@@ -1,31 +1,22 @@
 #include <pch.h>
 #include "physics_thread.h"
 #include "jolt_config.h"
+#include "physics_world.h"
 
-#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <exception>
 
 #include <Jolt/RegisterTypes.h>
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Core/IssueReporting.h>
-#include <Jolt/Core/JobSystemThreadPool.h>
-#include <Jolt/Core/TempAllocator.h>
-#include <Jolt/Physics/PhysicsSettings.h>
-#include <Jolt/Physics/PhysicsSystem.h>
 
 namespace wiwa
 {
 	namespace
 	{
-		constexpr JPH::uint kMaxBodies = 65536;
-		constexpr JPH::uint kMaxBodyPairs = 65536;
-		constexpr JPH::uint kMaxContactConstraints = 10240;
-		constexpr size_t kTempAllocatorBytes = 10 * 1024 * 1024;
-		constexpr u32 kMaxFixedRateHz = 1000;
-
 		// Jolt's process-wide state (allocator hooks, factory, registered types), set up by the first world and torn down by the last.
 		std::mutex s_RuntimeMutex;
 		u32 s_RuntimeUsers = 0;
@@ -71,99 +62,13 @@ namespace wiwa
 				JPH::Factory::sInstance = nullptr;
 			}
 		}
-
-		// Two fixed layers until the project layers exist (a later task): static bodies never collide with each other.
-		constexpr JPH::ObjectLayer kLayerStatic = 0;
-		constexpr JPH::ObjectLayer kLayerMoving = 1;
-		constexpr JPH::BroadPhaseLayer kBroadStatic(0);
-		constexpr JPH::BroadPhaseLayer kBroadMoving(1);
-
-		class BroadPhaseLayers final : public JPH::BroadPhaseLayerInterface
-		{
-		public:
-			JPH::uint GetNumBroadPhaseLayers() const override { return 2; }
-			JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer layer) const override { return layer == kLayerStatic ? kBroadStatic : kBroadMoving; }
-#if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
-			const char* GetBroadPhaseLayerName(JPH::BroadPhaseLayer layer) const override { return layer == kBroadStatic ? "static" : "moving"; }
-#endif
-		};
-
-		class ObjectVsBroadPhase final : public JPH::ObjectVsBroadPhaseLayerFilter
-		{
-		public:
-			bool ShouldCollide(JPH::ObjectLayer layer, JPH::BroadPhaseLayer broad) const override { return layer == kLayerMoving || broad == kBroadMoving; }
-		};
-
-		class ObjectPairs final : public JPH::ObjectLayerPairFilter
-		{
-		public:
-			bool ShouldCollide(JPH::ObjectLayer a, JPH::ObjectLayer b) const override { return a == kLayerMoving || b == kLayerMoving; }
-		};
-
-		u32 worker_count()
-		{
-			const int hardware = static_cast<int>(std::thread::hardware_concurrency());
-			return static_cast<u32>(std::clamp(hardware - 2, 1, 8)); // leave room for the main and render threads
-		}
-
-		PhysicsSettings sanitized(PhysicsSettings settings)
-		{
-			settings.FixedRateHz = std::clamp<u32>(settings.FixedRateHz, 1, kMaxFixedRateHz);
-			settings.MaxStepsPerWake = std::max<u32>(settings.MaxStepsPerWake, 1);
-			settings.VelocityIterations = std::max<u32>(settings.VelocityIterations, 1);
-			settings.PositionIterations = std::max<u32>(settings.PositionIterations, 1);
-			settings.SleepThreshold = std::max(settings.SleepThreshold, 0.0f);
-			return settings;
-		}
 	}
 
-	// Everything Jolt that one world needs. Created and destroyed on the physics thread, never seen by any other.
-	struct PhysicsWorld
-	{
-		// the layer interfaces must outlive the system
-		BroadPhaseLayers BroadPhase{};
-		ObjectVsBroadPhase ObjectVsBroad{};
-		ObjectPairs Pairs{};
-		JPH::TempAllocatorImpl Temp{ kTempAllocatorBytes };
-		JPH::JobSystemThreadPool Jobs{ JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, static_cast<int>(worker_count()) };
-		JPH::PhysicsSystem System{};
-		PhysicsSettings Settings{};
-
-		PhysicsWorld()
-		{
-			System.Init(kMaxBodies, 0, kMaxBodyPairs, kMaxContactConstraints, BroadPhase, ObjectVsBroad, Pairs);
-		}
-
-		void apply(const PhysicsSettings& settings)
-		{
-			Settings = sanitized(settings);
-			System.SetGravity(JPH::Vec3(Settings.Gravity.x, Settings.Gravity.y, Settings.Gravity.z));
-			JPH::PhysicsSettings jolt = System.GetPhysicsSettings();
-			jolt.mNumVelocitySteps = Settings.VelocityIterations;
-			jolt.mNumPositionSteps = Settings.PositionIterations;
-			jolt.mPointVelocitySleepThreshold = Settings.SleepThreshold;
-			System.SetPhysicsSettings(jolt);
-		}
-
-		double fixed_dt() const { return 1.0 / static_cast<double>(Settings.FixedRateHz); }
-
-		void execute(const PhysicsCommand& command)
-		{
-			std::visit([this](const auto& c)
-			{
-				using T = std::decay_t<decltype(c)>;
-				if constexpr (std::is_same_v<T, SetSettings>)
-				{
-					apply(c.Settings);
-				}
-			}, command);
-		}
-	};
-
-	void PhysicsThread::start(const PhysicsSettings& settings)
+	bool PhysicsThread::start(const PhysicsSettings& settings)
 	{
 		stop();
 
+		const u64 generation = ++m_Generation;
 		{
 			std::lock_guard<std::mutex> lock(m_QueueMutex);
 			m_Queue.clear();
@@ -171,11 +76,28 @@ namespace wiwa
 			m_Accepting = true;
 		}
 
-		std::promise<void> ready;
-		std::future<void> readyResult = ready.get_future();
-		m_Thread = std::thread([this, settings, &ready]() { run(settings, ready); });
-		readyResult.wait();
+		// the promise belongs to the thread: whatever happens there, it is fulfilled (or broken) and the wait below ends
+		std::promise<bool> ready;
+		std::future<bool> readyResult = ready.get_future();
+		m_Thread = std::thread([this, settings, generation, promise = std::move(ready)]() mutable { run(settings, generation, std::move(promise)); });
+
+		bool started = false;
+		try
+		{
+			started = readyResult.get();
+		}
+		catch (const std::exception& error)
+		{
+			WI_PHYSICS_LOG(Error, "The physics world could not start: {0}", error.what());
+		}
+
+		if (!started)
+		{
+			stop(); // joins the thread, which has ended
+			return false;
+		}
 		m_Running = true;
+		return true;
 	}
 
 	void PhysicsThread::stop()
@@ -205,7 +127,7 @@ namespace wiwa
 		m_Running = false;
 	}
 
-	bool PhysicsThread::push(PhysicsCommand&& command)
+	bool PhysicsThread::push(PhysicsCommand&& command, u64 generation)
 	{
 		std::unique_lock<std::mutex> lock(m_QueueMutex);
 		if (m_Accepting && m_Queue.size() >= PHYSICS_COMMAND_QUEUE_CAPACITY)
@@ -219,8 +141,12 @@ namespace wiwa
 			WI_PHYSICS_LOG(Warning, "Physics command dropped: no physics world is running");
 			return false;
 		}
+		if (generation != 0 && generation != m_Generation)
+		{
+			return false; // meant for a world that is gone: dropped on purpose, not an error
+		}
 
-		m_Queue.push_back(std::move(command));
+		m_Queue.push_back(QueuedCommand{ generation, std::move(command) });
 		return true;
 	}
 
@@ -236,7 +162,7 @@ namespace wiwa
 		return m_Published >= 2 ? m_Ring[(m_Published - 2) % PHYSICS_SNAPSHOT_RING_SIZE] : nullptr;
 	}
 
-	bool PhysicsThread::drain(std::deque<PhysicsCommand>& into)
+	bool PhysicsThread::drain(std::deque<QueuedCommand>& into)
 	{
 		{
 			std::lock_guard<std::mutex> lock(m_QueueMutex);
@@ -253,7 +179,7 @@ namespace wiwa
 		m_Published++;
 	}
 
-	void PhysicsThread::run(PhysicsSettings settings, std::promise<void>& ready)
+	void PhysicsThread::run(PhysicsSettings settings, u64 generation, std::promise<bool> ready)
 	{
 		using Clock = std::chrono::steady_clock;
 		using Seconds = std::chrono::duration<double>;
@@ -261,72 +187,95 @@ namespace wiwa
 		s_LiveThreads++;
 		acquire_runtime();
 		{
-			Scope<PhysicsWorld> world = CreateScope<PhysicsWorld>();
-			world->apply(settings);
-
-			u64 stepIndex = 0;
-			double time = 0.0;
-
-			// the world before its first step, so latest() is not null once start() returns
+			Scope<IPhysicsWorld> world;
+			try
 			{
-				Ref<PhysicsStepSnapshot> snapshot = CreateRef<PhysicsStepSnapshot>();
-				snapshot->FixedDt = static_cast<float>(world->fixed_dt());
-				publish(std::move(snapshot));
+				world = create_physics_world(settings, PhysicsLayers{});
 			}
-			ready.set_value(); // start() returns; `ready` is gone from here on
-
-			std::deque<PhysicsCommand> commands;
-			double accumulator = 0.0;
-			Clock::time_point last = Clock::now();
-			while (true)
+			catch (const std::exception& error)
 			{
-				const Clock::time_point now = Clock::now();
-				accumulator += Seconds(now - last).count();
-				last = now;
+				WI_PHYSICS_LOG(Error, "Making the physics world failed: {0}", error.what());
+			}
+			catch (...)
+			{
+				WI_PHYSICS_LOG(Error, "Making the physics world failed");
+			}
 
-				u32 steps = 0;
-				while (accumulator >= world->fixed_dt() && steps < world->Settings.MaxStepsPerWake)
+			if (world == nullptr)
+			{
+				ready.set_value(false);
+			}
+			else
+			{
+				u64 stepIndex = 0;
+				double time = 0.0;
+
+				// the world before its first step, so latest() is not null once start() returns
 				{
-					// the commands submitted so far apply to this step, in submission order
-					if (drain(commands))
-					{
-						for (const PhysicsCommand& command : commands)
-						{
-							world->execute(command);
-						}
-						commands.clear();
-					}
-
-					const double dt = world->fixed_dt();
-					const JPH::EPhysicsUpdateError error = world->System.Update(static_cast<float>(dt), 1, &world->Temp, &world->Jobs);
-					if (error != JPH::EPhysicsUpdateError::None)
-					{
-						WI_PHYSICS_LOG(Warning, "Physics step {0} reported error flags {1}", stepIndex + 1, static_cast<u32>(error));
-					}
-
-					stepIndex++;
-					time += dt;
-					accumulator -= dt;
-					steps++;
-
 					Ref<PhysicsStepSnapshot> snapshot = CreateRef<PhysicsStepSnapshot>();
-					snapshot->StepIndex = stepIndex;
-					snapshot->Time = time;
-					snapshot->FixedDt = static_cast<float>(dt);
+					snapshot->World = generation;
+					snapshot->FixedDt = static_cast<float>(world->fixed_dt());
 					publish(std::move(snapshot));
 				}
+				ready.set_value(true); // start() returns
 
-				// past the cap the simulation falls behind real time instead of stalling: the backlog is dropped
-				if (accumulator >= world->fixed_dt())
+				std::deque<QueuedCommand> commands;
+				double accumulator = 0.0;
+				Clock::time_point last = Clock::now();
+				while (true)
 				{
-					accumulator = std::fmod(accumulator, world->fixed_dt());
-				}
+					const Clock::time_point now = Clock::now();
+					if (!m_Paused)
+					{
+						accumulator += Seconds(now - last).count();
+					}
+					last = now;
 
-				const auto untilNextStep = std::chrono::duration_cast<Clock::duration>(Seconds(world->fixed_dt() - accumulator));
-				std::unique_lock<std::mutex> lock(m_QueueMutex);
-				if (m_Wake.wait_for(lock, untilNextStep, [this]() { return m_Stopping; }))
-				{
-					break;
+					u32 steps = 0;
+					while (accumulator >= world->fixed_dt() && steps < world->max_steps_per_wake())
+					{
+						// the commands submitted so far apply to this step, in submission order
+						if (drain(commands))
+						{
+							for (const QueuedCommand& queued : commands)
+							{
+								if (queued.Generation == 0 || queued.Generation == generation)
+								{
+									world->execute(queued.Command);
+								}
+							}
+							commands.clear();
+						}
+
+						const double dt = world->fixed_dt();
+						world->step();
+
+						stepIndex++;
+						time += dt;
+						accumulator -= dt;
+						steps++;
+
+						Ref<PhysicsStepSnapshot> snapshot = CreateRef<PhysicsStepSnapshot>();
+						snapshot->World = generation;
+						snapshot->StepIndex = stepIndex;
+						snapshot->Time = time;
+						snapshot->FixedDt = static_cast<float>(dt);
+						world->write_poses(*snapshot);
+						publish(std::move(snapshot));
+					}
+
+					// past the cap the simulation falls behind real time instead of stalling: the backlog is dropped
+					if (accumulator >= world->fixed_dt())
+					{
+						accumulator = std::fmod(accumulator, world->fixed_dt());
+					}
+
+					const auto untilNextStep = std::chrono::duration_cast<Clock::duration>(Seconds(world->fixed_dt() - accumulator));
+					std::unique_lock<std::mutex> lock(m_QueueMutex);
+					if (m_Wake.wait_for(lock, untilNextStep, [this]() { return m_Stopping; }))
+					{
+						break;
+					}
 				}
 			}
 		}

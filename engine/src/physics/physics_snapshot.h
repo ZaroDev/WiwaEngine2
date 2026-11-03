@@ -25,6 +25,7 @@ namespace wiwa
 	// What the physics thread publishes after each step. Immutable once published; the main thread never reads Jolt structures.
 	struct PhysicsStepSnapshot
 	{
+		u64 World = 0;       // the generation of the world that published it (PhysicsThread::generation); a new world never shows an older one's
 		u64 StepIndex = 0;   // steps completed since the world started (0: the world before its first step)
 		double Time = 0.0;   // simulated seconds since the world started
 		float FixedDt = 0.0f; // the length of the step that produced this snapshot

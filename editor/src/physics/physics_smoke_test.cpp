@@ -8,6 +8,8 @@
 
 #include <core/engine.h>
 #include <physics/physics_module.h>
+#include <physics/physics_sync.h>
+#include <scene/scene.h>
 
 namespace wiwa
 {
@@ -137,6 +139,265 @@ namespace wiwa
 			module->stop_world(); // stop without a world does nothing
 			check(!module->running(), "loop_stop_idle: stop_world without a world is harmless");
 		}
+
+		// ---- bodies: an in-memory scene driven through PhysicsSync the way PhysicsModule drives the play scene ----
+
+		BodyKey key_of(const Scene& scene, entt::entity entity) { return scene.registry().get<Id>(entity).Guid; }
+
+		const BodyPose* find_pose(const PhysicsStepSnapshot* snapshot, BodyKey key)
+		{
+			if (snapshot == nullptr)
+			{
+				return nullptr;
+			}
+			for (const BodyPose& pose : snapshot->Poses)
+			{
+				if (pose.Key == key)
+				{
+					return &pose;
+				}
+			}
+			return nullptr;
+		}
+
+		entt::entity add_entity(Scene& scene, const std::string& name, glm::vec3 position, entt::entity parent = entt::null)
+		{
+			const entt::entity entity = scene.create(name, parent);
+			scene.registry().get<Transform>(entity).Position = position;
+			return entity;
+		}
+
+		Collider& add_box_collider(Scene& scene, entt::entity entity, glm::vec3 halfExtents)
+		{
+			Collider collider;
+			collider.Shape = ColliderShape::Box;
+			collider.Size = halfExtents;
+			return scene.registry().emplace_or_replace<Collider>(entity, collider);
+		}
+
+		RigidBody& add_body(Scene& scene, entt::entity entity, MotionType motion)
+		{
+			RigidBody body;
+			body.Motion = motion;
+			return scene.registry().emplace_or_replace<RigidBody>(entity, body);
+		}
+
+		// A ground: a static box whose top is at y = 0.5 (centre at 0, half height 0.5), no RigidBody.
+		entt::entity add_ground(Scene& scene, glm::vec3 position = glm::vec3(0.0f))
+		{
+			const entt::entity ground = add_entity(scene, "Ground", position);
+			add_box_collider(scene, ground, glm::vec3(20.0f, 0.5f, 20.0f));
+			return ground;
+		}
+
+		// Starts a world for the scene and sends its bodies.
+		bool start_scene(PhysicsThread& thread, PhysicsSync& sync, Scene& scene)
+		{
+			scene.update_world_transforms();
+			if (!thread.start(scene.settings().Physics))
+			{
+				return false;
+			}
+			sync.build(scene, thread);
+			return true;
+		}
+
+		// What PhysicsModule does every frame, for simulated seconds of physics time (real time: the thread runs on its own clock).
+		Ref<const PhysicsStepSnapshot> run_for(PhysicsThread& thread, PhysicsSync& sync, Scene& scene, double seconds)
+		{
+			const Ref<const PhysicsStepSnapshot> first = thread.latest();
+			const double until = (first ? first->Time : 0.0) + seconds;
+			const Clock::time_point giveUp = Clock::now() + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(seconds * 3.0 + 2.0));
+			Ref<const PhysicsStepSnapshot> latest = first;
+			while (Clock::now() < giveUp)
+			{
+				scene.update_world_transforms();
+				sync.push_changes(scene, thread);
+				latest = thread.latest();
+				const Ref<const PhysicsStepSnapshot> previous = thread.previous();
+				if (latest != nullptr)
+				{
+					sync.apply_poses(scene, previous ? *previous : *latest, *latest, 1.0f);
+					scene.update_world_transforms();
+					if (latest->Time >= until)
+					{
+						break;
+					}
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(8));
+			}
+			return latest;
+		}
+
+		std::string fmt_vec(glm::vec3 v) { return "(" + std::to_string(v.x) + ", " + std::to_string(v.y) + ", " + std::to_string(v.z) + ")"; }
+
+		// Check 1: a dynamic box (half extent 0.5) dropped from 5 m onto a static box ground (top at 0.5) rests with its centre at 1.0.
+		// Then: a kinematic body follows its entity, and destroying an entity removes its body.
+		void check_drop_box(Check& check)
+		{
+			Scene scene;
+			add_ground(scene);
+			const entt::entity box = add_entity(scene, "Box", glm::vec3(0.0f, 5.0f, 0.0f));
+			add_body(scene, box, MotionType::Dynamic);
+			add_box_collider(scene, box, glm::vec3(0.5f));
+			const entt::entity mover = add_entity(scene, "Mover", glm::vec3(50.0f, 10.0f, 0.0f));
+			add_body(scene, mover, MotionType::Kinematic);
+			add_box_collider(scene, mover, glm::vec3(0.5f));
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "drop_box_start: the world starts");
+			check(sync.body_count() == 3, "drop_box_bodies: ground, box and mover are bodies, got " + std::to_string(sync.body_count()));
+
+			const Ref<const PhysicsStepSnapshot> rested = run_for(thread, sync, scene, 4.0);
+			const BodyPose* pose = find_pose(rested.get(), key_of(scene, box));
+			const float y = pose != nullptr ? pose->Position.y : -1000.0f;
+			WI_PHYSICS_LOG(Info, "physics smoke: dropped box rests at y = {0}", y);
+			check(pose != nullptr && std::abs(y - 1.0f) <= 0.02f, "drop_box_rests: the dropped box rests at y = 1.0 +- 0.02, got " + std::to_string(y));
+			check(pose != nullptr && std::abs(pose->Position.x) < 0.01f && std::abs(pose->Position.z) < 0.01f, "drop_box_straight: the box falls straight down");
+			const float transformY = scene.registry().get<Transform>(box).Position.y;
+			check(std::abs(transformY - 1.0f) <= 0.02f, "drop_box_transform: apply_poses writes the pose to the Transform, got y = " + std::to_string(transformY));
+
+			// a kinematic body is driven from the scene
+			scene.registry().get<Transform>(mover).Position = glm::vec3(52.0f, 10.0f, 0.0f);
+			const Ref<const PhysicsStepSnapshot> moved = run_for(thread, sync, scene, 0.3);
+			const BodyPose* moverPose = find_pose(moved.get(), key_of(scene, mover));
+			check(moverPose != nullptr && glm::length(moverPose->Position - glm::vec3(52.0f, 10.0f, 0.0f)) < 0.01f,
+				"kinematic_follows: a kinematic body moves to its entity's new pose, got " + (moverPose ? fmt_vec(moverPose->Position) : std::string("no pose")));
+			check(moverPose != nullptr && glm::length(moverPose->LinearVelocity) < 0.001f, "kinematic_stops: the kinematic body stops at its target");
+			check(std::abs(scene.registry().get<Transform>(mover).Position.x - 52.0f) < 1e-4f, "kinematic_not_written: a kinematic body's Transform is not overwritten");
+
+			// destroying the entity removes the body
+			const BodyKey boxKey = key_of(scene, box);
+			scene.destroy(box);
+			const Ref<const PhysicsStepSnapshot> after = run_for(thread, sync, scene, 0.1);
+			check(!sync.has_body(boxKey) && after != nullptr && find_pose(after.get(), boxKey) == nullptr, "destroy_removes_body: a destroyed entity's body is gone");
+			check(after != nullptr && after->Poses.size() == 2, "destroy_others_stay: the other bodies stay, got " + std::to_string(after ? after->Poses.size() : 0));
+			thread.stop();
+		}
+
+		// Check 2: a stack of 5 boxes is asleep after 5 s.
+		void check_stack_sleeps(Check& check)
+		{
+			Scene scene;
+			add_ground(scene);
+			std::vector<entt::entity> boxes;
+			for (u32 i = 0; i < 5; i++)
+			{
+				const entt::entity box = add_entity(scene, "Stacked" + std::to_string(i), glm::vec3(0.0f, 1.0f + static_cast<float>(i) * 1.01f, 0.0f));
+				add_body(scene, box, MotionType::Dynamic);
+				add_box_collider(scene, box, glm::vec3(0.5f));
+				boxes.push_back(box);
+			}
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "stack_start: the world starts");
+			const Ref<const PhysicsStepSnapshot> later = run_for(thread, sync, scene, 5.0);
+			u32 asleep = 0;
+			u32 found = 0;
+			float top = 0.0f;
+			for (const entt::entity box : boxes)
+			{
+				if (const BodyPose* pose = find_pose(later.get(), key_of(scene, box)))
+				{
+					found++;
+					asleep += pose->Active ? 0 : 1;
+					top = std::max(top, pose->Position.y);
+				}
+			}
+			WI_PHYSICS_LOG(Info, "physics smoke: stack of 5, {0} found, {1} asleep, top at y = {2}", found, asleep, top);
+			check(found == 5 && asleep == 5, "stack_sleeps: the 5 stacked boxes are asleep after 5 s, " + std::to_string(asleep) + " of " + std::to_string(found));
+			check(found == 5 && std::abs(top - 5.0f) < 0.1f, "stack_stands: the stack still stands (top box at y = 5), got " + std::to_string(top));
+			thread.stop();
+		}
+
+		// A Collider under a RigidBody ancestor (no RigidBody of its own) is part of the ancestor's compound shape; changing it replaces
+		// the shape. Odd sizes and layers are clamped, never a Jolt assert.
+		void check_compound(Check& check)
+		{
+			Scene scene;
+			add_ground(scene);
+			const entt::entity body = add_entity(scene, "Body", glm::vec3(0.0f, 3.0f, 0.0f));
+			add_body(scene, body, MotionType::Dynamic);
+			const entt::entity left = add_entity(scene, "Left", glm::vec3(-1.0f, 0.0f, 0.0f), body);
+			add_box_collider(scene, left, glm::vec3(0.5f));
+			const entt::entity right = add_entity(scene, "Right", glm::vec3(1.0f, 0.0f, 0.0f), body);
+			add_box_collider(scene, right, glm::vec3(0.5f));
+
+			// odd values: zero size, non-uniform scale on a sphere, a layer out of range, a mesh collider (no cooked shape yet)
+			const entt::entity odd = add_entity(scene, "Odd", glm::vec3(30.0f, 5.0f, 0.0f));
+			scene.registry().get<Transform>(odd).Scale = glm::vec3(1.0f, 3.0f, 0.0f);
+			add_body(scene, odd, MotionType::Dynamic).MassOverride = -5.0f;
+			Collider& oddCollider = add_box_collider(scene, odd, glm::vec3(0.0f));
+			oddCollider.Shape = ColliderShape::Sphere;
+			oddCollider.Layer = 99;
+			const entt::entity flat = add_entity(scene, "Flat", glm::vec3(-30.0f, 5.0f, 0.0f));
+			add_box_collider(scene, flat, glm::vec3(0.0f, -1.0f, 0.5f)).Layer = -3;
+			const entt::entity meshy = add_entity(scene, "Meshy", glm::vec3(0.0f, 5.0f, 30.0f));
+			add_box_collider(scene, meshy, glm::vec3(0.5f)).Shape = ColliderShape::Mesh;
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "compound_start: the world starts");
+			check(sync.has_body(key_of(scene, body)) && !sync.has_body(key_of(scene, left)) && !sync.has_body(key_of(scene, right)),
+				"compound_one_body: the colliders under a RigidBody make the ancestor's body, not their own");
+
+			const Ref<const PhysicsStepSnapshot> rested = run_for(thread, sync, scene, 3.0);
+			const BodyPose* pose = find_pose(rested.get(), key_of(scene, body));
+			check(pose != nullptr && std::abs(pose->Position.y - 1.0f) <= 0.02f,
+				"compound_rests: the compound of two child boxes rests at y = 1.0, got " + (pose ? std::to_string(pose->Position.y) : std::string("no pose")));
+			check(find_pose(rested.get(), key_of(scene, left)) == nullptr, "compound_no_child_body: the child collider has no body of its own");
+			check(find_pose(rested.get(), key_of(scene, odd)) != nullptr && find_pose(rested.get(), key_of(scene, flat)) != nullptr && find_pose(rested.get(), key_of(scene, meshy)) != nullptr,
+				"odd_values_make_bodies: zero sizes, a squashed sphere, out-of-range layers and a mesh collider still make bodies");
+
+			// bigger child boxes: ReplaceShape, and the body ends up higher
+			scene.registry().get<Collider>(left).Size = glm::vec3(1.0f);
+			scene.registry().get<Collider>(right).Size = glm::vec3(1.0f);
+			const Ref<const PhysicsStepSnapshot> grown = run_for(thread, sync, scene, 2.0);
+			const BodyPose* grownPose = find_pose(grown.get(), key_of(scene, body));
+			check(grownPose != nullptr && std::abs(grownPose->Position.y - 1.5f) <= 0.03f,
+				"compound_replace_shape: a changed child collider replaces the shape (rests at y = 1.5), got " + (grownPose ? std::to_string(grownPose->Position.y) : std::string("no pose")));
+			thread.stop();
+		}
+
+		// Play, Stop, Play with two different scenes: the second world has only the second scene's bodies, its snapshots carry the new
+		// generation, and commands meant for the first world are dropped.
+		void check_replay_no_stale_bodies(Check& check)
+		{
+			Scene first;
+			const entt::entity a = add_entity(first, "A", glm::vec3(0.0f, 2.0f, 0.0f));
+			add_body(first, a, MotionType::Dynamic);
+			add_box_collider(first, a, glm::vec3(0.5f));
+			Scene second;
+			const entt::entity b = add_entity(second, "B", glm::vec3(0.0f, 2.0f, 0.0f));
+			add_body(second, b, MotionType::Dynamic);
+			add_box_collider(second, b, glm::vec3(0.5f));
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, first), "replay_start_first: the first world starts");
+			const u64 firstGeneration = sync.generation();
+			run_for(thread, sync, first, 0.1);
+			thread.stop();
+			sync.clear();
+
+			check(start_scene(thread, sync, second), "replay_start_second: the second world starts");
+			check(!thread.push(CreateBody{ key_of(first, a), BodyDesc{} }, firstGeneration), "replay_stale_command_dropped: a command for the old world is refused");
+			const Ref<const PhysicsStepSnapshot> latest = run_for(thread, sync, second, 0.2);
+			check(latest != nullptr && latest->World == thread.generation() && latest->World != firstGeneration, "replay_new_generation: the snapshots carry the new world's generation");
+			check(latest != nullptr && latest->Poses.size() == 1 && find_pose(latest.get(), key_of(second, b)) != nullptr && find_pose(latest.get(), key_of(first, a)) == nullptr,
+				"replay_no_stale_bodies: the new world has only the new scene's bodies, got " + std::to_string(latest ? latest->Poses.size() : 0));
+
+			// a snapshot of the old world does not move the new scene's entities
+			PhysicsStepSnapshot stale;
+			stale.World = firstGeneration;
+			stale.Poses.push_back(BodyPose{ key_of(second, b), glm::vec3(0.0f, 100.0f, 0.0f) });
+			const glm::vec3 before = second.registry().get<Transform>(b).Position;
+			sync.apply_poses(second, stale, stale, 1.0f);
+			check(second.registry().get<Transform>(b).Position == before, "replay_stale_snapshot_ignored: apply_poses ignores a snapshot of another world");
+			thread.stop();
+		}
 	}
 
 	bool run_physics_smoke_test()
@@ -146,6 +407,10 @@ namespace wiwa
 		check_module_registered(check);
 		check_fixed_rate(check);
 		check_start_stop_loop(check);
+		check_drop_box(check);
+		check_stack_sleeps(check);
+		check_compound(check);
+		check_replay_no_stale_bodies(check);
 
 		if (check.Failures == 0)
 		{

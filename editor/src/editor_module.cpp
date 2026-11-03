@@ -4,6 +4,7 @@
 #include <asset_pipeline/asset_templates.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
+#include <physics/physics_module.h>
 #include <scene/scene_module.h>
 #include <renderer/window.h>
 #include <scripting/script_module.h>
@@ -49,6 +50,20 @@ namespace
 		virtual void restore_document(Ref<wiwa::Scene> scene, const wiwa::EditorDocument& document) override { m_Editor.restore_document(std::move(scene), document); }
 		virtual Ref<wiwa::Scene> active_scene() override { return m_Scenes.get_active(); }
 		// the game UI reads the editor's mouse while the game runs, and no input otherwise
+		virtual void start_physics() override
+		{
+			if (wiwa::PhysicsModule* physics = wiwa::Engine::get().get_module<wiwa::PhysicsModule>())
+			{
+				physics->start_world(m_Scenes.get_active());
+			}
+		}
+		virtual void stop_physics() override
+		{
+			if (wiwa::PhysicsModule* physics = wiwa::Engine::get().get_module<wiwa::PhysicsModule>())
+			{
+				physics->stop_world();
+			}
+		}
 		virtual void start_scripts() override { set_ui_input(&m_Input); m_Scripts.start(); }
 		virtual void stop_scripts() override { m_Scripts.stop(); set_ui_input(nullptr); }
 		virtual void cancel_loads() override { m_Scenes.cancel_loads(); }
@@ -80,6 +95,7 @@ void EditorModule::init()
 	// scripts run in play mode only; editing a scene does not run them
 	wiwa::Engine::get().get_module<wiwa::ScriptingModule>()->set_auto_start(false);
 	wiwa::Engine::get().get_time().stop_game(); // and there is no game time either
+	wiwa::Engine::get().get_module<wiwa::PhysicsModule>()->set_auto_start(false); // nor a physics world: play mode makes one from its clone
 
 	wiwa::SceneModule* scenes = wiwa::Engine::get().get_module<wiwa::SceneModule>();
 	m_SceneEditor = CreateScope<wiwa::SceneEditor>(*wiwa::Engine::get().get_module<wiwa::AssetManager>(), *scenes);

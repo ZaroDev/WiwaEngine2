@@ -1,6 +1,7 @@
 #pragma once
 
 #include <variant>
+#include <vector>
 
 #include "physics_types.h"
 
@@ -12,7 +13,93 @@ namespace wiwa
 		PhysicsSettings Settings{};
 	};
 
+	// What a shape is made of. Placeholder: a shape the physics world cannot build (a ConvexHull or Mesh collider until cooked shapes
+	// exist): the body is made but collides with nothing. Compound: the Children are the parts.
+	enum class ShapeKind : u32 { Box, Sphere, Capsule, Cylinder, Placeholder, Compound };
+
+	// The surface of a shape. The built-in default material until physics material assets exist.
+	struct ShapeMaterial
+	{
+		float Friction = 0.5f;
+		float Restitution = 0.0f;
+		float Density = 1000.0f; // kg/m3
+
+		bool operator==(const ShapeMaterial&) const = default;
+	};
+
+	// One shape of a body, plain data. Size is as the Collider says (box: half extents; sphere: radius in x; capsule and cylinder: radius
+	// in x, half height of the cylinder part in y), before the scale; the physics thread applies Scale (the entity's world scale) and
+	// clamps. Offset and Rotation place the shape in the body's frame (its entity's world position and rotation, no scale), Offset
+	// already scaled. A compound has Kind Compound and its parts in Children (each placed the same way); a body with one collider has that
+	// collider's shape directly.
+	struct ShapeDesc
+	{
+		ShapeKind Kind = ShapeKind::Box;
+		glm::vec3 Size{ 0.5f };
+		glm::vec3 Offset{ 0.0f };
+		glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+		glm::vec3 Scale{ 1.0f };
+		ShapeMaterial Material{};
+		EntityGuid Source{}; // the entity whose Collider this is, for warnings that are logged once per collider
+		std::vector<ShapeDesc> Children{};
+	};
+
+	// Everything about a body except its shape.
+	struct BodyDesc
+	{
+		MotionType Motion = MotionType::Static;
+		float MassOverride = 0.0f; // 0 (or less): from the shape and its density
+		float LinearDamping = 0.05f;
+		float AngularDamping = 0.05f;
+		float GravityFactor = 1.0f;
+		bool ContinuousCollision = false;
+		bool AllowSleeping = true;
+		bool ReportContacts = false;
+		bool LockPosition[3] = { false, false, false }; // true: the body may not move along that world axis
+		bool LockRotation[3] = { false, false, false }; // true: the body may not turn around that world axis
+		i32 Layer = 0;  // project layer index, clamped to 0..31 by the physics thread
+		bool IsTrigger = false;
+		glm::vec3 Position{ 0.0f }; // initial pose
+		glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+		ShapeDesc Shape{};
+	};
+
+	// Makes the body of that key (one that exists is replaced).
+	struct CreateBody
+	{
+		BodyKey Key{};
+		BodyDesc Desc{};
+	};
+
+	struct DestroyBody
+	{
+		BodyKey Key{};
+	};
+
+	// Teleports a body (static ones are moved this way).
+	struct SetTransform
+	{
+		BodyKey Key{};
+		glm::vec3 Pos{ 0.0f };
+		glm::quat Rot{ 1.0f, 0.0f, 0.0f, 0.0f };
+	};
+
+	// Moves a kinematic body to this pose over the next step (it pushes what it meets) and stops it there.
+	struct SetKinematicTarget
+	{
+		BodyKey Key{};
+		glm::vec3 Pos{ 0.0f };
+		glm::quat Rot{ 1.0f, 0.0f, 0.0f, 0.0f };
+	};
+
+	// Gives a body a new shape (a collider changed, or a compound part was added or removed). The mass is recomputed.
+	struct ReplaceShape
+	{
+		BodyKey Key{};
+		ShapeDesc Shape{};
+	};
+
 	// Plain-data commands from the main thread to the physics thread, applied at the start of the next step in submission order.
-	// New kinds (CreateBody, DestroyBody, ...) are added as new alternatives.
-	using PhysicsCommand = std::variant<SetSettings>;
+	// New kinds are added as new alternatives. Commands for a key that has no body are ignored.
+	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape>;
 }

@@ -67,7 +67,7 @@ namespace wiwa
 			WI_FIELD(Offset),
 			WI_FIELD(RotationEuler),
 			WI_FIELD(IsTrigger),
-			WI_FIELD(Layer),
+			WI_FIELD_META(Layer, FieldMeta::range(0.0f, 31.0f)), // PHYSICS_LAYER_COUNT layers; the physics world clamps whatever is stored
 			WI_FIELD_META(Material, FieldMeta::asset(AssetType::PhysicsMaterial)),
 			WI_FIELD_META(Mesh, FieldMeta::asset(AssetType::Mesh))));
 	}

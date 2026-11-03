@@ -1,14 +1,26 @@
 #pragma once
 
+#include <chrono>
+#include <memory>
+#include <mutex>
+
 #include <core/module.h>
 
+#include "physics_sync.h"
 #include "physics_thread.h"
 
 namespace wiwa
 {
-	// Owns the physics thread and its command and snapshot channels. A world exists only while a scene plays: start_world when play
-	// begins, stop_world when it ends (Play, Stop, Play again builds a fresh world each time). Used by the game too, so nothing here
-	// depends on editor code.
+	class Scene;
+
+	// Owns the physics thread and its command and snapshot channels. A world exists only while a scene plays:
+	//  - with auto start (the default, a game): a world is built for the SceneModule's active scene once the game clock plays, and built
+	//    again when a load replaces that scene;
+	//  - without (the editor): start_world(scene) and stop_world() are called by play mode, on the Play-mode clone.
+	// Either way the world stops when its scene is no longer the active one, and the physics steps stop while the game clock is paused.
+	// Per frame: update() takes the newest step snapshots; pre_render_update() sends the scene's changes (new, removed and changed
+	// colliders, static and kinematic bodies that moved) and writes the interpolated poses of dynamic bodies into their Transforms.
+	// Used by the game too, so nothing here depends on editor code. The physics thread never calls Engine::get_module.
 	class PhysicsModule : public IModule
 	{
 	public:
@@ -16,20 +28,46 @@ namespace wiwa
 		virtual ~PhysicsModule() override = default;
 
 		virtual void shutdown() override;
+		virtual void update(float deltaTime) override;
+		virtual void pre_render_update(float deltaTime) override;
 
-		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE; }
+		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE | UpdateFlags::UPDATE_RENDERER; }
 		virtual std::string get_name() const override { return "PhysicsModule"; }
 		virtual int get_priority() const override { return -20; } // after the scene (-80), before the UI (-10) and the scripts (0)
+
+		// With auto start a world follows the active scene while the game clock plays (a game). The editor turns it off.
+		void set_auto_start(bool autoStart) { m_AutoStart = autoStart; }
 
 		PhysicsThread& thread() { return m_Thread; }
 		bool running() const { return m_Thread.is_running(); }
 
-		// Main thread. Builds a new, empty world (a running one is stopped first).
-		void start_world(const PhysicsSettings& settings);
-		// Main thread. Stops the thread and frees the world. Does nothing when no world runs.
+		// Builds a new world for the scene (its physics settings, a body for each of its colliders) and keeps it in step with the scene
+		// until stop_world, or until the scene is no longer the SceneModule's active one. A running world is stopped first. False (logged)
+		// when the world could not be made: the scene then plays without physics.
+		bool start_world(Ref<Scene> scene);
+		// Builds a new, empty world that follows no scene (a running one is stopped first).
+		bool start_world(const PhysicsSettings& settings);
+		// Stops the thread and frees the world. Does nothing when no world runs.
 		void stop_world();
 
+		// The scene the world was built for; null when none.
+		Ref<Scene> world_scene() const;
+
 	private:
+		bool start_locked(const Ref<Scene>& scene);
+		void stop_locked();
+
+		mutable std::mutex m_Mutex{}; // start_world and stop_world may come from another thread than the frame (the smoke tests)
 		PhysicsThread m_Thread{};
+		PhysicsSync m_Sync{};
+		std::weak_ptr<Scene> m_Scene{};
+		bool m_HasScene = false;
+		std::weak_ptr<Scene> m_FailedScene{}; // auto start does not try the same scene again
+		bool m_AutoStart = true;
+		u64 m_SettingsRevision = 0;
+
+		Ref<const PhysicsStepSnapshot> m_Latest{};
+		Ref<const PhysicsStepSnapshot> m_Previous{};
+		std::chrono::steady_clock::time_point m_LatestArrival{};
 	};
 }
