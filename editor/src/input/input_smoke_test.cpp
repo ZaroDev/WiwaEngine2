@@ -329,6 +329,7 @@ namespace wiwa
 			gameplay.Actions.push_back({ "Forward", ActionType::Axis1D, { control_binding(Key::W), pad_control(PadAxis::LeftY) } });
 			gameplay.Actions.push_back({ "Fire", ActionType::Button, { pad_control(PadAxis::RightTrigger) } });
 			gameplay.Actions.push_back({ "Aim", ActionType::Axis2D, { pair2d(PadAxis::LeftX, PadAxis::LeftY, 0.2f) } });
+			gameplay.Actions.push_back({ "Interact", ActionType::Button, { control_binding(Key::E) } });
 
 			ActionMap ui;
 			ui.Name = "UI";
@@ -516,6 +517,214 @@ namespace wiwa
 			}
 		}
 
+		std::string maps_text(const ActionSystem& actions)
+		{
+			return input_map_to_text(InputMapData{ actions.maps() });
+		}
+
+		void action_rebinding(Check& check)
+		{
+			const InputControl keyE = control(Key::E);
+			const InputControl space = control(Key::Space);
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+				check(!rig.Actions.modified("Gameplay", "Jump"), "rebind_basic: not modified at the start");
+				check(rig.Actions.rebind("Gameplay", "Jump", 0, keyE), "rebind_basic: rebind succeeds");
+				check(rig.Actions.modified("Gameplay", "Jump"), "rebind_basic: now modified");
+
+				rig.Backend.key(Key::E, true);
+				rig.frame();
+				check(rig.Actions.state("Gameplay", "Jump").Down, "rebind_basic: E triggers Jump");
+				rig.Backend.key(Key::E, false);
+				rig.Backend.key(Key::Space, true);
+				rig.frame();
+				check(!rig.Actions.state("Gameplay", "Jump").Down, "rebind_basic: Space no longer triggers Jump");
+				const Action* jump = rig.Actions.action("Gameplay", "Jump");
+				check(jump && jump->Bindings.size() == 1 && jump->Bindings[0].Parts[0] == keyE, "rebind_basic: action() shows the current binding");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+				check(rig.Actions.rebind("Gameplay", "Move", 0, control(Key::I), "up"), "rebind_part: rebind the up part");
+				rig.Backend.key(Key::I, true);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Move").Vector.y, 1.0f), "rebind_part: I moves up");
+				rig.Backend.key(Key::I, false);
+				rig.Backend.key(Key::W, true);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Move").Vector.y, 0.0f), "rebind_part: W no longer moves up");
+				rig.Backend.key(Key::W, false);
+				rig.Backend.key(Key::S, true);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Move").Vector.y, -1.0f), "rebind_part: the other parts are untouched");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				const std::string before = maps_text(rig.Actions);
+				check(!rig.Actions.rebind("Nope", "Jump", 0, keyE), "rebind_invalid: unknown map");
+				check(!rig.Actions.rebind("Gameplay", "Nope", 0, keyE), "rebind_invalid: unknown action");
+				check(!rig.Actions.rebind("Gameplay", "Jump", 5, keyE), "rebind_invalid: binding index out of range");
+				check(!rig.Actions.rebind("Gameplay", "Jump", 0, keyE, "up"), "rebind_invalid: a part the binding does not have");
+				check(!rig.Actions.rebind("Gameplay", "Move", 0, keyE, "sideways"), "rebind_invalid: unknown part name");
+				check(maps_text(rig.Actions) == before, "rebind_invalid: nothing changed");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+
+				const size_t added = rig.Actions.add_binding("Gameplay", "Jump", control_binding(Key::E));
+				check(added == 1, "add_remove_binding: the new binding has index 1");
+				check(rig.Actions.add_binding("Gameplay", "Jump", composite1d(Key::A, Key::D)) == SIZE_MAX, "add_remove_binding: a binding the type cannot use is refused");
+				check(rig.Actions.add_binding("Gameplay", "Nope", control_binding(Key::E)) == SIZE_MAX, "add_remove_binding: unknown action");
+				rig.Backend.key(Key::E, true);
+				rig.frame();
+				check(rig.Actions.state("Gameplay", "Jump").Down, "add_remove_binding: the added binding works");
+				rig.Backend.key(Key::E, false);
+
+				check(rig.Actions.remove_binding("Gameplay", "Jump", 0), "add_remove_binding: remove the first binding");
+				check(!rig.Actions.remove_binding("Gameplay", "Jump", 3), "add_remove_binding: remove out of range fails");
+				rig.Backend.key(Key::Space, true);
+				rig.frame();
+				check(!rig.Actions.state("Gameplay", "Jump").Down, "add_remove_binding: Space no longer works");
+				check(rig.Actions.modified("Gameplay", "Jump"), "add_remove_binding: modified");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				const std::vector<BindingConflict> conflicts = rig.Actions.conflicts("Gameplay", keyE, "Jump");
+				check(conflicts.size() == 1 && conflicts[0].Action == "Interact" && conflicts[0].Binding == 0 && conflicts[0].Map == "Gameplay", "conflicts_reported: Interact uses E");
+				check(rig.Actions.conflicts("Gameplay", space, "Jump").empty(), "conflicts_reported: the excepted action is not a conflict");
+				check(rig.Actions.conflicts("Gameplay", space).size() == 1, "conflicts_reported: another map does not count");
+				check(rig.Actions.conflicts("Gameplay", control(Key::D)).size() >= 2, "conflicts_reported: parts of composites count");
+				check(rig.Actions.rebind("Gameplay", "Jump", 0, keyE), "conflicts_reported: the rebind still applies");
+				check(rig.Actions.conflicts("Gameplay", keyE).size() == 2, "conflicts_reported: now both use E");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				const std::string defaults = maps_text(rig.Actions);
+				rig.Actions.rebind("Gameplay", "Jump", 0, keyE);
+				rig.Actions.rebind("Gameplay", "Move", 0, control(Key::I), "up");
+				check(rig.Actions.reset_action("Gameplay", "Jump") && !rig.Actions.modified("Gameplay", "Jump") && rig.Actions.modified("Gameplay", "Move"),
+					"reset_action: restores one action only");
+				check(rig.Actions.action("Gameplay", "Jump")->Bindings[0].Parts[0] == space, "reset_action: the default binding is back");
+				check(!rig.Actions.reset_action("Gameplay", "Nope"), "reset_action: unknown action");
+				rig.Actions.reset_all();
+				check(maps_text(rig.Actions) == defaults && !rig.Actions.modified("Gameplay", "Move"), "reset_all: everything is back to the defaults");
+			}
+		}
+
+		void action_listen(Check& check)
+		{
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				std::vector<InputControl> got;
+				rig.Actions.listen_for_control([&](const InputControl& control) { got.push_back(control); });
+				check(rig.Actions.listening(), "listen_key: listening after the call");
+				rig.frame();
+				check(got.empty() && rig.Actions.listening(), "listen_key: nothing happens without input");
+				rig.Backend.key(Key::K, true);
+				rig.frame();
+				check(got.size() == 1 && got[0] == control(Key::K) && !rig.Actions.listening(), "listen_key: the pressed key is captured and listening ends");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				std::vector<InputControl> got;
+				rig.Backend.connect_pad(0, true);
+				rig.Actions.listen_for_control([&](const InputControl& control) { got.push_back(control); });
+				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.4f);
+				rig.frame();
+				check(got.empty() && rig.Actions.listening(), "listen_pad_axis: 0.4 is ignored");
+				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.6f);
+				rig.frame();
+				check(got.size() == 1 && got[0] == control(PadAxis::LeftX), "listen_pad_axis: 0.6 is captured");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				int calls = 0;
+				rig.Actions.listen_for_control([&](const InputControl&) { calls++; });
+				rig.Backend.key(Key::Escape, true);
+				rig.frame();
+				check(calls == 0 && !rig.Actions.listening(), "listen_escape_cancels: Escape cancels without a callback");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				int calls = 0;
+				rig.Actions.listen_for_control([&](const InputControl&) { calls++; });
+				rig.Backend.key(Key::K, true);
+				rig.Backend.key(Key::L, true);
+				rig.frame();
+				rig.Backend.key(Key::M, true);
+				rig.frame();
+				rig.frame();
+				check(calls == 1, "listen_once: the callback runs exactly once");
+			}
+
+			{
+				ActionRig rig;
+				rig.Actions.set_maps(action_test_maps());
+				rig.Actions.push_map("Gameplay");
+				rig.Backend.connect_pad(0, true);
+				rig.Backend.pad_axis(0, PadAxis::LeftY, 0.4f);
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Forward").Value, 0.4f), "listen_mutes_actions: the stick drives Forward before listening");
+				rig.Actions.listen_for_control([](const InputControl&) {});
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Forward").Value, 0.0f), "listen_mutes_actions: actions are zero while listening");
+				rig.Actions.cancel_listen();
+				check(!rig.Actions.listening(), "listen_mutes_actions: cancel_listen");
+				rig.frame();
+				check(near_equal(rig.Actions.state("Gameplay", "Forward").Value, 0.4f), "listen_mutes_actions: actions come back");
+			}
+		}
+
+		void last_device(Check& check)
+		{
+			ScriptedInputBackend backend;
+			InputState state;
+
+			state.update(backend);
+			check(state.last_device() == LastDevice::KeyboardMouse, "last_device_switch: the default is keyboard and mouse");
+			backend.connect_pad(0, true);
+			backend.pad_axis(0, PadAxis::LeftX, 0.5f);
+			state.update(backend);
+			check(state.last_device() == LastDevice::Gamepad, "last_device_switch: a stick at 0.5 switches to gamepad");
+			backend.pad_axis(0, PadAxis::LeftX, 0.1f);
+			state.update(backend);
+			check(state.last_device() == LastDevice::Gamepad, "last_device_switch: noise changes nothing");
+			backend.key(Key::W, true);
+			state.update(backend);
+			check(state.last_device() == LastDevice::KeyboardMouse, "last_device_switch: a key switches back");
+			state.update(backend);
+			backend.pad_axis(0, PadAxis::LeftX, 0.2f);
+			state.update(backend);
+			check(state.last_device() == LastDevice::KeyboardMouse, "last_device_switch: stick noise below 0.3 keeps keyboard");
+			backend.pad_button(0, PadButton::A, true);
+			state.update(backend);
+			check(state.last_device() == LastDevice::Gamepad, "last_device_switch: a pad button switches to gamepad");
+			backend.move_cursor({ 30.0f, 30.0f });
+			state.update(backend);
+			check(state.last_device() == LastDevice::KeyboardMouse, "last_device_switch: the mouse moving switches back");
+		}
+
 		void input_module(Check& check)
 		{
 			Engine& engine = Engine::get();
@@ -558,6 +767,9 @@ namespace wiwa
 		input_module(check);
 		input_map_format(check);
 		action_evaluation(check);
+		action_rebinding(check);
+		action_listen(check);
+		last_device(check);
 
 		if (check.Failures == 0)
 		{

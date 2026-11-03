@@ -4,6 +4,9 @@
 
 namespace wiwa
 {
+	// Which kind of device produced input last: any key, mouse button or cursor movement, or a pad button or an axis past 0.3. For UI prompts.
+	enum class LastDevice : u8 { KeyboardMouse, Gamepad };
+
 	// The raw state of the current frame plus the queries over it. Capture gates keyboard and mouse (the editor turns it off while
 	// ImGui owns them); gamepads are never gated.
 	class InputState
@@ -27,8 +30,11 @@ namespace wiwa
 
 		const RawInputState& raw() const { return m_Raw; }
 
+		LastDevice last_device() const { return m_LastDevice; }
+
 	private:
 		RawInputState m_Raw;
 		bool m_Capture = true;
+		LastDevice m_LastDevice = LastDevice::KeyboardMouse;
 	};
 }

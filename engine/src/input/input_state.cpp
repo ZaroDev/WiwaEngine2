@@ -8,6 +8,9 @@ namespace wiwa
 		// A held axis counts as "down" past this magnitude (the same threshold actions use for Button actions).
 		constexpr float AXIS_DOWN_THRESHOLD = 0.5f;
 
+		// A pad axis must pass this to count as the player using the pad (stick noise stays below).
+		constexpr float LAST_DEVICE_AXIS = 0.3f;
+
 		enum class Edge { Down, Pressed, Released };
 
 		bool button_state(const RawInputState& raw, bool capture, const InputControl& control, Edge edge)
@@ -36,6 +39,21 @@ namespace wiwa
 	void InputState::update(IInputBackend& backend)
 	{
 		backend.begin_frame(m_Raw);
+
+		// Gamepad first, so a new key press or mouse movement wins over a stick that is simply being held.
+		for (const PadState& pad : m_Raw.Pads)
+		{
+			bool active = pad.Pressed.any();
+			for (float axis : pad.Axes)
+			{
+				active = active || std::abs(axis) > LAST_DEVICE_AXIS;
+			}
+			if (pad.Connected && active) m_LastDevice = LastDevice::Gamepad;
+		}
+		if (m_Capture && (m_Raw.KeyPressed.any() || m_Raw.MousePressed.any() || m_Raw.CursorDelta != glm::vec2(0.0f)))
+		{
+			m_LastDevice = LastDevice::KeyboardMouse;
+		}
 	}
 
 	float InputState::value(const InputControl& control) const

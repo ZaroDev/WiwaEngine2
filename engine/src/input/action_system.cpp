@@ -143,6 +143,7 @@ namespace wiwa
 
 	void ActionSystem::set_maps(std::vector<ActionMap> maps)
 	{
+		m_Defaults = maps;
 		m_Maps = std::move(maps);
 		m_States.assign(m_Maps.size(), {});
 		for (size_t i = 0; i < m_Maps.size(); i++)
@@ -188,6 +189,16 @@ namespace wiwa
 
 	void ActionSystem::evaluate(const InputState& input)
 	{
+		if (m_Listen)
+		{
+			update_listen(input);
+			for (std::vector<ActionState>& states : m_States)
+			{
+				std::fill(states.begin(), states.end(), ActionState{});
+			}
+			return;
+		}
+
 		// Maps off the stack read zero, and their edges start over when they come back.
 		for (size_t i = 0; i < m_Maps.size(); i++)
 		{
@@ -249,5 +260,166 @@ namespace wiwa
 			if (candidate.Name == action) return true;
 		}
 		return false;
+	}
+
+	Action* ActionSystem::find_action(std::string_view map, std::string_view name)
+	{
+		const int index = map_index(map);
+		if (index < 0) return nullptr;
+
+		for (Action& candidate : m_Maps[index].Actions)
+		{
+			if (candidate.Name == name) return &candidate;
+		}
+		return nullptr;
+	}
+
+	const Action* ActionSystem::find_action(std::string_view map, std::string_view name) const
+	{
+		return const_cast<ActionSystem*>(this)->find_action(map, name);
+	}
+
+	const Action* ActionSystem::find_default(std::string_view map, std::string_view name) const
+	{
+		for (const ActionMap& defaults : m_Defaults)
+		{
+			if (defaults.Name != map) continue;
+			for (const Action& candidate : defaults.Actions)
+			{
+				if (candidate.Name == name) return &candidate;
+			}
+		}
+		return nullptr;
+	}
+
+	const Action* ActionSystem::action(std::string_view map, std::string_view name) const
+	{
+		return find_action(map, name);
+	}
+
+	bool ActionSystem::rebind(std::string_view map, std::string_view action, size_t binding, const InputControl& control, std::string_view part)
+	{
+		Action* found = find_action(map, action);
+		if (!found || binding >= found->Bindings.size() || control_name(control).empty()) return false;
+
+		Binding& target = found->Bindings[binding];
+		size_t partIndex = 0;
+		if (!part.empty())
+		{
+			partIndex = binding_part_count(target.BindingKind);
+			for (size_t i = 0; i < binding_part_count(target.BindingKind); i++)
+			{
+				if (part == binding_part_name(target.BindingKind, i)) partIndex = i;
+			}
+			if (partIndex >= binding_part_count(target.BindingKind)) return false;
+		}
+
+		target.Parts[partIndex] = control;
+		return true;
+	}
+
+	size_t ActionSystem::add_binding(std::string_view map, std::string_view action, const Binding& binding)
+	{
+		Action* found = find_action(map, action);
+		if (!found || !action_accepts(found->Type, binding.BindingKind)) return SIZE_MAX;
+
+		found->Bindings.push_back(binding);
+		return found->Bindings.size() - 1;
+	}
+
+	bool ActionSystem::remove_binding(std::string_view map, std::string_view action, size_t binding)
+	{
+		Action* found = find_action(map, action);
+		if (!found || binding >= found->Bindings.size()) return false;
+
+		found->Bindings.erase(found->Bindings.begin() + binding);
+		return true;
+	}
+
+	bool ActionSystem::reset_action(std::string_view map, std::string_view action)
+	{
+		Action* found = find_action(map, action);
+		const Action* defaults = find_default(map, action);
+		if (!found || !defaults) return false;
+
+		found->Bindings = defaults->Bindings;
+		return true;
+	}
+
+	void ActionSystem::reset_all()
+	{
+		// The defaults have the same maps and actions as the current set; only bindings were edited.
+		m_Maps = m_Defaults;
+	}
+
+	std::vector<BindingConflict> ActionSystem::conflicts(std::string_view map, const InputControl& control, std::string_view exceptAction) const
+	{
+		std::vector<BindingConflict> result;
+		const ActionMap* found = find_map(map);
+		if (!found) return result;
+
+		for (const Action& candidate : found->Actions)
+		{
+			if (!exceptAction.empty() && candidate.Name == exceptAction) continue;
+
+			for (size_t b = 0; b < candidate.Bindings.size(); b++)
+			{
+				const Binding& binding = candidate.Bindings[b];
+				for (size_t part = 0; part < binding_part_count(binding.BindingKind); part++)
+				{
+					if (binding.Parts[part] == control)
+					{
+						result.push_back({ found->Name, candidate.Name, b });
+						break;
+					}
+				}
+			}
+		}
+		return result;
+	}
+
+	bool ActionSystem::modified(std::string_view map, std::string_view action) const
+	{
+		const Action* current = find_action(map, action);
+		const Action* defaults = find_default(map, action);
+		return current && defaults && current->Bindings != defaults->Bindings;
+	}
+
+	void ActionSystem::listen_for_control(std::function<void(const InputControl&)> callback)
+	{
+		m_Listen = std::move(callback);
+	}
+
+	void ActionSystem::update_listen(const InputState& input)
+	{
+		// Escape always cancels; nothing else is excluded.
+		if (input.pressed(control(Key::Escape)))
+		{
+			m_Listen = nullptr;
+			return;
+		}
+
+		for (const InputControl& candidate : all_controls())
+		{
+			bool hit = false;
+			if (!control_is_axis(candidate))
+			{
+				hit = input.pressed(candidate);
+			}
+			else if (candidate.Device == InputDevice::Pad)
+			{
+				// Mouse axes are left out: moving the mouse would end the listening at once.
+				hit = std::abs(input.value(candidate)) > PRESS_THRESHOLD;
+			}
+
+			if (hit)
+			{
+				// Listening ends before the callback runs, so the callback may start a new listen.
+				auto callback = std::move(m_Listen);
+				m_Listen = nullptr;
+				callback(candidate);
+				return;
+			}
+		}
 	}
 }
