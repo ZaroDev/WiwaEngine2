@@ -17,7 +17,10 @@
 #include <input/input_project_settings.h>
 #include <input/input_module.h>
 #include <input/input_state.h>
+#include <scripting/script_instances.h>
 #include <scripting/script_module.h>
+#include <scripting/script_runtime.h>
+#include <scripting/script_source.h>
 #include <ui/ui_module.h>
 #include <input/scripted_input_backend.h>
 
@@ -163,6 +166,20 @@ namespace wiwa
 				check(state.down(padA) && near_equal(state.value(padLeftX), 0.7f), "raw_capture_gate: the pad still works");
 				state.set_capture(true);
 				check(state.down(keyW) && state.down(mouseLeft), "raw_capture_gate: capture back on shows the held state");
+			}
+
+			{
+				ScriptedInputBackend backend;
+				InputState state;
+				backend.connect_pad(0, true);
+				backend.connect_pad(1, true);
+				backend.pad_axis(0, PadAxis::LeftX, 0.5f);
+				backend.pad_axis(1, PadAxis::LeftX, -0.9f);
+				backend.pad_button(1, PadButton::A, true);
+				state.update(backend);
+				check(near_equal(state.value(padLeftX, 0), 0.5f) && near_equal(state.value(padLeftX, 1), -0.9f) && near_equal(state.value(padLeftX, 2), 0.0f) && near_equal(state.value(padLeftX), -0.9f),
+					"raw_pad_select: a pad argument reads that pad only");
+				check(!state.down(padA, 0) && state.down(padA, 1) && state.pressed(padA, 1) && !state.pressed(padA, 0) && state.down(padA), "raw_pad_select: buttons too");
 			}
 
 			{
@@ -1000,6 +1017,201 @@ namespace wiwa
 			database.scan();
 		}
 
+		class NoScripts final : public IScriptSource
+		{
+		public:
+			virtual std::optional<LoadedScript> find_by_path(std::string_view) override { return std::nullopt; }
+			virtual std::optional<LoadedScript> find_by_asset(AssetRef) override { return std::nullopt; }
+		};
+
+		// A Lua runtime with the input API bound to a module that reads from a scripted backend.
+		struct LuaInputHarness
+		{
+			NoScripts Source;
+			ScriptRuntime Runtime{ Source };
+			InputModule Module;
+			ScriptedInputBackend Backend;
+			ScriptInstances Instances{ Runtime }; // after the module: it is destroyed first and may still cancel a listen
+			sol::environment Env{ Runtime.state(), sol::create, Runtime.sandbox() };
+
+			LuaInputHarness()
+			{
+				Module.add_maps(action_test_maps());
+				Module.set_backend(&Backend);
+				Module.actions().push_map("Gameplay");
+				Instances.context().Input = &Module;
+			}
+
+			void frame() { Module.update(0.016f); }
+
+			// Runs a chunk and gives its results as text ("" for none); `error` receives the Lua error, if any.
+			std::string run(const std::string& chunk, std::string* error = nullptr)
+			{
+				sol::protected_function_result result = Runtime.state().safe_script(chunk, Env, sol::script_pass_on_error);
+				if (!result.valid())
+				{
+					sol::error failure = result;
+					if (error) *error = failure.what();
+					return {};
+				}
+				if (error) error->clear();
+				return result.get_type() == sol::type::none ? std::string() : Runtime.state()["tostring"](result.get<sol::object>()).get<std::string>();
+			}
+
+			bool fails(const std::string& chunk, const std::string& mention)
+			{
+				std::string error;
+				run(chunk, &error);
+				return !error.empty() && error.find(mention) != std::string::npos;
+			}
+		};
+
+		void lua_input(Check& check)
+		{
+			{
+				LuaInputHarness h;
+				h.Backend.key(Key::W, true);
+				h.Backend.connect_pad(0, true);
+				h.Backend.connect_pad(1, true);
+				h.Backend.pad_axis(0, PadAxis::LeftX, 0.5f);
+				h.Backend.pad_axis(1, PadAxis::LeftX, -0.9f);
+				h.Backend.pad_button(1, PadButton::A, true);
+				h.Backend.move_cursor({ 12.0f, 34.0f });
+				h.frame();
+				check(h.run("return input.down('Key.W')") == "true" && h.run("return input.pressed('Key.W')") == "true" && h.run("return input.released('Key.W')") == "false",
+					"lua_raw: down / pressed / released");
+				h.frame();
+				check(h.run("return input.down('Key.W')") == "true" && h.run("return input.pressed('Key.W')") == "false", "lua_raw: held is not pressed again");
+				check(h.run("return input.value('Pad.LeftX')") == "-0.89999997615814" || h.run("return input.value('Pad.LeftX') < -0.89 and input.value('Pad.LeftX') > -0.91") == "true",
+					"lua_raw: the largest pad wins without a pad argument");
+				check(h.run("return input.value('Pad.LeftX', 0) > 0.49 and input.value('Pad.LeftX', 0) < 0.51") == "true" &&
+					h.run("return input.value('Pad.LeftX', 1) < -0.89") == "true", "lua_raw: the pad argument is 0-based");
+				check(h.run("return input.down('Pad.A', 0)") == "false" && h.run("return input.down('Pad.A', 1)") == "true" && h.run("return input.down('Pad.A')") == "true",
+					"lua_raw: a pad button on the chosen pad only");
+				check(h.run("return input.pad_connected(0) and input.pad_connected(1) and not input.pad_connected(2)") == "true", "lua_raw: pad_connected");
+				check(h.run("local m = input.mouse(); return m.x .. ',' .. m.y") == "12.0,34.0" || h.run("local m = input.mouse(); return m.x == 12 and m.y == 34") == "true", "lua_raw: mouse position");
+				check(h.run("return input.last_device()") == "keyboard_mouse" || h.run("return input.last_device()") == "gamepad", "lua_raw: last_device is one of the two names");
+			}
+
+			{
+				LuaInputHarness h;
+				h.Backend.key(Key::W, true);
+				h.frame();
+				check(h.fails("return input.down('Key.Nope')", "Key.Nope") && h.fails("return input.pressed('W')", "'W'") && h.fails("return input.value(5)", "string"),
+					"lua_bad_control: the error names the bad control");
+				check(h.fails("input.set_cursor('sideways')", "sideways"), "lua_bad_control: a bad cursor mode is an error");
+				h.run("input.set_cursor('locked')");
+				check(h.Backend.cursor_mode() == CursorMode::Locked, "lua_cursor: locked reaches the backend");
+			}
+
+			{
+				LuaInputHarness h;
+				h.Backend.key(Key::Space, true);
+				h.Backend.key(Key::W, true);
+				h.frame();
+				check(h.run("local a = input.action('Gameplay', 'Jump'); return a:down() and a:pressed() and not a:released() and a:value() > 0.99") == "true", "lua_action: a handle follows a press");
+				check(h.run("local v = input.action('Gameplay', 'Move'):vector(); return v.x == 0 and v.y > 0.99") == "true", "lua_action: vector()");
+				h.frame();
+				check(h.run("return input.action('Gameplay', 'Jump'):pressed()") == "false", "lua_action: the handle reads the current frame");
+				h.Backend.key(Key::Space, false);
+				h.frame();
+				check(h.run("return input.action('Gameplay', 'Jump'):released()") == "true", "lua_action: released");
+			}
+
+			{
+				LuaInputHarness h;
+				check(h.fails("return input.action('Gameplay', 'Jum')", "Gameplay/Jum") && h.fails("return input.action('Nope', 'Jump')", "Nope/Jump"), "lua_action_unknown: the error names map/action");
+			}
+
+			{
+				LuaInputHarness h;
+				h.run("input.push_map('UI')");
+				check(h.Module.actions().map_active("UI") && h.Module.actions().active_maps().front() == "UI", "lua_stack: push");
+				h.run("input.pop_map('UI')");
+				check(!h.Module.actions().map_active("UI") && h.Module.actions().map_active("Gameplay"), "lua_stack: pop");
+				check(h.fails("input.push_map('Nope')", "Nope"), "lua_stack: an unknown map is an error");
+			}
+
+			{
+				LuaInputHarness h;
+				check(h.run("local b = input.bindings('Gameplay', 'Move'); return #b .. ':' .. b[1].kind .. ':' .. b[1].controls[1]") == "1:composite2d:Key.W", "lua_bindings: kind and controls");
+				check(h.run("return input.bindings('Gameplay', 'Jump')[1].controls[1]") == "Key.Space", "lua_bindings: a plain control");
+
+				const std::string conflict = h.run("local ok, conflicts = input.rebind('Gameplay', 'Jump', 1, 'Key.E'); return tostring(ok) .. ':' .. #conflicts .. ':' .. conflicts[1].action .. ':' .. conflicts[1].map");
+				check(conflict == "false:1:Interact:Gameplay", "lua_rebind: a conflict is returned (" + conflict + ")");
+				h.Backend.key(Key::E, true);
+				h.frame();
+				check(h.Module.actions().state("Gameplay", "Jump").Down, "lua_rebind: the rebind was applied anyway");
+				check(h.run("return input.rebind('Gameplay', 'Jump', 1, 'Key.J')") == "true", "lua_rebind: no conflict gives true");
+				check(h.run("return input.rebind('Gameplay', 'Move', 1, 'Key.I', 'up')") == "true" && h.Module.actions().action("Gameplay", "Move")->Bindings[0].Parts[0] == control(Key::I),
+					"lua_rebind: a part of a composite");
+				check(h.fails("input.rebind('Gameplay', 'Jump', 7, 'Key.J')", "Gameplay/Jump") && h.fails("input.rebind('Gameplay', 'Jump', 1, 'Key.Nope')", "Key.Nope"),
+					"lua_rebind: a bad index or control is an error");
+				check(h.run("return input.reset('Gameplay', 'Jump')") == "true" && !h.Module.actions().modified("Gameplay", "Jump"), "lua_rebind: reset");
+				h.run("input.reset_all()");
+				check(!h.Module.actions().modified("Gameplay", "Move"), "lua_rebind: reset_all");
+			}
+
+			{
+				LuaInputHarness h;
+				h.run("count = 0; last = ''; input.listen(function(c) count = count + 1; last = c end)");
+				check(h.Module.actions().listening(), "lua_listen: listening after the call");
+				h.frame();
+				check(h.run("return count") == "0", "lua_listen: nothing without input");
+				h.Backend.key(Key::E, true);
+				h.frame();
+				h.Backend.key(Key::F, true);
+				h.frame();
+				check(h.run("return count .. ':' .. last") == "1:Key.E" && !h.Module.actions().listening(), "lua_listen: the callback gets the control once");
+
+				h.run("count = 0; input.listen(function(c) count = count + 1 end)");
+				h.Backend.key(Key::Escape, true);
+				h.frame();
+				check(h.run("return count") == "0" && !h.Module.actions().listening(), "lua_listen: Escape cancels without a call");
+				h.run("input.listen(function(c) count = count + 1 end); input.cancel_listen()");
+				check(!h.Module.actions().listening(), "lua_listen: cancel_listen");
+			}
+
+			{
+				const std::filesystem::path path = std::filesystem::temp_directory_path() / "wiwa_input_lua_save.json";
+				std::error_code error;
+				std::filesystem::remove(path, error);
+
+				LuaInputHarness h;
+				h.Module.set_overrides_path(path);
+				h.run("input.rebind('Gameplay', 'Jump', 1, 'Key.J')");
+				check(h.run("return input.save_bindings()") == "true" && std::filesystem::exists(path), "lua_save: the file is written");
+
+				InputModule fresh;
+				fresh.add_maps(action_test_maps());
+				fresh.set_overrides_path(path);
+				check(fresh.load_overrides() && fresh.actions().action("Gameplay", "Jump")->Bindings[0].Parts[0] == control(Key::J), "lua_save: a fresh module sees the saved binding");
+				std::filesystem::remove(path, error);
+			}
+
+			{
+				LuaInputHarness h;
+				h.Instances.context().Input = nullptr;
+				check(h.fails("return input.down('Key.W')", "input module") && h.fails("return input.action('Gameplay', 'Jump')", "input module"), "lua_no_module: the calls are errors");
+				check(h.run("return 1 + 1") == "2", "lua_no_module: scripts that never touch input are unaffected");
+			}
+
+			{
+				LuaInputHarness h;
+				h.Backend.key(Key::Space, true);
+				h.Backend.key(Key::W, true);
+				h.Backend.connect_pad(0, true);
+				h.Backend.pad_axis(0, PadAxis::LeftX, 0.8f);
+				h.frame();
+				h.Instances.context().GamePlaying = false;
+				check(h.run("return input.down('Key.Space')") == "false" && h.run("return input.pressed('Key.Space')") == "false" && h.run("return input.value('Pad.LeftX')") == "0.0" &&
+					h.run("return input.action('Gameplay', 'Jump'):down()") == "false" && h.run("return input.action('Gameplay', 'Move'):vector().y") == "0.0",
+					"lua_idle_clock: queries read false / 0 while the game clock is not playing");
+				h.Instances.context().GamePlaying = true;
+				check(h.run("return input.down('Key.Space')") == "true", "lua_idle_clock: and read again once it plays");
+			}
+		}
+
 		void input_module(Check& check)
 		{
 			Engine& engine = Engine::get();
@@ -1046,6 +1258,7 @@ namespace wiwa
 		last_device(check);
 		input_persistence(check, pipeline);
 		input_importer(check, pipeline);
+		lua_input(check);
 
 		if (check.Failures == 0)
 		{

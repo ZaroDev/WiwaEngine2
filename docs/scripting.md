@@ -164,6 +164,43 @@ return Script:extend{
 }
 ```
 
+## Input
+
+Keyboard, mouse and gamepad input comes in two layers. **Raw** queries ask about one control; **actions** are named, typed and rebindable
+(a `.winput` asset made in the Asset Browser's Create menu, plus the player's rebinds). Both only mean something while the game clock plays:
+outside it every query reads `false` / `0`. A control is written `"Key.W"`, `"Mouse.Left"`, `"Mouse.DeltaX"` or `"Pad.A"`, `"Pad.LeftX"`
+(device, dot, name); a name that does not exist is a Lua error that says which.
+
+- **Keys:** `A`..`Z`, `0`..`9`, `Space`, `Enter`, `Escape`, `Tab`, `Backspace`, `Left`, `Right`, `Up`, `Down`, `LeftShift`, `LeftCtrl`,
+  `LeftAlt`, `F1`..`F12`. **Mouse:** buttons `Left`, `Right`, `Middle`, `X1`, `X2`; axes `DeltaX`, `DeltaY`, `ScrollX`, `ScrollY`.
+  **Pad:** buttons `A B X Y LeftBumper RightBumper Back Start Guide LeftThumb RightThumb DPadUp DPadRight DPadDown DPadLeft`; axes `LeftX`
+  `LeftY` `RightX` `RightY` (sticks, up is +1) and `LeftTrigger` `RightTrigger` (0 to 1).
+- **Raw.** `input.down(c)`, `input.pressed(c)`, `input.released(c)` (a press and release inside one frame gives both), `input.value(c)`,
+  `input.mouse()`, `input.mouse_delta()`, `input.scroll()` (`vec2`), `input.pad_connected(pad)`, `input.last_device()` (`"keyboard_mouse"`
+  or `"gamepad"`, for button prompts) and `input.set_cursor("normal" | "hidden" | "locked")` for mouse-look. Gamepads are numbered **from 0**;
+  without a pad argument a Pad control reads the largest value of all connected pads: `input.value("Pad.LeftX", 1)`.
+- **Actions.** `input.action("Gameplay", "Jump")` is a handle with `:down()`, `:pressed()`, `:released()`, `:value()` (a number) and
+  `:vector()` (`vec2`, at most length 1). A name that does not exist is an error (`unknown input action 'Gameplay/Jum'`). An action is read
+  only while its map is on the stack: `input.push_map("UI")` / `input.pop_map("UI")`. A map marked *consume* hides the controls it binds from
+  the maps below it, so a menu does not also make the character jump.
+- **Rebinding.** `input.bindings(map, action)` lists the bindings for display (`kind`, `controls`, `parts`, `scale`, `deadzone`, `invert`).
+  `input.rebind(map, action, index, control [, part])` changes one binding (**1-based** index, like the list; `part` is `"up"` for the up key
+  of WASD) and returns `true`, or `false` and the list of `{ map, action, binding }` that already use the control. The rebind is applied in
+  both cases, so the script (or the player) decides what to do about a conflict. `input.reset(map, action)`, `input.reset_all()`,
+  `input.save_bindings()` (writes `input_overrides.json`, which is read the next time the game starts).
+  `input.listen(function(control) ... end)` calls back once with the next control the player presses (a button, or a stick or trigger past
+  half; the mouse moving does not count) and `Escape` cancels without a call; actions read zero while it listens. `input.cancel_listen()`.
+
+```lua
+return Script:extend{
+  on_update = function(self, dt)
+    local move = input.action("Gameplay", "Move"):vector()
+    self.entity:get("Transform").position = self.entity:get("Transform").position + vec3(move.x, 0, -move.y) * (5 * dt)
+    if input.action("Gameplay", "Jump"):pressed() then self.entity:body():add_impulse(vec3(0, 300, 0)) end
+  end,
+}
+```
+
 ## `require` and builds
 
 `require("assets/scripts/util.lua")` takes a catalog path (the `.lua` may be left out) and runs the module once. A cycle is an error

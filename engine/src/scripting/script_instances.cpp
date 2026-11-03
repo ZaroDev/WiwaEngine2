@@ -3,6 +3,7 @@
 
 #include <algorithm>
 
+#include <input/input_module.h>
 #include <physics/physics_module.h>
 #include <scene/reflection/component_registry.h>
 #include <scene/reflection/value_bag.h>
@@ -24,6 +25,7 @@ namespace wiwa
 		bind_engine(m_Runtime, m_Context);
 		bind_ui(m_Runtime, m_Context);
 		bind_physics(m_Runtime, m_Context);
+		bind_input(m_Runtime, m_Context);
 	}
 
 	ScriptInstances::~ScriptInstances()
@@ -41,6 +43,13 @@ namespace wiwa
 
 	void ScriptInstances::stop()
 	{
+		// A Lua function waiting in input.listen must not outlive the scripts (it would be called into a state that is gone).
+		if (m_Context.InputListening && m_Context.Input != nullptr)
+		{
+			m_Context.Input->actions().cancel_listen();
+		}
+		m_Context.InputListening = false;
+
 		if (m_Scene == nullptr)
 		{
 			return;

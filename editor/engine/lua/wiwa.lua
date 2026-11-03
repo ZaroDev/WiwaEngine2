@@ -343,6 +343,114 @@ function physics.shape_cast(shape, from, to, layer_mask) end
 function physics.set_gravity(gravity) end
 
 --------------------------------------------------------------------------------------------------------------------------------
+-- Input
+--------------------------------------------------------------------------------------------------------------------------------
+
+--- A control is named "Key.W", "Mouse.Left", "Mouse.DeltaX" or "Pad.A", "Pad.LeftX" (device, dot, name). Gamepads are numbered from 0.
+---@alias InputControl string
+---@alias InputCursorMode "normal"|"hidden"|"locked"
+---@alias InputBindingKind "control"|"composite1d"|"composite2d"|"pair2d"
+---@class InputBinding
+---@field kind InputBindingKind
+---@field controls InputControl[] the controls of the binding, in the order of `parts`
+---@field parts string[] "control", "negative"/"positive", "up"/"down"/"left"/"right" or "x"/"y"
+---@field scale number
+---@field deadzone number
+---@field invert boolean
+---@class InputConflict
+---@field map string
+---@field action string
+---@field binding integer 1-based
+
+--- A named action of an input map (a .winput asset). It reads the state of the current frame.
+---@class InputAction
+local InputAction = {}
+---@return boolean
+function InputAction:down() end
+---@return boolean
+function InputAction:pressed() end
+---@return boolean
+function InputAction:released() end
+--- The magnitude of a button, the value of a 1D axis (signed).
+---@return number
+function InputAction:value() end
+--- The value of a 2D axis, at most length 1.
+---@return vec2
+function InputAction:vector() end
+
+--- Queries read false / zero while the game clock does not play. Errors: an unknown control or action is a Lua error that names it.
+input = {}
+--- `pad` is the gamepad (0-based); without it a Pad control reads the largest value of all connected pads.
+---@param control InputControl
+---@param pad? integer
+---@return boolean
+function input.down(control, pad) end
+---@param control InputControl
+---@param pad? integer
+---@return boolean
+function input.pressed(control, pad) end
+---@param control InputControl
+---@param pad? integer
+---@return boolean
+function input.released(control, pad) end
+--- 0 or 1 for a button, the raw value of an axis (sticks -1..1 with up = +1, triggers 0..1).
+---@param control InputControl
+---@param pad? integer
+---@return number
+function input.value(control, pad) end
+--- Pixels of the window.
+---@return vec2
+function input.mouse() end
+---@return vec2
+function input.mouse_delta() end
+---@return vec2
+function input.scroll() end
+---@param pad integer
+---@return boolean
+function input.pad_connected(pad) end
+--- Which device was used last, for button prompts.
+---@return "keyboard_mouse"|"gamepad"
+function input.last_device() end
+---@param mode InputCursorMode
+function input.set_cursor(mode) end
+---@param map string
+---@param name string
+---@return InputAction
+function input.action(map, name) end
+--- A map is read only while it is on the stack; a map that consumes controls hides them from the maps below it.
+---@param map string
+function input.push_map(map) end
+---@param map string
+function input.pop_map(map) end
+--- The bindings of an action, for showing them to the player.
+---@param map string
+---@param action string
+---@return InputBinding[]
+function input.bindings(map, action) end
+--- Rebinds one binding (1-based index) of an action, or one part of it ("up" of WASD). The rebind is always applied; the result is true,
+--- or false and the bindings that use the control already, so that the script can ask the player what to do.
+---@param map string
+---@param action string
+---@param index integer
+---@param control InputControl
+---@param part? string
+---@return boolean
+---@return InputConflict[]?
+function input.rebind(map, action, index, control, part) end
+---@param map string
+---@param action string
+---@return boolean
+function input.reset(map, action) end
+function input.reset_all() end
+--- Calls back with the next control the player presses (a button, or a stick or trigger past half). Escape cancels without a call.
+---@param callback fun(control: InputControl)
+function input.listen(callback) end
+function input.cancel_listen() end
+--- Writes the rebinds so that they are there the next time the game starts.
+---@return boolean
+function input.save_bindings() end
+
+--------------------------------------------------------------------------------------------------------------------------------
 -- UI
 --------------------------------------------------------------------------------------------------------------------------------
 

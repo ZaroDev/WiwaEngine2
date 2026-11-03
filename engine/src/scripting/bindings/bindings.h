@@ -29,6 +29,10 @@ namespace wiwa
 	// physics.raycast / raycast_all / overlap_sphere / overlap_box / shape_cast / set_gravity, and entity:body() with its Body methods.
 	void bind_physics(ScriptRuntime& runtime, ScriptContext& context);
 
+	// input.down / pressed / released / value / mouse / mouse_delta / scroll / pad_connected / last_device / set_cursor, input.action (a handle with
+	// down / pressed / released / value / vector), push_map / pop_map, and the rebinding calls (bindings, rebind, reset, listen, save_bindings).
+	void bind_input(ScriptRuntime& runtime, ScriptContext& context);
+
 	// UI.panel(entity), panels and their widgets (properties, on / off), UI.input.
 	void bind_ui(ScriptRuntime& runtime, ScriptContext& context);
 

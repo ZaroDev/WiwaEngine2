@@ -7,6 +7,7 @@
 
 #include <core/engine.h>
 #include <renderer/render_module.h>
+#include <input/input_module.h>
 #include <physics/physics_module.h>
 #include <scene/scene_module.h>
 
@@ -29,6 +30,7 @@ namespace wiwa
 		context.Scenes = Engine::get().get_module<SceneModule>();
 		context.Ui = Engine::get().get_module<UiModule>();
 		context.Physics = Engine::get().get_module<PhysicsModule>();
+		context.Input = Engine::get().get_module<InputModule>();
 		if (RenderModule* renderer = Engine::get().get_module<RenderModule>())
 		{
 			context.Debug = &renderer->get_debug_draw();
@@ -195,6 +197,7 @@ namespace wiwa
 
 		// seconds of the game clock, which follows pause and time scale; while it is paused the scripts do not run
 		const Time& time = Engine::get().get_time();
+		m_Instances->context().GamePlaying = time.get_game_clock().IsPlaying;
 		if (time.get_game_clock().IsPlaying)
 		{
 			if (PhysicsModule* physics = Engine::get().get_module<PhysicsModule>())

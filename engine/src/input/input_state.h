@@ -17,11 +17,12 @@ namespace wiwa
 		void set_capture(bool keyboardMouse) { m_Capture = keyboardMouse; }
 		bool capture() const { return m_Capture; }
 
-		bool down(const InputControl& control) const;
-		bool pressed(const InputControl& control) const;
-		bool released(const InputControl& control) const;
+		// `pad` limits a Pad control to that gamepad (0-based); -1 reads all of them.
+		bool down(const InputControl& control, int pad = -1) const;
+		bool pressed(const InputControl& control, int pad = -1) const;
+		bool released(const InputControl& control, int pad = -1) const;
 		// Button controls give 0 or 1, axes their raw value. Pad controls use the largest magnitude over the connected pads.
-		float value(const InputControl& control) const;
+		float value(const InputControl& control, int pad = -1) const;
 
 		glm::vec2 mouse_position() const { return m_Capture ? m_Raw.Cursor : glm::vec2(0.0f); }
 		glm::vec2 mouse_delta() const { return m_Capture ? m_Raw.CursorDelta : glm::vec2(0.0f); }

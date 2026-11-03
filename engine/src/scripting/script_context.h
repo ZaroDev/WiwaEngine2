@@ -9,6 +9,7 @@ namespace wiwa
 {
 	class AssetManager;
 	class DebugDraw;
+	class InputModule;
 	class PhysicsModule;
 	class SceneModule;
 	class UiHandlerTable;
@@ -25,6 +26,9 @@ namespace wiwa
 		DebugDraw* Debug = nullptr;     // null without a renderer: debug drawing is ignored
 		UiModule* Ui = nullptr;         // null where there is no such module (a test): the UI calls are Lua errors
 		PhysicsModule* Physics = nullptr; // null where there is no such module (a test): the physics calls are Lua errors
+		InputModule* Input = nullptr;   // null where there is no such module (a test): the input calls are Lua errors
+		bool GamePlaying = true;        // false while the game clock does not play: the input queries then read false / zero
+		bool InputListening = false;    // a Lua function waits in input.listen (cancelled when the scripts stop)
 		UiHandlerTable* UiHandlers = nullptr; // the Lua functions that listen to UI events, owned by the script instances
 		float DeltaTime = 0.0f;         // seconds, of the update that is running
 		double TotalTime = 0.0;         // seconds of updates so far

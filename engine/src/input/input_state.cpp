@@ -13,7 +13,7 @@ namespace wiwa
 
 		enum class Edge { Down, Pressed, Released };
 
-		bool button_state(const RawInputState& raw, bool capture, const InputControl& control, Edge edge)
+		bool button_state(const RawInputState& raw, bool capture, const InputControl& control, Edge edge, int padIndex)
 		{
 			switch (control.Device)
 			{
@@ -25,8 +25,10 @@ namespace wiwa
 				return edge == Edge::Down ? raw.MouseDown[control.Code] : edge == Edge::Pressed ? raw.MousePressed[control.Code] : raw.MouseReleased[control.Code];
 			case InputDevice::Pad:
 				if (control.Code >= PAD_BUTTON_COUNT) return false;
-				for (const PadState& pad : raw.Pads)
+				for (u32 i = 0; i < MAX_GAMEPADS; i++)
 				{
+					if (padIndex >= 0 && static_cast<u32>(padIndex) != i) continue;
+					const PadState& pad = raw.Pads[i];
 					const bool hit = edge == Edge::Down ? pad.Down[control.Code] : edge == Edge::Pressed ? pad.Pressed[control.Code] : pad.Released[control.Code];
 					if (hit) return true;
 				}
@@ -56,11 +58,11 @@ namespace wiwa
 		}
 	}
 
-	float InputState::value(const InputControl& control) const
+	float InputState::value(const InputControl& control, int pad) const
 	{
 		if (!control_is_axis(control))
 		{
-			return down(control) ? 1.0f : 0.0f;
+			return down(control, pad) ? 1.0f : 0.0f;
 		}
 
 		if (control.Device == InputDevice::Mouse)
@@ -80,32 +82,34 @@ namespace wiwa
 		if (axis >= PAD_AXIS_COUNT) return 0.0f;
 
 		float best = 0.0f;
-		for (const PadState& pad : m_Raw.Pads)
+		for (u32 i = 0; i < MAX_GAMEPADS; i++)
 		{
-			if (pad.Connected && std::abs(pad.Axes[axis]) > std::abs(best))
+			const PadState& state = m_Raw.Pads[i];
+			if (pad >= 0 && static_cast<u32>(pad) != i) continue;
+			if (state.Connected && std::abs(state.Axes[axis]) > std::abs(best))
 			{
-				best = pad.Axes[axis];
+				best = state.Axes[axis];
 			}
 		}
 		return best;
 	}
 
-	bool InputState::down(const InputControl& control) const
+	bool InputState::down(const InputControl& control, int pad) const
 	{
 		if (control_is_axis(control))
 		{
-			return std::abs(value(control)) >= AXIS_DOWN_THRESHOLD;
+			return std::abs(value(control, pad)) >= AXIS_DOWN_THRESHOLD;
 		}
-		return button_state(m_Raw, m_Capture, control, Edge::Down);
+		return button_state(m_Raw, m_Capture, control, Edge::Down, pad);
 	}
 
-	bool InputState::pressed(const InputControl& control) const
+	bool InputState::pressed(const InputControl& control, int pad) const
 	{
-		return !control_is_axis(control) && button_state(m_Raw, m_Capture, control, Edge::Pressed);
+		return !control_is_axis(control) && button_state(m_Raw, m_Capture, control, Edge::Pressed, pad);
 	}
 
-	bool InputState::released(const InputControl& control) const
+	bool InputState::released(const InputControl& control, int pad) const
 	{
-		return !control_is_axis(control) && button_state(m_Raw, m_Capture, control, Edge::Released);
+		return !control_is_axis(control) && button_state(m_Raw, m_Capture, control, Edge::Released, pad);
 	}
 }
