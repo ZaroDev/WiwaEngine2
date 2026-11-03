@@ -1596,7 +1596,7 @@ namespace wiwa
 			check(serialize(afterLook) == entitiesBefore, "settings_prefab_untouched: editing the settings leaves every entity and prefab override as it was");
 
 			// save, open
-			const std::string relativePath = "Assets/_scene_smoke/edited.wscene";
+			const std::string relativePath = "assets/_scene_smoke/edited.wscene";
 			check(editor.save_as(relativePath) && !editor.dirty(), "the scene saves, and is clean afterwards");
 			const std::optional<AssetRef> editedRef = database.ensure_imported(assets.folder() / "edited.wscene");
 			check(editedRef.has_value(), "the saved file imports");
