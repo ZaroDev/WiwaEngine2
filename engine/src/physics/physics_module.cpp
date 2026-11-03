@@ -79,6 +79,7 @@ namespace wiwa
 		m_HasScene = false;
 		m_Latest.reset();
 		m_Previous.reset();
+		m_Steps.clear();
 	}
 
 	void PhysicsModule::update(float)
@@ -96,6 +97,19 @@ namespace wiwa
 		{
 			start_locked(active);
 		}
+		// every step completed since the last frame, in order, with its events (a world that follows no scene: taken and dropped, so
+		// they do not pile up)
+		m_Steps.clear();
+		if (m_Thread.is_running())
+		{
+			for (Ref<const PhysicsStepSnapshot>& step : m_Thread.take_steps())
+			{
+				if (m_HasScene && step->World == m_Sync.generation())
+				{
+					m_Steps.push_back(std::move(step));
+				}
+			}
+		}
 		if (!m_HasScene)
 		{
 			return;
@@ -103,7 +117,7 @@ namespace wiwa
 
 		m_Thread.set_paused(!playing);
 
-		// the newest step, and the one just before it for interpolation (events and per-step dispatch come with the contact listener)
+		// the newest step, and the one just before it for interpolation
 		const Ref<const PhysicsStepSnapshot> latest = m_Thread.latest();
 		if (latest != nullptr && latest->World == m_Sync.generation() && (m_Latest == nullptr || latest->StepIndex != m_Latest->StepIndex))
 		{
@@ -112,6 +126,38 @@ namespace wiwa
 			m_Latest = latest;
 			m_LatestArrival = std::chrono::steady_clock::now();
 		}
+	}
+
+	std::vector<Ref<const PhysicsStepSnapshot>> PhysicsModule::steps_this_frame() const
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		return m_Steps;
+	}
+
+	std::vector<PhysicsEvent> PhysicsModule::events_for_step(const PhysicsStepSnapshot& step) const
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		return events_for_step_locked(step);
+	}
+
+	std::vector<PhysicsEvent> PhysicsModule::events_for_step_locked(const PhysicsStepSnapshot& step) const
+	{
+		std::vector<PhysicsEvent> events;
+		const Ref<Scene> scene = m_HasScene ? m_Scene.lock() : nullptr;
+		if (scene == nullptr || step.World == 0 || step.World != m_Sync.generation())
+		{
+			return events; // another world's step: its bodies are not this scene's
+		}
+		events.reserve(step.Events.size());
+		for (const PhysicsEvent& event : step.Events)
+		{
+			// an entity destroyed since the step: its events go (by guid, the entity may be gone before its DestroyBody was applied)
+			if (scene->find(event.A) != entt::null && scene->find(event.B) != entt::null)
+			{
+				events.push_back(event);
+			}
+		}
+		return events;
 	}
 
 	void PhysicsModule::pre_render_update(float)

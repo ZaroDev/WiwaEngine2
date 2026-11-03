@@ -20,6 +20,9 @@ namespace wiwa
 		virtual void step() = 0;
 		// Fills the poses of every body after a step.
 		virtual void write_poses(PhysicsStepSnapshot& snapshot) const = 0;
+		// Moves the contact and trigger events made since the last call (the commands' and the step's) into the snapshot, sorted (see
+		// PhysicsStepSnapshot::Events).
+		virtual void take_events(PhysicsStepSnapshot& snapshot) = 0;
 
 		virtual double fixed_dt() const = 0;
 		virtual u32 max_steps_per_wake() const = 0;

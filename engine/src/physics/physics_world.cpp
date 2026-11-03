@@ -17,6 +17,7 @@
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 
+#include "contact_listener.h"
 #include "physics_layers_jolt.h"
 #include "physics_material_jolt.h"
 #include "shape_builder.h"
@@ -30,6 +31,9 @@ namespace wiwa
 		constexpr JPH::uint kMaxContactConstraints = 10240;
 		constexpr size_t kTempAllocatorBytes = 10 * 1024 * 1024;
 		constexpr u32 kMaxFixedRateHz = 1000;
+
+		template<typename>
+		inline constexpr bool always_false = false;
 
 		u32 worker_count()
 		{
@@ -98,6 +102,8 @@ namespace wiwa
 			PhysicsWorld(const PhysicsSettings& settings, const PhysicsLayers& layers) : m_Pairs(layers)
 			{
 				m_System.Init(kMaxBodies, 0, kMaxBodyPairs, kMaxContactConstraints, m_BroadPhase, m_ObjectVsBroad, m_Pairs);
+					m_Contacts.set_bodies(&m_System.GetBodyInterfaceNoLock());
+					m_System.SetContactListener(&m_Contacts);
 				apply(settings);
 				// the friction and restitution of a contact come from the two shapes' materials (physics_material_jolt.h), not from the bodies
 				m_System.SetCombineFriction(&combine_friction);
@@ -148,11 +154,24 @@ namespace wiwa
 					{
 						replace_shape(c.Key, c.Shape);
 					}
+					else if constexpr (std::is_same_v<T, SetLayer>)
+					{
+						set_layer(c.Key, c.Layer);
+					}
+					else if constexpr (std::is_same_v<T, SetLayers>)
+					{
+						set_layers(c.Layers);
+					}
+					else
+					{
+						static_assert(always_false<T>, "a PhysicsCommand kind is not handled by PhysicsWorld::execute");
+					}
 				}, command);
 			}
 
 			void step() override
 			{
+				m_Contacts.begin_step();
 				const JPH::EPhysicsUpdateError error = m_System.Update(static_cast<float>(fixed_dt()), 1, &m_Temp, &m_Jobs);
 				if (error != JPH::EPhysicsUpdateError::None)
 				{
@@ -166,6 +185,7 @@ namespace wiwa
 					bodies.SetLinearAndAngularVelocity(id, JPH::Vec3::sZero(), JPH::Vec3::sZero());
 				}
 				m_MovedKinematic.clear();
+				m_Contacts.end_step();
 			}
 
 			void write_poses(PhysicsStepSnapshot& snapshot) const override
@@ -188,6 +208,8 @@ namespace wiwa
 				}
 			}
 
+			void take_events(PhysicsStepSnapshot& snapshot) override { m_Contacts.take_events(snapshot.Events); }
+
 			double fixed_dt() const override { return 1.0 / static_cast<double>(m_Settings.FixedRateHz); }
 			u32 max_steps_per_wake() const override { return m_Settings.MaxStepsPerWake; }
 
@@ -202,7 +224,8 @@ namespace wiwa
 				i32 Layer = 0;
 				bool IsTrigger = false;
 				bool ReportContacts = false;
-				ShapeDesc Shape{};                         // as last built, for SetMaterial
+				bool Placeholder = false;                  // no collidable shape: it does not collide
+				ShapeDesc Shape{};                        // as last built, for SetMaterial
 			};
 
 			enum class BodyWarning : u32 { AllLocked, Placeholder };
@@ -275,6 +298,7 @@ namespace wiwa
 				entry.Layer = desc.Layer;
 				entry.IsTrigger = desc.IsTrigger;
 				entry.ReportContacts = desc.ReportContacts;
+				entry.Placeholder = placeholder;
 				entry.Shape = desc.Shape;
 
 				JPH::BodyCreationSettings settings(placeholder ? m_Placeholder.GetPtr() : shape.GetPtr(), to_jolt(desc.Position), to_jolt(desc.Rotation),
@@ -304,6 +328,7 @@ namespace wiwa
 					return;
 				}
 				m_Bodies[key] = entry;
+				m_Contacts.register_body(entry.Id, key, desc.IsTrigger, desc.ReportContacts);
 			}
 
 			void destroy_body(BodyKey key)
@@ -314,6 +339,7 @@ namespace wiwa
 					return;
 				}
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
+				m_Contacts.unregister_body(it->second.Id);
 				bodies.RemoveBody(it->second.Id);
 				bodies.DestroyBody(it->second.Id);
 				std::erase(m_MovedKinematic, it->second.Id);
@@ -383,6 +409,7 @@ namespace wiwa
 
 				JPH::RefConst<JPH::Shape> shape = m_Shapes.build(desc);
 				const bool placeholder = shape == nullptr;
+				entry.Placeholder = placeholder;
 				const MotionType motion = effective_motion(key, entry.Requested, placeholder, entry.Dofs);
 				const bool moving = motion != MotionType::Static;
 				const JPH::Shape* newShape = placeholder ? m_Placeholder.GetPtr() : shape.GetPtr();
@@ -411,6 +438,36 @@ namespace wiwa
 				bodies.SetObjectLayer(entry.Id, to_object_layer(entry.Layer, category(entry, placeholder)));
 			}
 
+			void set_layer(BodyKey key, i32 layer)
+			{
+				const auto it = m_Bodies.find(key);
+				if (it == m_Bodies.end())
+				{
+					return;
+				}
+				BodyEntry& entry = it->second;
+				entry.Layer = layer;
+				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
+				bodies.SetObjectLayer(entry.Id, to_object_layer(layer, category(entry, entry.Placeholder)));
+				if (entry.Motion != MotionType::Static)
+				{
+					bodies.ActivateBody(entry.Id); // a sleeping body is not tested again by itself
+				}
+			}
+
+			void set_layers(const PhysicsLayers& layers)
+			{
+				m_Pairs.set_layers(layers);
+				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
+				for (const auto& [key, entry] : m_Bodies)
+				{
+					if (entry.Motion != MotionType::Static)
+					{
+						bodies.ActivateBody(entry.Id); // sleeping bodies test their pairs again
+					}
+				}
+			}
+
 			// the layer interfaces must outlive the system
 			BroadPhaseLayers m_BroadPhase{};
 			ObjectVsBroadPhase m_ObjectVsBroad{};
@@ -418,6 +475,7 @@ namespace wiwa
 			JPH::TempAllocatorImpl m_Temp{ kTempAllocatorBytes };
 			JPH::JobSystemThreadPool m_Jobs{ JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, static_cast<int>(worker_count()) };
 			JPH::PhysicsSystem m_System{};
+			ContactCollector m_Contacts{};
 			PhysicsSettings m_Settings{};
 
 			ShapeBuilder m_Shapes{};

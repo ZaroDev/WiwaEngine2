@@ -7,6 +7,7 @@
 #include <future>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 #include "physics_commands.h"
 #include "physics_snapshot.h"
@@ -17,6 +18,9 @@ namespace wiwa
 	constexpr u32 PHYSICS_COMMAND_QUEUE_CAPACITY = 4096;
 	// How many published snapshots the thread keeps; older ones are released when the ring wraps.
 	constexpr u32 PHYSICS_SNAPSHOT_RING_SIZE = 4;
+	// How many published snapshots take_steps() keeps for its consumer (4 s at 60 Hz) before it folds the oldest into the next one.
+	constexpr u32 PHYSICS_PENDING_STEP_LIMIT = 240;
+	static_assert(PHYSICS_PENDING_STEP_LIMIT > PHYSICS_SNAPSHOT_RING_SIZE, "a folded snapshot must not be one the ring hands out");
 
 	// The thread that owns the Jolt world. It steps on its own clock at a fixed rate (an accumulator, at most MaxStepsPerWake steps per
 	// wake), applies the queued commands at the start of each step and publishes an immutable snapshot after each step. Jolt types stay
@@ -47,6 +51,13 @@ namespace wiwa
 		Ref<const PhysicsStepSnapshot> latest();
 		Ref<const PhysicsStepSnapshot> previous();
 
+		// One consumer (the PhysicsModule, or a smoke check): every snapshot published since the last call, oldest first, so no step's
+		// events are missed between two frames. At most PHYSICS_PENDING_STEP_LIMIT wait: past that the oldest is folded into the next
+		// one (its begin and end events go in front of that step's own, its Stay events are dropped, its poses are gone), counted by
+		// folded_steps(). stop() forgets them.
+		std::vector<Ref<const PhysicsStepSnapshot>> take_steps();
+		u64 folded_steps() const { return m_FoldedSteps; }
+
 		bool is_running() const { return m_Running; }
 		// The world that runs (or ran last): 1 for the first start, one more for each start after. Snapshots carry it.
 		u64 generation() const { return m_Generation; }
@@ -67,7 +78,7 @@ namespace wiwa
 
 		void run(PhysicsSettings settings, u64 generation, std::promise<bool> ready);
 		bool drain(std::deque<QueuedCommand>& into);
-		void publish(Ref<const PhysicsStepSnapshot> snapshot);
+		void publish(Ref<PhysicsStepSnapshot> snapshot);
 
 		std::thread m_Thread{};
 		std::atomic<bool> m_Running{ false };
@@ -86,6 +97,8 @@ namespace wiwa
 		std::mutex m_SnapshotMutex{};
 		std::array<Ref<const PhysicsStepSnapshot>, PHYSICS_SNAPSHOT_RING_SIZE> m_Ring{};
 		u64 m_Published = 0; // how many snapshots were published since start (the newest sits at (m_Published - 1) % ring size)
+		std::deque<Ref<const PhysicsStepSnapshot>> m_Pending{}; // published, not yet taken by take_steps
+		std::atomic<u64> m_FoldedSteps{ 0 };
 
 		inline static std::atomic<u32> s_LiveThreads{ 0 };
 	};

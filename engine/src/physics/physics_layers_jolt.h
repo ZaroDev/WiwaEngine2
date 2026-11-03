@@ -39,6 +39,8 @@ namespace wiwa
 	public:
 		explicit ObjectLayerPairs(const PhysicsLayers& layers) : m_Layers(layers) {}
 		bool ShouldCollide(JPH::ObjectLayer a, JPH::ObjectLayer b) const override;
+		// Between steps only: the physics thread changes it while no step runs.
+		void set_layers(const PhysicsLayers& layers) { m_Layers = layers; }
 
 	private:
 		PhysicsLayers m_Layers;

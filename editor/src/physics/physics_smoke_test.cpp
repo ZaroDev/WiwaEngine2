@@ -3,6 +3,7 @@
 
 #include "../asset_pipeline/asset_database.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <fstream>
@@ -583,6 +584,133 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		u32 count_events(const std::vector<PhysicsEvent>& events, PhysicsEventKind kind, BodyKey x, BodyKey y)
+		{
+			return static_cast<u32>(std::count_if(events.begin(), events.end(), [&](const PhysicsEvent& event)
+			{
+				return event.Kind == kind && ((event.A == x && event.B == y) || (event.A == y && event.B == x));
+			}));
+		}
+
+		u32 count_events_of(const std::vector<PhysicsEvent>& events, BodyKey body)
+		{
+			return static_cast<u32>(std::count_if(events.begin(), events.end(), [&](const PhysicsEvent& event) { return event.A == body || event.B == body; }));
+		}
+
+		// Runs the world for simulated seconds and keeps the events of every step (as PhysicsModule's dispatcher gets them).
+		void run_collecting(PhysicsThread& thread, PhysicsSync& sync, Scene& scene, double seconds, std::vector<PhysicsEvent>& events)
+		{
+			const Ref<const PhysicsStepSnapshot> first = thread.latest();
+			const double until = (first ? first->Time : 0.0) + seconds;
+			for (double now = first ? first->Time : 0.0; now < until;)
+			{
+				const Ref<const PhysicsStepSnapshot> latest = run_for(thread, sync, scene, 0.05);
+				for (const Ref<const PhysicsStepSnapshot>& step : thread.take_steps())
+				{
+					events.insert(events.end(), step->Events.begin(), step->Events.end());
+				}
+				if (latest == nullptr || latest->Time <= now)
+				{
+					break; // the world does not advance
+				}
+				now = latest->Time;
+			}
+		}
+
+		// Check 3: a ball falls through a trigger volume onto the ground: one TriggerEnter and one TriggerExit for the volume and the
+		// ball, no collision events for the trigger, one CollisionEnter for the ground with a normal along y and a closing velocity.
+		void check_trigger_events(Check& check)
+		{
+			Scene scene;
+			const entt::entity ground = add_ground(scene);
+			const entt::entity volume = add_entity(scene, "Volume", glm::vec3(0.0f, 4.0f, 0.0f));
+			add_box_collider(scene, volume, glm::vec3(2.0f, 1.0f, 2.0f)).IsTrigger = true;
+			const entt::entity ball = add_entity(scene, "Ball", glm::vec3(0.0f, 8.0f, 0.0f));
+			add_body(scene, ball, MotionType::Dynamic);
+			Collider& collider = add_box_collider(scene, ball, glm::vec3(0.5f));
+			collider.Shape = ColliderShape::Sphere;
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "trigger_start: the world starts");
+			std::vector<PhysicsEvent> events;
+			run_collecting(thread, sync, scene, 2.5, events);
+			thread.stop();
+
+			const BodyKey groundKey = key_of(scene, ground), volumeKey = key_of(scene, volume), ballKey = key_of(scene, ball);
+			check(count_events(events, PhysicsEventKind::TriggerEnter, volumeKey, ballKey) == 1, "trigger_enter_once: one TriggerEnter for the ball and the volume, got " +
+				std::to_string(count_events(events, PhysicsEventKind::TriggerEnter, volumeKey, ballKey)));
+			check(count_events(events, PhysicsEventKind::TriggerExit, volumeKey, ballKey) == 1, "trigger_exit_once: one TriggerExit for the ball and the volume, got " +
+				std::to_string(count_events(events, PhysicsEventKind::TriggerExit, volumeKey, ballKey)));
+			check(count_events(events, PhysicsEventKind::CollisionEnter, volumeKey, ballKey) == 0 && count_events(events, PhysicsEventKind::CollisionExit, volumeKey, ballKey) == 0,
+				"trigger_no_collision: a trigger makes no collision events");
+			check(count_events(events, PhysicsEventKind::CollisionEnter, groundKey, ballKey) == 1, "trigger_ground_enter: one CollisionEnter for the ball and the ground, got " +
+				std::to_string(count_events(events, PhysicsEventKind::CollisionEnter, groundKey, ballKey)));
+			check(count_events(events, PhysicsEventKind::CollisionExit, groundKey, ballKey) == 0, "trigger_resting_no_exit: a ball at rest on the ground gives no exit");
+			bool normalOk = false, velocityOk = false;
+			for (const PhysicsEvent& event : events)
+			{
+				if (event.Kind == PhysicsEventKind::CollisionEnter && count_events({ event }, PhysicsEventKind::CollisionEnter, groundKey, ballKey) == 1)
+				{
+					// the normal points from A to B: up when the ground is A, down when the ball is
+					const float up = event.A == groundKey ? 1.0f : -1.0f;
+					normalOk = event.Normal.y * up > 0.9f;
+					const float closing = (event.B == ballKey ? -1.0f : 1.0f) * event.RelativeVelocity.y; // the ball's downward speed
+					velocityOk = closing > 5.0f && closing < 15.0f && event.Impulse > 0.0f;
+				}
+			}
+			check(normalOk, "trigger_ground_normal: the contact normal points from A to B along y");
+			check(velocityOk, "trigger_ground_velocity: the ball arrives at 5..15 m/s with an impulse");
+		}
+
+		// Check 4: layers. The matrix says layers 1 and 2 do not collide: a ball on layer 2 falls through the ground on layer 1 and makes no
+		// event; a ball on layer 0 lands. A third ball starts on layer 2 and is moved to layer 0 while it falls (SetLayer): it lands.
+		void check_layers(Check& check)
+		{
+			Scene scene;
+			const entt::entity ground = add_ground(scene);
+			scene.registry().get<Collider>(ground).Layer = 1;
+			const auto ball = [&](const char* name, float x, i32 layer)
+			{
+				const entt::entity entity = add_entity(scene, name, glm::vec3(x, 5.0f, 0.0f));
+				add_body(scene, entity, MotionType::Dynamic);
+				Collider& collider = add_box_collider(scene, entity, glm::vec3(0.5f));
+				collider.Shape = ColliderShape::Sphere;
+				collider.Layer = layer;
+				return entity;
+			};
+			const entt::entity ghost = ball("Ghost", -6.0f, 2);
+			const entt::entity solid = ball("Solid", 6.0f, 0);
+			const entt::entity switched = ball("Switched", 0.0f, 2);
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "layers_start: the world starts");
+			PhysicsLayers layers;
+			layers.set_collides(1, 2, false);
+			check(thread.push(SetLayers{ layers }), "layers_push: SetLayers is accepted");
+
+			std::vector<PhysicsEvent> events;
+			run_collecting(thread, sync, scene, 0.2, events);
+			scene.registry().get<Collider>(switched).Layer = 0;
+			run_collecting(thread, sync, scene, 2.3, events);
+			thread.stop();
+
+			const BodyKey groundKey = key_of(scene, ground);
+			const float ghostY = scene.registry().get<Transform>(ghost).Position.y;
+			const float solidY = scene.registry().get<Transform>(solid).Position.y;
+			const float switchedY = scene.registry().get<Transform>(switched).Position.y;
+			check(ghostY < -3.0f, "layers_pass_through: a ball on a layer that does not collide with the ground's falls through it, y = " + std::to_string(ghostY));
+			check(count_events_of(events, key_of(scene, ghost)) == 0, "layers_no_events: a pair that does not collide makes no events, got " +
+				std::to_string(count_events_of(events, key_of(scene, ghost))));
+			check(std::abs(solidY - 1.0f) < 0.05f && count_events(events, PhysicsEventKind::CollisionEnter, groundKey, key_of(scene, solid)) == 1,
+				"layers_default_lands: a ball on layer 0 lands on the ground with one CollisionEnter, y = " + std::to_string(solidY));
+			check(std::abs(switchedY - 1.0f) < 0.05f, "layers_set_layer: a ball moved to layer 0 while it falls lands, y = " + std::to_string(switchedY));
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -596,6 +724,8 @@ namespace wiwa
 		check_replay_no_stale_bodies(check);
 		check_paused_queue(check);
 		check_materials(check, pipeline);
+		check_trigger_events(check);
+		check_layers(check);
 
 		if (check.Failures == 0)
 		{

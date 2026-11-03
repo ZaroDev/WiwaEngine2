@@ -70,6 +70,7 @@ namespace wiwa
 
 		const u64 generation = ++m_Generation;
 		m_Paused = false; // a new world runs until its owner pauses it (a pause belongs to the world it was set for)
+		m_FoldedSteps = 0;
 		{
 			std::lock_guard<std::mutex> lock(m_QueueMutex);
 			m_Queue.clear();
@@ -124,6 +125,7 @@ namespace wiwa
 			std::lock_guard<std::mutex> lock(m_SnapshotMutex);
 			m_Ring.fill(nullptr);
 			m_Published = 0;
+			m_Pending.clear();
 		}
 		m_Running = false;
 	}
@@ -173,9 +175,42 @@ namespace wiwa
 		return !into.empty();
 	}
 
-	void PhysicsThread::publish(Ref<const PhysicsStepSnapshot> snapshot)
+	std::vector<Ref<const PhysicsStepSnapshot>> PhysicsThread::take_steps()
 	{
 		std::lock_guard<std::mutex> lock(m_SnapshotMutex);
+		std::vector<Ref<const PhysicsStepSnapshot>> steps(std::make_move_iterator(m_Pending.begin()), std::make_move_iterator(m_Pending.end()));
+		m_Pending.clear();
+		return steps;
+	}
+
+	void PhysicsThread::publish(Ref<PhysicsStepSnapshot> snapshot)
+	{
+		std::lock_guard<std::mutex> lock(m_SnapshotMutex);
+		if (m_Pending.size() >= PHYSICS_PENDING_STEP_LIMIT)
+		{
+			// nobody took the steps for a long while: the oldest goes, but its begin and end events go into the next one (in front, so
+			// they keep their order). That one is past the ring (the limit is larger), so nobody else holds it and a copy can replace it.
+			const Ref<const PhysicsStepSnapshot> oldest = std::move(m_Pending.front());
+			m_Pending.pop_front();
+			Ref<PhysicsStepSnapshot> folded = CreateRef<PhysicsStepSnapshot>(*m_Pending.front());
+			std::vector<PhysicsEvent> events;
+			events.reserve(oldest->Events.size() + folded->Events.size());
+			for (const PhysicsEvent& event : oldest->Events)
+			{
+				if (event.Kind != PhysicsEventKind::CollisionStay)
+				{
+					events.push_back(event);
+				}
+			}
+			events.insert(events.end(), folded->Events.begin(), folded->Events.end());
+			folded->Events = std::move(events);
+			m_Pending.front() = std::move(folded);
+			if (m_FoldedSteps++ == 0)
+			{
+				WI_PHYSICS_LOG(Warning, "Physics steps are not taken by the main thread: the oldest are folded (their Stay events are dropped)");
+			}
+		}
+		m_Pending.push_back(snapshot);
 		m_Ring[m_Published % PHYSICS_SNAPSHOT_RING_SIZE] = std::move(snapshot); // releases the oldest one
 		m_Published++;
 	}
@@ -273,6 +308,7 @@ namespace wiwa
 						snapshot->Time = time;
 						snapshot->FixedDt = static_cast<float>(dt);
 						world->write_poses(*snapshot);
+						world->take_events(*snapshot);
 						publish(std::move(snapshot));
 					}
 

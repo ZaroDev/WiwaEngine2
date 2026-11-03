@@ -25,7 +25,8 @@ namespace wiwa
 		void build(Scene& scene, PhysicsThread& thread);
 
 		// Once per frame, after the scene moved: bodies whose entity was destroyed (or lost its collider) are destroyed, new ones are made,
-		// changed colliders send ReplaceShape (SetMaterial when only the material asset changed), a changed RigidBody makes the body again, and static and kinematic bodies follow their
+		// changed colliders send ReplaceShape (SetMaterial when only the material asset changed), a changed layer sends SetLayer, a changed RigidBody (or
+		// trigger flag) makes the body again, and static and kinematic bodies follow their
 		// entity's WorldTransform (SetTransform, SetKinematicTarget).
 		void push_changes(Scene& scene, PhysicsThread& thread);
 

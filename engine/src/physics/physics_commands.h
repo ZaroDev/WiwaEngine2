@@ -3,6 +3,7 @@
 #include <variant>
 #include <vector>
 
+#include "physics_layers.h"
 #include "physics_material_asset.h"
 #include "physics_types.h"
 
@@ -98,7 +99,21 @@ namespace wiwa
 		PhysicsMaterialData Material{};
 	};
 
+	// Puts a body on another project layer (0..31, clamped), keeping the body and its contacts' bookkeeping. A sleeping body is woken.
+	struct SetLayer
+	{
+		BodyKey Key{};
+		i32 Layer = 0;
+	};
+
+	// Replaces the project layers' collision matrix (the world starts with PhysicsLayers' default: everything collides). Pairs already
+	// touching are tested again on the next step.
+	struct SetLayers
+	{
+		PhysicsLayers Layers{};
+	};
+
 	// Plain-data commands from the main thread to the physics thread, applied at the start of the next step in submission order.
 	// New kinds are added as new alternatives. Commands for a key that has no body are ignored.
-	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial>;
+	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial, SetLayer, SetLayers>;
 }

@@ -107,13 +107,13 @@ namespace wiwa
 			return true;
 		}
 
-		// Everything but the pose and the shape.
+		// Everything but the pose, the shape and the layer (a layer change is a SetLayer).
 		bool same_body(const BodyDesc& a, const BodyDesc& b)
 		{
 			return a.Motion == b.Motion && a.MassOverride == b.MassOverride && a.LinearDamping == b.LinearDamping && a.AngularDamping == b.AngularDamping
 				&& a.GravityFactor == b.GravityFactor && a.ContinuousCollision == b.ContinuousCollision && a.AllowSleeping == b.AllowSleeping
 				&& a.ReportContacts == b.ReportContacts && std::equal(std::begin(a.LockPosition), std::end(a.LockPosition), std::begin(b.LockPosition))
-				&& std::equal(std::begin(a.LockRotation), std::end(a.LockRotation), std::begin(b.LockRotation)) && a.Layer == b.Layer && a.IsTrigger == b.IsTrigger;
+				&& std::equal(std::begin(a.LockRotation), std::end(a.LockRotation), std::begin(b.LockRotation)) && a.IsTrigger == b.IsTrigger;
 		}
 
 		// The entity whose body a collider belongs to: itself when it has a RigidBody, else the nearest ancestor that has one, else itself
@@ -281,6 +281,11 @@ namespace wiwa
 			}
 
 			Tracked& tracked = it->second;
+			if (tracked.Desc.Layer != collected.Desc.Layer)
+			{
+				thread.push(SetLayer{ key, collected.Desc.Layer }, m_Generation);
+				tracked.Desc.Layer = collected.Desc.Layer;
+			}
 			if (!same_shape(tracked.Desc.Shape, collected.Desc.Shape))
 			{
 				// only the material of a single shape changed (its asset finished loading): the cheap command says so

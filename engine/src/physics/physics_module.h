@@ -3,6 +3,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <vector>
 
 #include <core/module.h>
 
@@ -53,7 +54,16 @@ namespace wiwa
 		// The scene the world was built for; null when none.
 		Ref<Scene> world_scene() const;
 
+		// The steps the world completed since the previous frame (taken by update()), oldest first, for the per-step dispatch.
+		std::vector<Ref<const PhysicsStepSnapshot>> steps_this_frame() const;
+
+		// The step's contact and trigger events for the dispatcher, in the step's order: none when the step is another world's (an
+		// older world, or none runs), and none naming an entity that is no longer in the world's scene (destroyed since).
+		std::vector<PhysicsEvent> events_for_step(const PhysicsStepSnapshot& step) const;
+
 	private:
+		std::vector<PhysicsEvent> events_for_step_locked(const PhysicsStepSnapshot& step) const;
+
 		bool start_locked(const Ref<Scene>& scene);
 		void stop_locked();
 
@@ -66,6 +76,7 @@ namespace wiwa
 		bool m_AutoStart = true;
 		u64 m_SettingsRevision = 0;
 
+		std::vector<Ref<const PhysicsStepSnapshot>> m_Steps{}; // the steps completed since the previous frame
 		Ref<const PhysicsStepSnapshot> m_Latest{};
 		Ref<const PhysicsStepSnapshot> m_Previous{};
 		std::chrono::steady_clock::time_point m_LatestArrival{};
