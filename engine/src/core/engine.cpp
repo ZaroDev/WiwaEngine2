@@ -4,6 +4,7 @@
 #include "memory.h"
 
 #include <assets/asset_manager.h>
+#include <physics/physics_module.h>
 #include <renderer/render_module.h>
 #include <renderer/window.h>
 #include <scene/scene_module.h>
@@ -42,6 +43,7 @@ namespace wiwa
 		
 		m_ModuleManager.add_module<AssetManager>();
 		m_ModuleManager.add_module<SceneModule>();
+		m_ModuleManager.add_module<PhysicsModule>(); // after the scene, before the scripts
 		m_ModuleManager.add_module<Window>();
 		m_ModuleManager.add_module<RenderModule>();
 		m_ModuleManager.add_module<UiModule>(); // before the scripts: the clicks of a frame reach them in that frame

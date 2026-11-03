@@ -10,7 +10,7 @@
 #include "scene/scene_smoke_test.h"
 #include "scripting/script_smoke_test.h"
 #include "ui/ui_smoke_test.h"
-#include <physics/jolt_link_check.h>
+#include "physics/physics_smoke_test.h"
 
 class Editor final : public wiwa::Engine
 {
@@ -90,11 +90,11 @@ protected:
 					m_CommandResult = wiwa::run_ui_smoke_test(*assets) ? 0 : 1;
 				});
 			}
-			else if (m_Args[i] == "--physics-link-check") // temporary, removed in Task 2
+			else if (m_Args[i] == "--physics-smoke")
 			{
 				m_CommandThread = std::thread([this]()
 				{
-					m_CommandResult = wiwa::run_physics_link_check() ? 0 : 1;
+					m_CommandResult = wiwa::run_physics_smoke_test() ? 0 : 1;
 				});
 			}
 			else if (m_Args[i] == "--asset-smoke")
