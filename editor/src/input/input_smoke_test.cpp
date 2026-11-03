@@ -2,7 +2,9 @@
 #include "input_smoke_test.h"
 
 #include <core/engine.h>
+#include <input/action_types.h>
 #include <input/input_codes.h>
+#include <input/input_map_io.h>
 #include <input/input_module.h>
 #include <input/input_state.h>
 #include <scripting/script_module.h>
@@ -170,6 +172,125 @@ namespace wiwa
 			}
 		}
 
+		Binding control_binding(Key key, float scale = 1.0f, float deadzone = 0.0f, bool invert = false)
+		{
+			Binding binding;
+			binding.BindingKind = Binding::Kind::Control;
+			binding.Parts[0] = control(key);
+			binding.Scale = scale;
+			binding.Deadzone = deadzone;
+			binding.Invert = invert;
+			return binding;
+		}
+
+		Binding composite1d(Key negative, Key positive)
+		{
+			Binding binding;
+			binding.BindingKind = Binding::Kind::Composite1D;
+			binding.Parts[0] = control(negative);
+			binding.Parts[1] = control(positive);
+			return binding;
+		}
+
+		Binding composite2d(Key up, Key down, Key left, Key right)
+		{
+			Binding binding;
+			binding.BindingKind = Binding::Kind::Composite2D;
+			binding.Parts[0] = control(up);
+			binding.Parts[1] = control(down);
+			binding.Parts[2] = control(left);
+			binding.Parts[3] = control(right);
+			return binding;
+		}
+
+		Binding pair2d(PadAxis x, PadAxis y, float deadzone)
+		{
+			Binding binding;
+			binding.BindingKind = Binding::Kind::Pair2D;
+			binding.Parts[0] = control(x);
+			binding.Parts[1] = control(y);
+			binding.Deadzone = deadzone;
+			return binding;
+		}
+
+		InputMapData sample_map_data()
+		{
+			InputMapData data;
+
+			ActionMap gameplay;
+			gameplay.Name = "Gameplay";
+			gameplay.Actions.push_back({ "Jump", ActionType::Button, { control_binding(Key::Space), control_binding(Key::Enter, 1.0f, 0.0f, true) } });
+			gameplay.Actions.push_back({ "Throttle", ActionType::Axis1D, { composite1d(Key::S, Key::W), control_binding(Key::Up, 0.5f, 0.1f) } });
+			gameplay.Actions.push_back({ "Move", ActionType::Axis2D, { composite2d(Key::W, Key::S, Key::A, Key::D), pair2d(PadAxis::LeftX, PadAxis::LeftY, 0.2f) } });
+			data.Maps.push_back(gameplay);
+
+			ActionMap ui;
+			ui.Name = "UI";
+			ui.Consume = true;
+			ui.Actions.push_back({ "Submit", ActionType::Button, { control_binding(Key::Enter) } });
+			data.Maps.push_back(ui);
+			return data;
+		}
+
+		bool same_map_data(const InputMapData& a, const InputMapData& b)
+		{
+			return input_map_to_text(a) == input_map_to_text(b);
+		}
+
+		void input_map_format(Check& check)
+		{
+			const InputMapData sample = sample_map_data();
+			std::string error;
+			check(input_map_valid(sample, error) && error.empty(), "map_roundtrip: the sample map is valid");
+
+			const std::string text = input_map_to_text(sample);
+			InputMapData parsed;
+			check(input_map_from_text(text, parsed, error), "map_roundtrip: the written text parses (" + error + ")");
+			check(parsed.Maps.size() == 2 && parsed.Maps[0].Actions.size() == 3 && parsed.Maps[1].Consume, "map_roundtrip: structure survives");
+			check(parsed.Maps[0].Actions[2].Bindings.size() == 2 && parsed.Maps[0].Actions[2].Bindings[1].BindingKind == Binding::Kind::Pair2D &&
+				near_equal(parsed.Maps[0].Actions[2].Bindings[1].Deadzone, 0.2f), "map_roundtrip: binding kinds and values survive");
+			check(input_map_to_text(parsed) == text, "map_roundtrip: text -> data -> text is byte-identical");
+
+			// Omitted optional keys take their defaults.
+			const char* defaults = R"({"version":1,"maps":[{"name":"M","actions":[{"name":"A","type":"Button","bindings":[{"control":"Key.Space"}]}]}]})";
+			InputMapData defaulted;
+			check(input_map_from_text(defaults, defaulted, error), "map_defaults: minimal file parses (" + error + ")");
+			if (!defaulted.Maps.empty() && !defaulted.Maps[0].Actions.empty() && !defaulted.Maps[0].Actions[0].Bindings.empty())
+			{
+				const Binding& binding = defaulted.Maps[0].Actions[0].Bindings[0];
+				check(near_equal(binding.Scale, 1.0f) && near_equal(binding.Deadzone, 0.0f) && !binding.Invert && !defaulted.Maps[0].Consume,
+					"map_defaults: scale 1, deadzone 0, no invert, no consume");
+			}
+			else
+			{
+				check(false, "map_defaults: the parsed map has its action and binding");
+			}
+
+			struct Reject { const char* Name; const char* Text; const char* Offender; };
+			const Reject rejects[] =
+			{
+				{ "not json", "this is not json", "" },
+				{ "version 2", R"({"version":2,"maps":[]})", "version" },
+				{ "unknown control", R"({"version":1,"maps":[{"name":"M","actions":[{"name":"A","type":"Button","bindings":[{"control":"Key.Nope"}]}]}]})", "Key.Nope" },
+				{ "button with composite", R"({"version":1,"maps":[{"name":"M","actions":[{"name":"Jmp","type":"Button","bindings":[{"negative":"Key.A","positive":"Key.D"}]}]}]})", "Jmp" },
+				{ "axis2d with control", R"({"version":1,"maps":[{"name":"M","actions":[{"name":"Mv","type":"Axis2D","bindings":[{"control":"Key.A"}]}]}]})", "Mv" },
+				{ "duplicate action", R"({"version":1,"maps":[{"name":"M","actions":[{"name":"A","type":"Button","bindings":[]},{"name":"A","type":"Button","bindings":[]}]}]})", "A" },
+				{ "duplicate map", R"({"version":1,"maps":[{"name":"M","actions":[]},{"name":"M","actions":[]}]})", "M" },
+				{ "empty name", R"({"version":1,"maps":[{"name":"M","actions":[{"name":"","type":"Button","bindings":[]}]}]})", "" },
+				{ "unknown type", R"({"version":1,"maps":[{"name":"M","actions":[{"name":"A","type":"Button3D","bindings":[]}]}]})", "Button3D" },
+				{ "deadzone 1", R"({"version":1,"maps":[{"name":"M","actions":[{"name":"A","type":"Button","bindings":[{"control":"Key.A","deadzone":1.0}]}]}]})", "deadzone" },
+			};
+			for (const Reject& reject : rejects)
+			{
+				InputMapData untouched = sample_map_data();
+				std::string rejectError;
+				const bool ok = input_map_from_text(reject.Text, untouched, rejectError);
+				check(!ok && !rejectError.empty() && same_map_data(untouched, sample_map_data()) &&
+					rejectError.find(reject.Offender) != std::string::npos,
+					std::string("map_rejects: ") + reject.Name + " (error: " + rejectError + ")");
+			}
+		}
+
 		void input_module(Check& check)
 		{
 			Engine& engine = Engine::get();
@@ -210,6 +331,7 @@ namespace wiwa
 		Check check;
 		raw_input(check);
 		input_module(check);
+		input_map_format(check);
 
 		if (check.Failures == 0)
 		{
