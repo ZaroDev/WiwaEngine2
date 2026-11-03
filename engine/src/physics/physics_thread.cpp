@@ -69,6 +69,7 @@ namespace wiwa
 		stop();
 
 		const u64 generation = ++m_Generation;
+		m_Paused = false; // a new world runs until its owner pauses it (a pause belongs to the world it was set for)
 		{
 			std::lock_guard<std::mutex> lock(m_QueueMutex);
 			m_Queue.clear();
@@ -231,10 +232,8 @@ namespace wiwa
 					}
 					last = now;
 
-					u32 steps = 0;
-					while (accumulator >= world->fixed_dt() && steps < world->max_steps_per_wake())
+					const auto execute_queued = [&]()
 					{
-						// the commands submitted so far apply to this step, in submission order
 						if (drain(commands))
 						{
 							for (const QueuedCommand& queued : commands)
@@ -246,6 +245,19 @@ namespace wiwa
 							}
 							commands.clear();
 						}
+					};
+
+					// paused: no step, but the commands are still taken (in order), so a producer never waits on a full queue for good
+					if (m_Paused)
+					{
+						execute_queued();
+					}
+
+					u32 steps = 0;
+					while (accumulator >= world->fixed_dt() && steps < world->max_steps_per_wake())
+					{
+						// the commands submitted so far apply to this step, in submission order
+						execute_queued();
 
 						const double dt = world->fixed_dt();
 						world->step();

@@ -58,6 +58,7 @@ namespace wiwa
 			m_FailedScene = scene;
 			return false;
 		}
+		m_Thread.set_paused(!Engine::get().get_time().get_game_clock().IsPlaying); // the world follows the game clock from its first step
 		m_Sync.build(*scene, m_Thread);
 		m_Scene = scene;
 		m_HasScene = true;

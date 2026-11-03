@@ -45,7 +45,7 @@ namespace wiwa
 		// until stop_world, or until the scene is no longer the SceneModule's active one. A running world is stopped first. False (logged)
 		// when the world could not be made: the scene then plays without physics.
 		bool start_world(Ref<Scene> scene);
-		// Builds a new, empty world that follows no scene (a running one is stopped first).
+		// Builds a new, empty world that follows no scene (a running one is stopped first). It follows no game clock either: it is not paused.
 		bool start_world(const PhysicsSettings& settings);
 		// Stops the thread and frees the world. Does nothing when no world runs.
 		void stop_world();

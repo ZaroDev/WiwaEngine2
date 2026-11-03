@@ -1,6 +1,7 @@
 #include <editor_common.h>
 #include "physics_smoke_test.h"
 
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <string>
@@ -400,6 +401,60 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// While paused (the game clock is paused) the world does not step, but it keeps taking the commands: pushing more than the queue
+		// holds must not block for good (the main thread would never get to unpause). And a world started after a paused one runs.
+		void check_paused_queue(Check& check)
+		{
+			Scene scene;
+			const entt::entity wall = add_entity(scene, "Wall", glm::vec3(0.0f));
+			add_box_collider(scene, wall, glm::vec3(0.5f));
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "paused_start: the world starts");
+			thread.set_paused(true);
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			const Ref<const PhysicsStepSnapshot> before = thread.latest();
+
+			// a pusher thread, so that a push that blocks for good fails the check instead of hanging the run
+			const BodyKey key = key_of(scene, wall);
+			const u32 count = PHYSICS_COMMAND_QUEUE_CAPACITY * 2 + 100;
+			std::atomic<u32> pushed{ 0 };
+			std::thread pusher([&]()
+			{
+				for (u32 i = 0; i < count; i++)
+				{
+					if (!thread.push(SetTransform{ key, glm::vec3(0.0f, static_cast<float>(i) * 0.001f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f) }, sync.generation()))
+					{
+						break;
+					}
+					pushed++;
+				}
+			});
+			const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(5);
+			while (pushed < count && Clock::now() < giveUp)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			}
+			const u32 done = pushed;
+			const Ref<const PhysicsStepSnapshot> during = thread.latest();
+			thread.stop(); // releases a push that is still blocked
+			pusher.join();
+			check(done == count, "paused_push_never_hangs: " + std::to_string(count) + " commands pushed while paused within 5 s, got " + std::to_string(done));
+			check(before != nullptr && during != nullptr && during->StepIndex == before->StepIndex, "paused_no_steps: a paused world does not step");
+
+			// Pause, Stop, Play: the new world is not paused
+			thread.set_paused(true);
+			check(start_scene(thread, sync, scene), "paused_restart: the world starts again");
+			std::this_thread::sleep_for(std::chrono::milliseconds(200));
+			const Ref<const PhysicsStepSnapshot> restarted = thread.latest();
+			check(restarted != nullptr && restarted->StepIndex >= 5, "paused_restart_runs: a world started after a paused one steps, got step " + std::to_string(restarted ? restarted->StepIndex : 0));
+			thread.stop();
+		}
+	}
+
 	bool run_physics_smoke_test()
 	{
 		Check check;
@@ -411,6 +466,7 @@ namespace wiwa
 		check_stack_sleeps(check);
 		check_compound(check);
 		check_replay_no_stale_bodies(check);
+		check_paused_queue(check);
 
 		if (check.Failures == 0)
 		{

@@ -52,6 +52,7 @@ namespace wiwa
 		u64 generation() const { return m_Generation; }
 
 		// Any thread: while paused the world does not step (the game clock is paused); time spent paused is not caught up afterwards.
+		// Commands are still taken and applied while paused, so push never waits for good. start() clears the pause.
 		void set_paused(bool paused) { m_Paused = paused; }
 
 		// How many physics thread loops are alive in the process, for checks that stop() leaves nothing behind.
