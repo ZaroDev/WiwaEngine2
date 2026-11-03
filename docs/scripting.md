@@ -192,7 +192,8 @@ outside it every query reads `false` / `0`. A control is written `"Key.W"`, `"Mo
   both cases, so the script (or the player) decides what to do about a conflict. `input.reset(map, action)`, `input.reset_all()`,
   `input.save_bindings()` (writes `input_overrides.json`, which is read the next time the game starts).
   `input.listen(function(control) ... end)` calls back once with the next control the player presses (a button, or a stick or trigger past
-  half; the mouse moving does not count) and `Escape` cancels without a call; actions read zero while it listens. `input.cancel_listen()`.
+  half; the mouse moving does not count) and `Escape` cancels without a call; actions read zero while it listens.
+  `input.listening()` tells whether it still waits (it is how a script notices the cancel), `input.cancel_listen()` ends it.
 
 ```lua
 return Script:extend{
@@ -254,6 +255,10 @@ on the scene). Press Play and watch the Console:
 - **demo_ui** (the Hud entity, `assets/ui/demo_hud.wuipanel`): the HUD. The score counts up, a health bar breathes, the button toggles the
   "Demo light" and the slider sets its intensity (click and drag with the mouse over the Viewport in Play mode), and the tag over the
   "Beacon" sphere follows it on the screen. It waits for the panel to be `ready` before it looks its widgets up.
+- **input_demo** (the "Input demo" ball, `assets/input/demo.winput`): move it with WASD or the left stick, jump with Space or the pad's A, fire (a flash) with the
+  left mouse button or the right trigger. In the editor click the Viewport image first (it takes the keyboard and the mouse; Escape gives them
+  back). The panel at the right of the HUD shows the last device, the Move vector and the Jump bindings; "Rebind Jump" waits for a key or a
+  button, binds Jump to it and saves it to `input_overrides.json`. The project's default map is chosen in the Input panel (`input.wsettings`).
 
 Try: Pause, then Step; edit a script into a syntax error and save (the old version keeps running, the Console says why); fix it; add a
 property to `spinner.lua` and see it in the Inspector without stopping.
