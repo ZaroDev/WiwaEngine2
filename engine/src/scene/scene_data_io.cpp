@@ -207,6 +207,13 @@ namespace wiwa
 			ar.value(mb.Strength);
 			ar.value(mb.MaxBlurPixels);
 			ar.pod_vector(s.Scripts);
+			PhysicsSettings& ph = s.Physics;
+			ar.value(ph.Gravity);
+			ar.value(ph.FixedRateHz);
+			ar.value(ph.MaxStepsPerWake);
+			ar.value(ph.VelocityIterations);
+			ar.value(ph.PositionIterations);
+			ar.value(ph.SleepThreshold);
 		}
 	}
 

@@ -3,6 +3,7 @@
 #include <vector>
 
 #include <assets/asset_guid.h>
+#include <physics/physics_types.h>
 #include <math/math.h>
 
 // How a scene as a whole is lit and shown: its sky, ambient light, background and exposure. Saved with the scene
@@ -141,6 +142,9 @@ namespace wiwa
 		AoSettings Ao{};
 		TaaSettings Taa{};
 		MotionBlurSettings MotionBlur{};
+
+		// The step settings of the physics world of this scene (gravity, rate, solver iterations, sleeping).
+		PhysicsSettings Physics{};
 
 		// Scene-level scripts (Script assets): they run while the scene is active, in this order, and have no entity.
 		std::vector<AssetRef> Scripts{};

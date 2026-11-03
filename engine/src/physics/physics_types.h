@@ -19,5 +19,7 @@ namespace wiwa
 		u32 VelocityIterations = 10;
 		u32 PositionIterations = 2;
 		float SleepThreshold = 0.03f; // m/s below which a body may go to sleep
+
+		bool operator==(const PhysicsSettings&) const = default;
 	};
 }

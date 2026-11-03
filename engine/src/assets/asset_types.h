@@ -21,6 +21,7 @@ namespace wiwa
 		SurfaceShader,
 		Font,
 		UiPanel,
+		PhysicsMaterial,
 
 		Last
 	};
@@ -43,6 +44,7 @@ namespace wiwa
 		case AssetType::SurfaceShader: return "SurfaceShader";
 		case AssetType::Font: return "Font";
 		case AssetType::UiPanel: return "UiPanel";
+		case AssetType::PhysicsMaterial: return "PhysicsMaterial";
 		default: return "None";
 		}
 	}

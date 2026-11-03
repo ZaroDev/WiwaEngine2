@@ -44,5 +44,31 @@ namespace wiwa
 			WI_FIELD_META(Panel, FieldMeta::asset(AssetType::UiPanel)),
 			WI_FIELD(SortOrder),
 			WI_FIELD(Visible)));
+
+		registry.register_component(WI_COMPONENT(RigidBody,
+			WI_FIELD_META(Motion, FieldMeta::enumeration({ "Static", "Kinematic", "Dynamic" })),
+			WI_FIELD(MassOverride),
+			WI_FIELD(LinearDamping),
+			WI_FIELD(AngularDamping),
+			WI_FIELD(GravityFactor),
+			WI_FIELD(ContinuousCollision),
+			WI_FIELD(AllowSleeping),
+			WI_FIELD(ReportContacts),
+			WI_FIELD(LockPositionX),
+			WI_FIELD(LockPositionY),
+			WI_FIELD(LockPositionZ),
+			WI_FIELD(LockRotationX),
+			WI_FIELD(LockRotationY),
+			WI_FIELD(LockRotationZ)));
+
+		registry.register_component(WI_COMPONENT(Collider,
+			WI_FIELD_META(Shape, FieldMeta::enumeration({ "Box", "Sphere", "Capsule", "Cylinder", "ConvexHull", "Mesh" })),
+			WI_FIELD(Size),
+			WI_FIELD(Offset),
+			WI_FIELD(RotationEuler),
+			WI_FIELD(IsTrigger),
+			WI_FIELD(Layer),
+			WI_FIELD_META(Material, FieldMeta::asset(AssetType::PhysicsMaterial)),
+			WI_FIELD_META(Mesh, FieldMeta::asset(AssetType::Mesh))));
 	}
 }

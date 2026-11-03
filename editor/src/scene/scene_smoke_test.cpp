@@ -1642,6 +1642,118 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		SceneSettings physics_smoke_settings()
+		{
+			SceneSettings s;
+			s.Physics.Gravity = glm::vec3(0.0f, -3.7f, 1.0f);
+			s.Physics.FixedRateHz = 90;
+			s.Physics.MaxStepsPerWake = 6;
+			s.Physics.VelocityIterations = 12;
+			s.Physics.PositionIterations = 3;
+			s.Physics.SleepThreshold = 0.05f;
+			return s;
+		}
+
+		// RigidBody, Collider and the scene's physics settings survive save, cook and load (binary and the text of the file),
+		// and a prefab override of Collider.Size applies.
+		void check_physics_data(Check& check)
+		{
+			register_scene_components();
+			const ComponentRegistry& components = ComponentRegistry::get();
+			check(components.find("RigidBody") != nullptr && components.find("Collider") != nullptr, "physics: RigidBody and Collider are registered");
+
+			const AssetRef material{ AssetGuid::generate(), 0 };
+			const AssetRef meshRef{ AssetGuid::generate(), 1 };
+
+			Scene source;
+			source.set_settings(physics_smoke_settings());
+			const EntityGuid bodyId = EntityGuid::generate();
+			const entt::entity body = source.create(bodyId, "Body");
+			RigidBody rb;
+			rb.Motion = MotionType::Kinematic;
+			rb.MassOverride = 12.5f;
+			rb.LinearDamping = 0.3f;
+			rb.AngularDamping = 0.4f;
+			rb.GravityFactor = 0.5f;
+			rb.ContinuousCollision = true;
+			rb.AllowSleeping = false;
+			rb.ReportContacts = true;
+			rb.LockPositionY = true;
+			rb.LockRotationX = true;
+			rb.LockRotationZ = true;
+			source.registry().emplace<RigidBody>(body, rb);
+			Collider col;
+			col.Shape = ColliderShape::Capsule;
+			col.Size = glm::vec3(0.25f, 1.5f, 0.75f);
+			col.Offset = glm::vec3(0.0f, 0.5f, 0.0f);
+			col.RotationEuler = glm::vec3(10.0f, 20.0f, 30.0f);
+			col.IsTrigger = true;
+			col.Layer = 5;
+			col.Material = material;
+			col.Mesh = meshRef;
+			source.registry().emplace<Collider>(body, col);
+
+			const SceneData first = data_from_scene(source, "physics");
+			check(first.Settings.Physics == physics_smoke_settings().Physics, "physics: the scene's physics settings are in the records");
+			const std::vector<std::byte> bytes = serialize(first);
+			std::optional<SceneData> back = deserialize<SceneData>(bytes);
+			check(back.has_value() && back->Settings.Physics == physics_smoke_settings().Physics, "physics: the settings survive the cooked format");
+			if (!back)
+			{
+				return;
+			}
+
+			Scene copy;
+			const ApplyReport report = apply_scene_data(copy, *back);
+			check(report.UnknownComponents == 0 && report.UnknownFields == 0, "physics: nothing in the saved scene is unknown");
+			check(copy.settings().Physics == physics_smoke_settings().Physics, "physics: the loaded scene has the physics settings");
+			const entt::entity loaded = copy.find(bodyId);
+			check(loaded != entt::null && copy.registry().all_of<RigidBody, Collider>(loaded), "physics: the entity keeps its RigidBody and Collider");
+			if (loaded != entt::null && copy.registry().all_of<RigidBody, Collider>(loaded))
+			{
+				const RigidBody& r = copy.registry().get<RigidBody>(loaded);
+				check(r.Motion == MotionType::Kinematic && r.MassOverride == 12.5f && r.LinearDamping == 0.3f && r.AngularDamping == 0.4f && r.GravityFactor == 0.5f, "physics: RigidBody numbers survive");
+				check(r.ContinuousCollision && !r.AllowSleeping && r.ReportContacts, "physics: RigidBody flags survive");
+				check(!r.LockPositionX && r.LockPositionY && !r.LockPositionZ && r.LockRotationX && !r.LockRotationY && r.LockRotationZ, "physics: RigidBody locks survive");
+				const Collider& c = copy.registry().get<Collider>(loaded);
+				check(c.Shape == ColliderShape::Capsule && c.Size == col.Size && c.Offset == col.Offset && c.RotationEuler == col.RotationEuler, "physics: Collider shape and geometry survive");
+				check(c.IsTrigger && c.Layer == 5, "physics: Collider.IsTrigger and Layer survive");
+				check(c.Material == material && c.Mesh == meshRef, "physics: Collider asset references survive");
+			}
+			check(serialize(data_from_scene(copy, "physics")) == bytes, "physics: save, load, save gives the same bytes");
+
+			// the text of the file
+			const SceneJsonResult viaJson = scene_from_json(SceneJson::parse(scene_to_json(first).dump(2)));
+			check(viaJson.Scene.has_value() && viaJson.Scene->Settings.Physics == physics_smoke_settings().Physics, "physics: the settings survive the text of the file (" + viaJson.Error + ")");
+			check(viaJson.Scene.has_value() && serialize(*viaJson.Scene) == bytes, "physics: the text of the file gives the same binary scene (" + viaJson.Error + ")");
+
+			// a prefab override of Collider.Size
+			PrefabData prefab;
+			prefab.Name = "crate";
+			PrefabNode node = make_node("Crate", -1);
+			node.Components.push_back(ComponentRecord{ "Collider", { FieldRecord{ "Size", FieldValue(glm::vec3(0.5f)) } } });
+			prefab.Nodes = { node };
+			assign_stable_ids(prefab.Nodes);
+			const u64 nodeId = prefab.Nodes[0].StableId;
+			EntityRecord instance = make_instance(EntityGuid::generate(), AssetRef{ AssetGuid::generate(), 0 });
+			instance.Overrides = { set_field_override(nodeId, "Collider", "Size", FieldValue(glm::vec3(2, 3, 4))) };
+			const ExpandResult expanded = expand_prefab(instance, prefab);
+			const FieldValue* size = expanded.Entities.size() == 2 ? find_field(expanded.Entities[1].Components, "Collider", "Size") : nullptr;
+			check(size != nullptr && std::get_if<glm::vec3>(size) != nullptr && *std::get_if<glm::vec3>(size) == glm::vec3(2, 3, 4), "physics: a prefab override of Collider.Size applies");
+
+			// ... and lands on the component of the loaded entity
+			SceneData withInstance;
+			withInstance.Name = "crate_scene";
+			withInstance.Entities = expanded.Entities;
+			Scene crateScene;
+			apply_scene_data(crateScene, withInstance);
+			const entt::entity crate = expanded.Entities.size() == 2 ? crateScene.find(expanded.Entities[1].Id) : entt::null;
+			check(crate != entt::null && crateScene.registry().all_of<Collider>(crate) && crateScene.registry().get<Collider>(crate).Size == glm::vec3(2, 3, 4), "physics: the overridden Collider.Size reaches the loaded component");
+		}
+	}
+
 	bool run_scene_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1650,6 +1762,7 @@ namespace wiwa
 		check_reflection(check);
 		check_render_components(check);
 		check_scene_data(check);
+		check_physics_data(check);
 		check_node_ids(check, pipeline);
 		check_node_components(check);
 		check_prefab(check);
