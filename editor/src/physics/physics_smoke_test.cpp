@@ -1261,6 +1261,10 @@ namespace wiwa
 					std::this_thread::sleep_for(std::chrono::milliseconds(4));
 				}
 				thread.stop();
+				if (steps.size() > 90)
+				{
+					steps.resize(90); // the steps that came in one batch beyond the 90 are not compared
+				}
 				return steps;
 			};
 
