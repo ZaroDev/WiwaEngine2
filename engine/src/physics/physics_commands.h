@@ -160,7 +160,13 @@ namespace wiwa
 		glm::vec3 Gravity{ 0.0f, -9.81f, 0.0f };
 	};
 
+	// Turns the recording of the colliders' debug drawing on or off (into each step's snapshot). Ignored where Jolt has no debug renderer (Shipping).
+	struct SetDebugDraw
+	{
+		bool Enabled = false;
+	};
+
 	// Plain-data commands from the main thread to the physics thread, applied at the start of the next step in submission order.
 	// New kinds are added as new alternatives. Commands for a key that has no body are ignored.
-	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial, SetLayer, SetLayers, AddForce, AddTorque, AddImpulse, SetVelocity, SetAngularVelocity, WakeBody, SetGravity>;
+	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial, SetLayer, SetLayers, AddForce, AddTorque, AddImpulse, SetVelocity, SetAngularVelocity, WakeBody, SetGravity, SetDebugDraw>;
 }

@@ -86,6 +86,11 @@ namespace wiwa
 
 		// The project's physics layers (names and which pairs collide). A world starts with them and a running one takes the change at once.
 		// A game reads them from its pack when the module starts; the editor sets them from physics.wsettings.
+		// Records the colliders as Jolt's debug renderer draws them (in each step's snapshot) and shows them through the engine's debug renderer, every
+		// frame while a world runs. Off by default; the Physics panel has the toggle. Nothing is drawn in Shipping.
+		void set_debug_draw(bool enabled);
+		bool debug_draw() const { return m_DebugDraw; }
+
 		const PhysicsLayers& layers() const { return m_Layers; }
 		void set_layers(const PhysicsLayers& layers);
 
@@ -114,6 +119,7 @@ namespace wiwa
 		std::optional<BodyPose> newest_pose(BodyKey key) const;
 
 		void pump_locked();
+		void submit_debug_draw_locked();
 		bool start_locked(const Ref<Scene>& scene);
 		void stop_locked();
 
@@ -125,6 +131,7 @@ namespace wiwa
 		std::weak_ptr<Scene> m_FailedScene{}; // auto start does not try the same scene again
 		bool m_AutoStart = true;
 		PhysicsLayers m_Layers{};
+		bool m_DebugDraw = false;
 		u64 m_SettingsRevision = 0;
 
 		std::vector<Ref<const PhysicsStepSnapshot>> m_Steps{}; // the steps completed since the previous frame

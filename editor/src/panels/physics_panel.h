@@ -31,6 +31,8 @@ public:
 	bool set_layer_name(wiwa::u32 layer, const std::string& name);
 	const std::string& last_error() const { return m_Error; }
 	wiwa::u32 frames_drawn() const { return m_Frames; }
+	// Brings the window to the front of its dock on the next frame (the smoke check wants the contents drawn).
+	void request_focus() { m_Focus = true; }
 
 private:
 	void settings_tab();
@@ -43,4 +45,5 @@ private:
 	wiwa::PhysicsLayers m_Layers{};
 	std::string m_Error{};
 	wiwa::u32 m_Frames = 0;
+	bool m_Focus = false;
 };

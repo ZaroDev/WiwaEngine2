@@ -51,11 +51,16 @@ bool PhysicsPanel::set_layer_name(wiwa::u32 layer, const std::string& name)
 
 void PhysicsPanel::on_draw()
 {
+	m_Frames++; // counted even while the window is a hidden tab: the smoke check wants to know the panel was run
+	if (m_Focus)
+	{
+		ImGui::SetNextWindowFocus();
+		m_Focus = false;
+	}
 	ImGui::SetNextWindowPos(ImVec2(984.0f, 60.0f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSize(ImVec2(420.0f, 480.0f), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin(get_name(), &m_Open))
 	{
-		m_Frames++;
 		if (ImGui::BeginTabBar("##physics_tabs"))
 		{
 			if (ImGui::BeginTabItem("Settings"))
@@ -87,6 +92,16 @@ void PhysicsPanel::settings_tab()
 		return;
 	}
 
+	if (wiwa::PhysicsModule* module = wiwa::Engine::get().get_module<wiwa::PhysicsModule>())
+	{
+		bool draw = module->debug_draw();
+		if (ImGui::Checkbox("Draw colliders", &draw))
+		{
+			module->set_debug_draw(draw);
+		}
+		ImGui::TextDisabled("While a world runs (Play). Not available in Shipping builds.");
+	}
+	ImGui::Separator();
 	const wiwa::SceneSettings before = m_Editor.settings();
 	wiwa::SceneSettings settings = before;
 	wiwa::PhysicsSettings& physics = settings.Physics;

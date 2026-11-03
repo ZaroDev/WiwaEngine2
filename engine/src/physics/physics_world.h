@@ -25,6 +25,8 @@ namespace wiwa
 		virtual void take_events(PhysicsStepSnapshot& snapshot) = 0;
 		// Fills the snapshot's query data (see QuerySnapshot).
 		virtual void write_query(PhysicsStepSnapshot& snapshot) = 0;
+		// Fills the snapshot's debug drawing when SetDebugDraw asked for it.
+		virtual void write_debug(PhysicsStepSnapshot& snapshot) = 0;
 
 		virtual double fixed_dt() const = 0;
 		virtual u32 max_steps_per_wake() const = 0;

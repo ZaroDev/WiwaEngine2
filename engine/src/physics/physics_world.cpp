@@ -18,6 +18,7 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 
 #include "contact_listener.h"
+#include "physics_debug_draw.h"
 #include "physics_layers_jolt.h"
 #include "physics_material_jolt.h"
 #include "query_snapshot_jolt.h"
@@ -163,6 +164,10 @@ namespace wiwa
 					{
 						control(c);
 					}
+					else if constexpr (std::is_same_v<T, SetDebugDraw>)
+					{
+						m_DebugDraw = c.Enabled;
+					}
 					else if constexpr (std::is_same_v<T, WakeBody>)
 					{
 						wake(c.Key);
@@ -223,6 +228,27 @@ namespace wiwa
 			}
 
 			void take_events(PhysicsStepSnapshot& snapshot) override { m_Contacts.take_events(snapshot.Events); }
+
+			void write_debug(PhysicsStepSnapshot& snapshot) override
+			{
+#ifdef JPH_DEBUG_RENDERER
+				if (!m_DebugDraw)
+				{
+					return;
+				}
+				if (m_DebugRenderer == nullptr)
+				{
+					m_DebugRenderer = std::make_unique<RecordingDebugRenderer>();
+				}
+				JPH::BodyManager::DrawSettings draw;
+				draw.mDrawShape = true;
+				draw.mDrawShapeWireframe = true;
+				m_System.DrawBodies(draw, m_DebugRenderer.get());
+				snapshot.Debug = m_DebugRenderer->take();
+#else
+				(void)snapshot;
+#endif
+			}
 
 			void write_query(PhysicsStepSnapshot& snapshot) override
 			{
@@ -606,6 +632,10 @@ namespace wiwa
 			std::vector<JPH::BodyID> m_MovedKinematic{};
 			std::shared_ptr<const std::vector<QueryBody>> m_StaticQuery{}; // the static bodies of the query snapshots, until one changes
 			bool m_StaticDirty = true;
+			bool m_DebugDraw = false;
+#ifdef JPH_DEBUG_RENDERER
+			std::unique_ptr<RecordingDebugRenderer> m_DebugRenderer{};
+#endif
 			std::set<std::pair<BodyKey, u32>> m_Warned{};
 		};
 	}

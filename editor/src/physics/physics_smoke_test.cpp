@@ -1165,6 +1165,207 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// The debug drawing: on gives lines for a scene with one box, off gives none. (Shipping has no Jolt debug renderer: not checked there.)
+		void check_debug_draw(Check& check)
+		{
+			Scene scene;
+			add_ground(scene);
+			const entt::entity box = add_entity(scene, "Box", glm::vec3(0.0f, 3.0f, 0.0f));
+			add_body(scene, box, MotionType::Dynamic);
+			add_box_collider(scene, box, glm::vec3(0.5f));
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "debug_start: the world starts");
+			const u64 generation = thread.generation();
+			const auto wait_after = [&](u64 index) -> Ref<const PhysicsStepSnapshot>
+			{
+				const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(5);
+				while (Clock::now() < giveUp)
+				{
+					const Ref<const PhysicsStepSnapshot> latest = thread.latest();
+					if (latest != nullptr && latest->StepIndex > index)
+					{
+						return latest;
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+				return nullptr;
+			};
+
+			const Ref<const PhysicsStepSnapshot> offAtFirst = wait_after(3);
+			check(offAtFirst != nullptr && offAtFirst->Debug == nullptr, "debug_off_by_default: a world draws nothing until it is asked to");
+#if defined(WI_DEBUG) || defined(WI_RELEASE)
+			thread.push(SetDebugDraw{ true }, generation);
+			Ref<const PhysicsStepSnapshot> on = wait_after(offAtFirst->StepIndex + 1);
+			for (int i = 0; i < 100 && on != nullptr && on->Debug == nullptr; i++)
+			{
+				on = wait_after(on->StepIndex);
+			}
+			check(on != nullptr && on->Debug != nullptr && on->Debug->Lines.size() >= 24, "debug_on_lines: with debug draw on a step carries the lines of the colliders, got " +
+				std::to_string(on && on->Debug ? on->Debug->Lines.size() : 0));
+			bool inside = on != nullptr && on->Debug != nullptr;
+			if (inside)
+			{
+				for (const PhysicsDebugLine& line : on->Debug->Lines)
+				{
+					inside = inside && std::abs(line.A.x) <= 20.5f && std::abs(line.A.z) <= 20.5f && line.A.y > -1.0f && line.A.y < 5.0f;
+				}
+			}
+			check(inside, "debug_on_world_space: the lines are in world space, around the colliders");
+
+			thread.push(SetDebugDraw{ false }, generation);
+			Ref<const PhysicsStepSnapshot> off = on ? wait_after(on->StepIndex + 3) : nullptr;
+			check(off != nullptr && off->Debug == nullptr, "debug_off: with debug draw off the steps carry none again");
+#endif
+			thread.stop();
+		}
+
+		// Check 11: the simulation is repeatable. Two runs of the same scene with the same commands give the same poses, step for step, within 1e-4.
+		void check_repeatable(Check& check)
+		{
+			Scene scene;
+			add_ground(scene);
+			for (int i = 0; i < 6; i++)
+			{
+				const entt::entity box = add_entity(scene, "Box" + std::to_string(i), glm::vec3(0.1f * static_cast<float>(i), 1.5f + 1.2f * static_cast<float>(i), 0.05f * static_cast<float>(i)));
+				add_body(scene, box, MotionType::Dynamic);
+				add_box_collider(scene, box, glm::vec3(0.5f)).Shape = i % 2 == 0 ? ColliderShape::Box : ColliderShape::Sphere;
+			}
+
+			// poses of the first 90 steps that have the bodies, by step
+			const auto run = [&]() -> std::vector<Ref<const PhysicsStepSnapshot>>
+			{
+				PhysicsThread thread;
+				PhysicsSync sync;
+				scene.update_world_transforms();
+				thread.start(scene.settings().Physics);
+				thread.set_paused(true); // the bodies arrive before the first step with bodies
+				sync.build(scene, thread);
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				thread.set_paused(false);
+
+				std::vector<Ref<const PhysicsStepSnapshot>> steps;
+				const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(10);
+				while (Clock::now() < giveUp && steps.size() < 90)
+				{
+					for (Ref<const PhysicsStepSnapshot>& step : thread.take_steps())
+					{
+						if (!step->Poses.empty())
+						{
+							steps.push_back(std::move(step));
+						}
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(4));
+				}
+				thread.stop();
+				return steps;
+			};
+
+			const std::vector<Ref<const PhysicsStepSnapshot>> first = run();
+			const std::vector<Ref<const PhysicsStepSnapshot>> second = run();
+			check(first.size() >= 90 && second.size() >= 90, "repeat_steps: both runs give 90 steps, got " + std::to_string(first.size()) + " and " + std::to_string(second.size()));
+			float worst = 0.0f;
+			bool same = first.size() == second.size();
+			for (size_t i = 0; same && i < std::min(first.size(), second.size()); i++)
+			{
+				const PhysicsStepSnapshot& a = *first[i];
+				const PhysicsStepSnapshot& b = *second[i];
+				same = a.Poses.size() == b.Poses.size();
+				for (const BodyPose& pose : a.Poses)
+				{
+					const BodyPose* other = find_pose(&b, pose.Key);
+					if (other == nullptr)
+					{
+						same = false;
+						break;
+					}
+					worst = std::max({ worst, glm::length(pose.Position - other->Position), glm::length(pose.LinearVelocity - other->LinearVelocity) });
+				}
+			}
+			check(same && worst <= 1e-4f, "repeat_poses: two runs with the same commands give the same poses within 1e-4, the worst difference is " + std::to_string(worst));
+		}
+
+		// Play, Stop, Play, Stop 20 times: no thread is left, no step of an older world is delivered, and an event for an entity that was
+		// destroyed since is dropped.
+		void check_world_lifetime(Check& check)
+		{
+			PhysicsModule module;
+			module.set_auto_start(false);
+			const u32 threadsBefore = PhysicsThread::live_threads();
+
+			bool stale = false;
+			bool eventsSeen = false;
+			// the same scene every round: the entities of an older world exist in the new one, so only the world check can tell its steps apart
+			Ref<Scene> scene = CreateRef<Scene>();
+			add_ground(*scene);
+			const entt::entity ball = add_entity(*scene, "Ball", glm::vec3(0.0f, 0.9f, 0.0f)); // touches the ground at once
+			add_body(*scene, ball, MotionType::Dynamic);
+			add_box_collider(*scene, ball, glm::vec3(0.5f)).Shape = ColliderShape::Sphere;
+
+			Ref<const PhysicsStepSnapshot> eventStep; // a step of the world before, with events in it
+			for (int round = 0; round < 20; round++)
+			{
+				check(module.start_world(scene), "lifetime_start: the world starts, round " + std::to_string(round));
+				module.thread().set_paused(false);
+				if (eventStep != nullptr)
+				{
+					// the new world is running: a step of the old one delivers nothing, though its entities are in this scene
+					stale = stale || !module.events_for_step(*eventStep).empty();
+				}
+
+				Ref<const PhysicsStepSnapshot> found;
+				for (int attempt = 0; attempt < 100 && found == nullptr; attempt++)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(5));
+					module.pump();
+					for (const Ref<const PhysicsStepSnapshot>& step : module.steps_this_frame())
+					{
+						stale = stale || step->World != module.thread().generation();
+						if (found == nullptr && !module.events_for_step(*step).empty())
+						{
+							found = step;
+						}
+					}
+				}
+				eventsSeen = eventsSeen || found != nullptr;
+				eventStep = found != nullptr ? found : eventStep;
+
+				module.stop_world();
+				check(!module.running() && PhysicsThread::live_threads() == threadsBefore, "lifetime_stopped: no thread is left after Stop, round " + std::to_string(round));
+			}
+			check(!stale, "lifetime_no_stale_events: no step or event of an older world is delivered");
+			check(eventsSeen, "lifetime_events_delivered: events are delivered in a world that runs");
+			check(PhysicsThread::live_threads() == threadsBefore, "lifetime_thread_count: the thread count is what it was before the 20 rounds");
+
+			// an event for an entity that was destroyed since the step is dropped
+			Ref<const PhysicsStepSnapshot> withEvents;
+			check(module.start_world(scene), "lifetime_destroyed_start: the world starts");
+			module.thread().set_paused(false);
+			for (int attempt = 0; attempt < 200 && withEvents == nullptr; attempt++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(5));
+				module.pump();
+				for (const Ref<const PhysicsStepSnapshot>& step : module.steps_this_frame())
+				{
+					if (withEvents == nullptr && !module.events_for_step(*step).empty())
+					{
+						withEvents = step;
+					}
+				}
+			}
+			check(withEvents != nullptr, "lifetime_destroyed_events: a ball on the ground makes events");
+			if (withEvents != nullptr)
+			{
+				scene->destroy(ball);
+				check(module.events_for_step(*withEvents).empty(), "lifetime_destroyed_entity: the events of a destroyed entity are dropped");
+			}
+			module.stop_world();
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1185,6 +1386,9 @@ namespace wiwa
 		check_step_queries(check);
 		check_query_api(check);
 		check_body_control(check);
+		check_debug_draw(check);
+		check_repeatable(check);
+		check_world_lifetime(check);
 
 		if (check.Failures == 0)
 		{

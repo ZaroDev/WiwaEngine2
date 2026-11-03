@@ -271,6 +271,7 @@ namespace wiwa
 						snapshot->StepMs = stepMs;
 						world->take_events(*snapshot);
 						world->write_query(*snapshot);
+						world->write_debug(*snapshot);
 						publish(std::move(snapshot));
 					}
 

@@ -188,6 +188,10 @@ void EditorModule::update(float deltaTime)
 
 	if (m_PhysicsPanelSmoke && m_PhysicsPanel != nullptr)
 	{
+		if (m_Frame == 10)
+		{
+			m_PhysicsPanel->request_focus();
+		}
 		if (m_Frame == 40)
 		{
 			// a click in the matrix: layers 0 and 1 stop colliding (a layer is named first so that the matrix shows it)
@@ -202,7 +206,7 @@ void EditorModule::update(float deltaTime)
 			wiwa::PhysicsModule* physics = wiwa::Engine::get().get_module<wiwa::PhysicsModule>();
 			const bool passed = m_PhysicsPanel->frames_drawn() >= 100 && read && saved.Names[1] == "Smoke" && !saved.collides(0, 1) && saved.collides(0, 0) && saved.collides(1, 1) &&
 				physics != nullptr && !physics->layers().collides(0, 1) && m_PhysicsPanel->last_error().empty();
-			WI_INFO("Editor", "Physics panel smoke test {0}", passed ? "passed" : "FAILED: the panel did not draw, or the edited matrix was not saved and applied");
+			WI_INFO("Editor", "Physics panel smoke test {0} (frames {1}, read {2}, layer 1 \"{3}\", 0-1 collide {4}, error \"{5}\")", passed ? "passed" : "FAILED", m_PhysicsPanel->frames_drawn(), read, saved.Names[1], saved.collides(0, 1), m_PhysicsPanel->last_error());
 			std::error_code removed;
 			std::filesystem::remove(m_PhysicsPanelFile, removed);
 			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);

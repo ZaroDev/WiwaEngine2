@@ -1,10 +1,11 @@
 #include <pch.h>
 #include "physics_module.h"
-
 #include <algorithm>
 
 #include <core/engine.h>
 #include <assets/asset_manager.h>
+#include <renderer/debug/debug_draw.h>
+#include <renderer/render_module.h>
 #include <scene/scene_module.h>
 
 #include "physics_project_settings.h"
@@ -104,6 +105,10 @@ namespace wiwa
 		m_Thread.set_paused(!Engine::get().get_time().get_game_clock().IsPlaying); // the world follows the game clock from its first step
 		m_Sync.build(*scene, m_Thread);
 		m_Thread.push(SetLayers{ m_Layers }, m_Sync.generation());
+		if (m_DebugDraw)
+		{
+			m_Thread.push(SetDebugDraw{ true }, m_Sync.generation());
+		}
 		m_Scene = scene;
 		m_HasScene = true;
 		m_SettingsRevision = scene->settings_revision();
@@ -260,6 +265,8 @@ namespace wiwa
 			m_Sync.apply_poses(*scene, previous, *m_Latest, alpha);
 			scene->update_world_transforms();
 		}
+
+		submit_debug_draw_locked();
 	}
 
 	void PhysicsModule::submit(PhysicsCommand&& command)
@@ -307,5 +314,43 @@ namespace wiwa
 	{
 		const std::optional<BodyPose> pose = newest_pose(key);
 		return pose ? std::optional<glm::vec3>(pose->AngularVelocity) : std::nullopt;
+	}
+
+	void PhysicsModule::set_debug_draw(bool enabled)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		m_DebugDraw = enabled;
+		if (m_Thread.is_running())
+		{
+			m_Thread.push(SetDebugDraw{ enabled }, m_Sync.generation());
+		}
+	}
+
+	// The newest step's colliders go to the engine's debug renderer, for this frame.
+	void PhysicsModule::submit_debug_draw_locked()
+	{
+		if (!m_DebugDraw || m_Latest == nullptr || m_Latest->Debug == nullptr || m_Latest->World != m_Sync.generation())
+		{
+			return;
+		}
+		RenderModule* renderer = Engine::get().get_module<RenderModule>();
+		if (renderer == nullptr)
+		{
+			return;
+		}
+
+		DebugDraw& debug = renderer->get_debug_draw();
+		const auto color = [](u32 packed)
+		{
+			return glm::vec4(static_cast<float>(packed & 255u), static_cast<float>((packed >> 8) & 255u), static_cast<float>((packed >> 16) & 255u), static_cast<float>(packed >> 24)) / 255.0f;
+		};
+		for (const PhysicsDebugLine& line : m_Latest->Debug->Lines)
+		{
+			debug.line(line.A, line.B, color(line.Color), DebugDepth::Tested, 1.0f, 0.0f);
+		}
+		for (const PhysicsDebugTriangle& triangle : m_Latest->Debug->Triangles)
+		{
+			debug.triangle(triangle.A, triangle.B, triangle.C, color(triangle.Color), DebugDepth::Tested, 0.0f);
+		}
 	}
 }
