@@ -209,7 +209,7 @@ void EditorModule::pre_update(float deltaTime)
 void EditorModule::update(float deltaTime)
 {
 	m_Frame++;
-	if (!m_SceneEditor->playing())
+	if (!m_SceneEditor->playing() && !wiwa::Engine::get().get_module<wiwa::InputModule>()->backend_injected())
 	{
 		wiwa::Engine::get().get_module<wiwa::InputModule>()->set_capture(false); // the Viewport turns it on while it draws, in play mode
 	}

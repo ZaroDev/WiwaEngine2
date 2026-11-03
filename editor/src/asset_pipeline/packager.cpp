@@ -139,7 +139,18 @@ namespace wiwa
 			}
 
 			std::vector<AssetGuid> missing;
-			const std::unordered_set<AssetGuid> selected = select_pack_set(candidates, *settings, missing);
+			// No scene refers to the project's default input map, so it is packed because the project chose it.
+			BuildSettings effective = *settings;
+			{
+				InputProjectSettings inputSettings;
+				std::string inputError;
+				if (load_input_settings(inputSettingsFile, inputSettings, inputError) && inputSettings.DefaultMap.valid() &&
+					std::find(effective.AlwaysInclude.begin(), effective.AlwaysInclude.end(), inputSettings.DefaultMap.Guid) == effective.AlwaysInclude.end())
+				{
+					effective.AlwaysInclude.push_back(inputSettings.DefaultMap.Guid);
+				}
+			}
+			const std::unordered_set<AssetGuid> selected = select_pack_set(candidates, effective, missing);
 			if (!missing.empty())
 			{
 				for (AssetGuid guid : missing)

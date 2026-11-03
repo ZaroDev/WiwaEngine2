@@ -4,6 +4,7 @@
 #include <string>
 
 #include <core/common.h>
+#include <input/scripted_input_backend.h>
 #include <scene/scene.h>
 #include <scene/scene_editor.h>
 
@@ -31,6 +32,7 @@ namespace wiwa
 			Play,
 			Run,
 			Ui,
+			Input,
 			HotCreate,
 			HotFirst,
 			HotSecond,
@@ -49,6 +51,22 @@ namespace wiwa
 		};
 		UiResult run_ui_step(std::string& failure);
 		void restore_ui();
+
+		// The Input phase: the input demo of the scene (a ball that moves, jumps and rebinds Jump) driven by a scripted input backend.
+		enum class InputStep
+		{
+			Setup,
+			WaitReady,
+			Move,
+			Jump,
+			RebindClick,
+			Heard,
+			OldKey,
+			NewKey,
+			Saved,
+		};
+		UiResult run_input_step(std::string& failure);
+		void restore_input();
 
 		SceneEditor& m_Editor;
 		PlayMode& m_Play;
@@ -88,5 +106,13 @@ namespace wiwa
 		glm::vec2 m_SliderPoint{ 0.0f }; // where the middle of the slider's track is
 		float m_BeaconX = 0.0f;
 		float m_LightLevel = 0.0f;
+
+		// the Input phase
+		InputStep m_InputStep = InputStep::Setup;
+		u32 m_InputStepFrames = 0;
+		bool m_InputTouched = false; // the input module reads our backend and the bindings were reset: both are put back
+		ScriptedInputBackend m_InputBackend{};
+		glm::vec3 m_InputStart{ 0.0f };
+		glm::vec2 m_RebindCenter{ 0.0f };
 	};
 }

@@ -245,6 +245,7 @@ namespace wiwa
 						}
 					});
 			});
+		input.set_function("listening", [&context]() { return input_of(context).actions().listening(); });
 		input.set_function("cancel_listen", [&context]()
 			{
 				input_of(context).actions().cancel_listen();

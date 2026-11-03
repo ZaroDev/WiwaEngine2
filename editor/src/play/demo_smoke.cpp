@@ -6,6 +6,7 @@
 
 #include <assets/asset_manager.h>
 #include <core/engine.h>
+#include <input/input_module.h>
 #include <scene/reflection/component_registry.h>
 #include <scripting/script_module.h>
 #include <scripting/script_names.h>
@@ -55,6 +56,7 @@ namespace wiwa
 
 	DemoSmoke::~DemoSmoke()
 	{
+		restore_input(); // also when the run ended early
 		remove_hot_script(); // also when the run ended early
 	}
 
@@ -213,6 +215,37 @@ namespace wiwa
 				return true;
 			case UiResult::Passed:
 				restore_ui();
+				m_Phase = Phase::Input;
+				m_PhaseFrames = 0;
+				return false;
+			}
+			return false;
+		}
+
+		case Phase::Input:
+		{
+			if (m_Play.play_scene() == nullptr)
+			{
+				failure = "play stopped by itself";
+				restore_input();
+				return true;
+			}
+			if (!wait(3000, "the input checks", failure))
+			{
+				restore_input();
+				return true;
+			}
+
+			switch (run_input_step(failure))
+			{
+			case UiResult::Running:
+				return false;
+			case UiResult::Failed:
+				restore_input();
+				m_Phase = Phase::Done;
+				return true;
+			case UiResult::Passed:
+				restore_input();
 				m_Phase = Phase::HotCreate;
 				m_PhaseFrames = 0;
 				return false;
@@ -322,6 +355,9 @@ namespace wiwa
 		const glm::vec4 BUTTON_COLOR{ 0.2f, 0.35f, 0.6f, 1.0f };      // ToggleLight, while the pointer is not on it
 		const glm::vec4 SLIDER_FILL_COLOR{ 0.95f, 0.6f, 0.1f, 1.0f }; // LightIntensity
 		const glm::vec4 BEACON_TRACK_COLOR{ 0.9f, 0.2f, 0.9f, 0.8f };  // BeaconBar, which follows the Beacon entity
+
+		const glm::vec4 REBIND_COLOR{ 0.55f, 0.2f, 0.5f, 1.0f };       // RebindJump, while the pointer is not on it
+		const char* const INPUT_OVERRIDES_FILE = "input_overrides.json";
 
 		const glm::vec2 HUD_CANVAS{ 1920.0f, 1080.0f };
 	}
@@ -512,6 +548,230 @@ namespace wiwa
 
 		case UiStep::Finish:
 			return UiResult::Passed;
+		}
+		return UiResult::Passed;
+	}
+
+	void DemoSmoke::restore_input()
+	{
+		restore_ui();
+		if (!m_InputTouched)
+		{
+			return;
+		}
+		m_InputTouched = false;
+		if (InputModule* input = Engine::get().get_module<InputModule>())
+		{
+			input->set_backend(nullptr);
+			input->actions().cancel_listen();
+			input->actions().reset_all();
+		}
+		std::error_code error;
+		std::filesystem::remove(INPUT_OVERRIDES_FILE, error); // the rebind of the check was saved: it must not stay
+	}
+
+	// The input demo: the "Input demo" ball moves with D and jumps with Space (keys made up by a scripted backend), "Rebind Jump" listens for the
+	// next key (a click through the scripted UI input) and the key it hears becomes the Jump binding, in the actions and on the HUD, and is saved.
+	DemoSmoke::UiResult DemoSmoke::run_input_step(std::string& failure)
+	{
+		InputModule* input = Engine::get().get_module<InputModule>();
+		UiModule* ui = Engine::get().get_module<UiModule>();
+		Scene& play = *m_Play.play_scene();
+		const entt::entity ball = find_named(play, "Input demo");
+		const entt::entity hud = find_named(play, "Hud");
+		if (input == nullptr || ui == nullptr || ball == entt::null || hud == entt::null)
+		{
+			failure = "the demo scene has no input demo (an entity Input demo with input_demo.lua, and the Hud)";
+			return UiResult::Failed;
+		}
+		const EntityGuid hudGuid = play.registry().get<Id>(hud).Guid;
+		const auto position = [&]() { return play.registry().get<Transform>(ball).Position; };
+		const auto jump_state = [&]() { return input->actions().state("Gameplay", "Jump"); };
+		m_InputStepFrames++;
+
+		switch (m_InputStep)
+		{
+		case InputStep::Setup:
+		{
+			// a backend of our own (the editor leaves the capture to it), the UI fed by scripted input, and the default bindings
+			input->set_backend(&m_InputBackend);
+			input->set_capture(true);
+			input->actions().reset_all();
+			std::error_code error;
+			std::filesystem::remove(INPUT_OVERRIDES_FILE, error);
+			m_InputTouched = true;
+
+			m_UiPreviousInput = ui->input_source();
+			ui->set_canvas_override(HUD_CANVAS);
+			ui->set_input_source(&ui->scripted_input());
+			ui->scripted_input().clear_pointer();
+			m_UiTouched = true;
+			m_InputStep = InputStep::WaitReady;
+			m_InputStepFrames = 0;
+			return UiResult::Running;
+		}
+
+		case InputStep::WaitReady:
+		{
+			UiPanelInstance* instance = ui->instance_for(play, hudGuid);
+			UiDrawList list;
+			if (instance != nullptr && instance->ready())
+			{
+				play.update_world_transforms();
+				ui->build_draw_list(play, HUD_CANVAS, list);
+			}
+			const std::optional<UiRect> button = find_quad(list, REBIND_COLOR);
+			const std::optional<UiId> jumpText = instance != nullptr ? instance->find("InputInfo/JumpKey") : std::nullopt;
+			const bool shown = jumpText && instance->data().find(*jumpText)->Text == "Jump: Key.Space, Pad.A";
+
+			if (!button || !shown || !input->actions().map_active("Gameplay") || position().y > 0.6f)
+			{
+				if (m_InputStepFrames > 1500)
+				{
+					failure = std::string("the input demo did not start: ") + (instance == nullptr || !instance->ready() ? "the HUD is not loaded" : !button ? "no Rebind Jump button" :
+						!input->actions().map_active("Gameplay") ? "the Gameplay map was not pushed (is input.wsettings pointing at assets/input/demo.winput, and did input_demo.lua start?)" :
+						!shown ? "the HUD does not show the Jump bindings" : "the ball is not on the ground");
+					return UiResult::Failed;
+				}
+				return UiResult::Running;
+			}
+
+			m_RebindCenter = (button->Min + button->Max) * 0.5f;
+			m_InputStart = position();
+			m_InputBackend.key(Key::D, true);
+			m_InputStep = InputStep::Move;
+			m_InputStepFrames = 0;
+			return UiResult::Running;
+		}
+
+		case InputStep::Move:
+		{
+			if (position().x > m_InputStart.x + 0.5f)
+			{
+				m_InputBackend.key(Key::D, false);
+				m_InputBackend.key(Key::Space, true);
+				m_InputStep = InputStep::Jump;
+				m_InputStepFrames = 0;
+			}
+			else if (m_InputStepFrames > 1500)
+			{
+				failure = "holding D did not move the Input demo ball to the right (x " + std::to_string(position().x) + ", started at " + std::to_string(m_InputStart.x) + ")";
+				return UiResult::Failed;
+			}
+			return UiResult::Running;
+		}
+
+		case InputStep::Jump:
+		{
+			if (m_InputStepFrames == 1)
+			{
+				m_InputBackend.key(Key::Space, false);
+			}
+			if (position().y > m_InputStart.y + 0.3f)
+			{
+				// click Rebind Jump through the UI
+				ui->scripted_input().move_to(m_RebindCenter);
+				ui->scripted_input().press(0);
+				ui->scripted_input().release(0);
+				m_InputStep = InputStep::RebindClick;
+				m_InputStepFrames = 0;
+			}
+			else if (m_InputStepFrames > 1500)
+			{
+				failure = "pressing Space did not make the Input demo ball jump (y " + std::to_string(position().y) + ", started at " + std::to_string(m_InputStart.y) + ")";
+				return UiResult::Failed;
+			}
+			return UiResult::Running;
+		}
+
+		case InputStep::RebindClick:
+		{
+			if (input->actions().listening())
+			{
+				m_InputBackend.key(Key::E, true);
+				m_InputStep = InputStep::Heard;
+				m_InputStepFrames = 0;
+			}
+			else if (m_InputStepFrames > 600)
+			{
+				failure = "clicking Rebind Jump did not start listening for a key";
+				return UiResult::Failed;
+			}
+			return UiResult::Running;
+		}
+
+		case InputStep::Heard:
+		{
+			if (m_InputStepFrames == 1)
+			{
+				m_InputBackend.key(Key::E, false);
+			}
+			const wiwa::Action* jump = input->actions().action("Gameplay", "Jump");
+			if (jump != nullptr && !jump->Bindings.empty() && jump->Bindings[0].Parts[0] == control(Key::E))
+			{
+				m_InputBackend.key(Key::Space, true);
+				m_InputStep = InputStep::OldKey;
+				m_InputStepFrames = 0;
+			}
+			else if (m_InputStepFrames > 600)
+			{
+				failure = "pressing E after Rebind Jump did not bind Jump to E";
+				return UiResult::Failed;
+			}
+			return UiResult::Running;
+		}
+
+		case InputStep::OldKey:
+		{
+			// one frame later the old key is read: it must not trigger Jump any more
+			if (m_InputStepFrames == 3)
+			{
+				if (jump_state().Down)
+				{
+					failure = "Jump still fires on Space after it was rebound to E";
+					return UiResult::Failed;
+				}
+				m_InputBackend.key(Key::Space, false);
+				m_InputBackend.key(Key::E, true);
+				m_InputStep = InputStep::NewKey;
+				m_InputStepFrames = 0;
+			}
+			return UiResult::Running;
+		}
+
+		case InputStep::NewKey:
+		{
+			if (m_InputStepFrames == 3)
+			{
+				if (!jump_state().Down)
+				{
+					failure = "Jump does not fire on E after it was rebound to it";
+					return UiResult::Failed;
+				}
+				m_InputBackend.key(Key::E, false);
+				m_InputStep = InputStep::Saved;
+				m_InputStepFrames = 0;
+			}
+			return UiResult::Running;
+		}
+
+		case InputStep::Saved:
+		{
+			UiPanelInstance* instance = ui->instance_for(play, hudGuid);
+			const std::optional<UiId> jumpText = instance != nullptr ? instance->find("InputInfo/JumpKey") : std::nullopt;
+			const bool shown = jumpText && instance->data().find(*jumpText)->Text == "Jump: Key.E, Pad.A";
+			std::error_code error;
+			if (shown && std::filesystem::exists(INPUT_OVERRIDES_FILE, error))
+			{
+				return UiResult::Passed;
+			}
+			if (m_InputStepFrames > 600)
+			{
+				failure = shown ? "the rebind was not saved to input_overrides.json" : "the HUD does not show Key.E as a Jump binding";
+				return UiResult::Failed;
+			}
+			return UiResult::Running;
+		}
 		}
 		return UiResult::Passed;
 	}

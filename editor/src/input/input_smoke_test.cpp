@@ -982,6 +982,24 @@ namespace wiwa
 				std::span<const std::byte> payload;
 				const std::optional<InputMapData> fromPack = packed && parse_wasset_header(*packed, payload) ? deserialize<InputMapData>(payload) : std::nullopt;
 				check(fromPack && same_map_data(*fromPack, sample), "import_input_map_pack: the packed map decodes to the source");
+
+				// a build that packs only what its scenes use still carries the project's default input map (no scene refers to it)
+				{
+					const std::filesystem::path settingsFile = packDirectory / "input.wsettings";
+					std::filesystem::create_directories(packDirectory, error);
+					InputProjectSettings projectSettings;
+					projectSettings.DefaultMap = *ref;
+					std::string settingsError;
+					check(save_input_settings(settingsFile, projectSettings, settingsError), "import_input_map_default_packed: the settings are saved");
+
+					const BuildSettings noScenes{};
+					const std::filesystem::path selectivePack = packDirectory / "selective";
+					check(Packager::pack(database, selectivePack, nullptr, &noScenes, packDirectory / "none_physics.wsettings", settingsFile), "import_input_map_default_packed: packing a build with no scenes");
+					PakSource selective(selectivePack / "assets.wpak");
+					check(selective.valid() && selective.contains(ref->Guid), "import_input_map_default_packed: the default input map is in the pack");
+					const std::optional<InputProjectSettings> packedSettings = selective.valid() ? read_input_settings(selective) : std::nullopt;
+					check(packedSettings && packedSettings->DefaultMap == *ref, "import_input_map_default_packed: and the pack says it is the default");
+				}
 				std::filesystem::remove_all(packDirectory, error);
 			}
 
@@ -1158,6 +1176,7 @@ namespace wiwa
 				LuaInputHarness h;
 				h.run("count = 0; last = ''; input.listen(function(c) count = count + 1; last = c end)");
 				check(h.Module.actions().listening(), "lua_listen: listening after the call");
+				check(h.run("return input.listening()") == "true", "lua_listen: input.listening() is true while it waits");
 				h.frame();
 				check(h.run("return count") == "0", "lua_listen: nothing without input");
 				h.Backend.key(Key::E, true);
@@ -1170,6 +1189,7 @@ namespace wiwa
 				h.Backend.key(Key::Escape, true);
 				h.frame();
 				check(h.run("return count") == "0" && !h.Module.actions().listening(), "lua_listen: Escape cancels without a call");
+				check(h.run("return input.listening()") == "false", "lua_listen: input.listening() is false after Escape");
 				h.run("input.listen(function(c) count = count + 1 end); input.cancel_listen()");
 				check(!h.Module.actions().listening(), "lua_listen: cancel_listen");
 			}

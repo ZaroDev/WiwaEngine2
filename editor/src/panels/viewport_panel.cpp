@@ -83,7 +83,7 @@ void ViewportPanel::apply_manipulation(entt::entity entity, const glm::mat4& wor
 void ViewportPanel::update_game_input(const glm::vec2& imageMin, float scale, bool hovered)
 {
 	wiwa::InputModule* input = wiwa::Engine::get().get_module<wiwa::InputModule>();
-	if (input == nullptr)
+	if (input == nullptr || input->backend_injected()) // an injected backend (a smoke test) decides the capture itself
 	{
 		return;
 	}

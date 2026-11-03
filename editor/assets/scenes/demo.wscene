@@ -2369,6 +2369,18 @@
                                             "RigidBody":  { "Motion": "Dynamic" }
                                         },
                          "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id":  "a4c19e5b7d2f4086b13c5e9d7a082f61",
+                         "components":  {
+                                            "Name":  { "Value":  "Input demo" },
+                                            "Transform":  { "Position":  [ 4, 0.4, 6 ], "Rotation":  [ 0, 0, 0, 1 ], "Scale":  [ 0.8, 0.8, 0.8 ] },
+                                            "MeshRenderer":  { "Mesh": { "guid": "bc5be7b0a418adf9828a98ca0a27d3dd", "localId": 2 }, "Materials": [ { "guid": "4ae7e8927e833b7511667468a3f23eb3", "localId": 0 } ] },
+                                            "Collider":  { "Shape": "Sphere", "Size": [ 0.5, 0.5, 0.5 ], "Offset": [ 0, 0, 0 ] },
+                                            "RigidBody":  { "Motion": "Dynamic", "MassOverride": 1 },
+                                            "script:69dc8dd9bfff73c4dd80c95aca60bba5":  { "speed": 4, "jump_speed": 6 }
+                                        },
+                         "parent":  "552c39691eb7de2f4475a53ceed20380"
                      }
                  ],
     "settings":  {

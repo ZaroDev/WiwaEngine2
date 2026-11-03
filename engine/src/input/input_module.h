@@ -37,6 +37,8 @@ namespace wiwa
 		// Replaces the source of raw input (not owned; it must outlive its use). Null goes back to the GLFW backend, if there is one.
 		void set_backend(IInputBackend* backend);
 		IInputBackend* backend() const { return m_External ? m_External : m_Glfw.get(); }
+		// True while a backend was injected with set_backend (tests and tools drive the input then): the editor leaves the capture to them.
+		bool backend_injected() const { return m_External != nullptr; }
 
 		void set_cursor_mode(CursorMode mode);
 		CursorMode cursor_mode() const { return m_CursorMode; }

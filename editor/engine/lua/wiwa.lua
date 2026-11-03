@@ -445,6 +445,9 @@ function input.reset_all() end
 --- Calls back with the next control the player presses (a button, or a stick or trigger past half). Escape cancels without a call.
 ---@param callback fun(control: InputControl)
 function input.listen(callback) end
+--- Whether a listen is waiting (it ends when a control was heard, on Escape, or after cancel_listen).
+---@return boolean
+function input.listening() end
 function input.cancel_listen() end
 --- Writes the rebinds so that they are there the next time the game starts.
 ---@return boolean

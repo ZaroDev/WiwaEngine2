@@ -1195,7 +1195,7 @@ namespace wiwa
 			BuildSettings settings;
 			settings.Scenes = { sceneAsset->Guid };
 			settings.DefaultScene = sceneAsset->Guid;
-			check(Packager::pack(database, temp / "out", nullptr, &settings), "pak: packing the build");
+			check(Packager::pack(database, temp / "out", nullptr, &settings, temp / "none_physics.wsettings", temp / "none_input.wsettings"), "pak: packing the build");
 
 			// the sources are gone: only the pack is left
 			std::filesystem::remove_all(temp / "assets", error);
