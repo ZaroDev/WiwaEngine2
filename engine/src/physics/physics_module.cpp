@@ -204,4 +204,51 @@ namespace wiwa
 			scene->update_world_transforms();
 		}
 	}
+
+	void PhysicsModule::submit(PhysicsCommand&& command)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		if (m_Thread.is_running())
+		{
+			m_Thread.push(std::move(command), m_Sync.generation());
+		}
+	}
+
+	void PhysicsModule::add_force(BodyKey key, glm::vec3 force) { submit(AddForce{ key, force }); }
+	void PhysicsModule::add_impulse(BodyKey key, glm::vec3 impulse) { submit(AddImpulse{ key, impulse }); }
+	void PhysicsModule::add_torque(BodyKey key, glm::vec3 torque) { submit(AddTorque{ key, torque }); }
+	void PhysicsModule::set_velocity(BodyKey key, glm::vec3 velocity) { submit(SetVelocity{ key, velocity }); }
+	void PhysicsModule::set_angular_velocity(BodyKey key, glm::vec3 angular) { submit(SetAngularVelocity{ key, angular }); }
+	void PhysicsModule::wake(BodyKey key) { submit(WakeBody{ key }); }
+	void PhysicsModule::set_gravity(glm::vec3 gravity) { submit(SetGravity{ gravity }); }
+	void PhysicsModule::set_kinematic_target(BodyKey key, glm::vec3 position, glm::quat rotation) { submit(SetKinematicTarget{ key, position, rotation }); }
+
+	std::optional<BodyPose> PhysicsModule::newest_pose(BodyKey key) const
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		if (m_Latest == nullptr || m_Latest->World != m_Sync.generation())
+		{
+			return std::nullopt;
+		}
+		for (const BodyPose& pose : m_Latest->Poses)
+		{
+			if (pose.Key == key)
+			{
+				return pose;
+			}
+		}
+		return std::nullopt;
+	}
+
+	std::optional<glm::vec3> PhysicsModule::velocity(BodyKey key) const
+	{
+		const std::optional<BodyPose> pose = newest_pose(key);
+		return pose ? std::optional<glm::vec3>(pose->LinearVelocity) : std::nullopt;
+	}
+
+	std::optional<glm::vec3> PhysicsModule::angular_velocity(BodyKey key) const
+	{
+		const std::optional<BodyPose> pose = newest_pose(key);
+		return pose ? std::optional<glm::vec3>(pose->AngularVelocity) : std::nullopt;
+	}
 }

@@ -159,6 +159,19 @@ namespace wiwa
 					{
 						set_layer(c.Key, c.Layer);
 					}
+					else if constexpr (std::is_same_v<T, AddForce> || std::is_same_v<T, AddTorque> || std::is_same_v<T, AddImpulse> || std::is_same_v<T, SetVelocity> || std::is_same_v<T, SetAngularVelocity>)
+					{
+						control(c);
+					}
+					else if constexpr (std::is_same_v<T, WakeBody>)
+					{
+						wake(c.Key);
+					}
+					else if constexpr (std::is_same_v<T, SetGravity>)
+					{
+						m_Settings.Gravity = finite(c.Gravity) ? c.Gravity : m_Settings.Gravity;
+						m_System.SetGravity(JPH::Vec3(m_Settings.Gravity.x, m_Settings.Gravity.y, m_Settings.Gravity.z));
+					}
 					else if constexpr (std::is_same_v<T, SetLayers>)
 					{
 						set_layers(c.Layers);
@@ -499,6 +512,51 @@ namespace wiwa
 					entry.Motion = motion;
 				}
 				bodies.SetObjectLayer(entry.Id, to_object_layer(entry.Layer, category(entry, placeholder)));
+			}
+
+			// The body of a control command: only a dynamic body that moves by itself takes forces, impulses and velocities. A vector that
+			// is not finite is refused.
+			template<typename Command>
+			void control(const Command& command)
+			{
+				const auto it = m_Bodies.find(command.Key);
+				if (it == m_Bodies.end() || it->second.Motion != MotionType::Dynamic)
+				{
+					return;
+				}
+				const JPH::BodyID id = it->second.Id;
+				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
+				using T = std::decay_t<Command>;
+				const auto vec = [](glm::vec3 v) { return JPH::Vec3(v.x, v.y, v.z); };
+				if constexpr (std::is_same_v<T, AddForce>)
+				{
+					if (finite(command.Force)) { bodies.AddForce(id, vec(command.Force)); }
+				}
+				else if constexpr (std::is_same_v<T, AddTorque>)
+				{
+					if (finite(command.Torque)) { bodies.AddTorque(id, vec(command.Torque)); }
+				}
+				else if constexpr (std::is_same_v<T, AddImpulse>)
+				{
+					if (finite(command.Impulse)) { bodies.AddImpulse(id, vec(command.Impulse)); }
+				}
+				else if constexpr (std::is_same_v<T, SetVelocity>)
+				{
+					if (finite(command.Linear)) { bodies.SetLinearVelocity(id, vec(command.Linear)); }
+				}
+				else if constexpr (std::is_same_v<T, SetAngularVelocity>)
+				{
+					if (finite(command.Angular)) { bodies.SetAngularVelocity(id, vec(command.Angular)); }
+				}
+			}
+
+			void wake(BodyKey key)
+			{
+				const auto it = m_Bodies.find(key);
+				if (it != m_Bodies.end() && it->second.Motion != MotionType::Static)
+				{
+					m_System.GetBodyInterfaceNoLock().ActivateBody(it->second.Id);
+				}
 			}
 
 			void set_layer(BodyKey key, i32 layer)

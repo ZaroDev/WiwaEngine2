@@ -1053,6 +1053,118 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// Check 9: body control. Every command sent while the world is paused shows in the first snapshot after the pause, and not in the
+		// one before. A ball of 1000 kg/m3 and radius 0.5 weighs about 523.6 kg, so an impulse of that many newton seconds is 1 m/s.
+		void check_body_control(Check& check)
+		{
+			Scene scene;
+			SceneSettings settings = scene.settings();
+			settings.Physics.Gravity = glm::vec3(0.0f);
+			scene.set_settings(settings);
+			const entt::entity ball = add_entity(scene, "Ball", glm::vec3(0.0f, 10.0f, 0.0f));
+			add_body(scene, ball, MotionType::Dynamic);
+			add_box_collider(scene, ball, glm::vec3(0.5f)).Shape = ColliderShape::Sphere;
+			const BodyKey key = key_of(scene, ball);
+			constexpr float kMass = 523.5988f;
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "control_start: the world starts");
+			const u64 generation = thread.generation();
+
+			const auto wait_for_step_after = [&](u64 index) -> Ref<const PhysicsStepSnapshot>
+			{
+				const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(5);
+				while (Clock::now() < giveUp)
+				{
+					const Ref<const PhysicsStepSnapshot> latest = thread.latest();
+					if (latest != nullptr && latest->StepIndex > index)
+					{
+						return latest;
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+				return nullptr;
+			};
+			// pauses, sends the commands, resumes: returns the last snapshot before the commands and the first one after
+			const auto send = [&](std::vector<PhysicsCommand> commands) -> std::pair<Ref<const PhysicsStepSnapshot>, Ref<const PhysicsStepSnapshot>>
+			{
+				thread.set_paused(true);
+				std::this_thread::sleep_for(std::chrono::milliseconds(60)); // a step that was running finishes
+				const Ref<const PhysicsStepSnapshot> before = thread.latest();
+				for (PhysicsCommand& command : commands)
+				{
+					thread.push(std::move(command), generation);
+				}
+				thread.set_paused(false);
+				return { before, wait_for_step_after(before ? before->StepIndex : 0) };
+			};
+
+			wait_for_step_after(3); // the body exists in the snapshots
+
+			// AddImpulse: once
+			auto [beforeImpulse, afterImpulse] = send({ AddImpulse{ key, glm::vec3(kMass, 0.0f, 0.0f) } });
+			const BodyPose* v0 = find_pose(beforeImpulse.get(), key);
+			const BodyPose* v1 = find_pose(afterImpulse.get(), key);
+			check(v0 && v1 && std::abs(v0->LinearVelocity.x) < 1e-4f && std::abs(v1->LinearVelocity.x - 1.0f) < 0.01f,
+				"control_impulse: AddImpulse shows in the next step (0 -> 1 m/s), not before");
+			const Ref<const PhysicsStepSnapshot> later = wait_for_step_after(afterImpulse ? afterImpulse->StepIndex + 2 : 0);
+			const BodyPose* v2 = find_pose(later.get(), key);
+			check(v2 && std::abs(v2->LinearVelocity.x - 1.0f) < 0.02f, "control_impulse_once: the impulse is not applied again");
+
+			// SetVelocity
+			auto [beforeSet, afterSet] = send({ SetVelocity{ key, glm::vec3(0.0f, 3.0f, 0.0f) } });
+			const BodyPose* s1 = find_pose(afterSet.get(), key);
+			check(s1 && std::abs(s1->LinearVelocity.y - 3.0f) < 0.01f && std::abs(s1->LinearVelocity.x) < 0.01f, "control_set_velocity: SetVelocity replaces the velocity");
+
+			// AddForce: one step only. Zero the velocity first, then a force that makes 1 m/s in one step (F = m / dt)
+			send({ SetVelocity{ key, glm::vec3(0.0f) } });
+			auto [beforeForce, afterForce] = send({ AddForce{ key, glm::vec3(0.0f, 0.0f, kMass * 60.0f) } });
+			const BodyPose* f1 = find_pose(afterForce.get(), key);
+			const Ref<const PhysicsStepSnapshot> afterForce2 = wait_for_step_after(afterForce ? afterForce->StepIndex + 3 : 0);
+			const BodyPose* f2 = find_pose(afterForce2.get(), key);
+			check(f1 && std::abs(f1->LinearVelocity.z - 1.0f) < 0.05f, "control_force: AddForce changes the velocity in the next step, got " + std::to_string(f1 ? f1->LinearVelocity.z : -1.0f));
+			check(f2 && std::abs(f2->LinearVelocity.z - 1.0f) < 0.05f, "control_force_one_step: the force acts during one step only, got " + std::to_string(f2 ? f2->LinearVelocity.z : -1.0f));
+
+			// SetAngularVelocity and AddTorque
+			auto [beforeSpin, afterSpin] = send({ SetAngularVelocity{ key, glm::vec3(0.0f, 2.0f, 0.0f) } });
+			const BodyPose* a1 = find_pose(afterSpin.get(), key);
+			check(a1 && std::abs(a1->AngularVelocity.y - 2.0f) < 0.05f, "control_set_angular: SetAngularVelocity replaces the angular velocity");
+			send({ SetAngularVelocity{ key, glm::vec3(0.0f) } });
+			auto [beforeTorque, afterTorque] = send({ AddTorque{ key, glm::vec3(100.0f, 0.0f, 0.0f) } });
+			const BodyPose* t1 = find_pose(afterTorque.get(), key);
+			check(t1 && t1->AngularVelocity.x > 0.01f, "control_torque: AddTorque turns the body");
+
+			// SetGravity and WakeBody: the ball is at rest and goes to sleep; a gravity does not wake it, WakeBody does
+			send({ SetVelocity{ key, glm::vec3(0.0f) }, SetAngularVelocity{ key, glm::vec3(0.0f) } });
+			Ref<const PhysicsStepSnapshot> resting = thread.latest();
+			const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(5);
+			while (Clock::now() < giveUp)
+			{
+				resting = thread.latest();
+				const BodyPose* pose = find_pose(resting.get(), key);
+				if (pose != nullptr && !pose->Active)
+				{
+					break;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(20));
+			}
+			check(find_pose(resting.get(), key) && !find_pose(resting.get(), key)->Active, "control_sleeps: a ball at rest goes to sleep");
+			auto [beforeWake, afterWake] = send({ SetGravity{ glm::vec3(0.0f, -10.0f, 0.0f) }, WakeBody{ key } });
+			const Ref<const PhysicsStepSnapshot> falling = wait_for_step_after(afterWake ? afterWake->StepIndex + 5 : 0);
+			const BodyPose* w1 = find_pose(falling.get(), key);
+			check(w1 && w1->Active && w1->LinearVelocity.y < -0.1f, "control_gravity_wake: SetGravity and WakeBody make the ball fall, vy = " + std::to_string(w1 ? w1->LinearVelocity.y : 0.0f));
+
+			// commands for a body that is gone are ignored
+			const BodyKey gone = EntityGuid::generate();
+			auto [beforeGone, afterGone] = send({ AddForce{ gone, glm::vec3(1.0f) }, AddImpulse{ gone, glm::vec3(1.0f) }, SetVelocity{ gone, glm::vec3(1.0f) }, WakeBody{ gone } });
+			check(afterGone != nullptr && afterGone->Poses.size() == 1, "control_gone_ignored: commands for a key without a body change nothing and the world goes on");
+			thread.stop();
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1072,6 +1184,7 @@ namespace wiwa
 		check_step_dispatch(check);
 		check_step_queries(check);
 		check_query_api(check);
+		check_body_control(check);
 
 		if (check.Failures == 0)
 		{

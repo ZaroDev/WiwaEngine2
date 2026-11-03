@@ -116,7 +116,51 @@ namespace wiwa
 		PhysicsLayers Layers{};
 	};
 
+	// Body control from scripts. All take effect in the next step. AddForce and AddTorque act during that one step only; AddImpulse changes
+	// the velocity once; a command for a body that is not dynamic (or is gone) is ignored.
+	struct AddForce
+	{
+		BodyKey Key{};
+		glm::vec3 Force{ 0.0f }; // newtons, world space, through the centre of mass
+	};
+
+	struct AddTorque
+	{
+		BodyKey Key{};
+		glm::vec3 Torque{ 0.0f }; // newton metres, world space
+	};
+
+	struct AddImpulse
+	{
+		BodyKey Key{};
+		glm::vec3 Impulse{ 0.0f }; // newton seconds, world space, through the centre of mass
+	};
+
+	struct SetVelocity
+	{
+		BodyKey Key{};
+		glm::vec3 Linear{ 0.0f }; // m/s
+	};
+
+	struct SetAngularVelocity
+	{
+		BodyKey Key{};
+		glm::vec3 Angular{ 0.0f }; // rad/s
+	};
+
+	// Wakes a sleeping body.
+	struct WakeBody
+	{
+		BodyKey Key{};
+	};
+
+	// Gravity of the world (the scene's setting is applied again only by a SetSettings).
+	struct SetGravity
+	{
+		glm::vec3 Gravity{ 0.0f, -9.81f, 0.0f };
+	};
+
 	// Plain-data commands from the main thread to the physics thread, applied at the start of the next step in submission order.
 	// New kinds are added as new alternatives. Commands for a key that has no body are ignored.
-	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial, SetLayer, SetLayers>;
+	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial, SetLayer, SetLayers, AddForce, AddTorque, AddImpulse, SetVelocity, SetAngularVelocity, WakeBody, SetGravity>;
 }

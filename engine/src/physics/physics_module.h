@@ -3,6 +3,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 #include <core/module.h>
@@ -66,11 +67,30 @@ namespace wiwa
 		// Delivers the steps taken this frame to the sink (see dispatch_physics_steps). Main thread, after update().
 		PhysicsDispatchResult dispatch_steps(IPhysicsStepSink& sink);
 
+		// Body control for scripts (main thread). Each is a command for the world that runs, applied at the start of the next step (so the
+		// effect shows in the snapshot of the step after the one that was current when it was sent). With no world running, or for a body that does
+		// not exist (any more), nothing happens and nothing is logged.
+		void add_force(BodyKey key, glm::vec3 force);
+		void add_impulse(BodyKey key, glm::vec3 impulse);
+		void add_torque(BodyKey key, glm::vec3 torque);
+		void set_velocity(BodyKey key, glm::vec3 velocity);
+		void set_angular_velocity(BodyKey key, glm::vec3 angular);
+		void wake(BodyKey key);
+		void set_gravity(glm::vec3 gravity);
+		void set_kinematic_target(BodyKey key, glm::vec3 position, glm::quat rotation);
+
+		// The velocities of a body in the newest step; none when there is no such body in it.
+		std::optional<glm::vec3> velocity(BodyKey key) const;
+		std::optional<glm::vec3> angular_velocity(BodyKey key) const;
+
 		// The data the queries run against: the step that is being delivered to the sink, else the newest step. Null while no world runs.
 		Ref<const QuerySnapshot> query() const;
 
 	private:
 		std::vector<PhysicsEvent> events_for_step_locked(const PhysicsStepSnapshot& step) const;
+
+		void submit(PhysicsCommand&& command);
+		std::optional<BodyPose> newest_pose(BodyKey key) const;
 
 		bool start_locked(const Ref<Scene>& scene);
 		void stop_locked();
