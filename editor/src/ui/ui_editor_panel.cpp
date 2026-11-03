@@ -532,7 +532,16 @@ void UiEditorPanel::draw_tree()
 	{
 		const UiWidget* selected = m_Model->data().find(m_Selected);
 		const UiId parent = selected == nullptr ? 0 : (is_container(selected->Kind) ? selected->Id : selected->Parent);
-		ImGui::TextDisabled(parent == 0 ? "at the top level" : "inside %s", m_Model->data().find(parent)->Name.c_str());
+		const UiWidget* parentWidget = m_Model->data().find(parent);
+		if (parentWidget)
+		{
+			ImGui::TextDisabled("inside %s", parentWidget->Name.c_str());
+		}
+		else
+		{
+			ImGui::TextDisabled("at the top level");
+		}
+		
 		for (const WidgetKind kind : KINDS)
 		{
 			if (ImGui::MenuItem(widget_kind_name(kind)))

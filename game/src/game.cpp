@@ -1,7 +1,7 @@
 #include <core/engine.h>
 #include <renderer/render_module.h>
 #include <scene/scene_module.h>
-
+#include <game_module.h>
 // A game on the engine. It has no editor in it: scenes and assets come from the pack (assets.wpak) next to the program.
 //
 //   wiwa_game                                        load the default scene of the pack (chosen in the editor's Build Settings)
@@ -16,6 +16,7 @@ public:
 protected:
 	virtual void on_init() override
 	{
+		m_ModuleManager.add_module<GameModule>();
 		for (const std::string& argument : get_arguments())
 		{
 			m_QuitWhenLoaded = m_QuitWhenLoaded || argument == "--scene-smoke-load";
@@ -24,8 +25,6 @@ protected:
 
 	virtual void on_update(float deltaTime) override
 	{
-		
-
 		if (!m_QuitWhenLoaded)
 		{
 			return;
