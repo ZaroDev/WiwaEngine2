@@ -3,6 +3,7 @@
 
 #include <algorithm>
 
+#include <physics/physics_module.h>
 #include <scene/reflection/component_registry.h>
 #include <scene/reflection/value_bag.h>
 #include <ui/ui_module.h>
@@ -100,6 +101,14 @@ namespace wiwa
 
 	bool ScriptInstances::call_hook(Instance& instance, const char* hook, const float* deltaTime)
 	{
+		return call_hook_with(instance, hook, [&](const sol::protected_function& function)
+		{
+			return deltaTime != nullptr ? m_Runtime.call(function, instance.Self, *deltaTime) : m_Runtime.call(function, instance.Self);
+		});
+	}
+
+	bool ScriptInstances::call_hook_with(Instance& instance, const char* hook, const std::function<sol::protected_function_result(const sol::protected_function&)>& invoke)
+	{
 		// handlers that the hook registers belong to this instance
 		struct CurrentOwner
 		{
@@ -122,9 +131,7 @@ namespace wiwa
 		}
 
 		sol::protected_function function = member;
-		sol::protected_function_result result = deltaTime != nullptr
-			? m_Runtime.call(function, instance.Self, *deltaTime)
-			: m_Runtime.call(function, instance.Self);
+		sol::protected_function_result result = invoke(function);
 		if (result.valid())
 		{
 			return true;
@@ -424,6 +431,107 @@ namespace wiwa
 				}
 			}
 		}
+	}
+
+	namespace
+	{
+		const char* physics_hook(PhysicsEventKind kind)
+		{
+			switch (kind)
+			{
+			case PhysicsEventKind::CollisionEnter: return "on_collision_enter";
+			case PhysicsEventKind::CollisionStay: return "on_collision_stay";
+			case PhysicsEventKind::CollisionExit: return "on_collision_exit";
+			case PhysicsEventKind::TriggerEnter: return "on_trigger_enter";
+			default: return "on_trigger_exit";
+			}
+		}
+	}
+
+	// An event goes to the scripts on both entities, each told about the other. The contact is described from the receiver's side: `normal`
+	// points from the other body towards the receiver (the way the receiver is pushed out), `relative_velocity` is the receiver's velocity
+	// relative to the other's, before the contact was resolved.
+	void ScriptInstances::deliver_physics_event(const PhysicsEvent& event)
+	{
+		if (m_Scene == nullptr)
+		{
+			return;
+		}
+
+		const bool contact = event.Kind != PhysicsEventKind::TriggerEnter && event.Kind != PhysicsEventKind::TriggerExit;
+		const char* hook = physics_hook(event.Kind);
+		sol::state_view lua = m_Runtime.state().lua_state();
+
+		for (int side = 0; side < 2; side++)
+		{
+			const EntityGuid self = side == 0 ? event.A : event.B;
+			const EntityGuid other = side == 0 ? event.B : event.A;
+			const float toSelf = side == 0 ? -1.0f : 1.0f; // the event's normal points from A to B
+
+			for (size_t i = 0; i < m_Instances.size(); i++)
+			{
+				Instance& instance = m_Instances[i];
+				// an earlier handler may have destroyed either entity
+				if (instance.Entity != self || instance.Failed || !alive(instance) || m_Scene->find(other) == entt::null)
+				{
+					continue;
+				}
+
+				call_hook_with(instance, hook, [&](const sol::protected_function& function)
+				{
+					const EntityHandle otherHandle{ other, &m_Context };
+					if (!contact)
+					{
+						return m_Runtime.call(function, instance.Self, otherHandle);
+					}
+					sol::table info = lua.create_table();
+					info["point"] = LuaVec3{ event.Point, {} };
+					info["normal"] = LuaVec3{ event.Normal * toSelf, {} };
+					info["impulse"] = event.Impulse;
+					info["relative_velocity"] = LuaVec3{ event.RelativeVelocity * -toSelf, {} };
+					return m_Runtime.call(function, instance.Self, otherHandle, info);
+				});
+			}
+		}
+	}
+
+	void ScriptInstances::dispatch_physics(PhysicsModule& physics)
+	{
+		if (m_Scene == nullptr)
+		{
+			return;
+		}
+
+		struct Sink final : IPhysicsStepSink
+		{
+			ScriptInstances& Owner;
+			explicit Sink(ScriptInstances& owner) : Owner(owner) {}
+
+			void on_step_events(const PhysicsStepSnapshot&, const std::vector<PhysicsEvent>& events) override
+			{
+				for (const PhysicsEvent& event : events)
+				{
+					Owner.deliver_physics_event(event);
+				}
+			}
+
+			void on_physics_update(const PhysicsStepSnapshot&, float dt) override
+			{
+				for (std::vector<Instance>* instances : { &Owner.m_SceneInstances, &Owner.m_Instances })
+				{
+					for (size_t i = 0; i < instances->size(); i++)
+					{
+						Instance& instance = (*instances)[i];
+						if (!instance.Failed && Owner.alive(instance))
+						{
+							Owner.call_hook(instance, "on_physics_update", &dt);
+						}
+					}
+				}
+			}
+		} sink(*this);
+
+		physics.dispatch_steps(sink);
 	}
 
 	void ScriptInstances::update(float deltaTime)

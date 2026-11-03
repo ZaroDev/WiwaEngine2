@@ -7,6 +7,8 @@
 
 #include <core/module.h>
 
+#include "physics_dispatch.h"
+
 #include "physics_sync.h"
 #include "physics_thread.h"
 
@@ -61,6 +63,12 @@ namespace wiwa
 		// older world, or none runs), and none naming an entity that is no longer in the world's scene (destroyed since).
 		std::vector<PhysicsEvent> events_for_step(const PhysicsStepSnapshot& step) const;
 
+		// Delivers the steps taken this frame to the sink (see dispatch_physics_steps). Main thread, after update().
+		PhysicsDispatchResult dispatch_steps(IPhysicsStepSink& sink);
+
+		// The data the queries run against: the step that is being delivered to the sink, else the newest step. Null while no world runs.
+		Ref<const QuerySnapshot> query() const;
+
 	private:
 		std::vector<PhysicsEvent> events_for_step_locked(const PhysicsStepSnapshot& step) const;
 
@@ -77,6 +85,7 @@ namespace wiwa
 		u64 m_SettingsRevision = 0;
 
 		std::vector<Ref<const PhysicsStepSnapshot>> m_Steps{}; // the steps completed since the previous frame
+		Ref<const QuerySnapshot> m_DispatchQuery{}; // set while dispatch_steps delivers a step (main thread only)
 		Ref<const PhysicsStepSnapshot> m_Latest{};
 		Ref<const PhysicsStepSnapshot> m_Previous{};
 		std::chrono::steady_clock::time_point m_LatestArrival{};

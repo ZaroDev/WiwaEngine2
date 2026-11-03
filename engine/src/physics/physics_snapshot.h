@@ -40,6 +40,8 @@ namespace wiwa
 		glm::vec3 RelativeVelocity{ 0.0f };
 	};
 
+	class QuerySnapshot;
+
 	// What the physics thread publishes after each step. Immutable once published; the main thread never reads Jolt structures.
 	struct PhysicsStepSnapshot
 	{
@@ -52,5 +54,8 @@ namespace wiwa
 		// step's own, each group by (Kind, A, B). When the main thread fell far behind, a snapshot can also carry the begin and end events
 		// of older steps that were folded into it (PhysicsThread::take_steps), before its own.
 		std::vector<PhysicsEvent> Events{};
+		// The world as this step left it, for the queries (raycast, overlap, shape cast) of the step's handlers. Null in the snapshot a world
+		// publishes before its first step.
+		Ref<const QuerySnapshot> Query{};
 	};
 }

@@ -7,6 +7,7 @@
 
 #include <core/engine.h>
 #include <renderer/render_module.h>
+#include <physics/physics_module.h>
 #include <scene/scene_module.h>
 
 #include "script_component.h"
@@ -195,6 +196,10 @@ namespace wiwa
 		const Time& time = Engine::get().get_time();
 		if (time.get_game_clock().IsPlaying)
 		{
+			if (PhysicsModule* physics = Engine::get().get_module<PhysicsModule>())
+			{
+				m_Instances->dispatch_physics(*physics);
+			}
 			m_Instances->update(time.get_delta_time_seconds());
 		}
 	}

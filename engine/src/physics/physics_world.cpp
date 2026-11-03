@@ -20,6 +20,7 @@
 #include "contact_listener.h"
 #include "physics_layers_jolt.h"
 #include "physics_material_jolt.h"
+#include "query_snapshot_jolt.h"
 #include "shape_builder.h"
 
 namespace wiwa
@@ -210,6 +211,50 @@ namespace wiwa
 
 			void take_events(PhysicsStepSnapshot& snapshot) override { m_Contacts.take_events(snapshot.Events); }
 
+			void write_query(PhysicsStepSnapshot& snapshot) override
+			{
+				const JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
+				const auto describe = [&](BodyKey key, const BodyEntry& entry)
+				{
+					QueryBody body;
+					body.Key = key;
+					body.Shape = entry.Built;
+					JPH::RVec3 position;
+					JPH::Quat rotation;
+					bodies.GetPositionAndRotation(entry.Id, position, rotation);
+					body.Position = to_glm(position);
+					body.Rotation = to_glm(rotation);
+					body.Layer = static_cast<u32>(std::clamp<i32>(entry.Layer, 0, static_cast<i32>(PHYSICS_LAYER_COUNT) - 1));
+					return body;
+				};
+
+				// bodies that collide with nothing (triggers, placeholders) are not queried; the static ones are kept until one changes
+				if (m_StaticDirty || m_StaticQuery == nullptr)
+				{
+					auto statics = std::make_shared<std::vector<QueryBody>>();
+					for (const auto& [key, entry] : m_Bodies)
+					{
+						if (entry.Motion == MotionType::Static && entry.Built != nullptr && !entry.IsTrigger)
+						{
+							statics->push_back(describe(key, entry));
+						}
+					}
+					m_StaticQuery = std::move(statics);
+					m_StaticDirty = false;
+				}
+
+				auto impl = std::make_unique<QuerySnapshot::Impl>();
+				impl->Static = m_StaticQuery;
+				for (const auto& [key, entry] : m_Bodies)
+				{
+					if (entry.Motion != MotionType::Static && entry.Built != nullptr && !entry.IsTrigger)
+					{
+						impl->Moving.push_back(describe(key, entry));
+					}
+				}
+				snapshot.Query = std::make_shared<QuerySnapshot>(std::move(impl));
+			}
+
 			double fixed_dt() const override { return 1.0 / static_cast<double>(m_Settings.FixedRateHz); }
 			u32 max_steps_per_wake() const override { return m_Settings.MaxStepsPerWake; }
 
@@ -225,6 +270,7 @@ namespace wiwa
 				bool IsTrigger = false;
 				bool ReportContacts = false;
 				bool Placeholder = false;                  // no collidable shape: it does not collide
+				JPH::RefConst<JPH::Shape> Built{};         // the Jolt shape (null: the placeholder), for the query snapshot
 				ShapeDesc Shape{};                        // as last built, for SetMaterial
 			};
 
@@ -310,6 +356,7 @@ namespace wiwa
 				entry.IsTrigger = desc.IsTrigger;
 				entry.ReportContacts = desc.ReportContacts;
 				entry.Placeholder = placeholder;
+				entry.Built = shape;
 				entry.Shape = desc.Shape;
 
 				JPH::BodyCreationSettings settings(placeholder ? m_Placeholder.GetPtr() : shape.GetPtr(), to_jolt(desc.Position), to_jolt(desc.Rotation),
@@ -339,6 +386,7 @@ namespace wiwa
 					return;
 				}
 				m_Bodies[key] = entry;
+				m_StaticDirty = true;
 				m_Contacts.register_body(entry.Id, key, desc.IsTrigger, desc.ReportContacts);
 			}
 
@@ -351,6 +399,7 @@ namespace wiwa
 				}
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
 				m_Contacts.unregister_body(it->second.Id);
+				m_StaticDirty = true;
 				bodies.RemoveBody(it->second.Id);
 				bodies.DestroyBody(it->second.Id);
 				std::erase(m_MovedKinematic, it->second.Id);
@@ -364,6 +413,7 @@ namespace wiwa
 				{
 					return;
 				}
+				m_StaticDirty = m_StaticDirty || it->second.Motion == MotionType::Static;
 				const JPH::EActivation activation = it->second.Motion == MotionType::Static ? JPH::EActivation::DontActivate : JPH::EActivation::Activate;
 				m_System.GetBodyInterfaceNoLock().SetPositionAndRotation(it->second.Id, to_jolt(position), to_jolt(rotation), activation);
 			}
@@ -416,11 +466,13 @@ namespace wiwa
 				}
 				BodyEntry& entry = it->second;
 				entry.Shape = desc;
+				m_StaticDirty = true;
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
 
 				JPH::RefConst<JPH::Shape> shape = movable_or_null(key, entry.Requested, m_Shapes.build(desc));
 				const bool placeholder = shape == nullptr;
 				entry.Placeholder = placeholder;
+				entry.Built = shape;
 				const MotionType motion = effective_motion(key, entry.Requested, placeholder, entry.Dofs);
 				const bool moving = motion != MotionType::Static;
 				const JPH::Shape* newShape = placeholder ? m_Placeholder.GetPtr() : shape.GetPtr();
@@ -458,6 +510,7 @@ namespace wiwa
 				}
 				BodyEntry& entry = it->second;
 				entry.Layer = layer;
+				m_StaticDirty = true;
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
 				bodies.SetObjectLayer(entry.Id, to_object_layer(layer, category(entry, entry.Placeholder)));
 				if (entry.Motion != MotionType::Static)
@@ -493,6 +546,8 @@ namespace wiwa
 			JPH::RefConst<JPH::Shape> m_Placeholder{};
 			std::unordered_map<BodyKey, BodyEntry> m_Bodies{};
 			std::vector<JPH::BodyID> m_MovedKinematic{};
+			std::shared_ptr<const std::vector<QueryBody>> m_StaticQuery{}; // the static bodies of the query snapshots, until one changes
+			bool m_StaticDirty = true;
 			std::set<std::pair<BodyKey, u32>> m_Warned{};
 		};
 	}

@@ -134,6 +134,22 @@ namespace wiwa
 		return m_Steps;
 	}
 
+	PhysicsDispatchResult PhysicsModule::dispatch_steps(IPhysicsStepSink& sink)
+	{
+		const std::vector<Ref<const PhysicsStepSnapshot>> steps = steps_this_frame();
+		return dispatch_physics_steps(steps, [this](const PhysicsStepSnapshot& step) { return events_for_step(step); }, sink, m_DispatchQuery);
+	}
+
+	Ref<const QuerySnapshot> PhysicsModule::query() const
+	{
+		if (m_DispatchQuery != nullptr)
+		{
+			return m_DispatchQuery;
+		}
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		return m_Latest != nullptr ? m_Latest->Query : nullptr;
+	}
+
 	std::vector<PhysicsEvent> PhysicsModule::events_for_step(const PhysicsStepSnapshot& step) const
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);

@@ -162,7 +162,10 @@ namespace wiwa
 				WI_PHYSICS_LOG(Warning, "Physics steps are not taken by the main thread: the oldest are folded (their Stay events are dropped)");
 			}
 		}
-		m_Pending.push_back(snapshot);
+		if (snapshot->StepIndex != 0)
+		{
+			m_Pending.push_back(snapshot); // the world before its first step is not a completed step
+		}
 		m_Ring[m_Published % PHYSICS_SNAPSHOT_RING_SIZE] = std::move(snapshot); // releases the oldest one
 		m_Published++;
 	}
@@ -261,6 +264,7 @@ namespace wiwa
 						snapshot->FixedDt = static_cast<float>(dt);
 						world->write_poses(*snapshot);
 						world->take_events(*snapshot);
+						world->write_query(*snapshot);
 						publish(std::move(snapshot));
 					}
 

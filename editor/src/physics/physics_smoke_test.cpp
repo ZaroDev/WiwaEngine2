@@ -8,13 +8,16 @@
 #include <atomic>
 #include <chrono>
 #include <fstream>
+#include <functional>
 #include <cmath>
 #include <string>
 #include <thread>
 
 #include <assets/asset_manager.h>
 #include <core/engine.h>
+#include <physics/physics_dispatch.h>
 #include <physics/physics_module.h>
+#include <physics/query_snapshot.h>
 #include <physics/physics_sync.h>
 #include <scene/scene.h>
 
@@ -855,6 +858,201 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// Stands in for the script instances: records what the dispatcher delivers.
+		struct RecordingSink final : IPhysicsStepSink
+		{
+			std::function<void(const PhysicsStepSnapshot&, const std::vector<PhysicsEvent>&)> OnEvents{};
+			std::function<void(const PhysicsStepSnapshot&, float)> OnUpdate{};
+			u32 Updates = 0;
+			std::vector<u64> UpdatedSteps{};
+			std::vector<PhysicsEvent> Events{};
+
+			void on_step_events(const PhysicsStepSnapshot& step, const std::vector<PhysicsEvent>& events) override
+			{
+				Events.insert(Events.end(), events.begin(), events.end());
+				if (OnEvents)
+				{
+					OnEvents(step, events);
+				}
+			}
+
+			void on_physics_update(const PhysicsStepSnapshot& step, float dt) override
+			{
+				Updates++;
+				UpdatedSteps.push_back(step.StepIndex);
+				if (OnUpdate)
+				{
+					OnUpdate(step, dt);
+				}
+			}
+		};
+
+		// Check 7: on_physics_update runs once per completed step, whatever the frames are like: 2 simulated seconds at 60 Hz give 120
+		// updates (+-2) when every frame lasts 250 ms. And a main thread that fell far behind skips the updates of the oldest steps but
+		// still delivers their begin and end events.
+		void check_step_dispatch(Check& check)
+		{
+			Scene scene;
+			add_ground(scene);
+			const entt::entity ball = add_entity(scene, "Ball", glm::vec3(0.0f, 50.0f, 0.0f));
+			add_body(scene, ball, MotionType::Dynamic);
+			add_box_collider(scene, ball, glm::vec3(0.5f)).Shape = ColliderShape::Sphere;
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "dispatch_start: the world starts");
+			RecordingSink sink;
+			Ref<const QuerySnapshot> current;
+			const auto events_of = [](const PhysicsStepSnapshot& step) { return step.Events; };
+			double lastTime = 0.0;
+			u64 lastStep = 0;
+			for (int frame = 0; frame < 20 && lastTime < 2.0; frame++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(250)); // a deliberately slow frame
+				scene.update_world_transforms();
+				sync.push_changes(scene, thread);
+				const std::vector<Ref<const PhysicsStepSnapshot>> steps = thread.take_steps();
+				dispatch_physics_steps(steps, events_of, sink, current);
+				lastTime = steps.empty() ? lastTime : steps.back()->Time;
+				lastStep = steps.empty() ? lastStep : steps.back()->StepIndex;
+			}
+			thread.stop();
+
+			bool ordered = true;
+			for (size_t i = 1; i < sink.UpdatedSteps.size(); i++)
+			{
+				ordered = ordered && sink.UpdatedSteps[i] == sink.UpdatedSteps[i - 1] + 1;
+			}
+			check(sink.Updates == lastStep && std::abs(static_cast<double>(sink.Updates) - lastTime * 60.0) <= 2.0 && lastTime >= 2.0, "dispatch_rate: 2 simulated seconds at 60 Hz give 120 updates (one per step) with 250 ms frames, got " +
+				std::to_string(sink.Updates) + " over " + std::to_string(lastTime) + " s");
+			check(ordered, "dispatch_every_step: each completed step is delivered once, in order");
+
+			// a main thread that fell behind: 100 steps at once, the 32 newest get on_physics_update, every enter and exit is delivered
+			std::vector<Ref<const PhysicsStepSnapshot>> many;
+			for (u64 i = 1; i <= 100; i++)
+			{
+				auto step = CreateRef<PhysicsStepSnapshot>();
+				step->StepIndex = i;
+				step->FixedDt = 1.0f / 60.0f;
+				PhysicsEvent enter, stay, exit;
+				enter.Kind = PhysicsEventKind::CollisionEnter;
+				stay.Kind = PhysicsEventKind::CollisionStay;
+				exit.Kind = PhysicsEventKind::TriggerExit;
+				step->Events = { enter, stay, exit };
+				many.push_back(step);
+			}
+			RecordingSink behind;
+			const PhysicsDispatchResult result = dispatch_physics_steps(many, events_of, behind, current);
+			const auto count = [&](PhysicsEventKind kind) { return std::count_if(behind.Events.begin(), behind.Events.end(), [&](const PhysicsEvent& e) { return e.Kind == kind; }); };
+			check(result.Updated == PHYSICS_MAX_DISPATCHED_STEPS && result.Skipped == 100 - PHYSICS_MAX_DISPATCHED_STEPS && behind.UpdatedSteps.front() == 100 - PHYSICS_MAX_DISPATCHED_STEPS + 1,
+				"dispatch_cap: only the newest steps get on_physics_update, got " + std::to_string(result.Updated));
+			check(count(PhysicsEventKind::CollisionEnter) == 100 && count(PhysicsEventKind::TriggerExit) == 100, "dispatch_skipped_events: begin and end events of skipped steps are delivered");
+			check(count(PhysicsEventKind::CollisionStay) == PHYSICS_MAX_DISPATCHED_STEPS, "dispatch_skipped_stay: stay events of skipped steps are dropped");
+		}
+
+		// Check 8: a query inside the handler of a step sees that step. A box falls fast (gravity -100); the ray from above hits its top at
+		// the pose that step's snapshot has, and the box has moved by a lot since the step before.
+		void check_step_queries(Check& check)
+		{
+			Scene scene;
+			SceneSettings settings = scene.settings();
+			settings.Physics.Gravity = glm::vec3(0.0f, -100.0f, 0.0f);
+			scene.set_settings(settings);
+			const entt::entity box = add_entity(scene, "Faller", glm::vec3(0.0f, 1000.0f, 0.0f));
+			add_body(scene, box, MotionType::Dynamic);
+			add_box_collider(scene, box, glm::vec3(0.5f));
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "queries_start: the world starts");
+			const BodyKey key = key_of(scene, box);
+
+			RecordingSink sink;
+			Ref<const QuerySnapshot> current;
+			u32 checked = 0, exact = 0, moved = 0;
+			float lastY = 1000.0f;
+			sink.OnUpdate = [&](const PhysicsStepSnapshot& step, float)
+			{
+				const BodyPose* pose = find_pose(&step, key);
+				if (pose == nullptr || current == nullptr)
+				{
+					return;
+				}
+				const std::optional<RayHit> hit = current->raycast(glm::vec3(0.0f, 1500.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), 3000.0f);
+				checked++;
+				exact += hit && hit->Key == key && std::abs(hit->Point.y - (pose->Position.y + 0.5f)) < 0.01f ? 1 : 0;
+				moved += lastY - pose->Position.y > 0.05f ? 1 : 0;
+				lastY = pose->Position.y;
+			};
+
+			const auto events_of = [](const PhysicsStepSnapshot& step) { return step.Events; };
+			for (int frame = 0; frame < 40 && checked < 40; frame++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				dispatch_physics_steps(thread.take_steps(), events_of, sink, current);
+			}
+			thread.stop();
+
+			check(checked >= 30, "queries_dispatched: the handler ran for 30 steps, got " + std::to_string(checked));
+			check(exact == checked, "queries_same_step: the ray hits the pose of the step that is delivered, " + std::to_string(exact) + " of " + std::to_string(checked));
+			check(moved + 4 >= checked, "queries_box_moves: the box moved more than 5 cm between steps (a stale snapshot would show), " + std::to_string(moved) + " of " + std::to_string(checked));
+			check(current == nullptr, "queries_current_cleared: no step is current after the dispatch");
+		}
+
+		// The query API against a static scene: a ground (top at y = 0.5), a 1 m box at (5, 1.5, 0) on layer 3 and a trigger that is not queried.
+		void check_query_api(Check& check)
+		{
+			Scene scene;
+			const entt::entity ground = add_ground(scene);
+			const entt::entity crate = add_entity(scene, "Crate", glm::vec3(5.0f, 1.5f, 0.0f));
+			add_box_collider(scene, crate, glm::vec3(0.5f)).Layer = 3;
+			const entt::entity volume = add_entity(scene, "Volume", glm::vec3(-5.0f, 1.5f, 0.0f));
+			add_box_collider(scene, volume, glm::vec3(2.0f)).IsTrigger = true;
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "query_api_start: the world starts");
+			run_for(thread, sync, scene, 0.2);
+			Ref<const PhysicsStepSnapshot> latest = thread.latest();
+			thread.stop();
+			const Ref<const QuerySnapshot> query = latest ? latest->Query : nullptr;
+			check(query != nullptr && query->body_count() == 2, "query_api_bodies: the ground and the crate are queried, the trigger is not, got " + std::to_string(query ? query->body_count() : 0));
+			if (query == nullptr)
+			{
+				return;
+			}
+			const BodyKey groundKey = key_of(scene, ground), crateKey = key_of(scene, crate);
+
+			const std::optional<RayHit> down = query->raycast(glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f, -2.0f, 0.0f), 100.0f);
+			check(down && down->Key == groundKey && std::abs(down->Distance - 9.5f) < 0.01f && down->Normal.y > 0.99f && std::abs(down->Point.y - 0.5f) < 0.01f,
+				"query_ray: a ray down hits the ground at 9.5 m with an upward normal");
+			check(!query->raycast(glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), 5.0f), "query_ray_range: a ray too short hits nothing");
+			check(!query->raycast(glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f), 5.0f), "query_ray_zero: a zero direction hits nothing");
+			const std::vector<RayHit> all = query->raycast_all(glm::vec3(5.0f, 10.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), 100.0f);
+			check(all.size() >= 2 && all.front().Key == crateKey && std::abs(all.front().Point.y - 2.0f) < 0.01f && all.back().Key == groundKey,
+				"query_ray_all: a ray through the crate hits it, then the ground, nearest first, got " + std::to_string(all.size()));
+			check(!query->raycast(glm::vec3(5.0f, 10.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), 100.0f, ~(1u << 3)) || query->raycast(glm::vec3(5.0f, 10.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), 100.0f, ~(1u << 3))->Key == groundKey,
+				"query_ray_mask: a mask without the crate's layer skips it");
+
+			const std::vector<BodyKey> near_crate = query->overlap_sphere(glm::vec3(5.0f, 1.5f, 0.0f), 0.2f);
+			check(near_crate.size() == 1 && near_crate[0] == crateKey, "query_sphere: a small sphere inside the crate overlaps only the crate");
+			check(query->overlap_sphere(glm::vec3(0.0f, 30.0f, 0.0f), 1.0f).empty(), "query_sphere_empty: a sphere in the air overlaps nothing");
+			const std::vector<BodyKey> box = query->overlap_box(glm::vec3(2.5f, 0.9f, 0.0f), glm::vec3(4.0f, 0.5f, 1.0f), glm::quat(1, 0, 0, 0));
+			check(box.size() == 2, "query_box: a wide box overlaps the crate and the ground, got " + std::to_string(box.size()));
+			check(query->overlap_box(glm::vec3(5.0f, 1.5f, 0.0f), glm::vec3(1.0f), glm::quat(1, 0, 0, 0), 1u << 0).size() == 1, "query_box_mask: layer 0 only finds the ground");
+
+			ShapeDesc sphere;
+			sphere.Kind = ShapeKind::Sphere;
+			sphere.Size = glm::vec3(0.25f);
+			const std::optional<RayHit> cast = query->shape_cast(sphere, glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+			check(cast && cast->Key == groundKey && std::abs(cast->Distance - 9.25f) < 0.05f && cast->Normal.y > 0.9f,
+				"query_shape_cast: a sphere cast down stops 0.25 m above the ground, got " + std::to_string(cast ? cast->Distance : -1.0f));
+			check(!query->shape_cast(sphere, glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f, 5.0f, 0.0f)), "query_shape_cast_miss: a cast that meets nothing gives no hit");
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -871,6 +1069,9 @@ namespace wiwa
 		check_trigger_events(check);
 		check_layers(check);
 		check_cooked_shapes(check, pipeline);
+		check_step_dispatch(check);
+		check_step_queries(check);
+		check_query_api(check);
 
 		if (check.Failures == 0)
 		{
