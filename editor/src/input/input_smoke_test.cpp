@@ -2,6 +2,7 @@
 #include "input_smoke_test.h"
 
 #include "../asset_pipeline/asset_database.h"
+#include "input_edit_model.h"
 #include "../asset_pipeline/asset_templates.h"
 #include "../asset_pipeline/file_utils.h"
 #include "../asset_pipeline/input_settings_file.h"
@@ -1357,6 +1358,170 @@ namespace wiwa
 			}
 		}
 
+		// How many undo steps the model has (counted on a copy).
+		size_t undo_depth(InputEditModel model)
+		{
+			size_t depth = 0;
+			while (model.can_undo())
+			{
+				model.undo();
+				depth++;
+			}
+			return depth;
+		}
+
+		void edit_model(Check& check)
+		{
+			// every kind of edit is one undo step that undo and redo restore exactly
+			{
+				InputEditModel model{ InputMapData{} };
+				std::vector<std::string> states = { input_map_to_text(model.data()) };
+				const auto step = [&]() { states.push_back(input_map_to_text(model.data())); };
+
+				check(model.add_map("Gameplay") == 0, "edit_add_remove: add_map"); step();
+				check(model.add_action(0, "Jump", ActionType::Button) == 0, "edit_add_remove: add_action"); step();
+				check(model.add_binding(0, 0, control_binding(Key::Space)) == 0, "edit_add_remove: add_binding"); step();
+				check(model.add_action(0, "Move", ActionType::Axis2D) == 1, "edit_add_remove: a second action"); step();
+				check(model.add_binding(0, 1, composite2d(Key::W, Key::S, Key::A, Key::D)) == 0, "edit_add_remove: a composite"); step();
+				check(model.set_binding_part(0, 1, 0, 0, control(Key::I)), "edit_add_remove: set_binding_part"); step();
+				check(model.set_binding_params(0, 0, 0, 2.0f, 0.1f, true), "edit_add_remove: set_binding_params"); step();
+				check(model.set_consume(0, true), "edit_add_remove: set_consume"); step();
+				check(model.rename_action(0, 0, "Hop"), "edit_add_remove: rename_action"); step();
+				check(model.rename_map(0, "Main"), "edit_add_remove: rename_map"); step();
+				check(model.set_action_type(0, 0, ActionType::Axis1D), "edit_add_remove: set_action_type"); step();
+				check(model.remove_binding(0, 1, 0), "edit_add_remove: remove_binding"); step();
+				check(model.remove_action(0, 1), "edit_add_remove: remove_action"); step();
+				check(model.remove_map(0), "edit_add_remove: remove_map"); step();
+
+				check(undo_depth(model) == states.size() - 1, "edit_add_remove: every edit is one undo step");
+				for (size_t i = states.size() - 1; i > 0; i--)
+				{
+					model.undo();
+					check(input_map_to_text(model.data()) == states[i - 1], "edit_add_remove: undo restores step " + std::to_string(i));
+				}
+				check(!model.can_undo() && model.can_redo(), "edit_add_remove: back at the start");
+				for (size_t i = 1; i < states.size(); i++)
+				{
+					model.redo();
+					check(input_map_to_text(model.data()) == states[i], "edit_add_remove: redo restores step " + std::to_string(i));
+				}
+				check(!model.can_redo(), "edit_add_remove: nothing left to redo");
+			}
+
+			// refused calls change nothing and make no step
+			{
+				InputEditModel model{ InputMapData{} };
+				model.add_map("Gameplay");
+				model.add_map("UI");
+				model.add_action(0, "Jump", ActionType::Button);
+				model.add_action(0, "Move", ActionType::Axis2D);
+				model.add_binding(0, 0, control_binding(Key::Space));
+				const std::string before = input_map_to_text(model.data());
+				const size_t depth = undo_depth(model);
+
+				const std::vector<std::pair<std::string, bool>> refused =
+				{
+					{ "add_map duplicate", model.add_map("Gameplay") != SIZE_MAX },
+					{ "add_map empty", model.add_map("") != SIZE_MAX },
+					{ "add_map leading space", model.add_map(" Menu") != SIZE_MAX },
+					{ "add_map trailing space", model.add_map("Menu ") != SIZE_MAX },
+					{ "rename_map duplicate", model.rename_map(1, "Gameplay") },
+					{ "rename_map empty", model.rename_map(1, "") },
+					{ "rename_map out of range", model.rename_map(9, "X") },
+					{ "add_action duplicate", model.add_action(0, "Jump", ActionType::Button) != SIZE_MAX },
+					{ "add_action empty", model.add_action(0, "", ActionType::Button) != SIZE_MAX },
+					{ "add_action bad map", model.add_action(7, "X", ActionType::Button) != SIZE_MAX },
+					{ "rename_action duplicate", model.rename_action(0, 1, "Jump") },
+					{ "add_binding wrong kind", model.add_binding(0, 0, composite1d(Key::A, Key::D)) != SIZE_MAX },
+					{ "add_binding to Axis2D control", model.add_binding(0, 1, control_binding(Key::A)) != SIZE_MAX },
+					{ "add_binding bad action", model.add_binding(0, 9, control_binding(Key::A)) != SIZE_MAX },
+					{ "set_binding_params deadzone 1", model.set_binding_params(0, 0, 0, 1.0f, 1.0f, false) },
+					{ "set_binding_params negative deadzone", model.set_binding_params(0, 0, 0, 1.0f, -0.1f, false) },
+					{ "set_binding_params NaN scale", model.set_binding_params(0, 0, 0, std::numeric_limits<float>::quiet_NaN(), 0.0f, false) },
+					{ "set_binding_part bad part", model.set_binding_part(0, 0, 0, 1, control(Key::E)) },
+					{ "set_binding_part bad binding", model.set_binding_part(0, 0, 4, 0, control(Key::E)) },
+					{ "set_binding_part bad control", model.set_binding_part(0, 0, 0, 0, InputControl{ InputDevice::Key, 9999 }) },
+					{ "remove_map out of range", model.remove_map(5) },
+					{ "remove_action out of range", model.remove_action(0, 5) },
+					{ "remove_binding out of range", model.remove_binding(0, 0, 5) },
+					{ "set_consume bad map", model.set_consume(5, true) },
+				};
+				for (const auto& [name, accepted] : refused)
+				{
+					check(!accepted, "edit_refused: " + name);
+				}
+				check(input_map_to_text(model.data()) == before && undo_depth(model) == depth, "edit_refused: nothing changed and no step was made");
+			}
+
+			// setting a value to itself is not a step
+			{
+				InputEditModel model{ sample_map_data() };
+				check(!model.can_undo(), "edit_same_value_no_step: a fresh model has no history");
+				check(model.set_consume(1, true) && model.rename_map(0, "Gameplay") && model.rename_action(0, 0, "Jump") && model.set_action_type(0, 0, ActionType::Button) &&
+					model.set_binding_params(0, 0, 0, 1.0f, 0.0f, false) && model.set_binding_part(0, 0, 0, 0, control(Key::Space)),
+					"edit_same_value_no_step: the calls are accepted");
+				check(!model.can_undo() && !model.dirty(), "edit_same_value_no_step: and make no step");
+			}
+
+			// a type change that would leave a binding the type cannot use is refused
+			{
+				InputEditModel model{ sample_map_data() };
+				check(!model.set_action_type(0, 2, ActionType::Button), "edit_type_change_refused: Axis2D with composite bindings to Button");
+				check(!model.set_action_type(0, 1, ActionType::Button), "edit_type_change_refused: Axis1D with a composite to Button");
+				check(model.remove_binding(0, 1, 0) && model.set_action_type(0, 1, ActionType::Button), "edit_type_change_refused: allowed once the composite is gone");
+				check(model.set_action_type(0, 0, ActionType::Axis1D), "edit_type_change_refused: Button with a control to Axis1D is fine");
+			}
+
+			{
+				InputEditModel model{ sample_map_data() };
+				check(!model.dirty(), "edit_dirty: clean at the start");
+				model.add_map("Extra");
+				check(model.dirty(), "edit_dirty: an edit makes it dirty");
+				model.mark_saved();
+				check(!model.dirty(), "edit_dirty: saved is clean");
+				model.rename_map(2, "Extra2");
+				check(model.dirty(), "edit_dirty: edit after saving");
+				model.undo();
+				check(!model.dirty(), "edit_dirty: undo back to the saved state is clean");
+				model.undo();
+				check(model.dirty(), "edit_dirty: undo past it is dirty");
+				model.redo();
+				check(!model.dirty(), "edit_dirty: redo to the saved state is clean");
+			}
+
+			{
+				InputEditModel model{ InputMapData{} };
+				model.add_map("A");
+				model.add_action(0, "Fire", ActionType::Button);
+				model.add_binding(0, 0, control_binding(Key::F));
+				model.add_action(0, "Aim", ActionType::Axis2D);
+				model.add_binding(0, 1, pair2d(PadAxis::RightX, PadAxis::RightY, 0.25f));
+				model.add_binding(0, 1, composite2d(Key::I, Key::K, Key::J, Key::L));
+				model.rename_action(0, 0, "Shoot");
+				model.set_binding_params(0, 0, 0, 0.5f, 0.2f, true);
+				model.add_map("B");
+				model.remove_map(0);
+				std::string error;
+				InputMapData parsed;
+				check(input_map_valid(model.data(), error) && error.empty(), "edit_output_valid: the document is valid after a series of edits (" + error + ")");
+				check(input_map_from_text(input_map_to_text(model.data()), parsed, error) && same_map_data(parsed, model.data()), "edit_output_valid: and survives the file format");
+			}
+
+			{
+				InputEditModel model{ InputMapData{} };
+				for (int i = 0; i < 101; i++)
+				{
+					model.add_map("M" + std::to_string(i));
+				}
+				check(undo_depth(model) == InputEditModel::MAX_UNDO_STEPS, "edit_undo_limit: 101 steps keep 100");
+				for (size_t i = 0; i < InputEditModel::MAX_UNDO_STEPS; i++)
+				{
+					model.undo();
+				}
+				check(!model.can_undo() && model.data().Maps.size() == 1, "edit_undo_limit: the oldest step is gone");
+			}
+		}
+
 		void input_module(Check& check)
 		{
 			Engine& engine = Engine::get();
@@ -1406,6 +1571,7 @@ namespace wiwa
 		input_importer(check, pipeline);
 		lua_input(check);
 		ui_input_source(check);
+		edit_model(check);
 
 		if (check.Failures == 0)
 		{
