@@ -1920,7 +1920,7 @@ namespace wiwa
 			const size_t cookedBefore = count_cooked_materials();
 			for (const auto& [name, text] : std::vector<std::pair<std::string, std::string>>{
 				{ "broken_json", "{ \"friction\": " }, { "negative", "{ \"friction\": -1 }" }, { "bad_mode", "{ \"frictionCombine\": \"Sum\" }" },
-				{ "wrong_type", "{ \"density\": \"heavy\" }" } })
+				{ "wrong_type", "{ \"density\": \"heavy\" }" }, { "too_large", "{ \"density\": 1e39 }" } })
 			{
 				const std::filesystem::path broken = dir / (name + ".wphysmat");
 				write_source(broken, text);

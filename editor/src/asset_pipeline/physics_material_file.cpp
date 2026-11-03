@@ -22,12 +22,13 @@ namespace wiwa
 				return false;
 			}
 			const double number = found->get<double>();
-			if (!std::isfinite(number) || number < 0.0)
+			const float narrowed = static_cast<float>(number);
+			if (!std::isfinite(number) || !std::isfinite(narrowed) || number < 0.0)
 			{
-				error = std::string("\"") + key + "\" must be 0 or more";
+				error = std::string("\"") + key + "\" must be a number from 0 to 3.4e38";
 				return false;
 			}
-			value = static_cast<float>(number);
+			value = narrowed;
 			return true;
 		}
 
