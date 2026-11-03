@@ -34,6 +34,8 @@ namespace wiwa
 
 		// Replaces the maps and clears the state. Stack entries whose maps still exist stay.
 		void set_maps(std::vector<ActionMap> maps);
+		// Adds maps next to the existing ones (they are defaults too); a map whose name exists already is skipped.
+		void add_maps(std::vector<ActionMap> maps);
 		const std::vector<ActionMap>& maps() const { return m_Maps; }
 		const ActionMap* find_map(std::string_view name) const;
 
@@ -57,6 +59,8 @@ namespace wiwa
 		// Returns the index of the new binding, or SIZE_MAX if the action does not exist or cannot use that kind of binding.
 		size_t add_binding(std::string_view map, std::string_view action, const Binding& binding);
 		bool remove_binding(std::string_view map, std::string_view action, size_t binding);
+		// Replaces all bindings of the action (used to load saved rebinds). False, and no change, if the action does not exist or a binding does not suit it.
+		bool set_bindings(std::string_view map, std::string_view action, std::vector<Binding> bindings);
 		bool reset_action(std::string_view map, std::string_view action);
 		void reset_all();
 		// Every binding of the map (all parts) that uses the control, except for the action named `exceptAction`. Only reports: the caller

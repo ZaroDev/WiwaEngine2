@@ -23,6 +23,7 @@ namespace wiwa
 		UiPanel,
 		PhysicsMaterial,
 		PhysicsShape,
+		InputMap,
 
 		Last
 	};
@@ -47,6 +48,7 @@ namespace wiwa
 		case AssetType::UiPanel: return "UiPanel";
 		case AssetType::PhysicsMaterial: return "PhysicsMaterial";
 		case AssetType::PhysicsShape: return "PhysicsShape";
+		case AssetType::InputMap: return "InputMap";
 		default: return "None";
 		}
 	}

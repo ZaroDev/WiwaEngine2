@@ -3,6 +3,7 @@
 
 #include <fstream>
 
+#include <input/input_map_io.h>
 #include <ui/ui_panel_io.h>
 
 namespace wiwa
@@ -542,6 +543,36 @@ namespace wiwa
 				return;
 			}
 			v = std::move(*panel);
+		}
+	}
+
+	void archive(BinaryArchive& ar, InputMapData& v)
+	{
+		u32 version = INPUT_MAP_VERSION;
+		ar.value(version);
+		if (ar.reading() && ar.ok() && version != INPUT_MAP_VERSION)
+		{
+			ar.fail();
+			return;
+		}
+
+		std::string text;
+		if (!ar.reading())
+		{
+			text = input_map_to_text(v);
+		}
+		ar.string(text);
+
+		if (ar.reading() && ar.ok())
+		{
+			InputMapData parsed;
+			std::string error;
+			if (ar.remaining() != 0 || !input_map_from_text(text, parsed, error))
+			{
+				ar.fail();
+				return;
+			}
+			v = std::move(parsed);
 		}
 	}
 }

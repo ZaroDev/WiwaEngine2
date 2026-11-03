@@ -98,6 +98,7 @@ namespace wiwa
 			case AssetType::Font: { auto h = manager.load<FontData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::PhysicsMaterial: { auto h = manager.load<PhysicsMaterialData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::PhysicsShape: { auto h = manager.load<CookedShapeData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::InputMap: { auto h = manager.load<InputMapData>(ref); return [h]() { return h.state(); }; }
 			default: return []() { return LoadState::Failed; };
 			}
 		}

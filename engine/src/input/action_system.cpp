@@ -422,4 +422,32 @@ namespace wiwa
 			}
 		}
 	}
+
+	bool ActionSystem::set_bindings(std::string_view map, std::string_view action, std::vector<Binding> bindings)
+	{
+		Action* found = find_action(map, action);
+		if (!found) return false;
+
+		for (const Binding& binding : bindings)
+		{
+			if (!action_accepts(found->Type, binding.BindingKind)) return false;
+		}
+		found->Bindings = std::move(bindings);
+		return true;
+	}
+
+	void ActionSystem::add_maps(std::vector<ActionMap> maps)
+	{
+		for (ActionMap& map : maps)
+		{
+			if (map_index(map.Name) >= 0)
+			{
+				WI_INPUT_LOG(Warning, "add_maps: there is an input map '{0}' already", map.Name);
+				continue;
+			}
+			m_Defaults.push_back(map);
+			m_States.emplace_back(map.Actions.size());
+			m_Maps.push_back(std::move(map));
+		}
+	}
 }

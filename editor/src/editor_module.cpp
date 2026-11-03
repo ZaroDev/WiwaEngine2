@@ -2,9 +2,11 @@
 
 #include <asset_pipeline/asset_pipeline_module.h>
 #include <asset_pipeline/asset_templates.h>
+#include <asset_pipeline/input_settings_file.h>
 #include <asset_pipeline/physics_settings_file.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
+#include <input/input_module.h>
 #include <physics/physics_module.h>
 #include <scene/scene_module.h>
 #include <renderer/window.h>
@@ -97,6 +99,21 @@ void EditorModule::init()
 	wiwa::Engine::get().get_module<wiwa::ScriptingModule>()->set_auto_start(false);
 	wiwa::Engine::get().get_time().stop_game(); // and there is no game time either
 	wiwa::Engine::get().get_module<wiwa::PhysicsModule>()->set_auto_start(false); // nor a physics world: play mode makes one from its clone
+
+	// The default input map the project chose (input.wsettings); a game gets it from its pack.
+	{
+		using wiwa::LogLevel;
+		wiwa::InputProjectSettings inputSettings;
+		std::string inputError;
+		if (!wiwa::load_input_settings(wiwa::INPUT_SETTINGS_FILE, inputSettings, inputError))
+		{
+			WI_LOG(Warning, "Editor", "{0}: {1}", wiwa::INPUT_SETTINGS_FILE, inputError);
+		}
+		else if (inputSettings.DefaultMap.valid())
+		{
+			wiwa::Engine::get().get_module<wiwa::InputModule>()->set_default_map(inputSettings.DefaultMap);
+		}
+	}
 
 	wiwa::SceneModule* scenes = wiwa::Engine::get().get_module<wiwa::SceneModule>();
 	m_SceneEditor = CreateScope<wiwa::SceneEditor>(*wiwa::Engine::get().get_module<wiwa::AssetManager>(), *scenes);

@@ -41,6 +41,7 @@ namespace wiwa
 			case AssetType::UiPanel: return make_asset<UiPanelData>(payload);
 			case AssetType::PhysicsMaterial: return make_asset<PhysicsMaterialData>(payload);
 			case AssetType::PhysicsShape: return make_asset<CookedShapeData>(payload);
+			case AssetType::InputMap: return make_asset<InputMapData>(payload);
 			default: return nullptr;
 			}
 		}

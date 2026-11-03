@@ -1,11 +1,16 @@
 #include <editor_common.h>
 #include "input_smoke_test.h"
 
+#include "../asset_pipeline/input_settings_file.h"
+#include <assets/pak_source.h>
+#include <assets/wasset_io.h>
 #include <core/engine.h>
 #include <input/action_system.h>
 #include <input/action_types.h>
 #include <input/input_codes.h>
 #include <input/input_map_io.h>
+#include <input/input_overrides.h>
+#include <input/input_project_settings.h>
 #include <input/input_module.h>
 #include <input/input_state.h>
 #include <scripting/script_module.h>
@@ -725,6 +730,175 @@ namespace wiwa
 			check(state.last_device() == LastDevice::KeyboardMouse, "last_device_switch: the mouse moving switches back");
 		}
 
+		void write_text_file(const std::filesystem::path& path, const std::string& text)
+		{
+			std::ofstream file(path, std::ios::binary | std::ios::trunc);
+			file << text;
+		}
+
+		void input_persistence(Check& check, AssetPipelineModule& pipeline)
+		{
+			std::error_code error;
+			const std::filesystem::path dir = std::filesystem::temp_directory_path() / "wiwa_input_smoke";
+			std::filesystem::remove_all(dir, error);
+			std::filesystem::create_directories(dir, error);
+
+			// The cooked asset: a version and the JSON text.
+			{
+				const InputMapData sample = sample_map_data();
+				const std::vector<std::byte> bytes = serialize(sample);
+				const std::optional<InputMapData> back = deserialize<InputMapData>(bytes);
+				check(back && same_map_data(*back, sample), "asset_archive_roundtrip: serialize -> deserialize is equal");
+
+				std::vector<std::byte> wrongVersion = bytes;
+				wrongVersion[0] = std::byte{ 2 };
+				check(!deserialize<InputMapData>(wrongVersion), "asset_archive_roundtrip: another version is refused");
+
+				const std::vector<std::byte> truncated(bytes.begin(), bytes.end() - 3);
+				check(!deserialize<InputMapData>(truncated), "asset_archive_roundtrip: a truncated payload is refused");
+
+				std::vector<std::byte> trailing = bytes;
+				trailing.push_back(std::byte{ 0 });
+				check(!deserialize<InputMapData>(trailing), "asset_archive_roundtrip: trailing bytes are refused");
+
+				BinaryArchive writer = BinaryArchive::writer();
+				u32 version = INPUT_MAP_VERSION;
+				std::string garbage = "{{{";
+				writer.value(version);
+				writer.string(garbage);
+				const std::vector<std::byte> badText = writer.take();
+				check(!deserialize<InputMapData>(badText), "asset_archive_roundtrip: text that is not a valid map is refused");
+			}
+
+			// The override file: only the changed actions, and they come back.
+			{
+				ActionSystem actions;
+				actions.set_maps(action_test_maps());
+				actions.rebind("Gameplay", "Jump", 0, control(Key::E));
+				actions.rebind("Gameplay", "Move", 0, control(Key::I), "up");
+				actions.add_binding("Gameplay", "Slow", control_binding(Key::J));
+
+				const nlohmann::json json = overrides_to_json(actions);
+				const nlohmann::json& gameplay = json["maps"]["Gameplay"];
+				check(gameplay.contains("Jump") && gameplay.contains("Move") && gameplay.contains("Slow") && !gameplay.contains("Throttle") && !json["maps"].contains("UI"),
+					"overrides_roundtrip: only the changed actions are in the JSON");
+
+				ActionSystem fresh;
+				fresh.set_maps(action_test_maps());
+				std::string warnings;
+				const size_t applied = apply_overrides(fresh, json, warnings);
+				check(applied == 3 && warnings.empty(), "overrides_roundtrip: all three are applied without warnings (" + warnings + ")");
+				check(maps_text(fresh) == maps_text(actions) && fresh.modified("Gameplay", "Jump") && !fresh.modified("Gameplay", "Throttle"),
+					"overrides_roundtrip: the bindings are the same");
+			}
+
+			// A stale override file never breaks the defaults.
+			{
+				ActionSystem actions;
+				actions.set_maps(action_test_maps());
+				const std::string defaults = maps_text(actions);
+
+				const char* stale = R"({"version":1,"maps":{
+					"Nope":{"Jump":[{"control":"Key.E"}]},
+					"Gameplay":{"Nope":[{"control":"Key.E"}],
+						"Jump":[{"negative":"Key.A","positive":"Key.D"}],
+						"Throttle":[{"control":"Key.Nope"}],
+						"Interact":[{"control":"Key.R"}]}}})";
+				bool threw = false;
+				size_t applied = 99;
+				std::string warnings;
+				try
+				{
+					applied = apply_overrides(actions, nlohmann::json::parse(stale), warnings);
+				}
+				catch (...)
+				{
+					threw = true;
+				}
+				check(!threw && applied == 1 && !warnings.empty(), "overrides_stale: stale entries are skipped with warnings, the valid one applies");
+				check(actions.action("Gameplay", "Interact")->Bindings[0].Parts[0] == control(Key::R) && !actions.modified("Gameplay", "Jump") && !actions.modified("Gameplay", "Throttle"),
+					"overrides_stale: the stale entries left the defaults alone");
+
+				for (const char* bad : { R"({"version":2,"maps":{"Gameplay":{"Interact":[{"control":"Key.R"}]}}})", "[1,2,3]", "\"text\"", R"({"version":1,"maps":[]})" })
+				{
+					ActionSystem untouched;
+					untouched.set_maps(action_test_maps());
+					std::string badWarnings;
+					size_t count = 99;
+					try
+					{
+						count = apply_overrides(untouched, nlohmann::json::parse(bad), badWarnings);
+					}
+					catch (...)
+					{
+						threw = true;
+					}
+					check(!threw && count == 0 && !badWarnings.empty() && maps_text(untouched) == defaults, std::string("overrides_stale: refused whole: ") + bad);
+				}
+			}
+
+			// The module saves and loads the file, and a file that is garbage leaves the defaults.
+			{
+				InputModule module;
+				module.add_maps(action_test_maps());
+				module.set_overrides_path(dir / "saved.json");
+				module.actions().rebind("Gameplay", "Jump", 0, control(Key::E));
+				check(module.save_overrides(), "overrides_file: save");
+
+				InputModule other;
+				other.add_maps(action_test_maps());
+				other.set_overrides_path(dir / "saved.json");
+				check(other.load_overrides() && other.actions().modified("Gameplay", "Jump") && other.actions().action("Gameplay", "Jump")->Bindings[0].Parts[0] == control(Key::E),
+					"overrides_file: a fresh module loads the saved bindings");
+
+				const std::string defaults = maps_text(other.actions());
+				for (const char* content : { "{{{", "" })
+				{
+					InputModule garbage;
+					garbage.add_maps(action_test_maps());
+					write_text_file(dir / "garbage.json", content);
+					garbage.set_overrides_path(dir / "garbage.json");
+					check(!garbage.load_overrides() && garbage.actions().find_map("Gameplay") && !garbage.actions().modified("Gameplay", "Jump"),
+						std::string("overrides_file_garbage: '") + content + "' leaves the defaults");
+				}
+				InputModule missing;
+				missing.add_maps(action_test_maps());
+				missing.set_overrides_path(dir / "missing.json");
+				check(!missing.load_overrides() && !missing.actions().modified("Gameplay", "Jump"), "overrides_file_garbage: a missing file leaves the defaults");
+			}
+
+			// The project settings: the file, and the pack.
+			{
+				const std::filesystem::path file = dir / "input.wsettings";
+				InputProjectSettings settings;
+				settings.DefaultMap.Guid = AssetGuid::generate();
+
+				std::string settingsError;
+				check(save_input_settings(file, settings, settingsError), "settings_roundtrip: save");
+				InputProjectSettings loaded;
+				check(load_input_settings(file, loaded, settingsError) && loaded.DefaultMap == settings.DefaultMap, "settings_roundtrip: the default map comes back");
+
+				InputProjectSettings none;
+				none.DefaultMap.Guid = AssetGuid::generate();
+				check(load_input_settings(dir / "none.wsettings", none, settingsError) && !none.DefaultMap.valid(), "settings_roundtrip: a missing file is the default");
+				write_text_file(dir / "garbage.wsettings", "{{{");
+				check(!load_input_settings(dir / "garbage.wsettings", none, settingsError) && !settingsError.empty(), "settings_roundtrip: a damaged file is refused");
+
+				AssetDatabase& database = pipeline.get_database();
+				const std::filesystem::path noPhysics = dir / "no_physics.wsettings";
+				check(Packager::pack(database, dir / "pack", nullptr, nullptr, noPhysics, file), "settings_pack: packing with the file");
+				PakSource pak(dir / "pack" / "assets.wpak");
+				const std::optional<InputProjectSettings> fromPack = pak.valid() ? read_input_settings(pak) : std::nullopt;
+				check(fromPack && fromPack->DefaultMap == settings.DefaultMap, "settings_pack: the pack holds the default map");
+
+				check(Packager::pack(database, dir / "pack_without", nullptr, nullptr, noPhysics, dir / "none.wsettings"), "settings_pack: packing without the file");
+				PakSource plain(dir / "pack_without" / "assets.wpak");
+				check(plain.valid() && !read_input_settings(plain).has_value(), "settings_pack: no file, no settings in the pack");
+			}
+
+			std::filesystem::remove_all(dir, error);
+		}
+
 		void input_module(Check& check)
 		{
 			Engine& engine = Engine::get();
@@ -760,7 +934,6 @@ namespace wiwa
 
 	bool run_input_smoke_test(AssetPipelineModule& pipeline)
 	{
-		(void)pipeline;
 
 		Check check;
 		raw_input(check);
@@ -770,6 +943,7 @@ namespace wiwa
 		action_rebinding(check);
 		action_listen(check);
 		last_device(check);
+		input_persistence(check, pipeline);
 
 		if (check.Failures == 0)
 		{

@@ -9,6 +9,7 @@
 
 #include <scene/scene_data.h>
 #include <physics/cooked_shape.h>
+#include <input/action_types.h>
 #include <physics/physics_material_asset.h>
 #include <ui/ui_widget.h>
 #include "asset_data.h"
@@ -137,6 +138,8 @@ namespace wiwa
 	void archive(BinaryArchive& ar, PhysicsMaterialData& v);
 	// A version, the shape kind, then the Jolt binary state of the shape (physics/cooked_shape.cpp).
 	void archive(BinaryArchive& ar, CookedShapeData& v);
+	// A version, then the JSON text (input/input_map_io.h is the one description of the format); refuses another version, trailing bytes and text input_map_from_text refuses.
+	void archive(BinaryArchive& ar, InputMapData& v);
 
 	template<typename T>
 	constexpr AssetType asset_type_of();
@@ -156,6 +159,7 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<UiPanelData>() { return AssetType::UiPanel; }
 	template<> constexpr AssetType asset_type_of<PhysicsMaterialData>() { return AssetType::PhysicsMaterial; }
 	template<> constexpr AssetType asset_type_of<CookedShapeData>() { return AssetType::PhysicsShape; }
+	template<> constexpr AssetType asset_type_of<InputMapData>() { return AssetType::InputMap; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)

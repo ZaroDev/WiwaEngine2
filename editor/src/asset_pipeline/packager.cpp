@@ -7,6 +7,7 @@
 #include <assets/asset_catalog.h>
 #include <assets/build_info.h>
 #include <assets/pak_format.h>
+#include <input/input_project_settings.h>
 #include <physics/physics_project_settings.h>
 #include <assets/wasset_io.h>
 
@@ -73,7 +74,7 @@ namespace wiwa
 		return selected;
 	}
 
-	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile)
+	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile, const std::filesystem::path& inputSettingsFile)
 	{
 		JobProgress local;
 		if (progress == nullptr)
@@ -314,6 +315,25 @@ namespace wiwa
 				else
 				{
 					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", physicsSettingsFile.string(), layersError);
+					ok = false;
+				}
+			}
+		}
+
+		// The project's input settings (the default map), if the editor has saved any.
+		{
+			std::error_code exists;
+			if (std::filesystem::exists(inputSettingsFile, exists))
+			{
+				InputProjectSettings inputSettings;
+				std::string inputError;
+				if (load_input_settings(inputSettingsFile, inputSettings, inputError))
+				{
+					ok = add_blob(INPUT_SETTINGS_GUID, 0, serialize(inputSettings), "input settings") && ok;
+				}
+				else
+				{
+					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", inputSettingsFile.string(), inputError);
 					ok = false;
 				}
 			}
