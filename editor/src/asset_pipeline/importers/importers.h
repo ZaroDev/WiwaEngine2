@@ -18,4 +18,5 @@ namespace wiwa
 	Scope<IImporter> create_ui_panel_importer();    // .wuipanel
 	Scope<IImporter> create_font_importer();        // .ttf .otf
 	Scope<IImporter> create_physics_material_importer(); // .wphysmat
+	Scope<IImporter> create_input_map_importer(); // .winput
 }

@@ -17,6 +17,7 @@ namespace wiwa
 		HlslInclude,   // .hlsli
 		UiPanel,       // .wuipanel
 		PhysicsMaterial, // .wphysmat
+		InputMap,        // .winput
 	};
 
 	// What the Create menu calls it, the name it starts with, and the extension the file gets ("" for a folder).

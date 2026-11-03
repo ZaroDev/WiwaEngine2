@@ -276,7 +276,7 @@ namespace wiwa
 		}
 
 		// 1. import + pack
-		check(Packager::pack(database, temp, nullptr, nullptr, temp / "none.wsettings"), "packing the Library");
+		check(Packager::pack(database, temp, nullptr, nullptr, temp / "none.wsettings", temp / "none_input.wsettings"), "packing the Library");
 		const std::vector<CookedFile> cooked = read_library(database.get_library_root());
 		check(!cooked.empty(), "the Library has cooked assets (put some files in Assets/)");
 		WI_ASSET_LOG(Info, "Smoke test: {0} cooked assets", cooked.size());

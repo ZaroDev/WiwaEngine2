@@ -9,6 +9,7 @@
 #include "../scene/scene_json.h"
 #include "material_file.h"
 #include "physics_material_file.h"
+#include <input/input_map_io.h>
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -16,6 +17,36 @@ namespace wiwa
 {
 	namespace
 	{
+		// The map a new .winput starts with: Jump on Space and the pad's A, Move on WASD and the left stick.
+		InputMapData default_input_map()
+		{
+			Binding space;
+			space.Parts[0] = control(Key::Space);
+			Binding padA;
+			padA.Parts[0] = control(PadButton::A);
+
+			Binding wasd;
+			wasd.BindingKind = Binding::Kind::Composite2D;
+			wasd.Parts[0] = control(Key::W);
+			wasd.Parts[1] = control(Key::S);
+			wasd.Parts[2] = control(Key::A);
+			wasd.Parts[3] = control(Key::D);
+			Binding stick;
+			stick.BindingKind = Binding::Kind::Pair2D;
+			stick.Parts[0] = control(PadAxis::LeftX);
+			stick.Parts[1] = control(PadAxis::LeftY);
+			stick.Deadzone = 0.2f;
+
+			ActionMap gameplay;
+			gameplay.Name = "Gameplay";
+			gameplay.Actions.push_back({ "Jump", ActionType::Button, { space, padA } });
+			gameplay.Actions.push_back({ "Move", ActionType::Axis2D, { wasd, stick } });
+
+			InputMapData data;
+			data.Maps.push_back(std::move(gameplay));
+			return data;
+		}
+
 		constexpr size_t MAX_NAME_LENGTH = 100;
 
 		// Windows treats everything before the first dot as the device name: "CON.txt" is the console too.
@@ -143,6 +174,7 @@ namespace wiwa
 		case CreateKind::HlslInclude: return "HLSL include";
 		case CreateKind::UiPanel: return "UI panel";
 		case CreateKind::PhysicsMaterial: return "Physics Material";
+		case CreateKind::InputMap: return "Input Map";
 		}
 		return "";
 	}
@@ -160,6 +192,7 @@ namespace wiwa
 		case CreateKind::HlslInclude: return "NewInclude";
 		case CreateKind::UiPanel: return "NewPanel";
 		case CreateKind::PhysicsMaterial: return "New physics material";
+		case CreateKind::InputMap: return "New input map";
 		}
 		return "";
 	}
@@ -177,6 +210,7 @@ namespace wiwa
 		case CreateKind::HlslInclude: return ".hlsli";
 		case CreateKind::UiPanel: return ".wuipanel";
 		case CreateKind::PhysicsMaterial: return ".wphysmat";
+		case CreateKind::InputMap: return ".winput";
 		}
 		return "";
 	}
@@ -279,6 +313,9 @@ namespace wiwa
 			break;
 		case CreateKind::PhysicsMaterial:
 			written = write_text(path, physics_material_to_json(default_physics_material()).dump(2));
+			break;
+		case CreateKind::InputMap:
+			written = write_text(path, input_map_to_text(default_input_map()));
 			break;
 		}
 

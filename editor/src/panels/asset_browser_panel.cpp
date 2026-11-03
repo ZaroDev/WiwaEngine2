@@ -573,7 +573,7 @@ void AssetBrowserPanel::draw_context_menu()
 	if (ImGui::BeginMenu("Create"))
 	{
 		for (const wiwa::CreateKind kind : { wiwa::CreateKind::Folder, wiwa::CreateKind::Material, wiwa::CreateKind::Script, wiwa::CreateKind::Scene,
-			wiwa::CreateKind::SurfaceShader, wiwa::CreateKind::HlslShader, wiwa::CreateKind::HlslInclude, wiwa::CreateKind::UiPanel, wiwa::CreateKind::PhysicsMaterial })
+			wiwa::CreateKind::SurfaceShader, wiwa::CreateKind::HlslShader, wiwa::CreateKind::HlslInclude, wiwa::CreateKind::UiPanel, wiwa::CreateKind::PhysicsMaterial, wiwa::CreateKind::InputMap })
 		{
 			if (ImGui::MenuItem(wiwa::display_name(kind)))
 			{

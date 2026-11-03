@@ -1,7 +1,11 @@
 #include <editor_common.h>
 #include "input_smoke_test.h"
 
+#include "../asset_pipeline/asset_database.h"
+#include "../asset_pipeline/asset_templates.h"
+#include "../asset_pipeline/file_utils.h"
 #include "../asset_pipeline/input_settings_file.h"
+#include "../asset_pipeline/meta_file.h"
 #include <assets/pak_source.h>
 #include <assets/wasset_io.h>
 #include <core/engine.h>
@@ -899,6 +903,103 @@ namespace wiwa
 			std::filesystem::remove_all(dir, error);
 		}
 
+		// The cooked asset of a source file, read from the Library (nullopt if there is none).
+		std::optional<std::filesystem::path> cooked_path(AssetDatabase& database, const std::filesystem::path& source)
+		{
+			std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+			if (!meta) return std::nullopt;
+
+			const std::string name = meta->Guid.to_string() + ".wasset";
+			std::error_code error;
+			for (auto it = std::filesystem::recursive_directory_iterator(database.get_library_root(), error); !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error))
+			{
+				if (it->is_regular_file() && it->path().filename() == name) return it->path();
+			}
+			return std::nullopt;
+		}
+
+		std::optional<InputMapData> cooked_input_map(AssetDatabase& database, const std::filesystem::path& source, std::vector<std::byte>* bytesOut = nullptr)
+		{
+			const std::optional<std::filesystem::path> path = cooked_path(database, source);
+			if (!path) return std::nullopt;
+
+			const std::optional<std::vector<std::byte>> bytes = read_binary_file(*path);
+			std::span<const std::byte> payload;
+			std::optional<WAssetHeader> header = bytes ? parse_wasset_header(*bytes, payload) : std::nullopt;
+			if (!header || header->Type != AssetType::InputMap) return std::nullopt;
+
+			if (bytesOut) *bytesOut = *bytes;
+			return deserialize<InputMapData>(payload);
+		}
+
+		void input_importer(Check& check, AssetPipelineModule& pipeline)
+		{
+			AssetDatabase& database = pipeline.get_database();
+			std::error_code error;
+			const std::filesystem::path dir = database.get_assets_root() / "zz_input_smoke";
+			std::filesystem::remove_all(dir, error);
+			std::filesystem::create_directories(dir, error);
+
+			const std::filesystem::path file = dir / "test.winput";
+			const InputMapData sample = sample_map_data();
+			write_text_file(file, input_map_to_text(sample));
+
+			std::vector<std::byte> libraryBytes;
+			const std::optional<AssetRef> ref = database.ensure_imported(file);
+			check(ref.has_value(), "import_input_map: the .winput imports");
+			const std::optional<InputMapData> cooked = cooked_input_map(database, file, &libraryBytes);
+			check(cooked && same_map_data(*cooked, sample), "import_input_map: the cooked map equals the source");
+
+			// the pack holds the Library's bytes and they decode to the same map
+			if (ref)
+			{
+				const std::filesystem::path packDirectory = std::filesystem::temp_directory_path() / "wiwa_input_import_smoke";
+				std::filesystem::remove_all(packDirectory, error);
+				check(Packager::pack(database, packDirectory, nullptr, nullptr, packDirectory / "none_physics.wsettings", packDirectory / "none_input.wsettings"),
+					"import_input_map_pack: packing the Library with a map in it");
+				PakSource pak(packDirectory / "assets.wpak");
+				const std::optional<std::vector<std::byte>> packed = pak.valid() ? pak.read(ref->Guid) : std::nullopt;
+				check(packed && *packed == libraryBytes, "import_input_map_pack: the pack holds the bytes of the Library");
+				std::span<const std::byte> payload;
+				const std::optional<InputMapData> fromPack = packed && parse_wasset_header(*packed, payload) ? deserialize<InputMapData>(payload) : std::nullopt;
+				check(fromPack && same_map_data(*fromPack, sample), "import_input_map_pack: the packed map decodes to the source");
+				std::filesystem::remove_all(packDirectory, error);
+			}
+
+			// the guid survives an edit and a re-import
+			InputMapData edited = sample;
+			edited.Maps.push_back(ActionMap{ "Extra", false, {} });
+			write_text_file(file, input_map_to_text(edited));
+			database.reimport(file);
+			const std::optional<AssetRef> again = database.ensure_imported(file);
+			check(ref && again && again->Guid == ref->Guid, "import_input_map: a re-import keeps the guid");
+			const std::optional<InputMapData> reimported = cooked_input_map(database, file);
+			check(reimported && same_map_data(*reimported, edited), "import_input_map: the edit is cooked");
+
+			// a damaged file fails the import and the previous cooked version stays
+			WI_INPUT_LOG(Info, "Smoke test: the next import errors are expected");
+			write_text_file(file, "{{{ not a map");
+			database.reimport(file);
+			const std::optional<InputMapData> kept = cooked_input_map(database, file);
+			check(kept && same_map_data(*kept, edited), "import_input_map_bad: a damaged edit keeps the previous cooked map");
+
+			const std::filesystem::path broken = dir / "broken.winput";
+			write_text_file(broken, R"({"version":1,"maps":[{"name":"M","actions":[{"name":"A","type":"Button","bindings":[{"control":"Key.Nope"}]}]}]})");
+			database.ensure_imported(broken);
+			check(!cooked_input_map(database, broken).has_value(), "import_input_map_bad: an unknown control cooks nothing");
+
+			// the Create menu makes a file that imports
+			check(std::string(extension(CreateKind::InputMap)) == ".winput", "import_input_map_template: the Create menu kind has the extension");
+			const std::filesystem::path created = create_asset(CreateKind::InputMap, dir, "Made");
+			check(!created.empty() && database.ensure_imported(created).has_value(), "import_input_map_template: the created file imports");
+			const std::optional<InputMapData> made = cooked_input_map(database, created);
+			check(made && made->Maps.size() == 1 && made->Maps[0].Name == "Gameplay" && made->Maps[0].Actions.size() == 2 &&
+				made->Maps[0].Actions[0].Name == "Jump" && made->Maps[0].Actions[1].Name == "Move", "import_input_map_template: the template has Gameplay with Jump and Move");
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+
 		void input_module(Check& check)
 		{
 			Engine& engine = Engine::get();
@@ -944,6 +1045,7 @@ namespace wiwa
 		action_listen(check);
 		last_device(check);
 		input_persistence(check, pipeline);
+		input_importer(check, pipeline);
 
 		if (check.Failures == 0)
 		{

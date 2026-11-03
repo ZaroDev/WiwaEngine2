@@ -24,5 +24,6 @@ namespace wiwa
 		database.register_importer(create_ui_panel_importer());
 		database.register_importer(create_font_importer());
 		database.register_importer(create_physics_material_importer());
+		database.register_importer(create_input_map_importer());
 	}
 }
