@@ -126,7 +126,7 @@ namespace wiwa
 
 		double x = 0.0, y = 0.0;
 		glfwGetCursorPos(window, &x, &y);
-		m_Events.move_cursor({ static_cast<float>(x), static_cast<float>(y) });
+		m_Events.place_cursor({ static_cast<float>(x), static_cast<float>(y) }); // where it starts is not a movement
 	}
 
 	GlfwInputBackend::~GlfwInputBackend()

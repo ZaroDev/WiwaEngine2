@@ -98,6 +98,16 @@ namespace wiwa
 				check(near_equal(state.scroll().y, 2.0f) && near_equal(state.value(control(MouseAxis::ScrollY)), 2.0f), "raw_mouse: scroll is reported");
 				state.update(backend);
 				check(near_equal(state.scroll().y, 0.0f) && near_equal(state.mouse_delta().x, 0.0f), "raw_mouse: scroll and delta are cleared the next frame");
+
+				// a cursor that is placed (the backend learning where it starts) is not a movement
+				ScriptedInputBackend placed;
+				InputState placedState;
+				placed.place_cursor({ 300.0f, 200.0f });
+				placedState.update(placed);
+				check(near_equal(placedState.mouse_position().x, 300.0f) && near_equal(placedState.mouse_delta().x, 0.0f) && near_equal(placedState.mouse_delta().y, 0.0f), "raw_mouse_place: the first frame has the position and no delta");
+				placed.move_cursor({ 305.0f, 200.0f });
+				placedState.update(placed);
+				check(near_equal(placedState.mouse_delta().x, 5.0f), "raw_mouse_place: later movement is a delta");
 			}
 
 			{

@@ -24,6 +24,12 @@ namespace wiwa
 		m_State.Cursor = position;
 	}
 
+	void ScriptedInputBackend::place_cursor(glm::vec2 position)
+	{
+		m_State.Cursor = position;
+		m_ReportedCursor = position;
+	}
+
 	void ScriptedInputBackend::scroll(glm::vec2 amount)
 	{
 		m_State.Scroll += amount;
