@@ -166,7 +166,60 @@ namespace wiwa
 		bool Enabled = false;
 	};
 
+	// A constraint between two bodies, plain data (see the Joint component for what the fields mean). A is the owner's body; B is the
+	// other body, a null guid for the world (the anchors are then world points). Angles are degrees.
+	struct JointDesc
+	{
+		JointType Type = JointType::Hinge;
+		BodyKey A{};
+		BodyKey B{};
+		bool CollideConnected = false;
+		glm::vec3 AnchorA{ 0.0f };
+		glm::vec3 AnchorB{ 0.0f };
+		glm::vec3 Axis{ 0.0f, 1.0f, 0.0f };
+		glm::vec3 NormalAxis{ 1.0f, 0.0f, 0.0f };
+		float LimitMin = 0.0f;
+		float LimitMax = 0.0f;
+		float SwingHalfAngle = 45.0f;
+		float TwistHalfAngle = 45.0f;
+		float SpringFrequency = 0.0f;
+		float SpringDamping = 0.0f;
+		JointMotorMode MotorMode = JointMotorMode::Off;
+		float MotorTarget = 0.0f;
+		float MotorMaxForce = 0.0f;
+		float BreakForce = 0.0f;
+		float BreakTorque = 0.0f;
+	};
+
+	// Makes the joint owned by Desc.A (one that exists for that owner is replaced). It waits, unmade, until both bodies exist.
+	struct CreateJoint
+	{
+		JointDesc Desc{};
+	};
+
+	struct DestroyJoint
+	{
+		BodyKey Owner{};
+	};
+
+	// Changes the motor of a joint (Off turns it off). Effective from the next step.
+	struct SetJointMotor
+	{
+		BodyKey Owner{};
+		JointMotorMode Mode = JointMotorMode::Off;
+		float Target = 0.0f;
+		float MaxForce = 0.0f;
+	};
+
+	// Changes the limits of a joint (degrees for a hinge, metres for a slider and a distance joint).
+	struct SetJointLimits
+	{
+		BodyKey Owner{};
+		float Min = 0.0f;
+		float Max = 0.0f;
+	};
+
 	// Plain-data commands from the main thread to the physics thread, applied at the start of the next step in submission order.
 	// New kinds are added as new alternatives. Commands for a key that has no body are ignored.
-	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial, SetLayer, SetLayers, AddForce, AddTorque, AddImpulse, SetVelocity, SetAngularVelocity, WakeBody, SetGravity, SetDebugDraw>;
+	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial, SetLayer, SetLayers, AddForce, AddTorque, AddImpulse, SetVelocity, SetAngularVelocity, WakeBody, SetGravity, SetDebugDraw, CreateJoint, DestroyJoint, SetJointMotor, SetJointLimits>;
 }

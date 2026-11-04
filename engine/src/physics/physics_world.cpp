@@ -181,6 +181,10 @@ namespace wiwa
 					{
 						set_layers(c.Layers);
 					}
+					else if constexpr (std::is_same_v<T, CreateJoint> || std::is_same_v<T, DestroyJoint> || std::is_same_v<T, SetJointMotor> || std::is_same_v<T, SetJointLimits>)
+					{
+						// joints are built in the next task
+					}
 					else
 					{
 						static_assert(always_false<T>, "a PhysicsCommand kind is not handled by PhysicsWorld::execute");

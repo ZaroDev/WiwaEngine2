@@ -17,13 +17,15 @@ namespace wiwa
 		bool Active = false; // awake (not sleeping)
 	};
 
-	enum class PhysicsEventKind : u32 { CollisionEnter, CollisionStay, CollisionExit, TriggerEnter, TriggerExit };
+	enum class PhysicsEventKind : u32 { CollisionEnter, CollisionStay, CollisionExit, TriggerEnter, TriggerExit, JointBreak };
 
 	// A contact or trigger event of one step, made by the contact listener on the physics thread. A and B name the two bodies (the
 	// owning bodies: a compound's part reports as its body), A < B. A pair where either body is a trigger gives Trigger events only.
 	//  - Enter: the first contact of the pair (a pair touching through several parts of a compound gives one); Exit: its last contact
 	//    ended, or one of the two bodies was destroyed. A contact lost because the bodies fell asleep is not an exit.
 	//  - Stay: at most one per pair per step, and only when either body has RigidBody::ReportContacts (none in the step of the Enter).
+	// JointBreak: a joint went over its break force or torque and was removed; A is the entity that owns the Joint, B the entity it was
+	// connected to (a null guid: the world). Not ordered A < B, delivered like begin and end events (never lost).
 	// Point, Normal, Impulse and RelativeVelocity are set on CollisionEnter and CollisionStay (zero on the others):
 	//  - Point: the middle of the contact points, world space; Normal: unit, pointing from A towards B (the way B is pushed out of A);
 	//  - RelativeVelocity: the velocity of B minus that of A at Point, before the step resolved the contact (m/s);
@@ -84,6 +86,7 @@ namespace wiwa
 		// What the step cost and how big the world is, for the editor's Physics panel.
 		u32 BodyCount = 0;
 		u32 ActiveBodies = 0;   // awake (not sleeping)
+		u32 JointCount = 0;     // joints that are made (not waiting for a body)
 		float StepMs = 0.0f;    // wall time of PhysicsSystem::Update
 	};
 }
