@@ -189,6 +189,8 @@ namespace wiwa
 		float MotorMaxForce = 0.0f;
 		float BreakForce = 0.0f;
 		float BreakTorque = 0.0f;
+
+		bool operator==(const JointDesc&) const = default;
 	};
 
 	// Makes the joint owned by Desc.A (one that exists for that owner is replaced). It waits, unmade, until both bodies exist.

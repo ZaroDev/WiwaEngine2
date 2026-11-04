@@ -1680,6 +1680,179 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// ---- joints from a scene: Joint components through PhysicsSync ----
+
+		struct DoorScene
+		{
+			entt::entity Anchor{ entt::null };
+			entt::entity Door{ entt::null };
+		};
+
+		// A static anchor 0.5 m above the hinge point (0, 5, 0) and a 2 m plank, a dynamic body level with the hinge, hinged to the anchor.
+		DoorScene make_door_scene(Scene& scene)
+		{
+			DoorScene rig;
+			rig.Anchor = add_entity(scene, "Anchor", glm::vec3(0.0f, 5.5f, 0.0f));
+			add_box_collider(scene, rig.Anchor, glm::vec3(0.1f));
+			rig.Door = add_entity(scene, "Door", glm::vec3(1.0f, 5.0f, 0.0f));
+			add_body(scene, rig.Door, MotionType::Dynamic);
+			add_box_collider(scene, rig.Door, glm::vec3(1.0f, 0.1f, 0.1f));
+			Joint joint;
+			joint.Type = JointType::Hinge;
+			joint.Connected = key_of(scene, rig.Anchor);
+			joint.AnchorA = glm::vec3(-1.0f, 0.0f, 0.0f);
+			joint.AnchorB = glm::vec3(0.0f, -0.5f, 0.0f);
+			joint.Axis = glm::vec3(0.0f, 0.0f, 1.0f);
+			scene.registry().emplace<Joint>(rig.Door, joint);
+			return rig;
+		}
+
+		glm::vec3 door_end(const Scene& scene, entt::entity door)
+		{
+			const Transform& transform = scene.registry().get<Transform>(door);
+			return transform.Position + transform.Rotation * glm::vec3(-1.0f, 0.0f, 0.0f);
+		}
+
+		float door_angle_deg(const Scene& scene, entt::entity door)
+		{
+			const glm::vec3 direction = scene.registry().get<Transform>(door).Rotation * glm::vec3(1.0f, 0.0f, 0.0f);
+			return glm::degrees(std::atan2(direction.y, direction.x));
+		}
+
+		void check_joint_sync(Check& check)
+		{
+			// the door swings on its hinge, and a limit changed while it runs takes effect without making the joint again
+			{
+				Scene scene;
+				const DoorScene rig = make_door_scene(scene);
+				PhysicsThread thread;
+				PhysicsSync sync;
+				check(start_scene(thread, sync, scene), "joint_sync_start: the world starts");
+				Joint& joint = scene.registry().get<Joint>(rig.Door);
+				joint.LimitMin = -30.0f;
+				joint.LimitMax = 30.0f;
+				const Ref<const PhysicsStepSnapshot> settled = run_for(thread, sync, scene, 3.0);
+				check(settled != nullptr && settled->JointCount == 1, "joint_sync_made: the Joint component makes one joint");
+				check(glm::length(door_end(scene, rig.Door) - glm::vec3(0.0f, 5.0f, 0.0f)) < 2e-2f, "joint_sync_anchor: the door's end stays on the hinge point, got " + fmt_vec(door_end(scene, rig.Door)));
+				const float angle = door_angle_deg(scene, rig.Door);
+				check(angle > -31.5f && angle < -26.0f, "joint_sync_limits: the limits set on the component hold the door at -30 degrees, got " + std::to_string(angle));
+
+				// removing the component frees the door
+				const float before = scene.registry().get<Transform>(rig.Door).Position.y;
+				scene.registry().remove<Joint>(rig.Door);
+				const Ref<const PhysicsStepSnapshot> freed = run_for(thread, sync, scene, 1.0);
+				check(freed != nullptr && freed->JointCount == 0, "joint_sync_removed: removing the component unmakes the joint");
+				check(scene.registry().get<Transform>(rig.Door).Position.y < before - 1.0f, "joint_sync_free: the door falls once its Joint is removed");
+				thread.stop();
+			}
+
+			// a joint to its own entity is not made
+			{
+				Scene scene;
+				const entt::entity lonely = add_entity(scene, "Lonely", glm::vec3(0.0f, 5.0f, 0.0f));
+				add_body(scene, lonely, MotionType::Dynamic);
+				add_box_collider(scene, lonely, glm::vec3(0.5f));
+				Joint joint;
+				joint.Connected = key_of(scene, lonely);
+				scene.registry().emplace<Joint>(lonely, joint);
+				PhysicsThread thread;
+				PhysicsSync sync;
+				check(start_scene(thread, sync, scene), "joint_self_start: the world starts");
+				const Ref<const PhysicsStepSnapshot> later = run_for(thread, sync, scene, 0.3);
+				check(later != nullptr && later->JointCount == 0 && sync.joint_count() == 0, "joint_self_not_made: a joint connected to its own entity is not sent and not made");
+				check(scene.registry().get<Transform>(lonely).Position.y < 4.9f, "joint_self_falls: the body is free");
+				thread.stop();
+			}
+
+			// destroying the connected entity while the joint runs: no crash, the joint is unmade, no break event for it
+			{
+				Scene scene;
+				const DoorScene rig = make_door_scene(scene);
+				PhysicsThread thread;
+				PhysicsSync sync;
+				check(start_scene(thread, sync, scene), "joint_destroy_start: the world starts");
+				run_for(thread, sync, scene, 0.3);
+				scene.destroy(rig.Anchor);
+				u32 breaks = 0;
+				const Clock::time_point until = Clock::now() + std::chrono::milliseconds(600);
+				while (Clock::now() < until)
+				{
+					scene.update_world_transforms();
+					sync.push_changes(scene, thread);
+					for (const Ref<const PhysicsStepSnapshot>& step : thread.take_steps())
+					{
+						for (const PhysicsEvent& event : step->Events)
+						{
+							breaks += event.Kind == PhysicsEventKind::JointBreak ? 1u : 0u;
+						}
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(8));
+				}
+				const Ref<const PhysicsStepSnapshot> later = thread.latest();
+				check(later != nullptr && later->JointCount == 0, "joint_destroy_unmade: the joint of a destroyed entity is unmade");
+				check(breaks == 0, "joint_destroy_no_break: no break event comes for a destroyed entity's joint");
+				thread.stop();
+			}
+		}
+
+		// A joint that breaks in every world, ten worlds one after the other from the same scene: each world gives one break, and nothing
+		// of an older world shows up in a newer one.
+		void check_joint_world_lifetime(Check& check)
+		{
+			Scene scene;
+			const entt::entity box = add_entity(scene, "Hanging", glm::vec3(0.0f, 4.7f, 0.0f));
+			add_body(scene, box, MotionType::Dynamic);
+			add_box_collider(scene, box, glm::vec3(0.5f));
+			Joint joint;
+			joint.Type = JointType::Fixed;
+			joint.AnchorA = glm::vec3(0.0f, 0.5f, 0.0f);
+			joint.AnchorB = glm::vec3(0.0f, 5.2f, 0.0f);
+			joint.BreakForce = 5000.0f;
+			scene.registry().emplace<Joint>(box, joint);
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			bool stale = false;
+			bool oneEach = true;
+			for (int round = 0; round < 10; round++)
+			{
+				if (!start_scene(thread, sync, scene))
+				{
+					check(false, "joint_lifetime_start: the world starts, round " + std::to_string(round));
+					return;
+				}
+				const Ref<const PhysicsStepSnapshot> first = thread.latest();
+				stale = stale || first == nullptr || first->JointCount != 0;
+				u32 breaks = 0;
+				u32 stepsSeen = 0;
+				const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(10);
+				while (stepsSeen < 90 && Clock::now() < giveUp)
+				{
+					scene.update_world_transforms();
+					sync.push_changes(scene, thread);
+					for (const Ref<const PhysicsStepSnapshot>& step : thread.take_steps())
+					{
+						stale = stale || step->World != thread.generation();
+						stepsSeen++;
+						for (const PhysicsEvent& event : step->Events)
+						{
+							breaks += event.Kind == PhysicsEventKind::JointBreak ? 1u : 0u;
+						}
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(4));
+				}
+				oneEach = oneEach && breaks == 1;
+				thread.stop();
+				// the scene's box fell in the world that just ended: it starts again where its entity is, so put it back
+				scene.registry().get<Transform>(box).Position = glm::vec3(0.0f, 4.7f, 0.0f);
+			}
+			check(!stale, "joint_lifetime_no_stale: a new world starts with no joints and shows nothing of an older one");
+			check(oneEach, "joint_lifetime_one_break: every world gives exactly one break, none carried over");
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1708,6 +1881,8 @@ namespace wiwa
 		check_joint_pending_destroy(check);
 		check_joint_no_collide(check);
 		check_joint_break(check);
+		check_joint_sync(check);
+		check_joint_world_lifetime(check);
 
 		if (check.Failures == 0)
 		{

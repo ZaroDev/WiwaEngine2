@@ -325,6 +325,103 @@ namespace wiwa
 				tracked.LastWorld = world;
 			}
 		}
+
+		push_joints(scene, thread);
+	}
+
+	void PhysicsSync::push_joints(const Scene& scene, PhysicsThread& thread)
+	{
+		const entt::registry& registry = scene.registry();
+		std::unordered_map<BodyKey, JointDesc> wanted;
+		for (const entt::entity entity : registry.view<Joint>())
+		{
+			const BodyKey owner = registry.get<Id>(entity).Guid;
+			if (!m_Bodies.contains(owner))
+			{
+				continue; // no body on this entity (yet): nothing to hold the joint
+			}
+			const Joint& joint = registry.get<Joint>(entity);
+			if (joint.Connected == owner)
+			{
+				if (m_WarnedJoints.insert(owner).second)
+				{
+					WI_PHYSICS_LOG(Warning, "Entity {0}: its Joint is connected to the entity itself; it is not made", owner.to_string());
+				}
+				continue;
+			}
+			JointDesc desc;
+			desc.Type = joint.Type;
+			desc.A = owner;
+			desc.B = joint.Connected;
+			desc.CollideConnected = joint.CollideConnected;
+			desc.AnchorA = joint.AnchorA;
+			desc.AnchorB = joint.AnchorB;
+			desc.Axis = joint.Axis;
+			desc.NormalAxis = joint.NormalAxis;
+			desc.LimitMin = joint.LimitMin;
+			desc.LimitMax = joint.LimitMax;
+			desc.SwingHalfAngle = joint.SwingHalfAngle;
+			desc.TwistHalfAngle = joint.TwistHalfAngle;
+			desc.SpringFrequency = joint.SpringFrequency;
+			desc.SpringDamping = joint.SpringDamping;
+			desc.MotorMode = joint.MotorMode;
+			desc.MotorTarget = joint.MotorTarget;
+			desc.MotorMaxForce = joint.MotorMaxForce;
+			desc.BreakForce = joint.BreakForce;
+			desc.BreakTorque = joint.BreakTorque;
+			wanted.emplace(owner, desc);
+		}
+
+		for (auto it = m_Joints.begin(); it != m_Joints.end();)
+		{
+			if (!wanted.contains(it->first))
+			{
+				thread.push(DestroyJoint{ it->first }, m_Generation);
+				it = m_Joints.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+
+		for (const auto& [owner, desc] : wanted)
+		{
+			const auto it = m_Joints.find(owner);
+			if (it == m_Joints.end())
+			{
+				thread.push(CreateJoint{ desc }, m_Generation);
+				m_Joints.emplace(owner, desc);
+				continue;
+			}
+			JointDesc& sent = it->second;
+			if (sent == desc)
+			{
+				continue;
+			}
+			// only the motor or the limits changed: the joint keeps its rest pose
+			JointDesc rest = desc;
+			rest.MotorMode = sent.MotorMode;
+			rest.MotorTarget = sent.MotorTarget;
+			rest.MotorMaxForce = sent.MotorMaxForce;
+			rest.LimitMin = sent.LimitMin;
+			rest.LimitMax = sent.LimitMax;
+			if (!(rest == sent))
+			{
+				thread.push(CreateJoint{ desc }, m_Generation);
+				sent = desc;
+				continue;
+			}
+			if (desc.MotorMode != sent.MotorMode || desc.MotorTarget != sent.MotorTarget || desc.MotorMaxForce != sent.MotorMaxForce)
+			{
+				thread.push(SetJointMotor{ owner, desc.MotorMode, desc.MotorTarget, desc.MotorMaxForce }, m_Generation);
+			}
+			if (desc.LimitMin != sent.LimitMin || desc.LimitMax != sent.LimitMax)
+			{
+				thread.push(SetJointLimits{ owner, desc.LimitMin, desc.LimitMax }, m_Generation);
+			}
+			sent = desc;
+		}
 	}
 
 	void PhysicsSync::apply_poses(Scene& scene, const PhysicsStepSnapshot& prev, const PhysicsStepSnapshot& latest, float alpha)
@@ -478,5 +575,7 @@ namespace wiwa
 		m_Materials.clear();
 		m_Shapes.clear();
 		m_WarnedColliders.clear();
+		m_Joints.clear();
+		m_WarnedJoints.clear();
 	}
 }

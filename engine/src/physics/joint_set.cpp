@@ -153,6 +153,15 @@ namespace wiwa
 	{
 		if (entry.Constraint != nullptr)
 		{
+			// a body held by the joint may be asleep: without the joint it has to be free to move
+			JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
+			for (const JPH::Body* body : { entry.Constraint->GetBody1(), entry.Constraint->GetBody2() })
+			{
+				if (body != nullptr && !body->IsStatic() && !body->IsActive())
+				{
+					bodies.ActivateBody(body->GetID());
+				}
+			}
 			m_System.RemoveConstraint(entry.Constraint);
 			entry.Constraint = nullptr;
 		}
