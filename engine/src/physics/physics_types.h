@@ -10,6 +10,10 @@ namespace wiwa
 
 	enum class MotionType : u32 { Static, Kinematic, Dynamic };
 
+	// Only append: the values are saved (Joint component).
+	enum class JointType : u32 { Fixed, Point, Hinge, Slider, Distance, Cone, SwingTwist, SixDof };
+	enum class JointMotorMode : u32 { Off, Velocity, Position };
+
 	// The per-scene step settings. Plain data: copied to the physics thread through a SetSettings command.
 	struct PhysicsSettings
 	{
