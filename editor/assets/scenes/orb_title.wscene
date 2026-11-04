@@ -1,0 +1,473 @@
+{
+  "name": "Orb Rush Title",
+  "entities": [
+    {
+      "id": "e92329a2c8b23ed40e6c6c8afc5a1c4e",
+      "components": {
+        "Name": {
+          "Value": "Camera"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            3.2,
+            9
+          ],
+          "Rotation": [
+            -0.10452846326765347,
+            0.0,
+            0.0,
+            0.9945218953682733
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Camera": {
+          "Projection": "Perspective",
+          "FovY": 60,
+          "Near": 0.1,
+          "Far": 400,
+          "OrthoSize": 10,
+          "Primary": true
+        }
+      }
+    },
+    {
+      "id": "e25757857baba87c2aa6c82fea7a7cd7",
+      "components": {
+        "Name": {
+          "Value": "Sun"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            20,
+            0
+          ],
+          "Rotation": [
+            -0.1386,
+            0.4465,
+            0.0702,
+            0.8812
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Directional",
+          "Color": [
+            1,
+            0.96,
+            0.9,
+            1
+          ],
+          "Intensity": 3.0,
+          "Range": 10,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": true
+        }
+      }
+    },
+    {
+      "id": "91059f4b91558c952a721f216808b7cd",
+      "components": {
+        "Name": {
+          "Value": "Floor"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            60,
+            1,
+            60
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 6
+          },
+          "Materials": [
+            {
+              "guid": "6add6eaf85b17fea868e81fdafd1be6e",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c8451d5761ec61cb00cbabfcce1f43cb",
+      "components": {
+        "Name": {
+          "Value": "Showcase"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            1.8,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "script:cfdc556506ad2769c9cffbb826ad6aec": {
+          "degrees_per_second": 25
+        }
+      }
+    },
+    {
+      "id": "b4e0f6b5accf1e6552acb5653a684958",
+      "components": {
+        "Name": {
+          "Value": "Ball"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.6,
+            1.6,
+            1.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "4ae7e8927e833b7511667468a3f23eb3",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "c8451d5761ec61cb00cbabfcce1f43cb"
+    },
+    {
+      "id": "faa2988de696c0c68ad5f1c939a794e1",
+      "components": {
+        "Name": {
+          "Value": "Ring"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0.21643961393810288,
+            0.0,
+            0.0,
+            0.9762960071199334
+          ],
+          "Scale": [
+            3.4,
+            3.4,
+            3.4
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 5
+          },
+          "Materials": [
+            {
+              "guid": "0fcc2a20617af4c78cd2a4e5a374e99d",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "c8451d5761ec61cb00cbabfcce1f43cb"
+    },
+    {
+      "id": "67584507028057443c3ea1823e1c1ad4",
+      "components": {
+        "Name": {
+          "Value": "Ring2"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            -0.28257102082169233,
+            0.10284744064531129,
+            0.3261904081870283,
+            0.8962007809365465
+          ],
+          "Scale": [
+            2.6,
+            2.6,
+            2.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 5
+          },
+          "Materials": [
+            {
+              "guid": "d5827b7830b775043c2e8526dd3b535f",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "c8451d5761ec61cb00cbabfcce1f43cb"
+    },
+    {
+      "id": "c776374fae5c172339079e081e399d66",
+      "components": {
+        "Name": {
+          "Value": "Glow cyan"
+        },
+        "Transform": {
+          "Position": [
+            -4,
+            2.5,
+            1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            0.1,
+            0.9,
+            1,
+            1
+          ],
+          "Intensity": 14,
+          "Range": 9,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "5476981f6f6ee517b021703dfa1d417e",
+      "components": {
+        "Name": {
+          "Value": "Glow orange"
+        },
+        "Transform": {
+          "Position": [
+            4,
+            2.5,
+            1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.45,
+            0.05,
+            1
+          ],
+          "Intensity": 14,
+          "Range": 9,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "e521cc87ca3ae86a4bda430671ac5c36",
+      "components": {
+        "Name": {
+          "Value": "MainMenu"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "UICanvas": {
+          "Panel": {
+            "guid": "b1d9ce917c7c006d377a17c8dc6e13cb",
+            "localId": 0
+          },
+          "SortOrder": 0,
+          "Visible": true
+        }
+      }
+    },
+    {
+      "id": "b0faf69c169e5eacaf267dc01f969fa1",
+      "components": {
+        "Name": {
+          "Value": "SettingsMenu"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "UICanvas": {
+          "Panel": {
+            "guid": "7470c62483a239e20eb438a0a22bdebe",
+            "localId": 0
+          },
+          "SortOrder": 1,
+          "Visible": true
+        }
+      }
+    },
+    {
+      "id": "179ad4c2921f02c00dbe964849cedaf0",
+      "components": {
+        "Name": {
+          "Value": "TitleLogic"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "script:455f09a99a66c57efb4b5bb25131147a": {}
+      }
+    }
+  ],
+  "settings": {
+    "source": "atmosphere",
+    "background": "sky",
+    "ambient": 0.45,
+    "scripts": [],
+    "atmosphere": {
+      "sunIlluminance": 3.4,
+      "skyBrightness": 3.5
+    },
+    "exposure": {
+      "auto": true,
+      "compensation": -0.3,
+      "minEv": -3,
+      "maxEv": 3,
+      "adaptSpeed": 2
+    },
+    "bloom": {
+      "enabled": true,
+      "threshold": 1,
+      "knee": 0.5,
+      "intensity": 0.07
+    },
+    "tonemap": {
+      "operator": "aces",
+      "contrast": 1.06,
+      "saturation": 1.12,
+      "temperature": 0.12,
+      "vignette": 0.25
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1.2,
+      "power": 1.6
+    }
+  }
+}

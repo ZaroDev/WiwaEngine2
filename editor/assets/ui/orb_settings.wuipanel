@@ -1,0 +1,404 @@
+{
+  "version": 1,
+  "referenceResolution": [
+    1920,
+    1080
+  ],
+  "match": 0.5,
+  "nextId": 19,
+  "widgets": [
+    {
+      "id": 2,
+      "kind": "Panel",
+      "Name": "Dim",
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0.6
+      ]
+    },
+    {
+      "id": 3,
+      "kind": "VStack",
+      "Name": "Menu",
+      "AnchorMin": [
+        0.5,
+        0.5
+      ],
+      "AnchorMax": [
+        0.5,
+        0.5
+      ],
+      "OffsetMin": [
+        -224,
+        -280
+      ],
+      "OffsetMax": [
+        224,
+        280
+      ],
+      "Color": [
+        0.04,
+        0.05,
+        0.1,
+        0.9
+      ],
+      "Spacing": 10,
+      "Padding": [
+        24,
+        24,
+        24,
+        24
+      ]
+    },
+    {
+      "id": 4,
+      "kind": "Text",
+      "Name": "Title",
+      "parent": 3,
+      "OffsetMax": [
+        400,
+        48
+      ],
+      "Text": "SETTINGS",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 40,
+      "Align": "Center",
+      "Color": [
+        1,
+        0.85,
+        0.3,
+        1
+      ],
+      "Outline": 0.15,
+      "OutlineColor": [
+        0.05,
+        0.1,
+        0.3,
+        1
+      ],
+      "Shadow": true
+    },
+    {
+      "id": 5,
+      "kind": "Text",
+      "Name": "MoveKey",
+      "parent": 3,
+      "OffsetMax": [
+        400,
+        28
+      ],
+      "Text": "Move",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 20
+    },
+    {
+      "id": 6,
+      "kind": "Text",
+      "Name": "DashKey",
+      "parent": 3,
+      "OffsetMax": [
+        400,
+        28
+      ],
+      "Text": "Dash",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 20
+    },
+    {
+      "id": 7,
+      "kind": "Button",
+      "Name": "RebindDash",
+      "parent": 3,
+      "OffsetMax": [
+        400,
+        46
+      ],
+      "Color": [
+        0.2,
+        0.35,
+        0.6,
+        1
+      ],
+      "HoverColor": [
+        0.35,
+        0.5,
+        0.85,
+        1
+      ],
+      "PressedColor": [
+        0.13999999999999999,
+        0.24499999999999997,
+        0.42,
+        1
+      ]
+    },
+    {
+      "id": 8,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 7,
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        10
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Rebind Dash",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 24,
+      "Align": "Center"
+    },
+    {
+      "id": 9,
+      "kind": "Text",
+      "Name": "PauseKey",
+      "parent": 3,
+      "OffsetMax": [
+        400,
+        28
+      ],
+      "Text": "Pause",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 20
+    },
+    {
+      "id": 10,
+      "kind": "Button",
+      "Name": "RebindPause",
+      "parent": 3,
+      "OffsetMax": [
+        400,
+        46
+      ],
+      "Color": [
+        0.2,
+        0.35,
+        0.6,
+        1
+      ],
+      "HoverColor": [
+        0.35,
+        0.5,
+        0.85,
+        1
+      ],
+      "PressedColor": [
+        0.13999999999999999,
+        0.24499999999999997,
+        0.42,
+        1
+      ]
+    },
+    {
+      "id": 11,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 10,
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        10
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Rebind Pause",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 24,
+      "Align": "Center"
+    },
+    {
+      "id": 12,
+      "kind": "Button",
+      "Name": "Reset",
+      "parent": 3,
+      "OffsetMax": [
+        400,
+        46
+      ],
+      "Color": [
+        0.55,
+        0.35,
+        0.15,
+        1
+      ],
+      "HoverColor": [
+        0.7000000000000001,
+        0.5,
+        0.4,
+        1
+      ],
+      "PressedColor": [
+        0.385,
+        0.24499999999999997,
+        0.105,
+        1
+      ]
+    },
+    {
+      "id": 13,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 12,
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        10
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Reset controls",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 24,
+      "Align": "Center"
+    },
+    {
+      "id": 14,
+      "kind": "Text",
+      "Name": "FovLabel",
+      "parent": 3,
+      "OffsetMax": [
+        400,
+        28
+      ],
+      "Text": "Field of view 60",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 20
+    },
+    {
+      "id": 15,
+      "kind": "Slider",
+      "Name": "Fov",
+      "parent": 3,
+      "OffsetMax": [
+        400,
+        24
+      ],
+      "Color": [
+        0.95,
+        0.6,
+        0.1,
+        1
+      ],
+      "MinValue": 40,
+      "MaxValue": 90,
+      "Value": 60,
+      "Step": 1
+    },
+    {
+      "id": 16,
+      "kind": "Text",
+      "Name": "Note",
+      "parent": 3,
+      "OffsetMax": [
+        400,
+        44
+      ],
+      "Text": "Field of view and best score last for this session. Controls are saved.",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 16,
+      "Wrap": true
+    },
+    {
+      "id": 17,
+      "kind": "Button",
+      "Name": "Back",
+      "parent": 3,
+      "OffsetMax": [
+        400,
+        46
+      ],
+      "Color": [
+        0.2,
+        0.35,
+        0.6,
+        1
+      ],
+      "HoverColor": [
+        0.35,
+        0.5,
+        0.85,
+        1
+      ],
+      "PressedColor": [
+        0.13999999999999999,
+        0.24499999999999997,
+        0.42,
+        1
+      ]
+    },
+    {
+      "id": 18,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 17,
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        10
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Back",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 24,
+      "Align": "Center"
+    }
+  ]
+}

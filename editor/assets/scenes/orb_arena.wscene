@@ -1,0 +1,1922 @@
+{
+  "name": "Orb Rush Arena",
+  "entities": [
+    {
+      "id": "57d957e15acb6c8068bb2d46326d4395",
+      "components": {
+        "Name": {
+          "Value": "Camera"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            11,
+            9
+          ],
+          "Rotation": [
+            -0.4383711467890774,
+            0.0,
+            0.0,
+            0.898794046299167
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Camera": {
+          "Projection": "Perspective",
+          "FovY": 60,
+          "Near": 0.1,
+          "Far": 400,
+          "OrthoSize": 10,
+          "Primary": true
+        }
+      }
+    },
+    {
+      "id": "9655364259ccd56f71774bd0266ec566",
+      "components": {
+        "Name": {
+          "Value": "Sun"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            20,
+            0
+          ],
+          "Rotation": [
+            -0.1386,
+            0.4465,
+            0.0702,
+            0.8812
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Directional",
+          "Color": [
+            1,
+            0.96,
+            0.9,
+            1
+          ],
+          "Intensity": 3.0,
+          "Range": 10,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": true
+        }
+      }
+    },
+    {
+      "id": "e7dccbb0d6be35616f664783ba5f6f41",
+      "components": {
+        "Name": {
+          "Value": "Glow cyan"
+        },
+        "Transform": {
+          "Position": [
+            -8,
+            3,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            0.1,
+            0.9,
+            1,
+            1
+          ],
+          "Intensity": 18,
+          "Range": 12,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "67a438786602cbf0ad054f97c97ef672",
+      "components": {
+        "Name": {
+          "Value": "Glow magenta"
+        },
+        "Transform": {
+          "Position": [
+            8,
+            3,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.1,
+            0.8,
+            1
+          ],
+          "Intensity": 18,
+          "Range": 12,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "56f02811013ac1c35c9a5fe6ea1b89c6",
+      "components": {
+        "Name": {
+          "Value": "Floor"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            24,
+            1,
+            24
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 6
+          },
+          "Materials": [
+            {
+              "guid": "6add6eaf85b17fea868e81fdafd1be6e",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7f03490838df473bd7aef58af1041adb",
+      "components": {
+        "Name": {
+          "Value": "Floor collider"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.5,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            26,
+            1,
+            26
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "9f3100e320049d17434824d5cba2c42d",
+      "components": {
+        "Name": {
+          "Value": "Wall N"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            1,
+            -12.25
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            25,
+            2,
+            0.5
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "fd1d5652d7a5cec58cc0a1f23b432604",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "d09b6d5f6c1a008225b6ca05f5e098ce",
+      "components": {
+        "Name": {
+          "Value": "Wall S"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            1,
+            12.25
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            25,
+            2,
+            0.5
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "fd1d5652d7a5cec58cc0a1f23b432604",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "b5c863ba5b5f9199f2cbab1bd7f9bcff",
+      "components": {
+        "Name": {
+          "Value": "Wall W"
+        },
+        "Transform": {
+          "Position": [
+            -12.25,
+            1,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.5,
+            2,
+            25
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "fd1d5652d7a5cec58cc0a1f23b432604",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "bb2a435dab2a4afbacec1455104fbb80",
+      "components": {
+        "Name": {
+          "Value": "Wall E"
+        },
+        "Transform": {
+          "Position": [
+            12.25,
+            1,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.5,
+            2,
+            25
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "fd1d5652d7a5cec58cc0a1f23b432604",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "bdc7337e553891e70b57ce8d3e938f89",
+      "components": {
+        "Name": {
+          "Value": "Pillar1"
+        },
+        "Transform": {
+          "Position": [
+            -5,
+            1,
+            -5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.2,
+            2,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 3
+          },
+          "Materials": [
+            {
+              "guid": "e22d00e200871abcf662204633f6c941",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "b939b57eef7f2b988c72a361a36b34de",
+      "components": {
+        "Name": {
+          "Value": "Pillar2"
+        },
+        "Transform": {
+          "Position": [
+            5,
+            1,
+            -5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.2,
+            2,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 3
+          },
+          "Materials": [
+            {
+              "guid": "e22d00e200871abcf662204633f6c941",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "935be0e72c1b73b5f539b6331ef31e94",
+      "components": {
+        "Name": {
+          "Value": "Pillar3"
+        },
+        "Transform": {
+          "Position": [
+            -5,
+            1,
+            5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.2,
+            2,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 3
+          },
+          "Materials": [
+            {
+              "guid": "e22d00e200871abcf662204633f6c941",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "59db7c274db059d9dddf891eb23a588b",
+      "components": {
+        "Name": {
+          "Value": "Pillar4"
+        },
+        "Transform": {
+          "Position": [
+            5,
+            1,
+            5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.2,
+            2,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 3
+          },
+          "Materials": [
+            {
+              "guid": "e22d00e200871abcf662204633f6c941",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "a686a3bb15a064b89a6a3aaabd9554fb",
+      "components": {
+        "Name": {
+          "Value": "Player"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0.5,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "4ae7e8927e833b7511667468a3f23eb3",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "LinearDamping": 0.6,
+          "AngularDamping": 0.3,
+          "ReportContacts": true
+        },
+        "script:67734717a2808ffb448b934bafd7c7de": {}
+      }
+    },
+    {
+      "id": "14794af1e0db129214d9d2e95227ce9b",
+      "components": {
+        "Name": {
+          "Value": "Orb01"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "d5827b7830b775043c2e8526dd3b535f",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "681de0c40ac261270c50831e700d85e1",
+      "components": {
+        "Name": {
+          "Value": "Orb02"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "0fcc2a20617af4c78cd2a4e5a374e99d",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "db93eb1e40e958482d28ba7ed2e0527d",
+      "components": {
+        "Name": {
+          "Value": "Orb03"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "c921930921e4409552aefc92d505befe",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "32cdc5f64a42eb15f7fafd3ed2bba74b",
+      "components": {
+        "Name": {
+          "Value": "Orb04"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "d5827b7830b775043c2e8526dd3b535f",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "ad8a752ea0628de3ebfed11bd85e85eb",
+      "components": {
+        "Name": {
+          "Value": "Orb05"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "0fcc2a20617af4c78cd2a4e5a374e99d",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "56e485c95004299ff2064399e3e060e6",
+      "components": {
+        "Name": {
+          "Value": "Orb06"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "c921930921e4409552aefc92d505befe",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "f6c0561d5afa120a4826cc5f7016029b",
+      "components": {
+        "Name": {
+          "Value": "Orb07"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "d5827b7830b775043c2e8526dd3b535f",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "1ca32b04460efb36d143fe833d73cf60",
+      "components": {
+        "Name": {
+          "Value": "Orb08"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "0fcc2a20617af4c78cd2a4e5a374e99d",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "dbf97240dbcef1b78f6ad7b85da81f22",
+      "components": {
+        "Name": {
+          "Value": "Orb09"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "c921930921e4409552aefc92d505befe",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "b680638b71d880aa61e0914903b712a6",
+      "components": {
+        "Name": {
+          "Value": "Orb10"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "d5827b7830b775043c2e8526dd3b535f",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "7c4bc39ed019e3b8f0fce70b40bd6f26",
+      "components": {
+        "Name": {
+          "Value": "Orb11"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "0fcc2a20617af4c78cd2a4e5a374e99d",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "4f6e6c0e02d0fe7e09d2d8322efefb4d",
+      "components": {
+        "Name": {
+          "Value": "Orb12"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -50,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "c921930921e4409552aefc92d505befe",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "RigidBody": {
+          "Motion": "Kinematic"
+        },
+        "script:99f7c227648b7d08aa537686082b40d2": {}
+      }
+    },
+    {
+      "id": "e50129143ea8b968d87cd811cb83777e",
+      "components": {
+        "Name": {
+          "Value": "Hazard1"
+        },
+        "Transform": {
+          "Position": [
+            -8,
+            0.6,
+            -8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.2,
+            1.2,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "14187d7887dc78e5d310fd2d96feb40a",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 3,
+          "LinearDamping": 0.05,
+          "ReportContacts": true
+        },
+        "script:0a82caaf51c67ef6798d47ad27b9aa74": {}
+      }
+    },
+    {
+      "id": "094eed8b2ab722e46d1a7c807b350726",
+      "components": {
+        "Name": {
+          "Value": "Hazard2"
+        },
+        "Transform": {
+          "Position": [
+            8,
+            0.6,
+            -8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.2,
+            1.2,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "14187d7887dc78e5d310fd2d96feb40a",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 3,
+          "LinearDamping": 0.05,
+          "ReportContacts": true
+        },
+        "script:0a82caaf51c67ef6798d47ad27b9aa74": {}
+      }
+    },
+    {
+      "id": "9015ef01f8b1c5101cafbb31530253b0",
+      "components": {
+        "Name": {
+          "Value": "Hazard3"
+        },
+        "Transform": {
+          "Position": [
+            -8,
+            0.6,
+            8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.2,
+            1.2,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "14187d7887dc78e5d310fd2d96feb40a",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 3,
+          "LinearDamping": 0.05,
+          "ReportContacts": true
+        },
+        "script:0a82caaf51c67ef6798d47ad27b9aa74": {}
+      }
+    },
+    {
+      "id": "602dc3d8333ed2f30b154b4b5c4c95a1",
+      "components": {
+        "Name": {
+          "Value": "Hazard4"
+        },
+        "Transform": {
+          "Position": [
+            8,
+            0.6,
+            8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.2,
+            1.2,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "14187d7887dc78e5d310fd2d96feb40a",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 3,
+          "LinearDamping": 0.05,
+          "ReportContacts": true
+        },
+        "script:0a82caaf51c67ef6798d47ad27b9aa74": {}
+      }
+    },
+    {
+      "id": "eb277028758f649ff9c52cef44758476",
+      "components": {
+        "Name": {
+          "Value": "Hazard5"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0.6,
+            -9
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.2,
+            1.2,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "14187d7887dc78e5d310fd2d96feb40a",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Sphere",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "Material": {
+            "guid": "31d17d25d84d11d650c856f7d0fec477",
+            "localId": 0
+          }
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 3,
+          "LinearDamping": 0.05,
+          "ReportContacts": true
+        },
+        "script:0a82caaf51c67ef6798d47ad27b9aa74": {}
+      }
+    },
+    {
+      "id": "823c8cd8cd0876aaea4cf7ee5b42c8b8",
+      "components": {
+        "Name": {
+          "Value": "Manager"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "script:9d65a02b829c4cece85769c5ff988d24": {}
+      }
+    },
+    {
+      "id": "526687922b5ddbd21bada824fac13536",
+      "components": {
+        "Name": {
+          "Value": "Hud"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "UICanvas": {
+          "Panel": {
+            "guid": "52bc5ddcad6f0c237efbf60d2ce68950",
+            "localId": 0
+          },
+          "SortOrder": 0,
+          "Visible": true
+        }
+      }
+    },
+    {
+      "id": "bc8a755fa742b7db526e1f80cbaed9f2",
+      "components": {
+        "Name": {
+          "Value": "PauseMenu"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "UICanvas": {
+          "Panel": {
+            "guid": "26fc49dfa3ab29a6dc8bd6d1de31f5ed",
+            "localId": 0
+          },
+          "SortOrder": 1,
+          "Visible": true
+        }
+      }
+    },
+    {
+      "id": "bccf0063f1a28fdc999b4e7ba89a819e",
+      "components": {
+        "Name": {
+          "Value": "EndMenu"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "UICanvas": {
+          "Panel": {
+            "guid": "3b171e14d0c59d45ce4aecbea5fbbe36",
+            "localId": 0
+          },
+          "SortOrder": 2,
+          "Visible": true
+        }
+      }
+    },
+    {
+      "id": "f7c84aa6c9d592671915a21ba76fe7c7",
+      "components": {
+        "Name": {
+          "Value": "SettingsMenu"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "UICanvas": {
+          "Panel": {
+            "guid": "7470c62483a239e20eb438a0a22bdebe",
+            "localId": 0
+          },
+          "SortOrder": 3,
+          "Visible": true
+        }
+      }
+    }
+  ],
+  "settings": {
+    "source": "atmosphere",
+    "background": "sky",
+    "ambient": 0.45,
+    "scripts": [],
+    "atmosphere": {
+      "sunIlluminance": 3.4,
+      "skyBrightness": 3.5
+    },
+    "exposure": {
+      "auto": true,
+      "compensation": -0.3,
+      "minEv": -3,
+      "maxEv": 3,
+      "adaptSpeed": 2
+    },
+    "bloom": {
+      "enabled": true,
+      "threshold": 1,
+      "knee": 0.5,
+      "intensity": 0.07
+    },
+    "tonemap": {
+      "operator": "aces",
+      "contrast": 1.06,
+      "saturation": 1.12,
+      "temperature": 0.12,
+      "vignette": 0.25
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1.2,
+      "power": 1.6
+    }
+  }
+}

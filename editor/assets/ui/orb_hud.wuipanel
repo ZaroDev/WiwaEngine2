@@ -1,0 +1,195 @@
+{
+  "version": 1,
+  "referenceResolution": [
+    1920,
+    1080
+  ],
+  "match": 0.5,
+  "nextId": 9,
+  "widgets": [
+    {
+      "id": 2,
+      "kind": "VStack",
+      "Name": "Top",
+      "OffsetMin": [
+        24,
+        24
+      ],
+      "OffsetMax": [
+        304,
+        150
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0.4
+      ],
+      "Spacing": 4,
+      "Padding": [
+        12,
+        10,
+        12,
+        10
+      ]
+    },
+    {
+      "id": 3,
+      "kind": "Text",
+      "Name": "Score",
+      "parent": 2,
+      "OffsetMax": [
+        400,
+        40
+      ],
+      "Text": "Score 0",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 32,
+      "Color": [
+        1,
+        0.85,
+        0.3,
+        1
+      ],
+      "Outline": 0.12,
+      "OutlineColor": [
+        0.05,
+        0.1,
+        0.3,
+        1
+      ],
+      "Shadow": true
+    },
+    {
+      "id": 4,
+      "kind": "Text",
+      "Name": "Combo",
+      "parent": 2,
+      "OffsetMax": [
+        400,
+        34
+      ],
+      "Text": "x1",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 26,
+      "Color": [
+        0.4,
+        0.95,
+        1,
+        1
+      ]
+    },
+    {
+      "id": 5,
+      "kind": "Text",
+      "Name": "Time",
+      "parent": 2,
+      "OffsetMax": [
+        400,
+        34
+      ],
+      "Text": "60",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 26
+    },
+    {
+      "id": 6,
+      "kind": "Bar",
+      "Name": "TimeBar",
+      "AnchorMin": [
+        0.5,
+        0
+      ],
+      "AnchorMax": [
+        0.5,
+        0
+      ],
+      "OffsetMin": [
+        -300,
+        28
+      ],
+      "OffsetMax": [
+        300,
+        48
+      ],
+      "Value": 1,
+      "Color": [
+        0.95,
+        0.6,
+        0.1,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.5
+      ]
+    },
+    {
+      "id": 7,
+      "kind": "VStack",
+      "Name": "PickupTag",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        110,
+        40
+      ],
+      "Visible": false,
+      "WorldOffset": [
+        0,
+        1.0,
+        0
+      ],
+      "Padding": [
+        6,
+        4,
+        6,
+        4
+      ]
+    },
+    {
+      "id": 8,
+      "kind": "Text",
+      "Name": "Text",
+      "parent": 7,
+      "OffsetMax": [
+        400,
+        38
+      ],
+      "Text": "+10",
+      "Font": {
+        "guid": "317d558de2f2bb590b21a7c9426086a4",
+        "localId": 0
+      },
+      "FontSize": 30,
+      "Align": "Center",
+      "Color": [
+        1,
+        1,
+        0.4,
+        1
+      ],
+      "Outline": 0.15,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "Shadow": true
+    }
+  ]
+}

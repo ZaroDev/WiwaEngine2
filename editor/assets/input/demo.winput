@@ -30,6 +30,22 @@
 					]
 				},
 				{
+					"name": "Dash",
+					"type": "Button",
+					"bindings": [
+						{ "control": "Key.Space" },
+						{ "control": "Pad.A" }
+					]
+				},
+				{
+					"name": "Pause",
+					"type": "Button",
+					"bindings": [
+						{ "control": "Key.P" },
+						{ "control": "Pad.Start" }
+					]
+				},
+				{
 					"name": "Fire",
 					"type": "Button",
 					"bindings": [
