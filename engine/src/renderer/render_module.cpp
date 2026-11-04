@@ -109,6 +109,7 @@ namespace wiwa
 			},
 			[this](RenderBatch& batch)
 			{
+				const auto frameStart = std::chrono::steady_clock::now();
 				apply_reloads();
 
 				// The commands first (they change the render-side state), then the frame.
@@ -126,6 +127,18 @@ namespace wiwa
 				run_render_test(world);
 
 				publish_snapshot();
+
+				if (m_LastFrameStart != std::chrono::steady_clock::time_point{})
+				{
+					using Millis = std::chrono::duration<float, std::milli>;
+					std::lock_guard<std::mutex> lock(m_FrameSamplesMutex);
+					if (m_FrameSamples.size() >= Series::Capacity)
+					{
+						m_FrameSamples.erase(m_FrameSamples.begin());
+					}
+					m_FrameSamples.emplace_back(Millis(frameStart - m_LastFrameStart).count(), Millis(std::chrono::steady_clock::now() - frameStart).count());
+				}
+				m_LastFrameStart = frameStart;
 			},
 			[this]()
 			{
@@ -532,6 +545,23 @@ namespace wiwa
 		{
 			fail_and_quit("The renderer failed");
 			return;
+		}
+
+		{
+			PerfStats& perf = Engine::get().get_perf();
+			std::vector<std::pair<float, float>> samples;
+			{
+				std::lock_guard<std::mutex> lock(m_FrameSamplesMutex);
+				samples.swap(m_FrameSamples);
+			}
+			for (const auto& [frameMs, cpuMs] : samples)
+			{
+				perf.add_render_frame(frameMs, cpuMs);
+			}
+			if (const std::string adapter = get_snapshot().Adapter; !adapter.empty())
+			{
+				perf.set_adapter_name(adapter);
+			}
 		}
 
 		Window* window = Engine::get().get_module<Window>();

@@ -127,6 +127,10 @@ namespace wiwa
 		ImGuiLayer m_ImGui{};
 		RenderThread m_Thread{};
 		SnapshotChannel m_Snapshot{};
+		// Per-frame times of the render thread (frame to frame, and the CPU time of the frame), waiting for the main thread to hand them to PerfStats.
+		std::mutex m_FrameSamplesMutex{};
+		std::vector<std::pair<float, float>> m_FrameSamples{};
+		std::chrono::steady_clock::time_point m_LastFrameStart{};
 		Scope<Renderer> m_Renderer{}; // created, used and destroyed on the render thread
 		ImGuiRenderPass* m_ImGuiPass = nullptr; // owned by the renderer; set on the render thread during start
 		UiRenderPass* m_UiPass = nullptr;       // the same, for the game UI

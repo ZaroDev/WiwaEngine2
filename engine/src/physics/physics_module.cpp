@@ -170,10 +170,12 @@ namespace wiwa
 			{
 				if (m_HasScene && step->World == m_Sync.generation())
 				{
+					Engine::get().get_perf().add_physics_step(step->StepMs);
 					m_Steps.push_back(std::move(step));
 				}
 			}
 		}
+		Engine::get().get_perf().set_physics_steps_last_frame(static_cast<u32>(m_Steps.size()));
 		if (!m_HasScene)
 		{
 			return;
