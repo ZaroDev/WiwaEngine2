@@ -260,6 +260,14 @@ The editor sets this up itself each time it starts, so there is nothing to confi
 Try: Pause, then Step; edit a script into a syntax error and save (the old version keeps running, the Console says why); fix it; add a
 property to `spinner.lua` and see it in the Inspector without stopping.
 
+## Orb Rush
+
+A small game built only from scripts, scenes and UI panels: `assets/scenes/orb_title.wscene` (main menu) and `orb_arena.wscene`, with the scripts in
+`assets/scripts/orbrush/`. Roll the ball (WASD or left stick), dash (Space or pad A), collect orbs before the 60 seconds end, chain pickups for
+a x5 combo, and avoid the red hazards. P or pad Start pauses; the pause, end-of-round and settings menus are UI panels driven by
+`game_manager.lua`, and Settings rebinds Dash and Pause and sets the field of view. `scripts/gen_orbrush.py` writes the scenes and panels
+(run it again after changing it). The manual play-through is in `docs/superpowers/specs/orb-rush-checklist.md`.
+
 ## Editor and builds
 
 In the editor scripts are loaded (their components exist) but do not run while you edit. In a game they run as soon as a scene is

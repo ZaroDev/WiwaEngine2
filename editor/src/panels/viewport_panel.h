@@ -41,4 +41,5 @@ private:
 	bool m_GizmoSettingsChanged = false; // saved once the mouse is let go
 	wiwa::EditorCamera m_Camera{};
 	bool m_UseEditorCamera = true;
+	bool m_ShowGameUi = false; // the Scene view leaves the game UI out; the Game panel shows it
 };

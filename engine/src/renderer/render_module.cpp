@@ -578,7 +578,7 @@ namespace wiwa
 		batch.Commands = std::move(m_PendingCommands);
 		m_PendingCommands.clear();
 		batch.Debug = m_DebugDraw.seal(deltaTime);
-		batch.Ui = std::move(m_PendingUi);
+		batch.Ui = m_GameUiVisible ? std::move(m_PendingUi) : UiDrawList{};
 		m_PendingUi = UiDrawList{};
 
 		// What the active scene changed, for the render thread's scene mirror.

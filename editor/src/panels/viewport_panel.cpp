@@ -105,6 +105,7 @@ void ViewportPanel::on_draw()
 	else if (open)
 	{
 		render->get_debug_draw().set_enabled(true); // the Game view switches it off while it shows the scene
+		render->set_game_ui_visible(m_ShowGameUi);
 		const ImVec2 size = ImGui::GetContentRegionAvail();
 		const float scale = ImGui::GetIO().DisplayFramebufferScale.x;
 		const wiwa::u32 width = static_cast<wiwa::u32>(std::max(size.x * scale, 0.0f));
@@ -191,6 +192,8 @@ void ViewportPanel::on_draw()
 			ImGui::SameLine();
 			
 			ImGui::Checkbox("Editor camera", &m_UseEditorCamera);
+			ImGui::SameLine();
+			ImGui::Checkbox("Game UI", &m_ShowGameUi);
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Gizmos"))
 			{

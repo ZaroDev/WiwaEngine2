@@ -49,6 +49,7 @@ void GamePanel::on_draw()
 				ui->set_camera_override(std::nullopt);
 			}
 			render->get_debug_draw().set_enabled(false);
+			render->set_game_ui_visible(true);
 			render->set_selection(std::nullopt);
 			(void)render->take_pick_result(); // a click answered after the Viewport gave way must not change the selection
 
