@@ -641,6 +641,15 @@ namespace wiwa
 	{
 		constexpr std::string_view apiPrefix = "--api=";
 
+		// The project's launch settings of a game's pack come first; the command line below overrides them.
+		const Engine& engine = Engine::get();
+		if (engine.project_from_pak())
+		{
+			const ProjectSettings& project = engine.project();
+			m_Description.Api = project.Api == LaunchApi::D3D11 ? GraphicsApi::D3D11 : project.Api == LaunchApi::D3D12 ? GraphicsApi::D3D12 : GraphicsApi::Vulkan;
+			m_Description.EnableValidation = project.GpuValidation;
+		}
+
 		for (const std::string& argument : Engine::get().get_arguments())
 		{
 			if (argument.starts_with(apiPrefix))

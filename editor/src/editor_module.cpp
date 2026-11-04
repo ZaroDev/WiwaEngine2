@@ -106,7 +106,8 @@ namespace
 
 void EditorModule::init()
 {
-	const std::string editorTitle = fmt::format("Wiwa2 Editor - ({0}) <{1}>", "Default project", WI_BUILD_CONFIGURATION);
+	const wiwa::ProjectSettings& project = wiwa::Engine::get().project();
+	const std::string editorTitle = fmt::format("Wiwa2 Editor - ({0} {1}) <{2}>", project.Name, wiwa::version_string(project), WI_BUILD_CONFIGURATION);
 	wiwa::Engine::get().get_module<wiwa::Window>()->set_title(editorTitle);
 
 	// ImGui owns the keyboard and the mouse; the Viewport hands them to the game while a scene plays
