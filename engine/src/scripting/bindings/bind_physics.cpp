@@ -63,6 +63,20 @@ namespace wiwa
 			return *joint;
 		}
 
+		// The entity of a character.* call: it must exist and have a CharacterController.
+		void require_character(const EntityHandle& handle)
+		{
+			const entt::entity entity = handle.resolve();
+			if (entity == entt::null)
+			{
+				throw sol::error("the entity no longer exists");
+			}
+			if (!handle.Context->ActiveScene->registry().all_of<CharacterController>(entity))
+			{
+				throw sol::error("the entity has no CharacterController component");
+			}
+		}
+
 		JointMotorMode joint_mode_of(const std::string& mode)
 		{
 			if (mode == "off")
@@ -260,5 +274,51 @@ namespace wiwa
 			component.LimitMax = max;
 		});
 		runtime.sandbox()["joint"] = joint;
+
+		// character.move(entity, velocity), character.jump(entity, speed), character.is_grounded(entity), character.state(entity)
+		sol::table character = lua.create_table();
+		character.set_function("move", [&context](const EntityHandle& entity, const LuaVec3& velocity)
+		{
+			require_character(entity);
+			if (!std::isfinite(velocity.Value.x) || !std::isfinite(velocity.Value.y) || !std::isfinite(velocity.Value.z))
+			{
+				throw sol::error("character.move: the velocity must be finite");
+			}
+			physics_of(context).set_character_velocity(entity.Guid, velocity.Value);
+		});
+		character.set_function("jump", [&context](const EntityHandle& entity, float speed)
+		{
+			require_character(entity);
+			if (!std::isfinite(speed))
+			{
+				throw sol::error("character.jump: the speed must be a finite number");
+			}
+			physics_of(context).character_jump(entity.Guid, speed);
+		});
+		character.set_function("is_grounded", [&context](const EntityHandle& entity)
+		{
+			require_character(entity);
+			const std::optional<CharacterPose> pose = physics_of(context).newest_character(entity.Guid);
+			return pose && pose->Ground == GroundState::Grounded;
+		});
+		// { grounded, sliding, ground (the entity it stands on, or nil), normal, velocity }; nil while the world has no such character
+		character.set_function("state", [&context](const EntityHandle& entity, sol::this_state state) -> sol::object
+		{
+			require_character(entity);
+			sol::state_view view(state);
+			const std::optional<CharacterPose> pose = physics_of(context).newest_character(entity.Guid);
+			if (!pose)
+			{
+				return sol::object(view, sol::lua_nil);
+			}
+			sol::table result = view.create_table();
+			result["grounded"] = pose->Ground == GroundState::Grounded;
+			result["sliding"] = pose->Ground == GroundState::Sliding;
+			result["ground"] = pose->GroundBody.valid() ? sol::object(sol::make_object(state, EntityHandle{ pose->GroundBody, &context })) : sol::object(view, sol::lua_nil);
+			result["normal"] = LuaVec3{ pose->GroundNormal, {} };
+			result["velocity"] = LuaVec3{ pose->Velocity, {} };
+			return result;
+		});
+		runtime.sandbox()["character"] = character;
 	}
 }

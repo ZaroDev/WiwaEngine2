@@ -358,6 +358,32 @@ function joint.set_motor(entity, mode, target, max_force) end
 ---@param max number
 function joint.set_limits(entity, min, max) end
 
+--- Characters (the `CharacterController` component): commands go to the physics world and take effect in the next step; reads are from the newest step.
+--- Up is +Y. A call on an entity without a `CharacterController` is an error.
+character = {}
+--- The horizontal velocity (m/s, world space) the character tries to keep until the next call; `y` is ignored (gravity and jumps are the physics world's).
+---@param entity Entity
+---@param velocity vec3
+function character.move(entity, velocity) end
+--- Jumps with an upward speed (m/s) in the next step, only if the character stands on something then.
+---@param entity Entity
+---@param speed number
+function character.jump(entity, speed) end
+--- True when it stands on ground it can walk on.
+---@param entity Entity
+---@return boolean
+function character.is_grounded(entity) end
+--- `grounded`, `sliding` (on a slope too steep to stand on), `ground` (the entity it stands on, nil for none), `ground normal`, and its real `velocity`; nil while the world has no such character.
+---@class CharacterState
+---@field grounded boolean
+---@field sliding boolean
+---@field ground Entity?
+---@field normal vec3
+---@field velocity vec3
+---@param entity Entity
+---@return CharacterState?
+function character.state(entity) end
+
 --------------------------------------------------------------------------------------------------------------------------------
 -- Input
 --------------------------------------------------------------------------------------------------------------------------------

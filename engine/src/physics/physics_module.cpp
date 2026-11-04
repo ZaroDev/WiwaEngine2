@@ -292,6 +292,26 @@ namespace wiwa
 	void PhysicsModule::set_gravity(glm::vec3 gravity) { submit(SetGravity{ gravity }); }
 	void PhysicsModule::set_kinematic_target(BodyKey key, glm::vec3 position, glm::quat rotation) { submit(SetKinematicTarget{ key, position, rotation }); }
 
+	void PhysicsModule::set_character_velocity(BodyKey key, glm::vec3 velocity) { submit(SetCharacterVelocity{ key, velocity }); }
+	void PhysicsModule::character_jump(BodyKey key, float speed) { submit(CharacterJump{ key, speed }); }
+
+	std::optional<CharacterPose> PhysicsModule::newest_character(BodyKey key) const
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		if (m_Latest == nullptr || m_Latest->World != m_Sync.generation())
+		{
+			return std::nullopt;
+		}
+		for (const CharacterPose& pose : m_Latest->Characters)
+		{
+			if (pose.Key == key)
+			{
+				return pose;
+			}
+		}
+		return std::nullopt;
+	}
+
 	std::optional<BodyPose> PhysicsModule::newest_pose(BodyKey key) const
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);

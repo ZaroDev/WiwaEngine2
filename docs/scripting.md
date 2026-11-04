@@ -154,6 +154,14 @@ snapshot of step N+1: `entity:body()` is a `Body` with `add_force` (during one s
 `set_angular_velocity`, `get_velocity`, `get_angular_velocity` (the newest step; `nil` without a body), `set_kinematic_target(position, rotation)` and `wake()`.
 `physics.set_gravity(vec3)` changes the world's gravity. A command for a body that no longer exists is ignored.
 
+**Characters** are the `CharacterController` component (see the physics spec): a capsule that walks, climbs steps and stands on
+slopes without being a rigid body. `character.move(entity, velocity)` sets the horizontal velocity (m/s, world space; `y` is ignored) the
+character keeps until the next call, `character.jump(entity, speed)` jumps with an upward speed if it stands on something,
+`character.is_grounded(entity)` and `character.state(entity)` (`grounded`, `sliding`, `ground` (an entity or `nil`), `normal`, `velocity`)
+read the newest step (`nil` while the world has no such character). Like the body control, commands take effect one step later, and a
+call on an entity without a `CharacterController` is a Lua error. Triggers see characters: `on_trigger_enter/exit` arrive with the character
+as `other` (and the trigger for the character). Physics queries hit characters too.
+
 **Joints** are the `Joint` component (see the physics spec). `joint.set_motor(entity, mode, target, max_force)` (`mode` is `"off"`,
 `"velocity"` or `"position"`) and `joint.set_limits(entity, min, max)` write the component, and the physics world gets the change at the
 start of the next step like the body control above, keeping the joint's rest pose. A positive target turns (hinge, rad/s or degrees) or
