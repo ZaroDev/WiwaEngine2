@@ -74,7 +74,7 @@ Forward+ (clustered forward), not deferred: a depth prepass and a compute light-
 ## Settings
 
 - `SceneSettings` (scene.md): the look; reaches the render thread through the extractor.
-- `RenderQuality` (`render_quality.json`, `render_quality.h`): shadow distance/cascades/split lambda/bias values, vsync, copy queue, bloom mips (2..6), AO slices (1..4) and steps (4..16), FXAA, TAA. `sanitized()` clears FXAA when TAA is set. Read at renderer start, written when the World panel changes a value, sent to the render thread as a command applied at the start of the next frame. Missing file or keys give defaults.
+- `RenderQuality` (`render_quality.json`, `render_quality.h`): shadow distance/cascades/split lambda/bias values, vsync, copy queue, bloom mips (2..6), AO slices (1..4) and steps (4..16), FXAA, TAA. `sanitized()` clears FXAA when TAA is set. Read at renderer start, written when the Settings panel (Renderer page) changes a value, sent to the render thread as a command applied at the start of the next frame. Missing file or keys give defaults.
 - The anti-aliasing choice is Off / FXAA / TAA, exclusive (FXAA after a TAA resolve only blurs).
 
 ## Shaders

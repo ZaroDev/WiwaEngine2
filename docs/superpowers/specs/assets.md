@@ -41,14 +41,15 @@ A failed load gives a Failed handle and a log line; consumers substitute fallbac
 
 ## Project settings files (editor working directory)
 
-Only `physics.wsettings` and `input.wsettings` are packed into `assets.wpak`. `render_quality.json` is read from next to the program.
+Only `project.wproject` (under `PROJECT_SETTINGS_GUID`), `physics.wsettings` and `input.wsettings` are packed into `assets.wpak`. `render_quality.json` is read from next to the program.
 
 | File | Content | Edited in |
 | --- | --- | --- |
 | `build_settings.json` | scenes, default scene | Build Settings popup |
-| `render_quality.json` | `RenderQuality` (rendering.md) | World panel, Quality section |
-| `physics.wsettings` | layers and collision matrix | Physics panel |
-| `input.wsettings` | default `.winput` asset | Input panel |
-| `gizmo_settings.json` | editor gizmo toggles (editor only) | Viewport Gizmos menu |
+| `render_quality.json` | `RenderQuality` (rendering.md) | Settings page, Renderer |
+| `project.wproject` | name, version, window, launch, performance ([project-settings.md](project-settings.md)) | Settings page, Project / Launch / Performance |
+| `physics.wsettings` | layers and collision matrix | Settings page, Physics |
+| `input.wsettings` | default `.winput` asset | Settings page, Input |
+| `gizmo_settings.json` | editor gizmo toggles (editor only) | Viewport Gizmos menu, Settings page, Editor |
 
 A missing or unreadable file gives defaults, logged once.

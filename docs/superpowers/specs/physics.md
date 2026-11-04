@@ -68,7 +68,7 @@ The world exists only while a scene plays (the Play clone, or the game's scene o
 
 - `PhysicsMaterial` (`.wphysmat` JSON: friction, restitution, density, friction/restitution combine Average/Min/Max/Multiply; out-of-range values rejected at import). A built-in default (friction 0.5, restitution 0, density 1000) is used when a collider has none.
 - Convex hulls and triangle meshes are cooked by the model importer when `generatePhysicsShapes` is set in the `.meta`: `PhysicsShape` sub-assets at the mesh's local id plus `PHYSICS_HULL_LOCAL_ID_OFFSET` / `PHYSICS_MESH_LOCAL_ID_OFFSET`, stored as Jolt shape binary state. The game and engine never build hulls/BVH meshes from raw vertices at run time. Only the physics thread holds shape objects.
-- **Project settings** `physics.wsettings` (editor working directory, packed under `PHYSICS_SETTINGS_GUID`): up to 32 named layers and the 32x32 collision matrix, mapped to Jolt object layers and broad-phase layers (static, moving, trigger). **Scene settings** (in `.wscene`): gravity, fixed rate, max steps per frame, solver iterations, sleep threshold, debug-draw defaults.
+- **Project settings** `physics.wsettings` (edited on the Settings page, Physics; the Physics panel keeps the scene settings and stats) (editor working directory, packed under `PHYSICS_SETTINGS_GUID`): up to 32 named layers and the 32x32 collision matrix, mapped to Jolt object layers and broad-phase layers (static, moving, trigger). **Scene settings** (in `.wscene`): gravity, fixed rate, max steps per frame, solver iterations, sleep threshold, debug-draw defaults.
 
 ## Lua
 
