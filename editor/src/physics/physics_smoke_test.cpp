@@ -1853,6 +1853,84 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// The lines the debug renderer recorded for two bodies, with or without a limited hinge between them (0 in Shipping).
+		size_t joint_debug_lines(bool withJoint)
+		{
+#if defined(WI_DEBUG) || defined(WI_RELEASE)
+			CommandWorld world;
+			if (!world.start(glm::vec3(0.0f)))
+			{
+				return 0;
+			}
+			const BodyKey anchor = EntityGuid::generate();
+			const BodyKey plank = EntityGuid::generate();
+			world.send(CreateBody{ anchor, box_body(MotionType::Static, glm::vec3(0.0f, 5.5f, 0.0f), glm::vec3(0.1f)) });
+			world.send(CreateBody{ plank, box_body(MotionType::Dynamic, glm::vec3(1.0f, 5.0f, 0.0f), glm::vec3(1.0f, 0.1f, 0.1f)) });
+			if (withJoint)
+			{
+				JointDesc joint = hinge_desc();
+				joint.A = plank;
+				joint.B = anchor;
+				joint.LimitMin = -30.0f;
+				joint.LimitMax = 30.0f;
+				world.send(CreateJoint{ joint });
+			}
+			world.send(SetDebugDraw{ true });
+			size_t lines = 0;
+			const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(5);
+			while (lines == 0 && Clock::now() < giveUp)
+			{
+				for (const auto& step : world.Thread.take_steps())
+				{
+					lines = step->Debug != nullptr ? step->Debug->Lines.size() : lines;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(2));
+			}
+			world.Thread.stop();
+			return lines;
+#else
+			(void)withJoint;
+			return 0;
+#endif
+		}
+
+		void check_joint_debug_draw(Check& check)
+		{
+#if defined(WI_DEBUG) || defined(WI_RELEASE)
+			const size_t without = joint_debug_lines(false);
+			const size_t with = joint_debug_lines(true);
+			check(without > 0 && with > without + 4, "joint_debug_draw: a hinge with limits adds lines to the debug drawing, " + std::to_string(without) + " without, " + std::to_string(with) + " with");
+#else
+			(void)check;
+#endif
+		}
+	}
+
+	namespace
+	{
+		// The module's stats count the made joints (the Physics panel shows them).
+		void check_joint_stats(Check& check)
+		{
+			PhysicsModule module;
+			module.set_auto_start(false);
+			Ref<Scene> scene = CreateRef<Scene>();
+			make_door_scene(*scene);
+			check(module.start_world(scene), "joint_stats_start: the world starts");
+			module.thread().set_paused(false);
+			u32 joints = 0;
+			for (int attempt = 0; attempt < 200 && joints == 0; attempt++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(5));
+				module.pump();
+				joints = module.stats().Joints;
+			}
+			check(joints == 1, "joint_stats_count: PhysicsModule::stats counts one joint, got " + std::to_string(joints));
+			module.stop_world();
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1883,6 +1961,8 @@ namespace wiwa
 		check_joint_break(check);
 		check_joint_sync(check);
 		check_joint_world_lifetime(check);
+		check_joint_debug_draw(check);
+		check_joint_stats(check);
 
 		if (check.Failures == 0)
 		{

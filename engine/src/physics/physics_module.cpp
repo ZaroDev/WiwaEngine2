@@ -46,6 +46,7 @@ namespace wiwa
 		{
 			stats.Bodies = m_Latest->BodyCount;
 			stats.ActiveBodies = m_Latest->ActiveBodies;
+			stats.Joints = m_Latest->JointCount;
 			stats.StepMs = m_Latest->StepMs;
 		}
 		return stats;

@@ -271,6 +271,8 @@ namespace wiwa
 				draw.mDrawShape = true;
 				draw.mDrawShapeWireframe = true;
 				m_System.DrawBodies(draw, m_DebugRenderer.get());
+				m_System.DrawConstraints(m_DebugRenderer.get());
+				m_System.DrawConstraintLimits(m_DebugRenderer.get());
 				snapshot.Debug = m_DebugRenderer->take();
 #else
 				(void)snapshot;
