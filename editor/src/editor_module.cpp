@@ -106,9 +106,7 @@ namespace
 
 void EditorModule::init()
 {
-	const wiwa::ProjectSettings& project = wiwa::Engine::get().project();
-	const std::string editorTitle = fmt::format("Wiwa2 Editor - ({0} {1}) <{2}>", project.Name, wiwa::version_string(project), WI_BUILD_CONFIGURATION);
-	wiwa::Engine::get().get_module<wiwa::Window>()->set_title(editorTitle);
+	wiwa::Engine::get().get_module<wiwa::Window>()->set_title(ProjectSection::editor_title(wiwa::Engine::get().project()));
 
 	// ImGui owns the keyboard and the mouse; the Viewport hands them to the game while a scene plays
 	wiwa::Engine::get().get_module<wiwa::InputModule>()->set_capture(false);
@@ -172,10 +170,13 @@ void EditorModule::init()
 	Ref<InputPanel> inputPanel = CreateRef<InputPanel>(m_InputPanelSmoke ? std::filesystem::temp_directory_path() / "wiwa_input_panel_smoke.wsettings" : std::filesystem::path(wiwa::INPUT_SETTINGS_FILE));
 	m_InputPanel = inputPanel.get();
 	m_Panels.push_back(inputPanel);
+	Ref<EditorSection> editorSection = CreateRef<EditorSection>();
+	// every project-wide setting in one place (closed until opened from the Window menu); it shares the sections the Physics and Input panels made
+	m_Panels.push_back(CreateRef<SettingsPanel>(CreateRef<ProjectSection>(), CreateRef<RendererSection>(), physicsPanel->section(), inputPanel->section(), editorSection));
 	// the Scene and Game panels share the renderer's one view: the Game panel, added first, wins when both are visible
 	Ref<ViewOwner> viewOwner = CreateRef<ViewOwner>();
 	m_Panels.push_back(CreateRef<GamePanel>(*m_SceneEditor, viewOwner));
-	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor, viewOwner));
+	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor, viewOwner, editorSection));
 	m_Panels.push_back(CreateRef<PerformancePanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
 	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());

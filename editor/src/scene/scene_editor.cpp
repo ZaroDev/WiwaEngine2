@@ -1,6 +1,7 @@
 #include <editor_common.h>
 #include "scene_editor.h"
 
+#include <core/engine.h>
 #include <scene/reflection/component_registry.h>
 
 #include "../asset_pipeline/asset_templates.h"
@@ -205,7 +206,15 @@ namespace wiwa
 			return;
 		}
 
-		m_Scenes.set_active(CreateRef<Scene>());
+		Ref<Scene> scene = CreateRef<Scene>();
+		// a new scene starts at the rate the project chose (Settings, Performance); 0 keeps the built-in default
+		if (const u32 rate = Engine::get().project().FixedRate; rate != 0)
+		{
+			SceneSettings settings = scene->settings();
+			settings.Physics.FixedRateHz = rate;
+			scene->set_settings(settings);
+		}
+		m_Scenes.set_active(scene);
 		set_scene(m_Scenes.get_active());
 	}
 

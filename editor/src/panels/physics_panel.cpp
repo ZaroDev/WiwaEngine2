@@ -8,45 +8,9 @@
 #include <core/engine.h>
 #include <physics/physics_module.h>
 
-#include <asset_pipeline/physics_settings_file.h>
-
 PhysicsPanel::PhysicsPanel(wiwa::SceneEditor& editor, std::filesystem::path layersFile)
-	: Panel("Physics", PanelCategory::Window), m_Editor(editor), m_File(std::move(layersFile))
+	: Panel("Physics", PanelCategory::Window), m_Editor(editor), m_Section(CreateRef<PhysicsSection>(std::move(layersFile)))
 {
-	if (!wiwa::load_physics_layers(m_File, m_Layers, m_Error))
-	{
-		WI_WARN("Physics", "{0}: {1}; the default layers are used", m_File.string(), m_Error);
-	}
-	if (wiwa::PhysicsModule* physics = wiwa::Engine::get().get_module<wiwa::PhysicsModule>())
-	{
-		physics->set_layers(m_Layers);
-	}
-}
-
-bool PhysicsPanel::save_layers()
-{
-	m_Error.clear();
-	if (wiwa::PhysicsModule* physics = wiwa::Engine::get().get_module<wiwa::PhysicsModule>())
-	{
-		physics->set_layers(m_Layers);
-	}
-	return wiwa::save_physics_layers(m_File, m_Layers, m_Error);
-}
-
-bool PhysicsPanel::set_collides(wiwa::u32 a, wiwa::u32 b, bool collides)
-{
-	m_Layers.set_collides(a, b, collides);
-	return save_layers();
-}
-
-bool PhysicsPanel::set_layer_name(wiwa::u32 layer, const std::string& name)
-{
-	if (layer >= wiwa::PHYSICS_LAYER_COUNT)
-	{
-		return false;
-	}
-	m_Layers.Names[layer] = name;
-	return save_layers();
 }
 
 void PhysicsPanel::on_draw()
@@ -68,11 +32,6 @@ void PhysicsPanel::on_draw()
 				settings_tab();
 				ImGui::EndTabItem();
 			}
-			if (ImGui::BeginTabItem("Layers"))
-			{
-				layers_tab();
-				ImGui::EndTabItem();
-			}
 			if (ImGui::BeginTabItem("Stats"))
 			{
 				stats_tab();
@@ -92,6 +51,7 @@ void PhysicsPanel::settings_tab()
 		return;
 	}
 
+	ImGui::TextDisabled("Layer names and the collision matrix are project settings: see the Settings panel.");
 	if (wiwa::PhysicsModule* module = wiwa::Engine::get().get_module<wiwa::PhysicsModule>())
 	{
 		bool draw = module->debug_draw();
@@ -133,67 +93,6 @@ void PhysicsPanel::settings_tab()
 	if (!(settings == before))
 	{
 		m_Editor.edit_settings(settings);
-	}
-}
-
-void PhysicsPanel::layers_tab()
-{
-	// the layers that have a name, and the first one without (to name next)
-	wiwa::u32 shown = 1;
-	for (wiwa::u32 i = 0; i < wiwa::PHYSICS_LAYER_COUNT; i++)
-	{
-		if (!m_Layers.Names[i].empty())
-		{
-			shown = i + 1;
-		}
-	}
-	shown = std::min(shown + 1, wiwa::PHYSICS_LAYER_COUNT);
-
-	ImGui::TextDisabled("Names (layer 0 is the default of a collider). The matrix says which layers collide.");
-	for (wiwa::u32 i = 0; i < shown; i++)
-	{
-		char text[64];
-		std::snprintf(text, sizeof(text), "%s", m_Layers.Names[i].c_str());
-		ImGui::SetNextItemWidth(220.0f);
-		char label[32];
-		std::snprintf(label, sizeof(label), "%u##layer_name_%u", i, i);
-		if (ImGui::InputText(label, text, sizeof(text)) && (i != 0 || text[0] != '\0'))
-		{
-			set_layer_name(i, text);
-		}
-	}
-
-	ImGui::Separator();
-	if (ImGui::BeginTable("##layer_matrix", static_cast<int>(shown) + 1, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Borders))
-	{
-		ImGui::TableSetupColumn("");
-		for (wiwa::u32 b = 0; b < shown; b++)
-		{
-			ImGui::TableSetupColumn(std::to_string(b).c_str());
-		}
-		ImGui::TableHeadersRow();
-		for (wiwa::u32 a = 0; a < shown; a++)
-		{
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("%u %s", a, m_Layers.Names[a].c_str());
-			for (wiwa::u32 b = 0; b <= a; b++) // the matrix is symmetric: the lower triangle says it all
-			{
-				ImGui::TableSetColumnIndex(static_cast<int>(b) + 1);
-				bool collides = m_Layers.collides(a, b);
-				char id[32];
-				std::snprintf(id, sizeof(id), "##m_%u_%u", a, b);
-				if (ImGui::Checkbox(id, &collides))
-				{
-					set_collides(a, b, collides);
-				}
-			}
-		}
-		ImGui::EndTable();
-	}
-	if (!m_Error.empty())
-	{
-		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_Error.c_str());
 	}
 }
 

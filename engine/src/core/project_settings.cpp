@@ -31,7 +31,7 @@ namespace wiwa
 		settings.FpsCap = std::min(settings.FpsCap, 1000u);
 		if (settings.FixedRate != 0)
 		{
-			settings.FixedRate = std::clamp(settings.FixedRate, 10u, 480u);
+			settings.FixedRate = std::clamp(settings.FixedRate, 10u, 240u);
 		}
 		settings.Mode = clamp_enum(static_cast<u8>(settings.Mode), WindowMode::Fullscreen);
 		settings.Api = clamp_enum(static_cast<u8>(settings.Api), LaunchApi::D3D12);

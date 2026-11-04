@@ -11,3 +11,4 @@
 #include "viewport_panel.h"
 #include "world_panel.h"
 #include "console_panel.h"
+#include "settings_panel.h"

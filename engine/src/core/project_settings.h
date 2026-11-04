@@ -59,7 +59,7 @@ namespace wiwa
 		bool operator==(const ProjectSettings&) const = default;
 	};
 
-	// Sizes 160..16384, FpsCap 0..1000, FixedRate 0 or 10..480, an empty name gets the default.
+	// Sizes 160..16384, FpsCap 0..1000, FixedRate 0 or 10..240 (the scene's own range), an empty name gets the default.
 	ProjectSettings sanitized(ProjectSettings settings);
 
 	// The window title: WindowTitle, or the name when that is empty.
