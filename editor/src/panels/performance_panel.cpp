@@ -65,6 +65,8 @@ namespace
 			top = std::max(top * 1.1f, yFloor);
 		}
 
+		top = std::max(top, 0.001f);
+
 		ImDrawList* draw = ImGui::GetWindowDrawList();
 		draw->AddRectFilled(min, max, IM_COL32(20, 20, 24, 255));
 		draw->AddRect(min, max, IM_COL32(70, 70, 80, 255));
