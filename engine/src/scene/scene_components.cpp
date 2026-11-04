@@ -90,5 +90,16 @@ namespace wiwa
 			WI_FIELD(MotorMaxForce),
 			WI_FIELD(BreakForce),
 			WI_FIELD(BreakTorque)));
+
+		registry.register_component(WI_COMPONENT(CharacterController,
+			WI_FIELD(Radius),
+			WI_FIELD(Height),
+			WI_FIELD(Offset),
+			WI_FIELD(StepHeight),
+			WI_FIELD_META(MaxSlopeAngle, FieldMeta::range(0.0f, 89.0f)),
+			WI_FIELD(Mass),
+			WI_FIELD(PushStrength),
+			WI_FIELD(GravityFactor),
+			WI_FIELD_META(Layer, FieldMeta::range(0.0f, 31.0f))));
 	}
 }

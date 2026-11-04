@@ -186,4 +186,21 @@ namespace wiwa
 		float BreakForce = 0.0f;
 		float BreakTorque = 0.0f;
 	};
+
+	// A character the scripts move (physics.md, Character controller): a capsule that slides along what it meets, climbs steps and stands on
+	// slopes up to MaxSlopeAngle, without being a rigid body. Up is world +Y. Put it on an entity with no Collider or RigidBody of its own.
+	// Height is the whole capsule, caps included (a Height below 2 * Radius is made 2 * Radius); Offset moves the capsule from the entity's
+	// origin; angles are degrees.
+	struct CharacterController
+	{
+		float Radius = 0.4f;
+		float Height = 1.8f;
+		glm::vec3 Offset{ 0.0f, 0.0f, 0.0f };
+		float StepHeight = 0.35f;
+		float MaxSlopeAngle = 45.0f;
+		float Mass = 70.0f;           // kg, for what it pushes and what pushes it
+		float PushStrength = 100.0f;  // the most force (N) it pushes a body with
+		float GravityFactor = 1.0f;
+		i32 Layer = 0;                // an index into the project's physics layers
+	};
 }
