@@ -1536,6 +1536,16 @@ namespace wiwa
 				const BodyPose* pose = steps.empty() ? nullptr : find_pose(steps.back().get(), cart);
 				check(pose != nullptr && std::abs(pose->Position.x - 2.0f) < 0.02f, "joint_slider_limit: the slider stops at its 2 m limit, got " + (pose ? fmt_vec(pose->Position) : std::string("no pose")));
 				check(pose != nullptr && std::abs(pose->Position.y - 5.0f) < 1e-2f && std::abs(pose->Position.z) < 1e-2f, "joint_slider_axis: it moves along x only");
+
+				// the cart rests against its limit and goes to sleep; a motor set now has to wake it
+				world.run_steps(120);
+				const Ref<const PhysicsStepSnapshot> resting = world.Thread.latest();
+				const BodyPose* asleep = find_pose(resting.get(), cart);
+				check(asleep != nullptr && !asleep->Active, "joint_motor_wake_setup: the cart pressed against its limit goes to sleep");
+				world.send(SetJointMotor{ cart, JointMotorMode::Velocity, -1.0f, 1.0e6f });
+				const auto back = world.run_steps(60);
+				const BodyPose* moved = back.empty() ? nullptr : find_pose(back.back().get(), cart);
+				check(moved != nullptr && moved->Position.x < 1.5f, "joint_motor_wakes: a motor set on a sleeping body moves it, got x " + (moved ? std::to_string(moved->Position.x) : std::string("no pose")));
 				world.Thread.stop();
 			}
 		}

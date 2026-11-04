@@ -2,7 +2,7 @@
 
 Code: `engine/src/physics`, Lua `scripting/bindings/bind_physics.cpp`, editor `editor/src/panels/physics_panel.*`. Vendored under `engine/vendor/JoltPhysics`, built by premake as static lib `Jolt`. Verified by `--physics-smoke` and `--physics-panel-smoke`. Lua API: `docs/scripting.md`.
 
-Implemented: rigid bodies, primitive/convex hull/mesh/compound shapes, materials, layers, contact and trigger events, queries, body control, debug draw. **Not built:** constraints/joints, character controller, vehicles, ragdolls, soft bodies, heightfields. The body table and command queue take new command kinds without restructuring.
+Implemented: rigid bodies, primitive/convex hull/mesh/compound shapes, materials, layers, contact and trigger events, queries, body control, joints, debug draw. **Not built:** character controller, vehicles, ragdolls, soft bodies, heightfields. Cycle 2 design (joints, character controller, ragdolls): [2026-11-04-jolt-physics-cycle2-design.md](2026-11-04-jolt-physics-cycle2-design.md). The body table and command queue take new command kinds without restructuring.
 
 ## Build rules
 
@@ -39,6 +39,19 @@ The world exists only while a scene plays (the Play clone, or the game's scene o
 - A `Collider` on a `RigidBody` entity is that body's shape; with no `RigidBody` on it or an ancestor it is a static body; on a descendant of a `RigidBody` entity it joins the ancestor's compound (rebuilt and sent as `ReplaceShape` when a child collider changes).
 - World scale scales the shape. Non-uniform scale is fine for box/hull/mesh (Jolt scaled shapes); sphere/capsule need uniform scale, otherwise the largest axis is used with a one-time warning.
 
+## Joints
+
+`Joint` (reflected; one component with a `Type`: Fixed, Point, Hinge, Slider, Distance, Cone, SwingTwist, SixDof) sits on the entity of body A and names body B in `Connected` (not set: the world, and `AnchorB` is then a world point). Anchors and axes are in each body's frame (the entity's world position and rotation, no scale; from the origin, not the centre of mass). Fields the type does not use are ignored; angles are degrees.
+
+- **Rest pose:** the Jolt constraint is made in world space from the two bodies' poses at that moment, so that pose is zero: hinge and slider limits count from it (`LimitMin <= 0 <= LimitMax`, hinge within 180; both 0 is no limit), and a positive motor target turns or moves A relative to B, right-handed around/along `Axis` (A is Jolt's second body). Distance: `LimitMin`/`LimitMax` are the length range (both 0: the length at the start); `SpringFrequency > 0` makes it soft. Motors exist on hinge and slider (`MotorMode` Velocity or Position, `MotorMaxForce` 0 = no limit).
+- **Physics thread:** `JointSet` (`joint_set.*`, with `joint_builder.*` for everything Jolt) is the joint table next to the body table. A joint is made while both bodies exist and waits otherwise (before B appears, after a body was destroyed or made again: a body made under the same key takes its joints back). A description that cannot be built (zero axis, NaN, min > max, connected to itself) is logged once and stays unmade. Unmaking a joint, and changing its motor or limits, wakes the bodies it holds (Jolt does not).
+- **Commands:** `CreateJoint`, `DestroyJoint`, `SetJointMotor`, `SetJointLimits`, keyed by the guid of body A. `PhysicsSync::push_joints` sends a joint for each `Joint` on an entity that has a body: a change of only the motor or limits goes as `SetJointMotor`/`SetJointLimits` (the rest pose is kept), any other change makes the joint again; a removed component or entity sends `DestroyJoint`.
+- **Pairs that do not collide:** `CollideConnected` off (the default) puts the two bodies in a set that `ContactCollector::OnContactValidate` rejects.
+- **Break:** `BreakForce`/`BreakTorque` (0: unbreakable). After each step the total impulse a joint pushed with, divided by the step, is compared to them; over the limit the joint is unmade for good (a new `CreateJoint` makes another) and a `PhysicsEventKind::JointBreak` event (A the owner, B the other body or a null guid for the world) goes in the step's events, never lost. `events_for_step` needs only the owner alive.
+- **Lua:** `on_joint_break(self, other)` to the owner (`other` nil for the world or a gone entity); `joint.set_motor` and `joint.set_limits` write the `Joint` component, which the sync sends one step later.
+- **Debug draw** shows constraints and their limits; the Physics panel's Stats tab counts the joints made (`PhysicsStepSnapshot::JointCount`).
+- Not built: ropes, gears, pulleys, rack and pinion, path constraints. `Connected` must be the entity of a body (a collider on a descendant joins its ancestor's body, which is the key to name).
+
 ## Assets and settings
 
 - `PhysicsMaterial` (`.wphysmat` JSON: friction, restitution, density, friction/restitution combine Average/Min/Max/Multiply; out-of-range values rejected at import). A built-in default (friction 0.5, restitution 0, density 1000) is used when a collider has none.
@@ -47,8 +60,8 @@ The world exists only while a scene plays (the Play clone, or the game's scene o
 
 ## Lua
 
-`on_physics_update(self, dt)`, `on_collision_enter/stay/exit(self, other, contact)` (`point`, `normal`, `impulse`, `relative_velocity`), `on_trigger_enter/exit(self, other)`; queries `physics.raycast`, `raycast_all`, `overlap_sphere`, `overlap_box`, `shape_cast`; body control `add_force`, `add_impulse`, `add_torque`, `set_velocity`, `get_velocity`, `set_angular_velocity`, `set_kinematic_target`, `wake`, `physics.set_gravity`.
+`on_physics_update(self, dt)`, `on_joint_break(self, other)`, `on_collision_enter/stay/exit(self, other, contact)` (`point`, `normal`, `impulse`, `relative_velocity`), `on_trigger_enter/exit(self, other)`; queries `physics.raycast`, `raycast_all`, `overlap_sphere`, `overlap_box`, `shape_cast`; joints `joint.set_motor`, `joint.set_limits`; body control `add_force`, `add_impulse`, `add_torque`, `set_velocity`, `get_velocity`, `set_angular_velocity`, `set_kinematic_target`, `wake`, `physics.set_gravity`.
 
 ## Editor
 
-Physics panel tabs: **Settings** (scene settings through the normal undo path), **Layers** (names and matrix, saved to `physics.wsettings`), **Stats** (play mode: bodies, active, step time, steps per frame, dropped steps). Debug draw: a Jolt `DebugRenderer` implementation on the physics thread records lines/triangles into the step snapshot (no GPU access) and the main thread submits them to `DebugDraw`; only compiled where `JPH_DEBUG_RENDERER` is defined (Debug, Release).
+Physics panel tabs: **Settings** (scene settings through the normal undo path), **Layers** (names and matrix, saved to `physics.wsettings`), **Stats** (play mode: bodies, active, joints, step time, steps per frame, dropped steps). Debug draw: a Jolt `DebugRenderer` implementation on the physics thread records lines/triangles into the step snapshot (no GPU access) and the main thread submits them to `DebugDraw`; only compiled where `JPH_DEBUG_RENDERER` is defined (Debug, Release).

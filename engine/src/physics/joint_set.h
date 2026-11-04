@@ -66,6 +66,8 @@ namespace wiwa
 
 		void try_make(Entry& entry);
 		void unmake(Entry& entry);
+		// A body held by a joint may be asleep; a joint that changes (or goes) has to let it move.
+		void wake_bodies(const JPH::TwoBodyConstraint& constraint);
 
 		JPH::PhysicsSystem& m_System;
 		BodyLookup m_Lookup;

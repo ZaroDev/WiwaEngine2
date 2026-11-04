@@ -52,6 +52,7 @@ namespace wiwa
 		if (entry.Constraint != nullptr)
 		{
 			apply_joint_motor(*entry.Constraint, entry.Desc.Type, mode, entry.Desc.MotorTarget, entry.Desc.MotorMaxForce);
+			wake_bodies(*entry.Constraint);
 		}
 	}
 
@@ -68,6 +69,7 @@ namespace wiwa
 		if (entry.Constraint != nullptr)
 		{
 			apply_joint_limits(*entry.Constraint, entry.Desc.Type, min, max);
+			wake_bodies(*entry.Constraint);
 		}
 	}
 
@@ -149,19 +151,23 @@ namespace wiwa
 		}
 	}
 
+	void JointSet::wake_bodies(const JPH::TwoBodyConstraint& constraint)
+	{
+		JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
+		for (const JPH::Body* body : { constraint.GetBody1(), constraint.GetBody2() })
+		{
+			if (body != nullptr && !body->IsStatic() && !body->IsActive())
+			{
+				bodies.ActivateBody(body->GetID());
+			}
+		}
+	}
+
 	void JointSet::unmake(Entry& entry)
 	{
 		if (entry.Constraint != nullptr)
 		{
-			// a body held by the joint may be asleep: without the joint it has to be free to move
-			JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
-			for (const JPH::Body* body : { entry.Constraint->GetBody1(), entry.Constraint->GetBody2() })
-			{
-				if (body != nullptr && !body->IsStatic() && !body->IsActive())
-				{
-					bodies.ActivateBody(body->GetID());
-				}
-			}
+			wake_bodies(*entry.Constraint); // without the joint the bodies it held have to be free to move
 			m_System.RemoveConstraint(entry.Constraint);
 			entry.Constraint = nullptr;
 		}
