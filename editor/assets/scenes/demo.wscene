@@ -3475,6 +3475,455 @@
                              "script:7b264575d7884ad0a1aa48c7ef942421": {}
                          },
                          "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "e2e2dcc77819494192f08c0513b76735",
+                         "components": {
+                             "Name": {
+                                 "Value": "Character demo"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     0,
+                                     0,
+                                     0
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1,
+                                     1,
+                                     1
+                                 ]
+                             }
+                         }
+                     },
+                     {
+                         "id": "1cfbe16efe524bd184fb2f7ba51f2508",
+                         "components": {
+                             "Name": {
+                                 "Value": "Hero"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     19,
+                                     0,
+                                     1.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1,
+                                     1,
+                                     1
+                                 ]
+                             },
+                             "CharacterController": {
+                                 "Offset": [
+                                     0,
+                                     0.9,
+                                     0
+                                 ]
+                             },
+                             "script:25ad6587b5044ffc833f36b7cdb06519": {
+                                 "speed": 4,
+                                 "jump_speed": 6
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "cd086fbae13840a4b5ea79ee47fe511d",
+                         "components": {
+                             "Name": {
+                                 "Value": "Hero body"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     0,
+                                     0.9,
+                                     0
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.8,
+                                     1.8,
+                                     0.8
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 2
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "4ae7e8927e833b7511667468a3f23eb3",
+                                         "localId": 0
+                                     }
+                                 ]
+                             }
+                         },
+                         "parent": "1cfbe16efe524bd184fb2f7ba51f2508"
+                     },
+                     {
+                         "id": "2aa396399606422994b3e94270f84ebf",
+                         "components": {
+                             "Name": {
+                                 "Value": "Patrol"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     19,
+                                     0,
+                                     5.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1,
+                                     1,
+                                     1
+                                 ]
+                             },
+                             "CharacterController": {
+                                 "Offset": [
+                                     0,
+                                     0.9,
+                                     0
+                                 ]
+                             },
+                             "script:25ad6587b5044ffc833f36b7cdb06519": {
+                                 "speed": 2,
+                                 "jump_speed": 5,
+                                 "autopilot": true,
+                                 "leg": 4
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "c23cb70cb41e4440a78b28fe7e97412d",
+                         "components": {
+                             "Name": {
+                                 "Value": "Patrol body"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     0,
+                                     0.9,
+                                     0
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.8,
+                                     1.8,
+                                     0.8
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 2
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "2dbad0e89dad4905669b41cf505f133f",
+                                         "localId": 0
+                                     }
+                                 ]
+                             }
+                         },
+                         "parent": "2aa396399606422994b3e94270f84ebf"
+                     },
+                     {
+                         "id": "c42546a9b496403abffcd86833f7001e",
+                         "components": {
+                             "Name": {
+                                 "Value": "Low step"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     21.5,
+                                     0.1,
+                                     3.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1,
+                                     0.2,
+                                     7.4
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "bfd8c35c77f0422b8238bc3e6dd9c5b4",
+                         "components": {
+                             "Name": {
+                                 "Value": "Tall step"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     23.2,
+                                     0.3,
+                                     1.2
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1.5,
+                                     0.6,
+                                     2.4
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "b7a65eb209a142acb0c239d8880dfb58",
+                         "components": {
+                             "Name": {
+                                 "Value": "Walkable ramp"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     26.648,
+                                     1.413,
+                                     5.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0.2588190451,
+                                     0.9659258263
+                                 ],
+                                 "Scale": [
+                                     6,
+                                     0.2,
+                                     5
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "40880e2407064d84b0f820d98658490a",
+                         "components": {
+                             "Name": {
+                                 "Value": "Steep ramp"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     25.0866,
+                                     1.682,
+                                     -1.2
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0.5,
+                                     0.8660254038
+                                 ],
+                                 "Scale": [
+                                     4,
+                                     0.2,
+                                     2
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "f488b0fce21c4e11865c1706a9a76427",
+                         "components": {
+                             "Name": {
+                                 "Value": "Sliding platform"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     28,
+                                     0.15,
+                                     -4.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     2.4,
+                                     0.3,
+                                     2.4
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "603d84a8d1d2225094f02730986fb069",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Kinematic"
+                             },
+                             "script:9f16f5c9a1914fb4855b650df899d9ae": {
+                                 "amplitude": 2.5,
+                                 "speed": 0.6
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
                      }
                  ],
     "settings":  {

@@ -49,12 +49,15 @@ namespace wiwa
 		// The key of the character whose inner body this is (a null key: not one).
 		BodyKey key_of_inner(JPH::BodyID id) const;
 
-		// For the query snapshot: where each character is, its capsule shape and its layer.
+		// For the query snapshot and the debug drawing: where each character is, its capsule and its layer.
 		struct View
 		{
 			BodyKey Key{};
 			glm::vec3 Position{ 0.0f };      // of the capsule shape: its centre
+			float Radius = 0.0f;
+			float HalfCylinder = 0.0f;       // half the height of the straight part
 			i32 Layer = 0;
+			GroundState Ground = GroundState::Airborne;
 			JPH::RefConst<JPH::Shape> Shape{};
 		};
 		std::vector<View> views() const;

@@ -99,6 +99,7 @@ namespace wiwa
 			u32 Bodies = 0;
 			u32 ActiveBodies = 0;
 			u32 Joints = 0;            // made (not waiting for a body)
+			u32 Characters = 0;
 			float StepMs = 0.0f;       // of the newest step
 			u32 StepsLastFrame = 0;    // steps update() took in its last call
 			u64 DroppedSteps = 0;      // folded into a later one because the main thread did not take them (see PhysicsThread::folded_steps)

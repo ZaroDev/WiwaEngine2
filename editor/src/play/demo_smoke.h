@@ -33,7 +33,7 @@ namespace wiwa
 			Run,
 			Ui,
 			Input,
-			Joints,
+			Physics,
 			HotCreate,
 			HotFirst,
 			HotSecond,
@@ -42,7 +42,7 @@ namespace wiwa
 
 		bool wait(u32 frames, const char* what, std::string& failure);
 		std::string finish_checks();
-		bool sample_joints(Scene& play, std::string& failure);
+		bool sample_physics(Scene& play, std::string& failure);
 
 		// The HUD of the demo scene while it plays (the Ui phase), one step per frame.
 		enum class UiResult
@@ -85,8 +85,9 @@ namespace wiwa
 		float m_CameraLow = 1e9f, m_CameraHigh = -1e9f;
 		float m_LightLow = 1e9f, m_LightHigh = -1e9f;
 
-		// the Joints phase: the joints demo of the scene (door, cart, pendulum, bridge, breaking box) while it plays
-		struct JointsWatch
+		// the Physics phase: the joints demo (door, cart, pendulum, bridge, breaking box) and the character demo (a patrolling character, a sliding
+		// platform) of the scene while it plays
+		struct PhysicsWatch
 		{
 			float DoorSwing = 0.0f;                  // the largest |rotation.y| of the door
 			float CartLow = 1e9f, CartHigh = -1e9f;  // x of the cart on its rail
@@ -96,8 +97,11 @@ namespace wiwa
 			float WeakLow = 1e9f;                    // the lowest y of the hanging box
 			float BridgeStretch = 0.0f;              // the longest distance between two neighbouring planks
 			float BridgeLow = 1e9f;                  // the lowest y of a plank
+			float PatrolLowX = 1e9f, PatrolHighX = -1e9f; // the character that walks its lane on its own
+			float PatrolLowY = 1e9f, PatrolHighY = -1e9f;
+			float PlatformLow = 1e9f, PlatformHigh = -1e9f; // x of the platform that slides
 		};
-		JointsWatch m_Joints{};
+		PhysicsWatch m_Watch{};
 
 		EntityGuid m_Probe{};
 		AssetRef m_HotScript{};

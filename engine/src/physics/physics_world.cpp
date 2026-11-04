@@ -297,6 +297,13 @@ namespace wiwa
 				m_System.DrawBodies(draw, m_DebugRenderer.get());
 				m_System.DrawConstraints(m_DebugRenderer.get());
 				m_System.DrawConstraintLimits(m_DebugRenderer.get());
+				// a character is drawn in a colour for its state: green on ground, yellow sliding, red in the air
+				for (const CharacterSet::View& view : m_Characters.views())
+				{
+					const JPH::Color color = view.Ground == GroundState::Grounded ? JPH::Color(60, 255, 120) : view.Ground == GroundState::Sliding ? JPH::Color(255, 220, 40) : JPH::Color(255, 70, 50);
+					m_DebugRenderer->DrawCapsule(JPH::RMat44::sTranslation(JPH::RVec3(view.Position.x, view.Position.y, view.Position.z)), view.HalfCylinder, view.Radius, color,
+						JPH::DebugRenderer::ECastShadow::Off, JPH::DebugRenderer::EDrawMode::Wireframe);
+				}
 				snapshot.Debug = m_DebugRenderer->take();
 #else
 				(void)snapshot;

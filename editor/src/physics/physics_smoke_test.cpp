@@ -2269,6 +2269,63 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// The module's stats count the characters (the Physics panel shows them).
+		void check_character_stats(Check& check)
+		{
+			PhysicsModule module;
+			module.set_auto_start(false);
+			Ref<Scene> scene = CreateRef<Scene>();
+			add_ground(*scene);
+			add_character(*scene, "Hero", glm::vec3(0.0f, 1.0f, 0.0f));
+			check(module.start_world(scene), "character_stats_start: the world starts");
+			module.thread().set_paused(false);
+			u32 characters = 0;
+			for (int attempt = 0; attempt < 200 && characters == 0; attempt++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(5));
+				module.pump();
+				characters = module.stats().Characters;
+			}
+			check(characters == 1, "character_stats_count: PhysicsModule::stats counts one character, got " + std::to_string(characters));
+			module.stop_world();
+		}
+
+		// The debug capsule of a character is drawn in a colour for its state: airborne while it falls, grounded once it has landed.
+		void check_character_debug_draw(Check& check)
+		{
+#if defined(WI_DEBUG) || defined(WI_RELEASE)
+			const u32 grounded = 0xFF78FF3Cu; // 0xAABBGGRR of (60, 255, 120)
+			const u32 airborne = 0xFF3246FFu;  // (255, 70, 50)
+			CommandWorld world;
+			check(world.start(), "character_debug_start: the world starts");
+			make_floor(world);
+			const BodyKey hero = EntityGuid::generate();
+			world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 3.0f, 0.0f)) });
+			world.send(SetDebugDraw{ true });
+			bool sawAirborne = false;
+			bool sawGrounded = false;
+			for (const auto& step : world.run_steps(120))
+			{
+				if (step->Debug == nullptr)
+				{
+					continue;
+				}
+				for (const PhysicsDebugLine& line : step->Debug->Lines)
+				{
+					sawAirborne = sawAirborne || line.Color == airborne;
+					sawGrounded = sawGrounded || line.Color == grounded;
+				}
+			}
+			check(sawAirborne && sawGrounded, "character_debug_draw: the capsule is drawn in the airborne colour while it falls and the grounded colour once it stands, airborne " + std::to_string(sawAirborne) + ", grounded " + std::to_string(sawGrounded));
+			world.Thread.stop();
+#else
+			(void)check;
+#endif
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -2308,6 +2365,8 @@ namespace wiwa
 		check_character_queries(check);
 		check_character_sync(check);
 		check_character_repeatable(check);
+		check_character_debug_draw(check);
+		check_character_stats(check);
 
 		if (check.Failures == 0)
 		{

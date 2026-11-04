@@ -2,7 +2,7 @@
 
 Code: `engine/src/physics`, Lua `scripting/bindings/bind_physics.cpp`, editor `editor/src/panels/physics_panel.*`. Vendored under `engine/vendor/JoltPhysics`, built by premake as static lib `Jolt`. Verified by `--physics-smoke` and `--physics-panel-smoke`. Lua API: `docs/scripting.md`.
 
-Implemented: rigid bodies, primitive/convex hull/mesh/compound shapes, materials, layers, contact and trigger events, queries, body control, joints, debug draw. **Not built:** character controller, vehicles, ragdolls, soft bodies, heightfields. Cycle 2 design (joints, character controller, ragdolls): [2026-11-04-jolt-physics-cycle2-design.md](2026-11-04-jolt-physics-cycle2-design.md). The body table and command queue take new command kinds without restructuring.
+Implemented: rigid bodies, primitive/convex hull/mesh/compound shapes, materials, layers, contact and trigger events, queries, body control, joints, a character controller, debug draw. **Not built:** vehicles, ragdolls, soft bodies, heightfields. Cycle 2 design (joints, character controller, ragdolls): [2026-11-04-jolt-physics-cycle2-design.md](2026-11-04-jolt-physics-cycle2-design.md). The body table and command queue take new command kinds without restructuring.
 
 ## Build rules
 
@@ -52,6 +52,18 @@ The world exists only while a scene plays (the Play clone, or the game's scene o
 - **Debug draw** shows constraints and their limits; the Physics panel's Stats tab counts the joints made (`PhysicsStepSnapshot::JointCount`).
 - Not built: ropes, gears, pulleys, rack and pinion, path constraints. `Connected` must be the entity of a body (a collider on a descendant joins its ancestor's body, which is the key to name).
 
+## Character controller
+
+`CharacterController` (reflected; `Radius`, `Height` (caps included), `Offset`, `StepHeight`, `MaxSlopeAngle` (degrees), `Mass`, `PushStrength`, `GravityFactor`, `Layer`) on an entity with no `RigidBody` or `Collider` of its own (one warning, no character). The entity origin is the character's feet when `Offset.y` is half the height; up is world +Y. A `Height` below `2 * Radius` is made one with a warning.
+
+- **Physics thread:** `CharacterSet` (`character_set.*`) owns one `JPH::CharacterVirtual` per character, next to the body table and the joint table. Before each step it gives the character the velocity it was told to keep (horizontal only; `SetCharacterVelocity`), plus gravity, plus (standing on ground that is not falling away) the ground's velocity and a pending jump, then `ExtendedUpdate` (collide and slide, `mWalkStairsStepUp`/`mStickToFloorStepDown` from `StepHeight`, `MaxSlopeAngle`). A moving platform carries what stands on it. The supporting volume is the lower cap, measured from the character position. The reported velocity is the displacement over the step.
+- **Inner body:** every character has a kinematic inner rigid body (in the Moving layer of its `Layer`), registered with `ContactCollector` under the character's entity guid. That is what makes a character show in queries (it is in the `QuerySnapshot` as a capsule), fire `TriggerEnter/Exit` and be hit by fast bodies.
+- **Commands:** `CreateCharacter`, `DestroyCharacter`, `SetCharacterVelocity`, `CharacterJump` (applied in the next step, only if the character stands on ground then), `TeleportCharacter`. `PhysicsSync::push_characters` sends a character for each `CharacterController`: a changed field makes it again where its entity is; an entity moved by something other than the physics (the position differs from what `apply_poses` last wrote) is a teleport.
+- **Snapshot:** a `CharacterPose` per character (position, velocity, `GroundState` Grounded/Sliding/Airborne, the ground entity, the ground normal) and `CharacterCount`; `apply_poses` writes the (interpolated) position to the entity's `Transform`.
+- **Lua:** `character.move(entity, velocity)`, `character.jump(entity, speed)`, `character.is_grounded(entity)`, `character.state(entity)`; one step later, errors for an entity without the component.
+- **Debug draw:** a capsule in a colour for the state (green grounded, yellow sliding, red airborne); the Stats tab counts the characters.
+- Not built: character-vs-body `on_collision_*` events, custom up axes, crouching and shape switching, ladders. Characters push bodies through Jolt's defaults (`Mass`, `PushStrength`).
+
 ## Assets and settings
 
 - `PhysicsMaterial` (`.wphysmat` JSON: friction, restitution, density, friction/restitution combine Average/Min/Max/Multiply; out-of-range values rejected at import). A built-in default (friction 0.5, restitution 0, density 1000) is used when a collider has none.
@@ -60,8 +72,8 @@ The world exists only while a scene plays (the Play clone, or the game's scene o
 
 ## Lua
 
-`on_physics_update(self, dt)`, `on_joint_break(self, other)`, `on_collision_enter/stay/exit(self, other, contact)` (`point`, `normal`, `impulse`, `relative_velocity`), `on_trigger_enter/exit(self, other)`; queries `physics.raycast`, `raycast_all`, `overlap_sphere`, `overlap_box`, `shape_cast`; joints `joint.set_motor`, `joint.set_limits`; body control `add_force`, `add_impulse`, `add_torque`, `set_velocity`, `get_velocity`, `set_angular_velocity`, `set_kinematic_target`, `wake`, `physics.set_gravity`.
+`on_physics_update(self, dt)`, `on_joint_break(self, other)`, `on_collision_enter/stay/exit(self, other, contact)` (`point`, `normal`, `impulse`, `relative_velocity`), `on_trigger_enter/exit(self, other)`; queries `physics.raycast`, `raycast_all`, `overlap_sphere`, `overlap_box`, `shape_cast`; joints `joint.set_motor`, `joint.set_limits`; characters `character.move`, `character.jump`, `character.is_grounded`, `character.state`; body control `add_force`, `add_impulse`, `add_torque`, `set_velocity`, `get_velocity`, `set_angular_velocity`, `set_kinematic_target`, `wake`, `physics.set_gravity`.
 
 ## Editor
 
-Physics panel tabs: **Settings** (scene settings through the normal undo path), **Layers** (names and matrix, saved to `physics.wsettings`), **Stats** (play mode: bodies, active, joints, step time, steps per frame, dropped steps). Debug draw: a Jolt `DebugRenderer` implementation on the physics thread records lines/triangles into the step snapshot (no GPU access) and the main thread submits them to `DebugDraw`; only compiled where `JPH_DEBUG_RENDERER` is defined (Debug, Release).
+Physics panel tabs: **Settings** (scene settings through the normal undo path), **Layers** (names and matrix, saved to `physics.wsettings`), **Stats** (play mode: bodies, active, joints, characters, step time, steps per frame, dropped steps). Debug draw: a Jolt `DebugRenderer` implementation on the physics thread records lines/triangles into the step snapshot (no GPU access) and the main thread submits them to `DebugDraw`; only compiled where `JPH_DEBUG_RENDERER` is defined (Debug, Release).

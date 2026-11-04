@@ -212,7 +212,10 @@ namespace wiwa
 			view.Key = key;
 			const JPH::RVec3 center = entry.Character->GetCenterOfMassPosition();
 			view.Position = glm::vec3(center.GetX(), center.GetY(), center.GetZ());
+			view.Radius = entry.Desc.Radius;
+			view.HalfCylinder = entry.Desc.Height * 0.5f - entry.Desc.Radius;
 			view.Layer = entry.Desc.Layer;
+			view.Ground = ground_state_of(*entry.Character);
 			view.Shape = entry.Shape;
 			result.push_back(view);
 		}

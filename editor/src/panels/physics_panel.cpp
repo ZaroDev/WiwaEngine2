@@ -208,6 +208,7 @@ void PhysicsPanel::stats_tab()
 	const wiwa::PhysicsModule::Stats stats = physics->stats();
 	ImGui::Text("Bodies: %u (%u awake)", stats.Bodies, stats.ActiveBodies);
 	ImGui::Text("Joints: %u", stats.Joints);
+	ImGui::Text("Characters: %u", stats.Characters);
 	ImGui::Text("Step: %.3f ms", stats.StepMs);
 	ImGui::Text("Steps last frame: %u", stats.StepsLastFrame);
 	ImGui::Text("Dropped steps: %llu", static_cast<unsigned long long>(stats.DroppedSteps));
