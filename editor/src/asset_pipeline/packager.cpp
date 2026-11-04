@@ -74,7 +74,7 @@ namespace wiwa
 		return selected;
 	}
 
-	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile, const std::filesystem::path& inputSettingsFile)
+	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile, const std::filesystem::path& inputSettingsFile, const std::filesystem::path& projectSettingsFile)
 	{
 		JobProgress local;
 		if (progress == nullptr)
@@ -345,6 +345,24 @@ namespace wiwa
 				else
 				{
 					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", inputSettingsFile.string(), inputError);
+					ok = false;
+				}
+			}
+		}
+
+		// The project's name, version and launch settings, if the editor has saved any.
+		{
+			std::error_code exists;
+			if (std::filesystem::exists(projectSettingsFile, exists))
+			{
+				std::string projectError;
+				if (const std::optional<ProjectSettings> project = load_project_settings(projectSettingsFile, projectError))
+				{
+					ok = add_blob(PROJECT_SETTINGS_GUID, 0, serialize(*project), "project settings") && ok;
+				}
+				else
+				{
+					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", projectSettingsFile.string(), projectError);
 					ok = false;
 				}
 			}

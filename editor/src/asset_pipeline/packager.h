@@ -2,6 +2,8 @@
 
 #include <unordered_set>
 
+#include <core/project_settings.h>
+
 #include "asset_database.h"
 #include "build_settings.h"
 #include "input_settings_file.h"
@@ -30,11 +32,12 @@ namespace wiwa
 		// background thread (AssetPipelineModule::pack_async) and pass a progress object to follow it; without one it just
 		// runs to the end. A cancel request on the progress stops it between assets.
 		// The project's physics layers (physicsSettingsFile, if it exists) go into the pack too.
-		// So do the input settings (inputSettingsFile, if it exists).
+		// So do the input settings (inputSettingsFile) and the project settings (projectSettingsFile), if they exist.
 		// With settings the pack holds only what they choose, its catalog lists only that, and the default scene is recorded in
 		// its build info; without them (null) it holds every cooked asset.
 		static bool pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress = nullptr, const BuildSettings* settings = nullptr,
 			const std::filesystem::path& physicsSettingsFile = PHYSICS_SETTINGS_FILE,
-			const std::filesystem::path& inputSettingsFile = INPUT_SETTINGS_FILE);
+			const std::filesystem::path& inputSettingsFile = INPUT_SETTINGS_FILE,
+			const std::filesystem::path& projectSettingsFile = wiwa::PROJECT_SETTINGS_FILE);
 	};
 }

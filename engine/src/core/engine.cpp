@@ -43,7 +43,12 @@ namespace wiwa
 		m_Time.init();
 
 		
-		m_ModuleManager.add_module<AssetManager>();
+		AssetManager* assets = m_ModuleManager.add_module<AssetManager>();
+		load_project(*assets);
+		if (m_ProjectFromPak && m_Project.FpsCap > 0)
+		{
+			m_Time.set_target_fps(static_cast<int>(m_Project.FpsCap)); // the editor is not capped by the project
+		}
 		m_ModuleManager.add_module<SceneModule>();
 		m_ModuleManager.add_module<PhysicsModule>(); // after the scene, before the scripts
 		m_ModuleManager.add_module<Window>();
@@ -53,6 +58,29 @@ namespace wiwa
 		m_ModuleManager.add_module<ScriptingModule>();
 
 		on_init();
+	}
+
+	void Engine::load_project(AssetManager& assets)
+	{
+		if (IAssetSource* source = assets.get_source())
+		{
+			if (const std::optional<ProjectSettings> packed = read_project_settings(*source))
+			{
+				m_Project = *packed;
+				m_ProjectFromPak = true;
+				return;
+			}
+		}
+
+		std::string error;
+		if (const std::optional<ProjectSettings> loaded = load_project_settings(PROJECT_SETTINGS_FILE, error))
+		{
+			m_Project = *loaded;
+		}
+		else if (!error.empty())
+		{
+			WI_ENGINE_LOG(Warning, "{0}: the default project settings are used", error);
+		}
 	}
 
 	void Engine::update()
