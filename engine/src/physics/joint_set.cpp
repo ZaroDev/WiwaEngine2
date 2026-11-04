@@ -3,6 +3,8 @@
 
 #include "joint_builder.h"
 
+#include <algorithm>
+
 namespace wiwa
 {
 	void JointSet::create(const JointDesc& desc)
@@ -138,6 +140,13 @@ namespace wiwa
 		}
 		m_System.AddConstraint(constraint);
 		entry.Constraint = std::move(constraint);
+		if (!entry.Desc.CollideConnected && !toWorld)
+		{
+			const JPH::uint32 first = idA.GetIndexAndSequenceNumber();
+			const JPH::uint32 second = idB.GetIndexAndSequenceNumber();
+			entry.NoCollide = { std::min(first, second), std::max(first, second) };
+			m_NoCollide.insert(entry.NoCollide);
+		}
 	}
 
 	void JointSet::unmake(Entry& entry)
@@ -146,6 +155,37 @@ namespace wiwa
 		{
 			m_System.RemoveConstraint(entry.Constraint);
 			entry.Constraint = nullptr;
+		}
+		m_NoCollide.erase(entry.NoCollide);
+		entry.NoCollide = {};
+	}
+
+	void JointSet::check_breaks(float dt, std::vector<PhysicsEvent>& events)
+	{
+		if (!(dt > 0.0f))
+		{
+			return;
+		}
+		for (auto& [owner, entry] : m_Joints)
+		{
+			const bool breakable = entry.Desc.BreakForce > 0.0f || entry.Desc.BreakTorque > 0.0f;
+			if (entry.Constraint == nullptr || !breakable)
+			{
+				continue;
+			}
+			const JointReaction reaction = joint_reaction(*entry.Constraint, entry.Desc.Type);
+			const bool force = entry.Desc.BreakForce > 0.0f && reaction.Linear / dt > entry.Desc.BreakForce;
+			const bool torque = entry.Desc.BreakTorque > 0.0f && reaction.Angular / dt > entry.Desc.BreakTorque;
+			if (force || torque)
+			{
+				PhysicsEvent event;
+				event.Kind = PhysicsEventKind::JointBreak;
+				event.A = owner;
+				event.B = entry.Desc.B;
+				events.push_back(event);
+				unmake(entry);
+				entry.Failed = true;
+			}
 		}
 	}
 }

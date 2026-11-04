@@ -229,6 +229,63 @@ namespace wiwa
 		return nullptr;
 	}
 
+	JointReaction joint_reaction(const JPH::TwoBodyConstraint& constraint, JointType type)
+	{
+		JointReaction reaction;
+		switch (type)
+		{
+		case JointType::Fixed:
+		{
+			const auto& c = static_cast<const JPH::FixedConstraint&>(constraint);
+			reaction.Linear = c.GetTotalLambdaPosition().Length();
+			reaction.Angular = c.GetTotalLambdaRotation().Length();
+			break;
+		}
+		case JointType::Point:
+			reaction.Linear = static_cast<const JPH::PointConstraint&>(constraint).GetTotalLambdaPosition().Length();
+			break;
+		case JointType::Hinge:
+		{
+			const auto& c = static_cast<const JPH::HingeConstraint&>(constraint);
+			reaction.Linear = c.GetTotalLambdaPosition().Length();
+			reaction.Angular = c.GetTotalLambdaRotation().Length() + std::abs(c.GetTotalLambdaRotationLimits());
+			break;
+		}
+		case JointType::Slider:
+		{
+			const auto& c = static_cast<const JPH::SliderConstraint&>(constraint);
+			reaction.Linear = c.GetTotalLambdaPosition().Length() + std::abs(c.GetTotalLambdaPositionLimits());
+			reaction.Angular = c.GetTotalLambdaRotation().Length();
+			break;
+		}
+		case JointType::Distance:
+			reaction.Linear = std::abs(static_cast<const JPH::DistanceConstraint&>(constraint).GetTotalLambdaPosition());
+			break;
+		case JointType::Cone:
+		{
+			const auto& c = static_cast<const JPH::ConeConstraint&>(constraint);
+			reaction.Linear = c.GetTotalLambdaPosition().Length();
+			reaction.Angular = std::abs(c.GetTotalLambdaRotation());
+			break;
+		}
+		case JointType::SwingTwist:
+		{
+			const auto& c = static_cast<const JPH::SwingTwistConstraint&>(constraint);
+			reaction.Linear = c.GetTotalLambdaPosition().Length();
+			reaction.Angular = JPH::Vec3(c.GetTotalLambdaTwist(), c.GetTotalLambdaSwingY(), c.GetTotalLambdaSwingZ()).Length();
+			break;
+		}
+		case JointType::SixDof:
+		{
+			const auto& c = static_cast<const JPH::SixDOFConstraint&>(constraint);
+			reaction.Linear = c.GetTotalLambdaPosition().Length();
+			reaction.Angular = c.GetTotalLambdaRotation().Length();
+			break;
+		}
+		}
+		return reaction;
+	}
+
 	void apply_joint_motor(JPH::TwoBodyConstraint& constraint, JointType type, JointMotorMode mode, float target, float maxForce)
 	{
 		const float limit = maxForce > 0.0f && std::isfinite(maxForce) ? maxForce : FLT_MAX;

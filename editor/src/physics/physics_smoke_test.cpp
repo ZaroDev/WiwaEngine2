@@ -1588,6 +1588,98 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// Two boxes overlapping by half a box, joined by a loose distance joint (it only limits them to 5 m): with CollideConnected off they
+		// are not pushed apart, with it on they are.
+		float overlapping_pair_distance(bool collideConnected)
+		{
+			CommandWorld world;
+			if (!world.start(glm::vec3(0.0f)))
+			{
+				return -1.0f;
+			}
+			const BodyKey a = EntityGuid::generate();
+			const BodyKey b = EntityGuid::generate();
+			world.send(CreateBody{ a, box_body(MotionType::Dynamic, glm::vec3(0.0f, 5.0f, 0.0f)) });
+			world.send(CreateBody{ b, box_body(MotionType::Dynamic, glm::vec3(0.5f, 5.0f, 0.0f)) });
+			JointDesc joint;
+			joint.Type = JointType::Distance;
+			joint.A = a;
+			joint.B = b;
+			joint.LimitMin = 0.0f;
+			joint.LimitMax = 5.0f;
+			joint.CollideConnected = collideConnected;
+			world.send(CreateJoint{ joint });
+			const auto steps = world.run_steps(60);
+			const BodyPose* poseA = steps.empty() ? nullptr : find_pose(steps.back().get(), a);
+			const BodyPose* poseB = steps.empty() ? nullptr : find_pose(steps.back().get(), b);
+			world.Thread.stop();
+			return poseA != nullptr && poseB != nullptr ? glm::length(poseA->Position - poseB->Position) : -1.0f;
+		}
+
+		void check_joint_no_collide(Check& check)
+		{
+			const float quiet = overlapping_pair_distance(false);
+			const float pushed = overlapping_pair_distance(true);
+			check(std::abs(quiet - 0.5f) < 1e-3f, "joint_no_collide: joined boxes with CollideConnected off are not pushed apart, distance " + std::to_string(quiet));
+			check(pushed > 0.9f, "joint_collide: with CollideConnected on the overlapping boxes are pushed apart, distance " + std::to_string(pushed));
+		}
+
+		// A 1000 kg box (weight about 9810 N) hangs from the world by a fixed joint. Break force 5000: it breaks, once, and the box falls.
+		// Break force 100000: it holds and no event comes.
+		void check_joint_break(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "joint_break_start: the world starts");
+			const BodyKey weak = EntityGuid::generate();
+			const BodyKey strong = EntityGuid::generate();
+			const auto hang = [&](BodyKey key, float x, float breakForce)
+			{
+				world.send(CreateBody{ key, box_body(MotionType::Dynamic, glm::vec3(x, 4.7f, 0.0f)) });
+				JointDesc joint;
+				joint.Type = JointType::Fixed;
+				joint.A = key;
+				joint.AnchorA = glm::vec3(0.0f, 0.5f, 0.0f);
+				joint.AnchorB = glm::vec3(x, 5.2f, 0.0f); // a world point: no second body
+				joint.BreakForce = breakForce;
+				world.send(CreateJoint{ joint });
+			};
+			hang(weak, 0.0f, 5000.0f);
+			hang(strong, 10.0f, 100000.0f);
+
+			u32 weakBreaks = 0;
+			u32 strongBreaks = 0;
+			u32 lastJointCount = 99;
+			const BodyPose* weakPose = nullptr;
+			const BodyPose* strongPose = nullptr;
+			const auto steps = world.run_steps(180);
+			for (const auto& step : steps)
+			{
+				for (const PhysicsEvent& event : step->Events)
+				{
+					if (event.Kind == PhysicsEventKind::JointBreak)
+					{
+						weakBreaks += event.A == weak && !event.B.valid() ? 1u : 0u;
+						strongBreaks += event.A == strong ? 1u : 0u;
+					}
+				}
+				lastJointCount = step->JointCount;
+			}
+			if (!steps.empty())
+			{
+				weakPose = find_pose(steps.back().get(), weak);
+				strongPose = find_pose(steps.back().get(), strong);
+			}
+			check(weakBreaks == 1, "joint_break_event: the overloaded joint breaks exactly once and the event names its owner and the world, got " + std::to_string(weakBreaks));
+			check(strongBreaks == 0, "joint_break_strong: a joint under its limit does not break, events " + std::to_string(strongBreaks));
+			check(weakPose != nullptr && weakPose->Position.y < 2.0f, "joint_break_falls: the box falls once its joint is gone, got " + (weakPose ? fmt_vec(weakPose->Position) : std::string("no pose")));
+			check(strongPose != nullptr && std::abs(strongPose->Position.y - 4.7f) < 0.05f, "joint_break_holds: the strong joint holds its box, got " + (strongPose ? fmt_vec(strongPose->Position) : std::string("no pose")));
+			check(lastJointCount == 1, "joint_break_count: one joint is left made, got " + std::to_string(lastJointCount));
+			world.Thread.stop();
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1614,6 +1706,8 @@ namespace wiwa
 		check_joint_hinge(check);
 		check_joint_limits_motor(check);
 		check_joint_pending_destroy(check);
+		check_joint_no_collide(check);
+		check_joint_break(check);
 
 		if (check.Failures == 0)
 		{

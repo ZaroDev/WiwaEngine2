@@ -6,9 +6,12 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 
 #include <functional>
+#include <set>
+#include <vector>
 #include <unordered_map>
 
 #include "physics_commands.h"
+#include "physics_snapshot.h"
 
 namespace wiwa
 {
@@ -42,6 +45,13 @@ namespace wiwa
 		// Unmakes every joint and forgets them (before the bodies are destroyed).
 		void clear();
 
+		// After a step of dt seconds: a joint that pushed with more than its break force or torque is unmade for good (it is made again
+		// only by a new CreateJoint) and gives a JointBreak event (A the owner, B the other body or a null key for the world).
+		void check_breaks(float dt, std::vector<PhysicsEvent>& events);
+
+		// The body pairs of the made joints that have CollideConnected off (see ContactCollector::NoCollidePairs).
+		const std::set<std::pair<JPH::uint32, JPH::uint32>>& no_collide_pairs() const { return m_NoCollide; }
+
 		// How many joints are made right now.
 		u32 made_count() const;
 
@@ -50,7 +60,8 @@ namespace wiwa
 		{
 			JointDesc Desc{};
 			JPH::Ref<JPH::TwoBodyConstraint> Constraint{};
-			bool Failed = false; // cannot be built as described; not tried again
+			bool Failed = false; // cannot be built as described, or broke; not tried again
+			std::pair<JPH::uint32, JPH::uint32> NoCollide{}; // the pair this joint keeps from colliding while it is made ((0, 0): none)
 		};
 
 		void try_make(Entry& entry);
@@ -59,5 +70,6 @@ namespace wiwa
 		JPH::PhysicsSystem& m_System;
 		BodyLookup m_Lookup;
 		std::unordered_map<BodyKey, Entry> m_Joints{};
+		std::set<std::pair<JPH::uint32, JPH::uint32>> m_NoCollide{};
 	};
 }

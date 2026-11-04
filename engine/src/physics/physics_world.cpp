@@ -107,6 +107,7 @@ namespace wiwa
 				m_System.Init(kMaxBodies, 0, kMaxBodyPairs, kMaxContactConstraints, m_BroadPhase, m_ObjectVsBroad, m_Pairs);
 					m_Contacts.set_bodies(&m_System.GetBodyInterfaceNoLock());
 					m_System.SetContactListener(&m_Contacts);
+				m_Contacts.set_no_collide(&m_Joints.no_collide_pairs());
 				apply(settings);
 				// the friction and restitution of a contact come from the two shapes' materials (physics_material_jolt.h), not from the bodies
 				m_System.SetCombineFriction(&combine_friction);
@@ -223,6 +224,13 @@ namespace wiwa
 				}
 				m_MovedKinematic.clear();
 				m_Contacts.end_step();
+
+				std::vector<PhysicsEvent> broken;
+				m_Joints.check_breaks(static_cast<float>(fixed_dt()), broken);
+				for (const PhysicsEvent& event : broken)
+				{
+					m_Contacts.add_event(event);
+				}
 			}
 
 			void write_poses(PhysicsStepSnapshot& snapshot) const override

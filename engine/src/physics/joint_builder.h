@@ -18,6 +18,15 @@ namespace wiwa
 	// axis, min > max, a number that is not finite).
 	JPH::Ref<JPH::TwoBodyConstraint> build_joint(const JointDesc& desc, JPH::Body& a, JPH::Body& b, std::string& error);
 
+	// What a joint pushed with during the last step, as total impulses: Linear in N s, Angular in N m s (divide by the step for the force
+	// and the torque). Used for break limits.
+	struct JointReaction
+	{
+		float Linear = 0.0f;
+		float Angular = 0.0f;
+	};
+	JointReaction joint_reaction(const JPH::TwoBodyConstraint& constraint, JointType type);
+
 	// Hinge and slider joints have motors, the others ignore the call. maxForce <= 0 means no limit. Hinge angles are degrees, slider
 	// positions metres.
 	void apply_joint_motor(JPH::TwoBodyConstraint& constraint, JointType type, JointMotorMode mode, float target, float maxForce);

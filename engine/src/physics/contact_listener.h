@@ -6,6 +6,7 @@
 
 #include <map>
 #include <mutex>
+#include <set>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -21,6 +22,14 @@ namespace wiwa
 	public:
 		void set_bodies(JPH::BodyInterface* bodies) { m_Bodies = bodies; }
 
+		// Pairs of bodies (BodyID index and sequence numbers, the smaller first) that never collide: the two bodies of a joint with
+		// CollideConnected off. Owned by the joint table; read from Jolt job threads during a step, changed only between steps.
+		using NoCollidePairs = std::set<std::pair<JPH::uint32, JPH::uint32>>;
+		void set_no_collide(const NoCollidePairs* pairs) { m_NoCollide = pairs; }
+
+		// Adds an event of the step being finished (a joint that broke); it is sorted with the other events of the step.
+		void add_event(const PhysicsEvent& event);
+
 		void register_body(JPH::BodyID id, BodyKey key, bool sensor, bool reportContacts);
 		// The body is going away: its pairs end with an Exit now (the events go to the commands' group), and Jolt's later callbacks for
 		// its ID are ignored.
@@ -34,6 +43,7 @@ namespace wiwa
 		// Moves the events made since the last call into `events`: the commands' first, then the step's, each sorted.
 		void take_events(std::vector<PhysicsEvent>& events);
 
+		JPH::ValidateResult OnContactValidate(const JPH::Body& body1, const JPH::Body& body2, JPH::RVec3Arg baseOffset, const JPH::CollideShapeResult& collisionResult) override;
 		void OnContactAdded(const JPH::Body& body1, const JPH::Body& body2, const JPH::ContactManifold& manifold, JPH::ContactSettings& settings) override;
 		void OnContactPersisted(const JPH::Body& body1, const JPH::Body& body2, const JPH::ContactManifold& manifold, JPH::ContactSettings& settings) override;
 		void OnContactRemoved(const JPH::SubShapeIDPair& pair) override;
@@ -64,6 +74,7 @@ namespace wiwa
 		static void sort_events(std::vector<PhysicsEvent>& events);
 
 		JPH::BodyInterface* m_Bodies = nullptr;
+		const NoCollidePairs* m_NoCollide = nullptr;
 		std::unordered_map<JPH::uint32, BodyInfo> m_Infos{}; // by BodyID index and sequence; changed only between steps
 
 		std::mutex m_Mutex{};
