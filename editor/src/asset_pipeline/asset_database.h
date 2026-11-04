@@ -53,6 +53,8 @@ namespace wiwa
 		bool is_pending_asset(AssetGuid guid) const;
 		// Whether some source's last import cooked this guid (the embedded textures and other sub-assets of a model have no path of their own).
 		bool is_cooked_asset(AssetGuid guid) const;
+		// The source file each cooked guid came from, sub-assets included (a model's meshes and textures have no path of their own, only this).
+		std::unordered_map<AssetGuid, std::string> cooked_sources() const;
 		// A source, an asset being imported or a cooked file has this guid.
 		bool guid_exists(AssetGuid guid) const;
 

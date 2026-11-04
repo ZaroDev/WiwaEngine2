@@ -157,6 +157,28 @@ namespace wiwa
 		return m_PendingAssets.contains(guid);
 	}
 
+	std::unordered_map<AssetGuid, std::string> AssetDatabase::cooked_sources() const
+	{
+		std::unordered_map<AssetGuid, std::string> sources;
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto& [guidText, entry] : m_ImportCache.items())
+		{
+			if (!entry.is_object() || !entry.contains("assets"))
+			{
+				continue;
+			}
+			const std::string source = entry.value("source", std::string{});
+			for (const nlohmann::json& asset : entry["assets"])
+			{
+				if (const std::optional<AssetGuid> guid = asset.is_string() ? AssetGuid::from_string(asset.get<std::string>()) : std::nullopt)
+				{
+					sources[*guid] = source;
+				}
+			}
+		}
+		return sources;
+	}
+
 	bool AssetDatabase::guid_exists(AssetGuid guid) const
 	{
 		return path_of(guid).has_value() || is_pending_asset(guid) || is_cooked_asset(guid);
