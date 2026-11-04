@@ -18,6 +18,7 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 
 #include "contact_listener.h"
+#include "joint_set.h"
 #include "physics_debug_draw.h"
 #include "physics_layers_jolt.h"
 #include "physics_material_jolt.h"
@@ -115,6 +116,7 @@ namespace wiwa
 
 			~PhysicsWorld() override
 			{
+				m_Joints.clear(); // before the bodies: a constraint must not outlive them
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
 				for (const auto& [key, entry] : m_Bodies)
 				{
@@ -181,9 +183,21 @@ namespace wiwa
 					{
 						set_layers(c.Layers);
 					}
-					else if constexpr (std::is_same_v<T, CreateJoint> || std::is_same_v<T, DestroyJoint> || std::is_same_v<T, SetJointMotor> || std::is_same_v<T, SetJointLimits>)
+					else if constexpr (std::is_same_v<T, CreateJoint>)
 					{
-						// joints are built in the next task
+						m_Joints.create(c.Desc);
+					}
+					else if constexpr (std::is_same_v<T, DestroyJoint>)
+					{
+						m_Joints.destroy(c.Owner);
+					}
+					else if constexpr (std::is_same_v<T, SetJointMotor>)
+					{
+						m_Joints.set_motor(c.Owner, c.Mode, c.Target, c.MaxForce);
+					}
+					else if constexpr (std::is_same_v<T, SetJointLimits>)
+					{
+						m_Joints.set_limits(c.Owner, c.Min, c.Max);
 					}
 					else
 					{
@@ -229,6 +243,7 @@ namespace wiwa
 					pose.Active = bodies.IsActive(entry.Id);
 					snapshot.Poses.push_back(pose);
 				}
+				snapshot.JointCount = m_Joints.made_count();
 			}
 
 			void take_events(PhysicsStepSnapshot& snapshot) override { m_Contacts.take_events(snapshot.Events); }
@@ -431,6 +446,7 @@ namespace wiwa
 				m_Bodies[key] = entry;
 				m_StaticDirty = true;
 				m_Contacts.register_body(entry.Id, key, desc.IsTrigger, desc.ReportContacts);
+				m_Joints.body_created(key);
 			}
 
 			void destroy_body(BodyKey key)
@@ -441,6 +457,7 @@ namespace wiwa
 					return;
 				}
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
+				m_Joints.body_destroyed(key);
 				m_Contacts.unregister_body(it->second.Id);
 				m_StaticDirty = true;
 				bodies.RemoveBody(it->second.Id);
@@ -633,6 +650,7 @@ namespace wiwa
 			ShapeBuilder m_Shapes{};
 			JPH::RefConst<JPH::Shape> m_Placeholder{};
 			std::unordered_map<BodyKey, BodyEntry> m_Bodies{};
+			JointSet m_Joints{ m_System, [this](BodyKey key) { const auto it = m_Bodies.find(key); return it == m_Bodies.end() ? JPH::BodyID() : it->second.Id; } };
 			std::vector<JPH::BodyID> m_MovedKinematic{};
 			std::shared_ptr<const std::vector<QueryBody>> m_StaticQuery{}; // the static bodies of the query snapshots, until one changes
 			bool m_StaticDirty = true;

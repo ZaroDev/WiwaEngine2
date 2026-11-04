@@ -1370,6 +1370,224 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// ---- joints: bodies and joints made by commands, so that a joint can be set up without a scene ----
+
+		BodyDesc box_body(MotionType motion, glm::vec3 position, glm::vec3 halfExtents = glm::vec3(0.5f))
+		{
+			BodyDesc desc;
+			desc.Motion = motion;
+			desc.Position = position;
+			desc.Shape.Kind = ShapeKind::Box;
+			desc.Shape.Size = halfExtents;
+			return desc;
+		}
+
+		// A world with commands pushed straight to it; every published step can be walked through with take_steps().
+		struct CommandWorld
+		{
+			PhysicsThread Thread;
+			u64 Generation = 0;
+
+			bool start(glm::vec3 gravity = glm::vec3(0.0f, -9.81f, 0.0f))
+			{
+				PhysicsSettings settings;
+				settings.Gravity = gravity;
+				if (!Thread.start(settings))
+				{
+					return false;
+				}
+				Generation = Thread.generation();
+				return true;
+			}
+
+			void send(PhysicsCommand command) { Thread.push(std::move(command), Generation); }
+
+			// Every step published until `steps` more have completed, oldest first.
+			std::vector<Ref<const PhysicsStepSnapshot>> run_steps(u32 steps)
+			{
+				std::vector<Ref<const PhysicsStepSnapshot>> seen;
+				const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(20);
+				while (seen.size() < steps && Clock::now() < giveUp)
+				{
+					for (Ref<const PhysicsStepSnapshot>& step : Thread.take_steps())
+					{
+						seen.push_back(std::move(step));
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+				return seen;
+			}
+		};
+
+		glm::vec3 world_point(const BodyPose& pose, glm::vec3 local) { return pose.Position + pose.Rotation * local; }
+
+		// The angle of the box's local x axis in the xy plane, degrees.
+		float hinge_angle_deg(const BodyPose& pose)
+		{
+			const glm::vec3 direction = pose.Rotation * glm::vec3(1.0f, 0.0f, 0.0f);
+			return glm::degrees(std::atan2(direction.y, direction.x));
+		}
+
+		JointDesc hinge_desc()
+		{
+			JointDesc joint;
+			joint.Type = JointType::Hinge;
+			joint.AnchorA = glm::vec3(-1.0f, 0.0f, 0.0f); // the left end of a box 2 m long
+			joint.AnchorB = glm::vec3(0.0f, -0.5f, 0.0f); // on the anchor body, which sits above the plank's end (no overlap)
+			joint.Axis = glm::vec3(0.0f, 0.0f, 1.0f);
+			return joint;
+		}
+
+		// An anchor (static, 0.5 m above the world's (0, 5, 0), the hinge point) and a 2 m long plank hinged there by its left end, level.
+		struct HingeRig
+		{
+			BodyKey Anchor = EntityGuid::generate();
+			BodyKey Plank = EntityGuid::generate();
+		};
+
+		HingeRig make_hinge_rig(CommandWorld& world, JointDesc joint)
+		{
+			HingeRig rig;
+			world.send(CreateBody{ rig.Anchor, box_body(MotionType::Static, glm::vec3(0.0f, 5.5f, 0.0f), glm::vec3(0.1f)) });
+			world.send(CreateBody{ rig.Plank, box_body(MotionType::Dynamic, glm::vec3(1.0f, 5.0f, 0.0f), glm::vec3(1.0f, 0.1f, 0.1f)) });
+			joint.A = rig.Plank;
+			joint.B = rig.Anchor;
+			world.send(CreateJoint{ joint });
+			return rig;
+		}
+
+		// A hinge keeps its two anchor points together and turns only around its axis: the plank swings and does not fall away.
+		void check_joint_hinge(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "joint_hinge_start: the world starts");
+			const HingeRig rig = make_hinge_rig(world, hinge_desc());
+			const auto steps = world.run_steps(120);
+			const BodyPose* plank = steps.empty() ? nullptr : find_pose(steps.back().get(), rig.Plank);
+			check(plank != nullptr, "joint_hinge_pose: the plank has a pose");
+			if (plank != nullptr)
+			{
+				const glm::vec3 end = world_point(*plank, glm::vec3(-1.0f, 0.0f, 0.0f));
+				check(glm::length(end - glm::vec3(0.0f, 5.0f, 0.0f)) < 1e-2f, "joint_hinge_anchor: the plank's end stays on the anchor, got " + fmt_vec(end));
+				check(std::abs(plank->AngularVelocity.x) + std::abs(plank->AngularVelocity.y) < 1e-3f, "joint_hinge_axis: the plank turns only around z, got " + fmt_vec(plank->AngularVelocity));
+				check(glm::length(plank->Position - glm::vec3(1.0f, 5.0f, 0.0f)) > 0.3f, "joint_hinge_swings: gravity swings the plank away from where it started");
+			}
+			check(!steps.empty() && steps.back()->JointCount == 1, "joint_hinge_count: the snapshot counts one joint");
+			world.Thread.stop();
+		}
+
+		// Limits hold, a motor reaches its target speed, a slider stops at its limit.
+		void check_joint_limits_motor(Check& check)
+		{
+			{
+				CommandWorld world;
+				check(world.start(), "joint_limits_start: the world starts");
+				JointDesc joint = hinge_desc();
+				joint.LimitMin = -30.0f;
+				joint.LimitMax = 30.0f;
+				const HingeRig rig = make_hinge_rig(world, joint);
+				float lowest = 1000.0f;
+				float highest = -1000.0f;
+				for (const auto& step : world.run_steps(180))
+				{
+					if (const BodyPose* plank = find_pose(step.get(), rig.Plank))
+					{
+						lowest = std::min(lowest, hinge_angle_deg(*plank));
+						highest = std::max(highest, hinge_angle_deg(*plank));
+					}
+				}
+				check(lowest > -31.5f && lowest < -25.0f, "joint_limits_hinge_low: the plank swings down to the -30 degree limit and not past it, lowest " + std::to_string(lowest));
+				check(highest < 5.0f, "joint_limits_hinge_high: it does not swing up past its start, highest " + std::to_string(highest));
+				world.Thread.stop();
+			}
+			{
+				CommandWorld world;
+				check(world.start(glm::vec3(0.0f)), "joint_motor_start: the world starts");
+				JointDesc joint = hinge_desc();
+				joint.MotorMode = JointMotorMode::Velocity;
+				joint.MotorTarget = 1.0f;
+				joint.MotorMaxForce = 1.0e6f;
+				const HingeRig rig = make_hinge_rig(world, joint);
+				const auto steps = world.run_steps(45); // 43 degrees: before the plank turns into the anchor body above it
+				const BodyPose* plank = steps.empty() ? nullptr : find_pose(steps.back().get(), rig.Plank);
+				check(plank != nullptr && std::abs(plank->AngularVelocity.z - 1.0f) < 0.05f, "joint_motor_velocity: the motor turns the plank at 1 rad/s, got " + (plank ? fmt_vec(plank->AngularVelocity) : std::string("no pose")));
+				world.Thread.stop();
+			}
+			{
+				CommandWorld world;
+				check(world.start(glm::vec3(9.81f, 0.0f, 0.0f)), "joint_slider_start: the world starts");
+				const BodyKey anchor = EntityGuid::generate();
+				const BodyKey cart = EntityGuid::generate();
+				world.send(CreateBody{ anchor, box_body(MotionType::Static, glm::vec3(0.0f, 6.0f, 0.0f), glm::vec3(0.1f)) });
+				world.send(CreateBody{ cart, box_body(MotionType::Dynamic, glm::vec3(0.0f, 5.0f, 0.0f), glm::vec3(0.3f)) });
+				JointDesc joint;
+				joint.Type = JointType::Slider;
+				joint.A = cart;
+				joint.B = anchor;
+				joint.AnchorB = glm::vec3(0.0f, -1.0f, 0.0f);
+				joint.Axis = glm::vec3(1.0f, 0.0f, 0.0f);
+				joint.NormalAxis = glm::vec3(0.0f, 1.0f, 0.0f);
+				joint.LimitMin = 0.0f;
+				joint.LimitMax = 2.0f;
+				world.send(CreateJoint{ joint });
+				const auto steps = world.run_steps(180);
+				const BodyPose* pose = steps.empty() ? nullptr : find_pose(steps.back().get(), cart);
+				check(pose != nullptr && std::abs(pose->Position.x - 2.0f) < 0.02f, "joint_slider_limit: the slider stops at its 2 m limit, got " + (pose ? fmt_vec(pose->Position) : std::string("no pose")));
+				check(pose != nullptr && std::abs(pose->Position.y - 5.0f) < 1e-2f && std::abs(pose->Position.z) < 1e-2f, "joint_slider_axis: it moves along x only");
+				world.Thread.stop();
+			}
+		}
+
+		// A joint named before its second body exists waits and is made when the body appears; destroying a body unmakes its joints; a
+		// body made again (CreateBody for an existing key) keeps its joints.
+		void check_joint_pending_destroy(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "joint_pending_start: the world starts");
+			const BodyKey anchor = EntityGuid::generate();
+			const BodyKey ball = EntityGuid::generate();
+			world.send(CreateBody{ ball, box_body(MotionType::Dynamic, glm::vec3(1.0f, 5.0f, 0.0f), glm::vec3(0.2f)) });
+			JointDesc joint;
+			joint.Type = JointType::Point;
+			joint.A = ball;
+			joint.B = anchor;
+			joint.AnchorA = glm::vec3(-1.0f, 0.0f, 0.0f);
+			world.send(CreateJoint{ joint });
+
+			auto steps = world.run_steps(20);
+			const BodyPose* falling = steps.empty() ? nullptr : find_pose(steps.back().get(), ball);
+			check(!steps.empty() && steps.back()->JointCount == 0, "joint_pending_waits: a joint without its second body is not made");
+			check(falling != nullptr && falling->Position.y < 4.9f, "joint_pending_free: the body is free while the joint waits");
+
+			world.send(CreateBody{ anchor, box_body(MotionType::Static, glm::vec3(0.0f, 5.0f, 0.0f), glm::vec3(0.1f)) });
+			steps = world.run_steps(300);
+			const BodyPose* hanging = steps.empty() ? nullptr : find_pose(steps.back().get(), ball);
+			check(!steps.empty() && steps.back()->JointCount == 1, "joint_pending_made: the joint is made when the second body appears");
+			check(hanging != nullptr && glm::length(world_point(*hanging, glm::vec3(-1.0f, 0.0f, 0.0f)) - glm::vec3(0.0f, 5.0f, 0.0f)) < 0.05f,
+				"joint_pending_holds: the made joint holds the body to the anchor, got " + (hanging ? fmt_vec(world_point(*hanging, glm::vec3(-1.0f, 0.0f, 0.0f))) : std::string("no pose")));
+
+			// the body made again keeps the joint
+			BodyDesc again = box_body(MotionType::Dynamic, hanging != nullptr ? hanging->Position : glm::vec3(0.0f, 5.0f, 0.0f), glm::vec3(0.2f));
+			again.Rotation = hanging != nullptr ? hanging->Rotation : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+			world.send(CreateBody{ ball, again });
+			steps = world.run_steps(120);
+			const BodyPose* replaced = steps.empty() ? nullptr : find_pose(steps.back().get(), ball);
+			check(!steps.empty() && steps.back()->JointCount == 1, "joint_replace_count: a body made again keeps its joint");
+			check(replaced != nullptr && glm::length(world_point(*replaced, glm::vec3(-1.0f, 0.0f, 0.0f)) - glm::vec3(0.0f, 5.0f, 0.0f)) < 0.05f,
+				"joint_replace_holds: the joint still holds the body made again, got " + (replaced ? fmt_vec(world_point(*replaced, glm::vec3(-1.0f, 0.0f, 0.0f))) : std::string("no pose")));
+
+			// destroying the other body unmakes the joint; the ball is free and the world goes on
+			world.send(DestroyBody{ anchor });
+			steps = world.run_steps(60);
+			const BodyPose* freed = steps.empty() ? nullptr : find_pose(steps.back().get(), ball);
+			check(!steps.empty() && steps.back()->JointCount == 0, "joint_destroy_count: destroying a joint's body unmakes it");
+			check(freed != nullptr && freed->Position.y < 3.0f, "joint_destroy_free: the ball falls once its anchor is gone, got " + (freed ? fmt_vec(freed->Position) : std::string("no pose")));
+			world.Thread.stop();
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1393,6 +1611,9 @@ namespace wiwa
 		check_debug_draw(check);
 		check_repeatable(check);
 		check_world_lifetime(check);
+		check_joint_hinge(check);
+		check_joint_limits_motor(check);
+		check_joint_pending_destroy(check);
 
 		if (check.Failures == 0)
 		{
