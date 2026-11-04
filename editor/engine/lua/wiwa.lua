@@ -531,6 +531,9 @@ function time.delta() end
 ---@return number
 function time.total() end
 
+--- Asks the host to end the program: a game closes, the editor stops play mode.
+function quit() end
+
 ---@param title string
 ---@param message string
 function log(title, message) end

@@ -79,10 +79,8 @@ or `debug`.
   (`"replace"` or `"additive"`) returns a handle with `progress()`, `done()`, `failed()`, `stage()`.
 - **Rendering:** `debug_draw.line / box / sphere / arrow(..., color?, duration?)`; `camera.primary()` and
   `camera.set_primary(entity)`.
-- **Engine:** `time.delta()`, `time.total()`; `log(title, message)`, `log_warning`, `log_error`.
+- **Engine:** `time.delta()`, `time.total()`; `log(title, message)`, `log_warning`, `log_error`; `quit()` asks the host to end the program (a game closes, the editor's Play stops).
 - **UI:** `UI.panel(entity)`, widgets by path, `widget:on(event, fn)`, `UI.input` (see "UI" below).
-
-Physics and keyboard input are not bound yet (the UI has its own input, below).
 
 ## UI
 
@@ -244,8 +242,7 @@ The editor sets this up itself each time it starts, so there is nothing to confi
 
 ## The demo scene
 
-`assets/scenes/demo.wscene` has scripts to try all of this (the sources are in `assets/scripts/`; `scripts/gen_demo_scene.py` puts them
-on the scene). Press Play and watch the Console:
+`assets/scenes/demo.wscene` has scripts to try all of this (the sources are in `assets/scripts/`). Press Play and watch the Console:
 
 - **spinner** (gold knot, blue ring, crate C): turns the entity; change `degrees_per_second` or `axis` in the Inspector while playing.
 - **bobber** (neon balls): bobs them using `lib/wave.lua`. Edit `wave.sine` there while playing and every ball changes.

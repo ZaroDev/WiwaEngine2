@@ -66,6 +66,7 @@ private:
 	Scope<wiwa::SceneEditor> m_SceneEditor;
 	Scope<wiwa::IPlayHost> m_PlayHost;
 	Scope<wiwa::PlayMode> m_PlayMode;
+	bool m_StopPlayRequested = false; // a script called quit()
 	Scope<wiwa::DemoSmoke> m_DemoSmoke;
 	bool m_PlaySmoke = false;
 	class UiEditorPanel* m_UiEditor = nullptr; // owned by m_Panels

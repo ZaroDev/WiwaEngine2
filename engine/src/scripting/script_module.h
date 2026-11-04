@@ -1,6 +1,7 @@
 #pragma once
 #include <core/module.h>
 
+#include <functional>
 #include <mutex>
 #include <vector>
 
@@ -36,6 +37,9 @@ namespace wiwa
 		// on_destroy of every script; the scripts stay stopped (an auto-start module starts again with the next update).
 		void stop();
 		bool running() const { return m_Instances != nullptr && m_Instances->running(); }
+
+		// What quit() in a script does. A game ends the program (the default); the editor replaces it with stopping play mode.
+		void set_quit_handler(std::function<void()> handler) { m_Instances->context().RequestQuit = std::move(handler); }
 
 		ScriptRuntime* get_runtime() { return m_Runtime.get(); }
 

@@ -7,6 +7,7 @@
 #include "hierarchy_panel.h"
 #include "inspector_panel.h"
 #include "performance_panel.h"
+#include "game_panel.h"
 #include "viewport_panel.h"
 #include "world_panel.h"
 #include "console_panel.h"

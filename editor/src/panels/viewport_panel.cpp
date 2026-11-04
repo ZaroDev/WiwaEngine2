@@ -39,8 +39,8 @@ namespace
 	}
 }
 
-ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor)
-	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>()), m_GizmoSettings(wiwa::GizmoSettings::load())
+ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor, Ref<ViewOwner> owner)
+	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_Owner(std::move(owner)), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>()), m_GizmoSettings(wiwa::GizmoSettings::load())
 {
 }
 
@@ -78,34 +78,6 @@ void ViewportPanel::apply_manipulation(entt::entity entity, const glm::mat4& wor
 	}
 }
 
-// While a scene plays the game reads the keyboard and the mouse as long as the Viewport has the focus or the pointer is over it.
-// Escape or Shift+F1 hands them back to the editor (typing in the panels works again) until the image is clicked.
-void ViewportPanel::update_game_input(const glm::vec2& imageMin, float scale, bool hovered)
-{
-	wiwa::InputModule* input = wiwa::Engine::get().get_module<wiwa::InputModule>();
-	if (input == nullptr || input->backend_injected()) // an injected backend (a smoke test) decides the capture itself
-	{
-		return;
-	}
-
-	const bool playing = m_Editor.playing();
-	if (!playing)
-	{
-		m_GameReleased = false;
-	}
-	else if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-	{
-		m_GameReleased = false;
-	}
-	else if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || (ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_F1, false)))
-	{
-		m_GameReleased = true;
-	}
-
-	input->ui_source().set_viewport(imageMin, scale, hovered);
-	input->set_capture(playing && !m_GameReleased && (hovered || ImGui::IsWindowFocused()));
-}
-
 void ViewportPanel::on_draw()
 {
 	wiwa::RenderModule* render = wiwa::Engine::get().get_module<wiwa::RenderModule>();
@@ -114,7 +86,7 @@ void ViewportPanel::on_draw()
 		return;
 	}
 
-	render->set_scene_in_viewport(true); // the scene goes to this panel, not over the window
+	render->set_scene_in_viewport(true); // the scene goes to a panel, not over the window
 	ImGuizmo::BeginFrame();
 
 	ImGui::SetNextWindowPos(ImVec2(376.0f, 12.0f), ImGuiCond_FirstUseEver);
@@ -123,8 +95,16 @@ void ViewportPanel::on_draw()
 	const bool open = ImGui::Begin(get_name(), nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 	ImGui::PopStyleVar();
 
-	if (open)
+	if (open && m_Owner->game_owns_render())
 	{
+		// the Game panel is showing the scene: this panel does not touch the camera, the selection or the input
+		ImGui::SetCursorPos(ImVec2(8.0f, 26.0f));
+		ImGui::TextDisabled("The Game view is showing the scene. Close it or dock it as a tab of this panel to see the Scene view.");
+		(void)render->take_pick_result();
+	}
+	else if (open)
+	{
+		render->get_debug_draw().set_enabled(true); // the Game view switches it off while it shows the scene
 		const ImVec2 size = ImGui::GetContentRegionAvail();
 		const float scale = ImGui::GetIO().DisplayFramebufferScale.x;
 		const wiwa::u32 width = static_cast<wiwa::u32>(std::max(size.x * scale, 0.0f));
@@ -161,7 +141,7 @@ void ViewportPanel::on_draw()
 			}
 			const bool hovered = ImGui::IsItemHovered();
 			const ImVec2 imageMin = ImGui::GetItemRectMin();
-			update_game_input(glm::vec2(imageMin.x, imageMin.y), scale, hovered);
+			m_PlayInput.update(m_Editor.playing(), glm::vec2(imageMin.x, imageMin.y), scale, hovered);
 
 			if (m_UseEditorCamera)
 			{

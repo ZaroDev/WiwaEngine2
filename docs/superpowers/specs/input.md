@@ -27,7 +27,7 @@ Code: `engine/src/input`, Lua `scripting/bindings/bind_input.cpp`, editor `edito
 
 ## Editor
 
-- Play routing: the game gets keyboard and mouse only while the Viewport panel has the game (click to capture, Esc or Shift+F1 to release); the editor turns the capture gate on only then. Gamepads always reach the game while playing.
+- Play routing: the game gets keyboard and mouse only while the Viewport or Game panel (whichever owns the render, `PlayInputRouter`) has the game (click to capture, Esc or Shift+F1 to release); the editor turns the capture gate on only then. Gamepads always reach the game while playing.
 - `InputPanel` edits a `.winput` through the ImGui-free `InputEditModel` (maps, actions, bindings, add/remove/rename, undo/redo, a "listen" button for a control) and the default map in `input.wsettings`.
 
 ## Demo

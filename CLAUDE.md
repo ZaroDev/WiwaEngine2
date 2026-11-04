@@ -30,7 +30,7 @@ No test framework (the user decided a suite isn't needed). Smoke commands: run t
 | `--render-smoke <frames>` | any | render N frames then exit (1 if a validation message or error was logged) |
 | `--scene-smoke-load` | game | load the `--scene` (or the pak's default scene) and quit |
 
-Other flags: `--scene <path>`, `--pack <outdir>`, `--api=vulkan|d3d11|d3d12` (default Vulkan, no silent fallback), `--gpu-validation`, `--no-copy-queue`. Panel smokes run with ImGui asserts on.
+Other flags: `--debug-draw` (game: a game starts with debug draw off), `--scene <path>`, `--pack <outdir>`, `--api=vulkan|d3d11|d3d12` (default Vulkan, no silent fallback), `--gpu-validation`, `--no-copy-queue`. Panel smokes run with ImGui asserts on.
 
 ## Architecture in one page
 
