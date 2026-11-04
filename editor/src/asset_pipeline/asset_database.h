@@ -53,6 +53,8 @@ namespace wiwa
 		bool is_pending_asset(AssetGuid guid) const;
 		// Whether some source's last import cooked this guid (the embedded textures and other sub-assets of a model have no path of their own).
 		bool is_cooked_asset(AssetGuid guid) const;
+		// A source, an asset being imported or a cooked file has this guid.
+		bool guid_exists(AssetGuid guid) const;
 
 		// Called (on a worker thread) with each cooked guid after a file was re-cooked with new content.
 		void add_reimport_listener(std::function<void(AssetGuid)> listener);
@@ -76,6 +78,10 @@ namespace wiwa
 
 		void scan_impl(JobProgress& progress);
 		std::vector<std::string> find_dependents(const std::string& sourceKey) const;
+		// A cache entry that dropped references as missing, and one of them is known now.
+		bool has_resolvable(const nlohmann::json& entry) const;
+		// Cooks again every file that is in that case; returns how many.
+		u32 refresh_unresolved();
 		u32 remove_orphans();
 		void write_catalog(); // returns how many sources/files were cleaned up
 		IImporter* find_importer(const std::filesystem::path& source) const;

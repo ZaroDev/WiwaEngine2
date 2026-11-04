@@ -47,6 +47,10 @@ namespace wiwa
 		// refers to the model's embedded textures) accepts a reference to it. Forgotten when this context ends.
 		void declare_pending_asset(AssetGuid guid);
 
+		// The references asset_exists() turned down. The database keeps them with the cooked file and cooks it again once one of them exists,
+		// because a dependency list that was filtered when the asset was missing would never see it.
+		const std::vector<AssetGuid>& unresolved() const { return m_Unresolved; }
+
 		// The whole-file asset (local id 0): a texture's image, a model's prefab, ...
 		AssetRef main_asset() const { return AssetRef{ m_Meta.Guid, 0 }; }
 
@@ -114,6 +118,7 @@ namespace wiwa
 		std::vector<EmittedAsset> m_Emitted{};
 		std::vector<std::filesystem::path> m_SourceDependencies{};
 		std::vector<AssetGuid> m_PendingAssets{};
+		mutable std::vector<AssetGuid> m_Unresolved{};
 	};
 
 	class IImporter

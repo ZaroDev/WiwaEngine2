@@ -53,3 +53,5 @@ Only `project.wproject` (under `PROJECT_SETTINGS_GUID`), `physics.wsettings` and
 | `gizmo_settings.json` | editor gizmo toggles (editor only) | Viewport Gizmos menu, Settings page, Editor |
 
 A missing or unreadable file gives defaults, logged once.
+
+- **Dropped references.** An importer keeps only the references that exist (`ImportContext::asset_exists`). The ones it dropped are stored as `unresolved` in the import cache; a file is cooked again once one of them exists (`AssetDatabase::refresh_unresolved`, run at the end of a scan and after `reimport`). Without this a scene cooked before its HUD panel was known (imports run in parallel) kept a dependency list without it, and the pack shipped without the panel.
