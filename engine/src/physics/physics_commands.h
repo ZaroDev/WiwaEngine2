@@ -221,7 +221,56 @@ namespace wiwa
 		float Max = 0.0f;
 	};
 
+	// A character (see the CharacterController component for what the fields mean), plain data. Position is where its entity is (the capsule
+	// is Offset from it); Rotation is not used (the capsule stays upright).
+	struct CharacterDesc
+	{
+		float Radius = 0.4f;
+		float Height = 1.8f;
+		glm::vec3 Offset{ 0.0f };
+		float StepHeight = 0.35f;
+		float MaxSlopeAngle = 45.0f; // degrees
+		float Mass = 70.0f;
+		float PushStrength = 100.0f;
+		float GravityFactor = 1.0f;
+		i32 Layer = 0;
+		glm::vec3 Position{ 0.0f };
+	};
+
+	// Makes the character of that key (one that exists is replaced).
+	struct CreateCharacter
+	{
+		BodyKey Key{};
+		CharacterDesc Desc{};
+	};
+
+	struct DestroyCharacter
+	{
+		BodyKey Key{};
+	};
+
+	// The horizontal velocity the character tries to keep (m/s, world space; y is ignored: the thread owns the vertical velocity).
+	struct SetCharacterVelocity
+	{
+		BodyKey Key{};
+		glm::vec3 Velocity{ 0.0f };
+	};
+
+	// An upward speed (m/s) given in the next step, only if the character stands on something then.
+	struct CharacterJump
+	{
+		BodyKey Key{};
+		float Speed = 0.0f;
+	};
+
+	// Moves the character to a position at once.
+	struct TeleportCharacter
+	{
+		BodyKey Key{};
+		glm::vec3 Position{ 0.0f };
+	};
+
 	// Plain-data commands from the main thread to the physics thread, applied at the start of the next step in submission order.
 	// New kinds are added as new alternatives. Commands for a key that has no body are ignored.
-	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial, SetLayer, SetLayers, AddForce, AddTorque, AddImpulse, SetVelocity, SetAngularVelocity, WakeBody, SetGravity, SetDebugDraw, CreateJoint, DestroyJoint, SetJointMotor, SetJointLimits>;
+	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial, SetLayer, SetLayers, AddForce, AddTorque, AddImpulse, SetVelocity, SetAngularVelocity, WakeBody, SetGravity, SetDebugDraw, CreateJoint, DestroyJoint, SetJointMotor, SetJointLimits, CreateCharacter, DestroyCharacter, SetCharacterVelocity, CharacterJump, TeleportCharacter>;
 }

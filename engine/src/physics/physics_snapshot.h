@@ -64,6 +64,20 @@ namespace wiwa
 		std::vector<PhysicsDebugTriangle> Triangles{};
 	};
 
+	// How a character stands: Grounded (on ground it can walk on), Sliding (on a slope steeper than its MaxSlopeAngle) or Airborne.
+	enum class GroundState : u32 { Grounded, Sliding, Airborne };
+
+	// The state of one character after a step.
+	struct CharacterPose
+	{
+		BodyKey Key{};
+		glm::vec3 Position{ 0.0f };     // of the entity (the capsule is Offset from it)
+		glm::vec3 Velocity{ 0.0f };
+		GroundState Ground = GroundState::Airborne;
+		BodyKey GroundBody{};           // the entity it stands on (a null key: none, or a body that is not an entity's)
+		glm::vec3 GroundNormal{ 0.0f, 1.0f, 0.0f };
+	};
+
 	class QuerySnapshot;
 
 	// What the physics thread publishes after each step. Immutable once published; the main thread never reads Jolt structures.
@@ -74,6 +88,7 @@ namespace wiwa
 		double Time = 0.0;   // simulated seconds since the world started
 		float FixedDt = 0.0f; // the length of the step that produced this snapshot
 		std::vector<BodyPose> Poses{};
+		std::vector<CharacterPose> Characters{};
 		// This step's events, sorted: first those made by the commands applied before the step (a destroyed body's exits), then the
 		// step's own, each group by (Kind, A, B). When the main thread fell far behind, a snapshot can also carry the begin and end events
 		// of older steps that were folded into it (PhysicsThread::take_steps), before its own.
@@ -87,6 +102,7 @@ namespace wiwa
 		u32 BodyCount = 0;
 		u32 ActiveBodies = 0;   // awake (not sleeping)
 		u32 JointCount = 0;     // joints that are made (not waiting for a body)
+		u32 CharacterCount = 0;
 		float StepMs = 0.0f;    // wall time of PhysicsSystem::Update
 	};
 }

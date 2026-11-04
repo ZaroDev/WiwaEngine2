@@ -200,6 +200,10 @@ namespace wiwa
 					{
 						m_Joints.set_limits(c.Owner, c.Min, c.Max);
 					}
+					else if constexpr (std::is_same_v<T, CreateCharacter> || std::is_same_v<T, DestroyCharacter> || std::is_same_v<T, SetCharacterVelocity> || std::is_same_v<T, CharacterJump> || std::is_same_v<T, TeleportCharacter>)
+					{
+						// characters are built in the next task
+					}
 					else
 					{
 						static_assert(always_false<T>, "a PhysicsCommand kind is not handled by PhysicsWorld::execute");
