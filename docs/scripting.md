@@ -134,6 +134,7 @@ trigger handlers, then `on_physics_update(self, dt)` of every script (`dt` is th
 | `on_collision_enter` / `on_collision_exit` | scripts on the two entities of a touching pair | `other` (Entity), `contact` |
 | `on_collision_stay` | the same, once per step, only if one of the bodies has `ReportContacts` | `other`, `contact` |
 | `on_trigger_enter` / `on_trigger_exit` | scripts on the two entities when either collider is a trigger | `other` |
+| `on_joint_break` | scripts on the entity that owns a `Joint` that went over its break force or torque | `other` (the entity it was connected to; `nil` for the world or an entity that is gone) |
 
 `contact` is described from the receiver's side: `point` (world space), `normal` (unit, from the other entity towards the receiver, the
 way it is pushed out), `impulse` (an estimate of the normal impulse, kg m/s) and `relative_velocity` (the receiver's velocity relative to the
@@ -152,6 +153,14 @@ against the newest step elsewhere. Triggers and shapes that do not collide are n
 snapshot of step N+1: `entity:body()` is a `Body` with `add_force` (during one step), `add_impulse`, `add_torque`, `set_velocity`,
 `set_angular_velocity`, `get_velocity`, `get_angular_velocity` (the newest step; `nil` without a body), `set_kinematic_target(position, rotation)` and `wake()`.
 `physics.set_gravity(vec3)` changes the world's gravity. A command for a body that no longer exists is ignored.
+
+**Joints** are the `Joint` component (see the physics spec). `joint.set_motor(entity, mode, target, max_force)` (`mode` is `"off"`,
+`"velocity"` or `"position"`) and `joint.set_limits(entity, min, max)` write the component, and the physics world gets the change at the
+start of the next step like the body control above, keeping the joint's rest pose. A positive target turns (hinge, rad/s or degrees) or
+moves (slider, m/s or metres) the entity that owns the joint, relative to the one it is connected to, the right-handed way around the
+`Axis`, or along it. Hinge limits are degrees and slider limits metres, counted from the pose the joint was made in (`min <= 0 <= max`;
+both 0 is no limit). An entity without a `Joint`, an unknown mode and `min > max` are Lua errors. A joint that breaks is gone for good
+(`on_joint_break`); put a new `Joint` on the entity to make another.
 
 ```lua
 return Script:extend{

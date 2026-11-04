@@ -231,8 +231,10 @@ namespace wiwa
 		events.reserve(step.Events.size());
 		for (const PhysicsEvent& event : step.Events)
 		{
-			// an entity destroyed since the step: its events go (by guid, the entity may be gone before its DestroyBody was applied)
-			if (scene->find(event.A) != entt::null && scene->find(event.B) != entt::null)
+			// an entity destroyed since the step: its events go (by guid, the entity may be gone before its DestroyBody was applied). A
+			// joint that broke needs only the entity that owns it: it was connected to the world, or to an entity that may be gone.
+			const bool needsOther = event.Kind != PhysicsEventKind::JointBreak;
+			if (scene->find(event.A) != entt::null && (!needsOther || scene->find(event.B) != entt::null))
 			{
 				events.push_back(event);
 			}

@@ -46,6 +46,40 @@ namespace wiwa
 			return result;
 		}
 
+		// The Joint component of an entity, for joint.set_motor and joint.set_limits. They write the component: the physics sync sends the
+		// change (the joint keeps its rest pose) and it takes effect one step later, like the body control.
+		Joint& joint_of(const EntityHandle& handle)
+		{
+			const entt::entity entity = handle.resolve();
+			if (entity == entt::null)
+			{
+				throw sol::error("the entity no longer exists");
+			}
+			Joint* joint = handle.Context->ActiveScene->registry().try_get<Joint>(entity);
+			if (joint == nullptr)
+			{
+				throw sol::error("the entity has no Joint component");
+			}
+			return *joint;
+		}
+
+		JointMotorMode joint_mode_of(const std::string& mode)
+		{
+			if (mode == "off")
+			{
+				return JointMotorMode::Off;
+			}
+			if (mode == "velocity")
+			{
+				return JointMotorMode::Velocity;
+			}
+			if (mode == "position")
+			{
+				return JointMotorMode::Position;
+			}
+			throw sol::error("joint.set_motor: mode must be \"off\", \"velocity\" or \"position\"");
+		}
+
 		u32 mask_of(const sol::optional<double>& mask)
 		{
 			return mask ? static_cast<u32>(static_cast<u64>(std::max(0.0, *mask))) : ~0u;
@@ -200,5 +234,31 @@ namespace wiwa
 		physics.set_function("set_gravity", [&context](const LuaVec3& gravity) { physics_of(context).set_gravity(gravity.Value); });
 
 		runtime.sandbox()["physics"] = physics;
+
+		// joint.set_motor(entity, mode, target, max_force) and joint.set_limits(entity, min, max) on the entity's Joint component
+		sol::table joint = lua.create_table();
+		joint.set_function("set_motor", [](const EntityHandle& entity, const std::string& mode, float target, sol::optional<float> maxForce)
+		{
+			const JointMotorMode motor = joint_mode_of(mode);
+			if (!std::isfinite(target) || (maxForce && !std::isfinite(*maxForce)))
+			{
+				throw sol::error("joint.set_motor: the target and the maximum force must be finite numbers");
+			}
+			Joint& component = joint_of(entity);
+			component.MotorMode = motor;
+			component.MotorTarget = target;
+			component.MotorMaxForce = maxForce ? std::max(*maxForce, 0.0f) : component.MotorMaxForce;
+		});
+		joint.set_function("set_limits", [](const EntityHandle& entity, float min, float max)
+		{
+			if (!std::isfinite(min) || !std::isfinite(max) || min > max)
+			{
+				throw sol::error("joint.set_limits: min and max must be finite numbers with min <= max");
+			}
+			Joint& component = joint_of(entity);
+			component.LimitMin = min;
+			component.LimitMax = max;
+		});
+		runtime.sandbox()["joint"] = joint;
 	}
 }

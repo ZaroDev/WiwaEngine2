@@ -453,6 +453,7 @@ namespace wiwa
 			case PhysicsEventKind::CollisionStay: return "on_collision_stay";
 			case PhysicsEventKind::CollisionExit: return "on_collision_exit";
 			case PhysicsEventKind::TriggerEnter: return "on_trigger_enter";
+			case PhysicsEventKind::JointBreak: return "on_joint_break";
 			default: return "on_trigger_exit";
 			}
 		}
@@ -468,8 +469,33 @@ namespace wiwa
 			return;
 		}
 
-		const bool contact = event.Kind != PhysicsEventKind::TriggerEnter && event.Kind != PhysicsEventKind::TriggerExit;
 		const char* hook = physics_hook(event.Kind);
+
+		// a joint that broke goes to the entity that owns it only; `other` is the entity it was connected to, nil for the world (or when
+		// that entity is gone)
+		if (event.Kind == PhysicsEventKind::JointBreak)
+		{
+			const bool otherAlive = m_Scene->find(event.B) != entt::null;
+			for (size_t i = 0; i < m_Instances.size(); i++)
+			{
+				Instance& instance = m_Instances[i];
+				if (instance.Entity != event.A || instance.Failed || !alive(instance))
+				{
+					continue;
+				}
+				call_hook_with(instance, hook, [&](const sol::protected_function& function)
+				{
+					if (otherAlive)
+					{
+						return m_Runtime.call(function, instance.Self, EntityHandle{ event.B, &m_Context });
+					}
+					return m_Runtime.call(function, instance.Self, sol::lua_nil);
+				});
+			}
+			return;
+		}
+
+		const bool contact = event.Kind != PhysicsEventKind::TriggerEnter && event.Kind != PhysicsEventKind::TriggerExit;
 		sol::state_view lua = m_Runtime.state().lua_state();
 
 		for (int side = 0; side < 2; side++)
