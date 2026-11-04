@@ -232,20 +232,82 @@ namespace wiwa
 			return false;
 		}
 
-		// The fastest GPU when the system can tell (Windows 10 1803+), else the first one.
-		ComPtr<IDXGIAdapter1> adapter;
+		// The fastest GPU first when the system can tell (Windows 10 1803+), then the others. On a laptop with hybrid graphics the fastest
+		// GPU may drive no display, and DXGI then refuses to make a swapchain for the window on it (DXGI_ERROR_DEVICE_REMOVED): the next
+		// adapter is tried. Software adapters are never used.
+		std::vector<ComPtr<IDXGIAdapter1>> candidates;
+		const auto add_candidate = [&](const ComPtr<IDXGIAdapter1>& adapter)
+		{
+			DXGI_ADAPTER_DESC1 description{};
+			if (adapter == nullptr || FAILED(adapter->GetDesc1(&description)) || (description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0)
+			{
+				return;
+			}
+			for (const ComPtr<IDXGIAdapter1>& known : candidates)
+			{
+				DXGI_ADAPTER_DESC1 knownDescription{};
+				if (SUCCEEDED(known->GetDesc1(&knownDescription)) && knownDescription.AdapterLuid.HighPart == description.AdapterLuid.HighPart
+					&& knownDescription.AdapterLuid.LowPart == description.AdapterLuid.LowPart)
+				{
+					return;
+				}
+			}
+			candidates.push_back(adapter);
+		};
+
 		ComPtr<IDXGIFactory6> factory6;
 		if (SUCCEEDED(factory.As(&factory6)))
 		{
-			factory6->EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter));
+			ComPtr<IDXGIAdapter1> fastest;
+			factory6->EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&fastest));
+			add_candidate(fastest);
 		}
-		if (adapter == nullptr)
+		ComPtr<IDXGIAdapter1> adapter;
+		for (UINT index = 0; factory->EnumAdapters1(index, &adapter) != DXGI_ERROR_NOT_FOUND; ++index)
 		{
-			factory->EnumAdapters1(0, &adapter);
+			add_candidate(adapter);
+			adapter.Reset();
 		}
 
+		if (candidates.empty())
+		{
+			WI_LOG(Error, "D3D12", "no hardware adapter");
+			return false;
+		}
+
+		for (size_t i = 0; i < candidates.size(); ++i)
+		{
+			if (create_on_adapter(factory, candidates[i], description, windowHandle, width, height))
+			{
+				return true;
+			}
+
+			// Everything the attempt made is dropped before the next one.
+			m_Swapchain.Reset();
+			m_CopyQueue.Reset();
+			m_Fence.Reset();
+			if (m_FenceEvent != nullptr)
+			{
+				CloseHandle(m_FenceEvent);
+				m_FenceEvent = nullptr;
+			}
+			m_Queue.Reset();
+			m_D3DDevice.Reset();
+			if (i + 1 < candidates.size())
+			{
+				WI_LOG(Warning, "D3D12", "'{0}' could not be used, trying the next adapter", m_AdapterName);
+			}
+		}
+		WI_LOG(Error, "D3D12", "no adapter could present to the window");
+		return false;
+	}
+
+	// The device, the queues, the fence and the swapchain of the window, all on one adapter.
+	bool D3D12Backend::create_on_adapter(const ComPtr<IDXGIFactory4>& factory, const ComPtr<IDXGIAdapter1>& adapter, const RendererDescription& description,
+		HWND windowHandle, u32 width, u32 height)
+	{
 		DXGI_ADAPTER_DESC1 adapterDescription{};
-		if (adapter && SUCCEEDED(adapter->GetDesc1(&adapterDescription)))
+		if (SUCCEEDED(adapter->GetDesc1(&adapterDescription)))
 		{
 			m_AdapterName = to_utf8(adapterDescription.Description);
 		}
@@ -300,8 +362,14 @@ namespace wiwa
 		swapchainDescription.Flags = m_TearingSupported ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
 
 		ComPtr<IDXGISwapChain1> swapchain1;
-		if (!check(factory->CreateSwapChainForHwnd(m_Queue.Get(), windowHandle, &swapchainDescription, nullptr, nullptr, &swapchain1),
-			"CreateSwapChainForHwnd") || !check(swapchain1.As(&m_Swapchain), "IDXGISwapChain3"))
+		// A warning, not an error: create_d3d_objects goes on with the next adapter.
+		const HRESULT swapchainResult = factory->CreateSwapChainForHwnd(m_Queue.Get(), windowHandle, &swapchainDescription, nullptr, nullptr, &swapchain1);
+		if (FAILED(swapchainResult))
+		{
+			WI_LOG(Warning, "D3D12", "CreateSwapChainForHwnd failed on '{0}' (0x{1:x})", m_AdapterName, static_cast<unsigned long>(swapchainResult));
+			return false;
+		}
+		if (!check(swapchain1.As(&m_Swapchain), "IDXGISwapChain3"))
 		{
 			return false;
 		}
