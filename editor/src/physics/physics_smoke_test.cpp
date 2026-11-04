@@ -2170,6 +2170,105 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		entt::entity add_character(Scene& scene, const std::string& name, glm::vec3 feet)
+		{
+			const entt::entity hero = add_entity(scene, name, feet);
+			CharacterController controller;
+			controller.Offset = glm::vec3(0.0f, 0.9f, 0.0f);
+			scene.registry().emplace<CharacterController>(hero, controller);
+			return hero;
+		}
+
+		// CharacterController components through PhysicsSync: the character lands and its Transform follows it; moving the entity from the
+		// outside teleports it; removing the component or the entity stops it; an entity that also has a body is not a character.
+		void check_character_sync(Check& check)
+		{
+			Scene scene;
+			add_ground(scene);
+			const entt::entity hero = add_character(scene, "Hero", glm::vec3(0.0f, 2.0f, 0.0f));
+			const entt::entity both = add_character(scene, "Both", glm::vec3(10.0f, 1.0f, 0.0f));
+			add_body(scene, both, MotionType::Dynamic);
+			add_box_collider(scene, both, glm::vec3(0.5f));
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "character_sync_start: the world starts");
+			Ref<const PhysicsStepSnapshot> landed = run_for(thread, sync, scene, 2.5);
+			const float y = scene.registry().get<Transform>(hero).Position.y;
+			check(landed != nullptr && landed->CharacterCount == 1 && sync.has_character(key_of(scene, hero)), "character_sync_made: the component makes one character");
+			// the ground box has its top at y = 0.5
+			check(std::abs(y - 0.5f) < 0.05f, "character_sync_lands: the character lands and its Transform follows, got y " + std::to_string(y));
+			check(!sync.has_character(key_of(scene, both)), "character_sync_with_body: an entity that also has a RigidBody is not a character");
+
+			// moved from the outside: teleported, and not pulled back
+			scene.registry().get<Transform>(hero).Position = glm::vec3(5.0f, 0.5f, 0.0f);
+			const Ref<const PhysicsStepSnapshot> moved = run_for(thread, sync, scene, 0.4);
+			const CharacterPose* pose = find_character(moved.get(), key_of(scene, hero));
+			check(pose != nullptr && std::abs(pose->Position.x - 5.0f) < 0.05f && std::abs(scene.registry().get<Transform>(hero).Position.x - 5.0f) < 0.05f,
+				"character_sync_teleport: a Transform set from outside teleports the character, got x " + (pose ? std::to_string(pose->Position.x) : std::string("no pose")));
+
+			// the component removed: the character is gone and its entity stays where it is
+			scene.registry().remove<CharacterController>(hero);
+			const Ref<const PhysicsStepSnapshot> removed = run_for(thread, sync, scene, 0.3);
+			check(removed != nullptr && removed->CharacterCount == 0 && !sync.has_character(key_of(scene, hero)), "character_sync_removed: removing the component removes the character");
+			thread.stop();
+
+			// the entity destroyed while the character moves: no crash, no pose for it
+			Scene other;
+			add_ground(other);
+			const entt::entity walker = add_character(other, "Walker", glm::vec3(0.0f, 0.5f, 0.0f));
+			PhysicsThread second;
+			PhysicsSync secondSync;
+			check(start_scene(second, secondSync, other), "character_sync_destroy_start: the world starts");
+			run_for(second, secondSync, other, 0.3);
+			other.destroy(walker);
+			const Ref<const PhysicsStepSnapshot> after = run_for(second, secondSync, other, 0.3);
+			check(after != nullptr && after->CharacterCount == 0, "character_sync_destroyed: a destroyed entity's character is gone");
+			second.stop();
+		}
+
+		// The same commands give the same walk twice, step for step.
+		void check_character_repeatable(Check& check)
+		{
+			const auto walk = []() -> std::vector<glm::vec3>
+			{
+				CommandWorld world;
+				std::vector<glm::vec3> positions;
+				if (!world.start())
+				{
+					return positions;
+				}
+				world.Thread.set_paused(true);
+				make_floor(world);
+				const BodyKey hero = EntityGuid::generate();
+				world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 1.0f, 0.0f)) });
+				world.send(SetCharacterVelocity{ hero, glm::vec3(1.5f, 0.0f, 0.5f) });
+				world.Thread.take_steps();
+				world.Thread.set_paused(false);
+				for (const auto& step : world.run_steps(150))
+				{
+					if (const CharacterPose* pose = find_character(step.get(), hero))
+					{
+						positions.push_back(pose->Position);
+					}
+				}
+				world.Thread.stop();
+				return positions;
+			};
+			const std::vector<glm::vec3> first = walk();
+			const std::vector<glm::vec3> second = walk();
+			const size_t count = std::min(first.size(), second.size());
+			bool same = count >= 100;
+			for (size_t i = 0; i < count && same; i++)
+			{
+				same = first[i] == second[i];
+			}
+			check(same, "character_repeatable: two runs of the same commands give the same positions step for step, " + std::to_string(first.size()) + " and " + std::to_string(second.size()) + " samples");
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -2207,6 +2306,8 @@ namespace wiwa
 		check_character_jump(check);
 		check_character_platform(check);
 		check_character_queries(check);
+		check_character_sync(check);
+		check_character_repeatable(check);
 
 		if (check.Failures == 0)
 		{

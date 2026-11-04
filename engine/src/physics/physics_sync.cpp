@@ -327,6 +327,7 @@ namespace wiwa
 		}
 
 		push_joints(scene, thread);
+		push_characters(scene, thread);
 	}
 
 	void PhysicsSync::push_joints(const Scene& scene, PhysicsThread& thread)
@@ -424,6 +425,77 @@ namespace wiwa
 		}
 	}
 
+	void PhysicsSync::push_characters(const Scene& scene, PhysicsThread& thread)
+	{
+		const entt::registry& registry = scene.registry();
+		std::unordered_map<BodyKey, CharacterDesc> wanted;
+		for (const entt::entity entity : registry.view<CharacterController>())
+		{
+			const BodyKey owner = registry.get<Id>(entity).Guid;
+			if (registry.all_of<RigidBody>(entity) || registry.all_of<Collider>(entity))
+			{
+				if (m_WarnedCharacters.insert(owner).second)
+				{
+					WI_PHYSICS_LOG(Warning, "Entity {0}: a CharacterController cannot share its entity with a RigidBody or a Collider; it is not made", owner.to_string());
+				}
+				continue;
+			}
+			const CharacterController& controller = registry.get<CharacterController>(entity);
+			CharacterDesc desc;
+			desc.Radius = controller.Radius;
+			desc.Height = controller.Height;
+			desc.Offset = controller.Offset;
+			desc.StepHeight = controller.StepHeight;
+			desc.MaxSlopeAngle = controller.MaxSlopeAngle;
+			desc.Mass = controller.Mass;
+			desc.PushStrength = controller.PushStrength;
+			desc.GravityFactor = controller.GravityFactor;
+			desc.Layer = controller.Layer;
+			desc.Position = glm::vec3(registry.get<WorldTransform>(entity).Matrix[3]);
+			wanted.emplace(owner, desc);
+		}
+
+		for (auto it = m_Characters.begin(); it != m_Characters.end();)
+		{
+			if (!wanted.contains(it->first))
+			{
+				thread.push(DestroyCharacter{ it->first }, m_Generation);
+				it = m_Characters.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+
+		for (const auto& [owner, desc] : wanted)
+		{
+			const auto it = m_Characters.find(owner);
+			if (it == m_Characters.end())
+			{
+				thread.push(CreateCharacter{ owner, desc }, m_Generation);
+				m_Characters.emplace(owner, TrackedCharacter{ desc, desc.Position });
+				continue;
+			}
+			TrackedCharacter& tracked = it->second;
+			CharacterDesc sentWithoutPosition = tracked.Desc;
+			sentWithoutPosition.Position = desc.Position;
+			const bool sameFields = sentWithoutPosition.Radius == desc.Radius && sentWithoutPosition.Height == desc.Height && sentWithoutPosition.Offset == desc.Offset
+				&& sentWithoutPosition.StepHeight == desc.StepHeight && sentWithoutPosition.MaxSlopeAngle == desc.MaxSlopeAngle && sentWithoutPosition.Mass == desc.Mass
+				&& sentWithoutPosition.PushStrength == desc.PushStrength && sentWithoutPosition.GravityFactor == desc.GravityFactor && sentWithoutPosition.Layer == desc.Layer;
+			if (!sameFields)
+			{
+				thread.push(CreateCharacter{ owner, desc }, m_Generation); // made again where its entity is
+				tracked = TrackedCharacter{ desc, desc.Position };
+			}
+			else if (glm::length(desc.Position - tracked.Expected) > 1e-3f)
+			{
+				thread.push(TeleportCharacter{ owner, desc.Position }, m_Generation); // something other than the physics moved the entity
+				tracked.Expected = desc.Position;
+			}
+		}
+	}
+
 	void PhysicsSync::apply_poses(Scene& scene, const PhysicsStepSnapshot& prev, const PhysicsStepSnapshot& latest, float alpha)
 	{
 		if (latest.World != m_Generation || m_Generation == 0)
@@ -482,6 +554,41 @@ namespace wiwa
 				transform.Position = glm::vec3(glm::inverse(parentWorld) * glm::vec4(position, 1.0f));
 				transform.Rotation = glm::normalize(glm::inverse(decompose(parentWorld).Rotation) * rotation);
 			}
+		}
+
+		// characters: only their position is written; the entity keeps its rotation and scale
+		std::unordered_map<BodyKey, const CharacterPose*> previousCharacters;
+		if (interpolate)
+		{
+			for (const CharacterPose& pose : prev.Characters)
+			{
+				previousCharacters.emplace(pose.Key, &pose);
+			}
+		}
+		for (const CharacterPose& pose : latest.Characters)
+		{
+			const auto tracked = m_Characters.find(pose.Key);
+			if (tracked == m_Characters.end())
+			{
+				continue;
+			}
+			const entt::entity entity = scene.find(pose.Key);
+			if (entity == entt::null || !registry.valid(entity))
+			{
+				continue; // destroyed since: its DestroyCharacter is on the way
+			}
+			glm::vec3 position = pose.Position;
+			if (interpolate)
+			{
+				if (const auto before = previousCharacters.find(pose.Key); before != previousCharacters.end())
+				{
+					position = glm::mix(before->second->Position, pose.Position, alpha);
+				}
+			}
+			Transform& transform = registry.get<Transform>(entity);
+			const entt::entity parent = registry.get<Hierarchy>(entity).Parent;
+			transform.Position = parent == entt::null ? position : glm::vec3(glm::inverse(registry.get<WorldTransform>(parent).Matrix) * glm::vec4(position, 1.0f));
+			tracked->second.Expected = position;
 		}
 	}
 
@@ -577,5 +684,7 @@ namespace wiwa
 		m_WarnedColliders.clear();
 		m_Joints.clear();
 		m_WarnedJoints.clear();
+		m_Characters.clear();
+		m_WarnedCharacters.clear();
 	}
 }

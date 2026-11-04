@@ -53,12 +53,15 @@ namespace wiwa
 
 		u64 generation() const { return m_Generation; }
 		size_t joint_count() const { return m_Joints.size(); }
+		bool has_character(BodyKey key) const { return m_Characters.contains(key); }
 		size_t body_count() const { return m_Bodies.size(); }
 		bool has_body(BodyKey key) const { return m_Bodies.contains(key); }
 
 	private:
 		// Sends the joints of the scene's Joint components (on entities that have a body, after the bodies were sent).
 		void push_joints(const Scene& scene, PhysicsThread& thread);
+		// Sends the characters of the scene's CharacterController components, and teleports the ones whose entity was moved from outside.
+		void push_characters(const Scene& scene, PhysicsThread& thread);
 
 		struct Tracked
 		{
@@ -86,6 +89,15 @@ namespace wiwa
 		// as SetJointMotor / SetJointLimits (the joint keeps its rest pose); any other change makes the joint again.
 		std::unordered_map<BodyKey, JointDesc> m_Joints{};
 		std::set<EntityGuid> m_WarnedJoints{};
+		// The characters sent: a CharacterController on an entity that has no body of its own gives one, named by the entity. Expected is
+		// the world position the entity should have if nothing but the physics moved it (what apply_poses wrote); another one is a teleport.
+		struct TrackedCharacter
+		{
+			CharacterDesc Desc{};
+			glm::vec3 Expected{ 0.0f };
+		};
+		std::unordered_map<BodyKey, TrackedCharacter> m_Characters{};
+		std::set<EntityGuid> m_WarnedCharacters{};
 		u64 m_Generation = 0;
 	};
 }
