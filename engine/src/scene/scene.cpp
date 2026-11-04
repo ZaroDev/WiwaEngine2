@@ -139,6 +139,38 @@ namespace wiwa
 		return true;
 	}
 
+	bool Scene::move_after(entt::entity entity, entt::entity sibling)
+	{
+		if (!m_Registry.valid(entity) || !m_Registry.valid(sibling) || entity == sibling)
+		{
+			return false;
+		}
+
+		const entt::entity parent = m_Registry.get<Hierarchy>(sibling).Parent;
+		for (entt::entity ancestor = sibling; ancestor != entt::null; ancestor = m_Registry.get<Hierarchy>(ancestor).Parent)
+		{
+			if (ancestor == entity)
+			{
+				return false;
+			}
+		}
+
+		unlink(entity);
+		Hierarchy& link = m_Registry.get<Hierarchy>(entity);
+		link.Parent = parent;
+		if (parent == entt::null)
+		{
+			m_Roots.insert(std::find(m_Roots.begin(), m_Roots.end(), sibling) + 1, entity);
+		}
+		else
+		{
+			Hierarchy& siblingLink = m_Registry.get<Hierarchy>(sibling);
+			link.NextSibling = siblingLink.NextSibling;
+			siblingLink.NextSibling = entity;
+		}
+		return true;
+	}
+
 	entt::entity Scene::find(EntityGuid id) const
 	{
 		const auto it = m_ByGuid.find(id);

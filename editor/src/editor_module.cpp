@@ -1,11 +1,25 @@
 #include "editor_module.h"
 
+#include <fstream>
+#include <sstream>
+
+#include <input/input_map_io.h>
+
 #include <asset_pipeline/asset_pipeline_module.h>
+#include <asset_pipeline/asset_templates.h>
+#include <asset_pipeline/input_settings_file.h>
+#include <asset_pipeline/physics_settings_file.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
+#include <input/input_module.h>
+#include <physics/physics_module.h>
 #include <scene/scene_module.h>
 #include <renderer/window.h>
 #include <scripting/script_module.h>
+#include <ui/ui_module.h>
+
+#include "ui/ui_editor_panel.h"
+#include "ui/ui_smoke_test.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -43,14 +57,47 @@ namespace
 
 		virtual void restore_document(Ref<wiwa::Scene> scene, const wiwa::EditorDocument& document) override { m_Editor.restore_document(std::move(scene), document); }
 		virtual Ref<wiwa::Scene> active_scene() override { return m_Scenes.get_active(); }
-		virtual void start_scripts() override { m_Scripts.start(); }
-		virtual void stop_scripts() override { m_Scripts.stop(); }
+		// the game UI reads the editor's mouse while the game runs, and no input otherwise
+		virtual void start_physics() override
+		{
+			if (wiwa::PhysicsModule* physics = wiwa::Engine::get().get_module<wiwa::PhysicsModule>())
+			{
+				physics->start_world(m_Scenes.get_active());
+			}
+		}
+		virtual void stop_physics() override
+		{
+			if (wiwa::PhysicsModule* physics = wiwa::Engine::get().get_module<wiwa::PhysicsModule>())
+			{
+				physics->stop_world();
+			}
+		}
+		virtual void start_scripts() override { set_ui_input(input() != nullptr ? &input()->ui_source() : nullptr); m_Scripts.start(); }
+		virtual void stop_scripts() override
+		{
+			m_Scripts.stop();
+			set_ui_input(nullptr);
+			if (input() != nullptr)
+			{
+				input()->set_capture(false); // ImGui has the keyboard and the mouse again
+			}
+		}
 		virtual void cancel_loads() override { m_Scenes.cancel_loads(); }
 		virtual void time_play() override { wiwa::Engine::get().get_time().play_game(); }
 		virtual void time_stop() override { wiwa::Engine::get().get_time().stop_game(); }
 		virtual void time_pause(bool paused) override { wiwa::Engine::get().get_time().set_game_pause(paused); }
 
 	private:
+		static wiwa::InputModule* input() { return wiwa::Engine::get().get_module<wiwa::InputModule>(); }
+
+		static void set_ui_input(wiwa::IUiInputSource* source)
+		{
+			if (wiwa::UiModule* ui = wiwa::Engine::get().get_module<wiwa::UiModule>())
+			{
+				ui->set_input_source(source);
+			}
+		}
+
 		wiwa::SceneEditor& m_Editor;
 		wiwa::SceneModule& m_Scenes;
 		wiwa::ScriptingModule& m_Scripts;
@@ -62,9 +109,28 @@ void EditorModule::init()
 	const std::string editorTitle = fmt::format("Wiwa2 Editor - ({0}) <{1}>", "Default project", WI_BUILD_CONFIGURATION);
 	wiwa::Engine::get().get_module<wiwa::Window>()->set_title(editorTitle);
 
+	// ImGui owns the keyboard and the mouse; the Viewport hands them to the game while a scene plays
+	wiwa::Engine::get().get_module<wiwa::InputModule>()->set_capture(false);
+
 	// scripts run in play mode only; editing a scene does not run them
 	wiwa::Engine::get().get_module<wiwa::ScriptingModule>()->set_auto_start(false);
 	wiwa::Engine::get().get_time().stop_game(); // and there is no game time either
+	wiwa::Engine::get().get_module<wiwa::PhysicsModule>()->set_auto_start(false); // nor a physics world: play mode makes one from its clone
+
+	// The default input map the project chose (input.wsettings); a game gets it from its pack.
+	{
+		using wiwa::LogLevel;
+		wiwa::InputProjectSettings inputSettings;
+		std::string inputError;
+		if (!wiwa::load_input_settings(wiwa::INPUT_SETTINGS_FILE, inputSettings, inputError))
+		{
+			WI_LOG(Warning, "Editor", "{0}: {1}", wiwa::INPUT_SETTINGS_FILE, inputError);
+		}
+		else if (inputSettings.DefaultMap.valid())
+		{
+			wiwa::Engine::get().get_module<wiwa::InputModule>()->set_default_map(inputSettings.DefaultMap);
+		}
+	}
 
 	wiwa::SceneModule* scenes = wiwa::Engine::get().get_module<wiwa::SceneModule>();
 	m_SceneEditor = CreateScope<wiwa::SceneEditor>(*wiwa::Engine::get().get_module<wiwa::AssetManager>(), *scenes);
@@ -73,39 +139,61 @@ void EditorModule::init()
 
 	m_PlayHost = CreateScope<EditorPlayHost>(*m_SceneEditor, *scenes, *wiwa::Engine::get().get_module<wiwa::ScriptingModule>());
 	m_PlayMode = CreateScope<wiwa::PlayMode>(*m_PlayHost);
+	// quit() in a script ends play mode, not the editor; the stop waits for post_update because the call comes from inside a script hook
+	wiwa::Engine::get().get_module<wiwa::ScriptingModule>()->set_quit_handler([this]() { m_StopPlayRequested = true; });
 	for (const std::string& argument : wiwa::Engine::get().get_arguments())
 	{
 		m_PlaySmoke = m_PlaySmoke || argument == "--play-smoke";
+		m_UiEditorSmoke = m_UiEditorSmoke || argument == "--ui-editor-smoke";
+		m_PhysicsPanelSmoke = m_PhysicsPanelSmoke || argument == "--physics-panel-smoke";
+		m_InputPanelSmoke = m_InputPanelSmoke || argument == "--input-panel-smoke";
 		if (argument == "--demo-smoke")
 		{
 			m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
 		}
 	}
 
-	m_Panels.push_back(CreateRef<HierarchyPanel>(*m_SceneEditor));
+	m_Panels.push_back(CreateRef<HierarchyPanel>(*m_SceneEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
 	Ref<InspectorPanel> inspector = CreateRef<InspectorPanel>(*m_SceneEditor);
 	m_Panels.push_back(inspector);
-	m_Panels.push_back(CreateRef<EnvironmentPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<LightingPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<ExposurePanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<BloomPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<TonemapPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<AoPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<PostEffectsPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<RendererPanel>());
-	m_Panels.push_back(CreateRef<QualityPanel>());
+	m_Panels.push_back(CreateRef<WorldPanel>(*m_SceneEditor));
+	// the smoke edits the matrix: it must not touch the project's physics.wsettings
+	m_PhysicsPanelFile = m_PhysicsPanelSmoke ? std::filesystem::temp_directory_path() / "wiwa_physics_panel_smoke.wsettings" : std::filesystem::path(wiwa::PHYSICS_SETTINGS_FILE);
+	if (m_PhysicsPanelSmoke)
+	{
+		std::error_code removed;
+		std::filesystem::remove(m_PhysicsPanelFile, removed);
+	}
+	Ref<PhysicsPanel> physicsPanel = CreateRef<PhysicsPanel>(*m_SceneEditor, m_PhysicsPanelFile);
+	m_PhysicsPanel = physicsPanel.get();
+	m_Panels.push_back(physicsPanel);
+	// the smoke check saves a default map: it must not touch the project's input.wsettings
+	Ref<InputPanel> inputPanel = CreateRef<InputPanel>(m_InputPanelSmoke ? std::filesystem::temp_directory_path() / "wiwa_input_panel_smoke.wsettings" : std::filesystem::path(wiwa::INPUT_SETTINGS_FILE));
+	m_InputPanel = inputPanel.get();
+	m_Panels.push_back(inputPanel);
+	// the Scene and Game panels share the renderer's one view: the Game panel, added first, wins when both are visible
+	Ref<ViewOwner> viewOwner = CreateRef<ViewOwner>();
+	m_Panels.push_back(CreateRef<GamePanel>(*m_SceneEditor, viewOwner));
+	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor, viewOwner));
+	m_Panels.push_back(CreateRef<PerformancePanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
-	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>();
+	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 	m_Panels.push_back(materialPanel);
 	Ref<AssetBrowserPanel> browser = CreateRef<AssetBrowserPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 	m_Panels.push_back(browser);
 	// the panels live as long as m_Panels, which holds all of them until shutdown
 	MaterialPanel* materials = materialPanel.get();
+	Ref<UiEditorPanel> uiEditorPanel = CreateRef<UiEditorPanel>(*m_SceneEditor);
+	m_Panels.push_back(uiEditorPanel);
+	UiEditorPanel* uiEditor = uiEditorPanel.get();
+	m_UiEditor = uiEditor;
 	AssetBrowserPanel* browserPanel = browser.get();
 	browser->set_open_material([materials](const std::filesystem::path& wmat) { materials->open(wmat); });
+	browser->set_open_ui_panel([uiEditor](const std::filesystem::path& wuipanel) { uiEditor->open(wuipanel); });
+	wiwa::SceneEditor* sceneEditor = m_SceneEditor.get();
+	browser->set_make_prefab([sceneEditor](entt::entity entity, const std::filesystem::path& folder) { return sceneEditor->make_prefab(entity, folder); });
 	inspector->set_locate([browserPanel](const wiwa::AssetRef& ref) { browserPanel->select_asset(ref); });
-	m_Panels.push_back(CreateRef<BuildSettingsPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
+	m_BuildSettings = CreateScope<BuildSettingsPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 
 	set_theme();
 }
@@ -126,6 +214,99 @@ void EditorModule::pre_update(float deltaTime)
 void EditorModule::update(float deltaTime)
 {
 	m_Frame++;
+	if (!m_SceneEditor->playing() && !wiwa::Engine::get().get_module<wiwa::InputModule>()->backend_injected())
+	{
+		wiwa::Engine::get().get_module<wiwa::InputModule>()->set_capture(false); // the Viewport turns it on while it draws, in play mode
+	}
+	if (m_UiEditorSmoke && m_UiEditor != nullptr)
+	{
+		if (m_Frame == 20)
+		{
+			m_UiEditorSmokeFile = wiwa::write_ui_editor_smoke_panel();
+			m_UiEditor->open(m_UiEditorSmokeFile);
+		}
+		if (m_Frame == 150)
+		{
+			const bool passed = m_UiEditor->loaded() && m_UiEditor->previewing();
+			WI_INFO("Editor", "UI editor smoke test {0}", passed ? "passed" : "FAILED: the panel did not load or is not previewing");
+			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+		}
+	}
+
+	if (m_PhysicsPanelSmoke && m_PhysicsPanel != nullptr)
+	{
+		if (m_Frame == 10)
+		{
+			m_PhysicsPanel->request_focus();
+		}
+		if (m_Frame == 40)
+		{
+			// a click in the matrix: layers 0 and 1 stop colliding (a layer is named first so that the matrix shows it)
+			m_PhysicsPanel->set_layer_name(1, "Smoke");
+			m_PhysicsPanel->set_collides(0, 1, false);
+		}
+		if (m_Frame == 130)
+		{
+			wiwa::PhysicsLayers saved;
+			std::string error;
+			const bool read = wiwa::load_physics_layers(m_PhysicsPanelFile, saved, error);
+			wiwa::PhysicsModule* physics = wiwa::Engine::get().get_module<wiwa::PhysicsModule>();
+			const bool passed = m_PhysicsPanel->frames_drawn() >= 100 && read && saved.Names[1] == "Smoke" && !saved.collides(0, 1) && saved.collides(0, 0) && saved.collides(1, 1) &&
+				physics != nullptr && !physics->layers().collides(0, 1) && m_PhysicsPanel->last_error().empty();
+			WI_INFO("Editor", "Physics panel smoke test {0} (frames {1}, read {2}, layer 1 \"{3}\", 0-1 collide {4}, error \"{5}\")", passed ? "passed" : "FAILED", m_PhysicsPanel->frames_drawn(), read, saved.Names[1], saved.collides(0, 1), m_PhysicsPanel->last_error());
+			std::error_code removed;
+			std::filesystem::remove(m_PhysicsPanelFile, removed);
+			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+		}
+	}
+
+	if (m_InputPanelSmoke && m_InputPanel != nullptr)
+	{
+		if (m_Frame == 10)
+		{
+			m_InputPanel->request_focus();
+		}
+		if (m_Frame == 100)
+		{
+			// open a map, add an action with a binding through the model, and save it
+			m_InputPanelFile = std::filesystem::temp_directory_path() / "wiwa_input_panel_smoke.winput";
+			{
+				std::ofstream out(m_InputPanelFile, std::ios::binary | std::ios::trunc);
+				out << R"({"version":1,"maps":[{"name":"Gameplay","actions":[{"name":"Jump","type":"Button","bindings":[{"control":"Key.Space"}]}]}]})";
+			}
+			if (m_InputPanel->open_path(m_InputPanelFile) && m_InputPanel->model() != nullptr)
+			{
+				wiwa::InputEditModel* model = m_InputPanel->model();
+				wiwa::Binding binding;
+				binding.Parts[0] = wiwa::control(wiwa::Key::F9);
+				const size_t action = model->add_action(0, "Smoke", wiwa::ActionType::Button);
+				model->add_binding(0, action, binding);
+				m_InputPanel->save();
+			}
+		}
+		if (m_Frame == 130)
+		{
+			std::ifstream in(m_InputPanelFile, std::ios::binary);
+			std::stringstream text;
+			text << in.rdbuf();
+			wiwa::InputMapData saved;
+			std::string error;
+			const bool read = wiwa::input_map_from_text(text.str(), saved, error);
+			const wiwa::Action* added = read && !saved.Maps.empty() && saved.Maps[0].Actions.size() == 2 ? &saved.Maps[0].Actions[1] : nullptr;
+			const bool passed = m_InputPanel->frames_drawn() >= 100 && read && added != nullptr && added->Name == "Smoke" && added->Bindings.size() == 1 &&
+				added->Bindings[0].Parts[0] == wiwa::control(wiwa::Key::F9) && m_InputPanel->last_error().empty() &&
+				m_InputPanel->model() != nullptr && !m_InputPanel->model()->dirty();
+			WI_INFO("Editor", "Input panel smoke test {0} (frames {1}, read {2}, actions {3}, error \"{4}\")", passed ? "passed" : "FAILED", m_InputPanel->frames_drawn(), read,
+				read && !saved.Maps.empty() ? saved.Maps[0].Actions.size() : 0, m_InputPanel->last_error());
+			std::error_code removed;
+			std::filesystem::remove(m_InputPanelFile, removed);
+			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+		}
+	}
+
 	if (m_PlaySmoke && m_Frame == 30)
 	{
 		const std::string failure = run_play_smoke();
@@ -168,11 +349,22 @@ void EditorModule::update(float deltaTime)
 		}
 	}
 
+	if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false))
+	{
+		save_scene();
+	}
 	main_bar();
+	export_modal();
+	scene_popups();
+	m_BuildSettings->on_draw();
 	dock_space();
 
 	// Adopts the scene the SceneModule loaded (or opened), and expands prefab instances once their prefab is there.
 	m_SceneEditor->update();
+	if (const std::string message = m_SceneEditor->take_message(); !message.empty())
+	{
+		show_scene_status(message);
+	}
 
 	for (auto& panel : m_Panels)
 	{
@@ -192,6 +384,11 @@ void EditorModule::post_update(float deltaTime)
 {
 	// after the scripts ran: a step ends here, and a scene a script loaded becomes the one that plays
 	m_PlayMode->update();
+	if (m_StopPlayRequested)
+	{
+		m_StopPlayRequested = false;
+		m_PlayMode->stop();
+	}
 }
 
 void EditorModule::pre_physics_update(float deltaTime)
@@ -278,16 +475,13 @@ void EditorModule::main_bar()
 	{
 		if (ImGui::BeginMenu("File"))
 		{
-			for (auto& panel : m_Panels)
+			scene_menu_items();
+			ImGui::Separator();
+			if (ImGui::MenuItem("Build Settings..."))
 			{
-				if (any(panel->get_category(), PanelCategory::File))
-				{
-					if (ImGui::MenuItem(panel->get_name(), nullptr, panel->is_active()))
-					{
-						panel->switch_active();
-					}
-				}
+				m_BuildSettings->open();
 			}
+			export_button();
 			ImGui::EndMenu();
 		}
 
@@ -334,56 +528,48 @@ void EditorModule::main_bar()
 			}
 			ImGui::EndMenu();
 		}
-		ImGui::EndMainMenuBar();
-	}
-	ImGuiViewportP* viewport = (ImGuiViewportP*)(void*)ImGui::GetMainViewport();
-	ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
-	float height = ImGui::GetFrameHeight();
 
-	// the bar is tinted while the scene plays, so that nobody edits the copy thinking it is the scene
-	const bool playing = m_PlayMode->state() != wiwa::PlayState::Edit;
-	if (playing)
-	{
-		ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4{ 0.55f, 0.28f, 0.05f, 1.0f });
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{ 0.55f, 0.28f, 0.05f, 1.0f });
-	}
-
-	if (ImGui::BeginViewportSideBar("##SecondaryMenuBar", viewport, ImGuiDir_Up, height, window_flags))
-	{
-		if (ImGui::BeginMenuBar())
+		ImGui::SetCursorPosX(ImGui::GetIO().DisplaySize.x / 2 - 15.0f);
+		const bool playing = m_PlayMode->state() != wiwa::PlayState::Edit;
+		
+		// the bar is tinted while the scene plays, so that nobody edits the copy thinking it is the scene
+		if (playing)
 		{
-			play_toolbar();
-			ImGui::EndMenuBar();
+			ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4{ 0.55f, 0.28f, 0.05f, 1.0f });
+			ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{ 0.55f, 0.28f, 0.05f, 1.0f });
 		}
-		ImGui::End();
-	}
+		play_toolbar();
 
-	if (playing)
-	{
-		ImGui::PopStyleColor(2);
-	}
+		if (playing)
+		{
+			ImGui::PopStyleColor(2);
+		}
+
+		ImGui::EndMainMenuBar();
+	}	
 }
 
 void EditorModule::play_toolbar()
 {
 	const wiwa::PlayState state = m_PlayMode->state();
-
+	const bool playing = m_PlayMode->state() != wiwa::PlayState::Edit;
+	const char* play = playing ? ICON_FK_STOP : ICON_FK_PLAY;
 	if (state == wiwa::PlayState::Edit)
 	{
 		ImGui::BeginDisabled(!m_PlayHost->can_play());
-		if (ImGui::Button("Play"))
+		if (ImGui::Button(play))
 		{
 			m_PlayMode->play();
 		}
 		ImGui::EndDisabled();
 	}
-	else if (ImGui::Button("Stop"))
+	else if (ImGui::Button(play))
 	{
 		m_PlayMode->stop();
 	}
 
 	ImGui::BeginDisabled(state == wiwa::PlayState::Edit);
-	if (ImGui::Button(state == wiwa::PlayState::Paused ? "Resume" : "Pause"))
+	if (ImGui::Button(state == wiwa::PlayState::Paused ? ICON_FK_PLAY : ICON_FK_PAUSE))
 	{
 		if (state == wiwa::PlayState::Paused)
 		{
@@ -397,15 +583,229 @@ void EditorModule::play_toolbar()
 	ImGui::EndDisabled();
 
 	ImGui::BeginDisabled(state != wiwa::PlayState::Paused);
-	if (ImGui::Button("Step"))
+	if (ImGui::Button(ICON_FK_STEP_FORWARD))
 	{
 		m_PlayMode->step();
 	}
 	ImGui::EndDisabled();
+	
 
-	if (state != wiwa::PlayState::Edit)
+	if (!m_SceneStatus.empty() && ImGui::GetTime() < m_SceneStatusUntil)
 	{
-		ImGui::TextUnformatted(state == wiwa::PlayState::Paused ? "  Paused (changes to this scene are lost on Stop)" : "  Playing (changes to this scene are lost on Stop)");
+		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "  %s", m_SceneStatus.c_str());
+	}
+}
+
+void EditorModule::show_scene_status(const std::string& text)
+{
+	m_SceneStatus = text;
+	m_SceneStatusUntil = ImGui::GetTime() + 5.0;
+}
+
+void EditorModule::save_scene()
+{
+	if (m_SceneEditor->playing())
+	{
+		return;
+	}
+	if (m_SceneEditor->path().empty())
+	{
+		m_SaveAsRequested = true;
+	}
+	else if (!m_SceneEditor->save())
+	{
+		show_scene_status("Could not save " + m_SceneEditor->path().string() + " (see the log)");
+	}
+}
+
+void EditorModule::scene_menu_items()
+{
+	ImGui::BeginDisabled(m_SceneEditor->playing());
+	if (ImGui::MenuItem("New Scene"))
+	{
+		m_SceneEditor->new_scene();
+	}
+	if (ImGui::MenuItem("Open Scene..."))
+	{
+		m_OpenSceneRequested = true;
+	}
+	ImGui::Separator();
+	if (ImGui::MenuItem("Save", "Ctrl+S"))
+	{
+		save_scene();
+	}
+	if (ImGui::MenuItem("Save As..."))
+	{
+		m_SaveAsRequested = true;
+	}
+	ImGui::EndDisabled();
+}
+
+void EditorModule::scene_popups()
+{
+	wiwa::AssetDatabase& database = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database();
+	const std::filesystem::path& root = database.get_assets_root();
+	// a scene is saved next to the one being edited, or in assets/scenes
+	const std::filesystem::path folder = m_SceneEditor->path().empty() ? root / "scenes" : m_SceneEditor->path().parent_path();
+
+	if (m_OpenSceneRequested)
+	{
+		m_OpenSceneRequested = false;
+		m_SceneChoices.clear();
+		std::error_code error;
+		for (std::filesystem::recursive_directory_iterator it(root, error), end; !error && it != end; it.increment(error))
+		{
+			if (it->is_regular_file(error) && it->path().extension() == ".wscene")
+			{
+				m_SceneChoices.push_back(it->path().generic_string());
+			}
+		}
+		std::sort(m_SceneChoices.begin(), m_SceneChoices.end());
+		ImGui::OpenPopup("Open scene");
+	}
+	if (m_SaveAsRequested)
+	{
+		m_SaveAsRequested = false;
+		m_SaveAsFocus = true;
+		std::string name = m_SceneEditor->path().empty() ? "untitled" : m_SceneEditor->path().stem().string() + " copy";
+		const std::string base = name;
+		for (int number = 2; number < 1000 && !wiwa::validate_name(name, folder, wiwa::CreateKind::Scene).empty(); number++)
+		{
+			name = base + " " + std::to_string(number);
+		}
+		std::snprintf(m_SaveAsName, sizeof(m_SaveAsName), "%s", name.c_str());
+		ImGui::OpenPopup("Save scene as");
+	}
+
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Open scene", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		if (m_SceneChoices.empty())
+		{
+			ImGui::TextDisabled("No scenes in the project");
+		}
+		else if (ImGui::BeginChild("##scene_list", ImVec2(420.0f, 220.0f), ImGuiChildFlags_Borders))
+		{
+			for (const std::string& scene : m_SceneChoices)
+			{
+				if (ImGui::Selectable(std::filesystem::path(scene).lexically_relative(root).generic_string().c_str()))
+				{
+					m_SceneEditor->open(scene);
+					ImGui::CloseCurrentPopup();
+				}
+			}
+		}
+		if (!m_SceneChoices.empty())
+		{
+			ImGui::EndChild();
+		}
+		if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Save scene as", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::TextDisabled("in %s", folder.generic_string().c_str());
+		if (m_SaveAsFocus)
+		{
+			ImGui::SetKeyboardFocusHere();
+			m_SaveAsFocus = false;
+		}
+		const bool entered = ImGui::InputText("##save_as_name", m_SaveAsName, sizeof(m_SaveAsName), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+		ImGui::SameLine();
+		ImGui::TextDisabled(".wscene");
+
+		const std::string reason = wiwa::validate_name(m_SaveAsName, folder, wiwa::CreateKind::Scene);
+		if (!reason.empty())
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", reason.c_str());
+		}
+
+		ImGui::BeginDisabled(!reason.empty());
+		const bool confirmed = ImGui::Button("Save") || (entered && reason.empty());
+		ImGui::EndDisabled();
+		if (confirmed)
+		{
+			const std::filesystem::path file = folder / (std::string(m_SaveAsName) + ".wscene");
+			if (!m_SceneEditor->save_as(file))
+			{
+				show_scene_status("Could not save " + file.string() + " (see the log)");
+			}
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+}
+
+void EditorModule::export_button()
+{
+	wiwa::AssetPipelineModule* assets = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>();
+	const Ref<wiwa::JobProgress> progress = assets->get_pack_progress();
+	const bool packing = progress && !progress->finished();
+
+	ImGui::BeginDisabled(m_PlayMode->state() != wiwa::PlayState::Edit || packing);
+	if (ImGui::MenuItem("Export"))
+	{
+		assets->pack_async("../game/");
+		m_ExportRequested = true;
+		m_ExportUnsaved = m_SceneEditor->dirty();
+	}
+	ImGui::EndDisabled();
+}
+
+void EditorModule::export_modal()
+{
+	constexpr const char* popup = "Exporting";
+	const Ref<wiwa::JobProgress> progress = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_pack_progress();
+	const bool packing = progress && !progress->finished();
+
+	// Escape closes a modal popup; while the pack runs it comes back
+	if (m_ExportRequested || (m_ExportShown && packing && !ImGui::IsPopupOpen(popup)))
+	{
+		m_ExportRequested = false;
+		m_ExportShown = true;
+		ImGui::OpenPopup(popup);
+	}
+	else if (m_ExportShown && !packing && !ImGui::IsPopupOpen(popup))
+	{
+		m_ExportShown = false;
+	}
+
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal(popup, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+	{
+		if (packing)
+		{
+			const std::string stage = progress->stage();
+			ImGui::Text("Exporting the game...");
+			ImGui::ProgressBar(progress->fraction(), ImVec2(360.0f, 0.0f), stage.c_str());
+		}
+		else
+		{
+			ImGui::Text(progress && progress->succeeded() ? "Exported" : "The export failed (see the console)");
+		}
+		if (m_ExportUnsaved)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "The scene has unsaved changes: the export has the saved version.");
+		}
+		if (!packing)
+		{
+			if (ImGui::Button("Close"))
+			{
+				m_ExportShown = false;
+				ImGui::CloseCurrentPopup();
+			}
+		}
+		ImGui::EndPopup();
 	}
 }
 

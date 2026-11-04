@@ -4,12 +4,15 @@
 
 #include <math/math.h>
 
+#include <ui/ui_draw_list.h>
+
 #include "imgui_draw_data.h"
 
 namespace wiwa
 {
 	class ShaderLibrary;
 	class TextureRegistry;
+	class GpuResourceCache;
 	class SceneRenderData;
 	struct DebugDrawData;
 	struct PickState;
@@ -27,6 +30,7 @@ namespace wiwa
 		bool SceneInViewport = false; // the UI shows the scene in a panel; otherwise it fills the window (the blit pass draws it)
 		PickState* Pick = nullptr; // the click waiting to be answered, and where its answer goes
 		const DebugDrawData* Debug = nullptr; // the debug shapes of this frame (null when there are none)
+		const UiDrawList* Ui = nullptr; // the game UI of this frame (null when there is none)
 		const SceneRenderData* Scene = nullptr; // the scene's draw lists and buffers for this frame (null when there is nothing to draw)
 	};
 
@@ -36,6 +40,7 @@ namespace wiwa
 		nvrhi::IFramebuffer* Backbuffer = nullptr; // a backbuffer framebuffer: pipelines are built against it
 		ShaderLibrary* Shaders = nullptr;          // cooked shaders, loaded through the asset system
 		TextureRegistry* Textures = nullptr;       // the textures the UI can draw by id
+		GpuResourceCache* Cache = nullptr;           // the meshes, textures and fonts on the GPU
 	};
 
 	// A render pass records its commands into the command list that the renderer

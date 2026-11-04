@@ -4,10 +4,13 @@
 #include "memory.h"
 
 #include <assets/asset_manager.h>
+#include <input/input_module.h>
+#include <physics/physics_module.h>
 #include <renderer/render_module.h>
 #include <renderer/window.h>
 #include <scene/scene_module.h>
 #include <scripting/script_module.h>
+#include <ui/ui_module.h>
 
 
 
@@ -35,14 +38,18 @@ namespace wiwa
 		WI_ENGINE_LOG(Info, "Allocated {0} bytes with {1} allocations", s_AllocatedBytesSize.load(), s_AllocationCount.load());
 
 		s_Engine = this;
+		m_ModuleManager.set_perf_stats(&m_Perf);
 
 		m_Time.init();
 
 		
 		m_ModuleManager.add_module<AssetManager>();
 		m_ModuleManager.add_module<SceneModule>();
+		m_ModuleManager.add_module<PhysicsModule>(); // after the scene, before the scripts
 		m_ModuleManager.add_module<Window>();
+		m_ModuleManager.add_module<InputModule>(); // after the window (it listens to it), before the render module whose ImGui backend chains onto its callbacks
 		m_ModuleManager.add_module<RenderModule>();
+		m_ModuleManager.add_module<UiModule>(); // before the scripts: the clicks of a frame reach them in that frame
 		m_ModuleManager.add_module<ScriptingModule>();
 
 		on_init();
@@ -65,6 +72,8 @@ namespace wiwa
 					continue;
 				}
 			}
+			const auto frameStart = std::chrono::steady_clock::now();
+			m_Perf.begin_frame();
 			m_Time.update();
 
 			m_ModuleManager.begin();
@@ -87,6 +96,8 @@ namespace wiwa
 			m_ModuleManager.post_render_update(realDeltaTime);
 
 			on_update(realDeltaTime);
+
+			m_Perf.end_frame(std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - frameStart).count());
 		}
 	}
 

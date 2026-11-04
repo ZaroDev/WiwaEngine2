@@ -1,5 +1,9 @@
 #pragma once
 
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
 #include <core/module.h>
 
 #include "asset_database.h"
@@ -36,7 +40,15 @@ namespace wiwa
 		Ref<JobProgress> get_pack_progress() const { return m_PackProgress; }
 
 	private:
+		// Keeps library/lua/generated.lua (the LuaLS stub of the registered components) current: written at start, and again whenever
+		// a component is registered or removed (a script imported, loaded or reloaded), noticed by polling the registry's snapshot.
+		void watch_lua_stubs();
+
 		Scope<AssetDatabase> m_Database{};
+		std::thread m_StubThread{};
+		std::mutex m_StubMutex{};
+		std::condition_variable m_StubWake{};
+		bool m_StubStop = false;
 		std::vector<Scope<FileWatcher>> m_Watchers{};
 		Ref<JobProgress> m_PackProgress{};
 		std::thread m_PackThread{};

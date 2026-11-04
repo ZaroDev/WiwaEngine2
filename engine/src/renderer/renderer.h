@@ -54,6 +54,20 @@ namespace wiwa
 		AssetManager* get_assets() const { return m_Description.Assets; }
 		TextureRegistry& get_textures() { return m_Textures; }
 
+		// The pass of this type that was added, or null (for the render checks).
+		template<typename T>
+		T* get_pass() const
+		{
+			for (const Scope<IRenderPass>& pass : m_Passes)
+			{
+				if (T* found = dynamic_cast<T*>(pass.get()))
+				{
+					return found;
+				}
+			}
+			return nullptr;
+		}
+
 		// Picking: the click to answer on the next frame (a newer one replaces it) and where the answer goes (null: nowhere).
 		PickState& get_pick() { return m_Pick; }
 		void set_pick_request(const PickRequest& request) { m_Pick.Pending = request; }

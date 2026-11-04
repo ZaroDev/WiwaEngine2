@@ -4,7 +4,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <fstream>
+#include <iterator>
+#include <set>
 #include <thread>
+#include <unordered_map>
 
 #include <assets/wasset_io.h>
 #include <scene/prefab_expander.h>
@@ -26,11 +30,16 @@
 #include <scripting/script_reload.h>
 #include <scripting/script_requires.h>
 #include <scripting/script_runtime.h>
+#include <physics/physics_module.h>
+#include <ui/ui_draw_list.h>
+#include <ui/ui_layout.h>
+#include <ui/ui_module.h>
 
 #include "asset_pipeline/asset_database.h"
 #include "asset_pipeline/build_settings.h"
 #include "asset_pipeline/builtin_importers.h"
 #include "asset_pipeline/file_utils.h"
+#include "asset_pipeline/lua_stubs.h"
 #include "asset_pipeline/packager.h"
 #include "play/play_mode.h"
 #include "scene/scene_editor.h"
@@ -1186,7 +1195,7 @@ namespace wiwa
 			BuildSettings settings;
 			settings.Scenes = { sceneAsset->Guid };
 			settings.DefaultScene = sceneAsset->Guid;
-			check(Packager::pack(database, temp / "out", nullptr, &settings), "pak: packing the build");
+			check(Packager::pack(database, temp / "out", nullptr, &settings, temp / "none_physics.wsettings", temp / "none_input.wsettings"), "pak: packing the build");
 
 			// the sources are gone: only the pack is left
 			std::filesystem::remove_all(temp / "assets", error);
@@ -1665,6 +1674,8 @@ namespace wiwa
 				(void)document;
 			}
 			virtual Ref<Scene> active_scene() override { return Active; }
+			virtual void start_physics() override { Calls.push_back("start_physics"); }
+			virtual void stop_physics() override { Calls.push_back("stop_physics"); }
 			virtual void start_scripts() override { Calls.push_back("start_scripts"); }
 			virtual void stop_scripts() override { Calls.push_back("stop_scripts"); }
 			virtual void cancel_loads() override { Calls.push_back("cancel_loads"); }
@@ -1683,7 +1694,7 @@ namespace wiwa
 				FakeHost host;
 				PlayMode mode(host);
 				mode.play();
-				check(host.Calls == Calls({ "capture_document", "show_scene(play)", "time_play", "start_scripts" }) && mode.state() == PlayState::Playing, "play_from_edit");
+				check(host.Calls == Calls({ "capture_document", "show_scene(play)", "time_play", "start_physics", "start_scripts" }) && mode.state() == PlayState::Playing, "play_from_edit");
 				check(mode.play_scene() != nullptr && mode.play_scene() != host.Edit && mode.play_scene()->roots().size() == host.Edit->roots().size(), "play_runs_on_a_clone");
 			}
 
@@ -1753,7 +1764,7 @@ namespace wiwa
 				mode.play();
 				host.Calls.clear();
 				mode.stop();
-				check(host.Calls == Calls({ "stop_scripts", "cancel_loads", "time_stop", "show_scene(edit)", "restore_document" }) && host.LastRestored == host.Edit && host.Active == host.Edit
+				check(host.Calls == Calls({ "stop_scripts", "stop_physics", "cancel_loads", "time_stop", "show_scene(edit)", "restore_document" }) && host.LastRestored == host.Edit && host.Active == host.Edit
 					&& mode.state() == PlayState::Edit && mode.play_scene() == nullptr, "stop_order_and_the_edit_scene_comes_back");
 			}
 
@@ -1764,7 +1775,7 @@ namespace wiwa
 				mode.pause();
 				host.Calls.clear();
 				mode.stop();
-				check(host.Calls == Calls({ "stop_scripts", "cancel_loads", "time_stop", "show_scene(edit)", "restore_document" }) && mode.state() == PlayState::Edit, "stop_from_paused");
+				check(host.Calls == Calls({ "stop_scripts", "stop_physics", "cancel_loads", "time_stop", "show_scene(edit)", "restore_document" }) && mode.state() == PlayState::Edit, "stop_from_paused");
 			}
 
 			{
@@ -1776,7 +1787,7 @@ namespace wiwa
 				host.Calls.clear();
 				mode.update();
 				mode.update();
-				const bool followed = mode.play_scene() == loaded && host.count("start_scripts") == 1 && host.count("stop_scripts") == 1;
+				const bool followed = mode.play_scene() == loaded && host.count("start_scripts") == 1 && host.count("stop_scripts") == 1 && host.count("start_physics") == 1;
 				mode.stop();
 				check(followed && host.LastRestored == host.Edit && host.Active == host.Edit, "scene_replaced_during_play_restarts_scripts_and_stop_restores_the_original");
 			}
@@ -1932,6 +1943,870 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// The globals the sandbox adds to the standard libraries must be exactly the ones editor/engine/lua/wiwa.lua declares.
+		void check_stub_globals(Check& check)
+		{
+			const std::filesystem::path stubPath = "engine/lua/wiwa.lua";
+			check(is_lua_stub_file(stubPath), "wiwa_lua_is_a_meta_file");
+
+			const std::set<std::string> parsed = declared_globals(
+				"---@meta\nfoo = 1\nlocal bar = 2\nfunction baz(x) end\nfunction qux.m() end\nfunction Q:n() end\n  indented = 3\n--- note = 1\nlocal function f() end\nif a == 2 then end\n");
+			check(parsed == std::set<std::string>({ "foo", "baz" }), "declared_globals_reads_assignments_and_plain_functions");
+
+			std::ifstream file(stubPath, std::ios::binary);
+			const std::string stub((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+			const std::set<std::string> declared = declared_globals(stub);
+
+			MemorySource source;
+			ScriptRuntime runtime(source);
+			ScriptInstances instances(runtime); // binds the scene, asset, render and engine parts of the API
+			sol::state baseline;
+			baseline.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string, sol::lib::table, sol::lib::utf8);
+
+			std::set<std::string> added;
+			u32 seen = 0;
+			for (const auto& entry : runtime.sandbox())
+			{
+				seen++;
+				if (entry.first.get_type() == sol::type::string)
+				{
+					const std::string name = entry.first.as<std::string>();
+					const sol::object inBaseline = baseline[name];
+					if (inBaseline.get_type() == sol::type::lua_nil || inBaseline.get_type() == sol::type::none)
+					{
+						added.insert(name);
+					}
+				}
+			}
+			check(seen > 20 && !added.empty(), "sandbox_globals_are_read");
+
+			for (const std::string& name : added)
+			{
+				if (!declared.contains(name))
+				{
+					WI_SCRIPT_LOG(Error, "the sandbox has the global '{0}' but wiwa.lua does not declare it", name);
+				}
+			}
+			for (const std::string& name : declared)
+			{
+				if (!added.contains(name))
+				{
+					WI_SCRIPT_LOG(Error, "wiwa.lua declares the global '{0}' but the sandbox does not have it", name);
+				}
+			}
+			check(added == declared, "stub_declares_exactly_the_sandbox_globals");
+		}
+
+		ComponentInfo stub_component(const std::string& name, const std::string& displayName, std::vector<FieldDescriptor> fields)
+		{
+			ComponentInfo info;
+			info.Name = name;
+			info.DisplayName = displayName;
+			info.Fields = std::move(fields);
+			return info;
+		}
+
+		bool loads_as_lua(const std::string& text)
+		{
+			sol::state lua;
+			return lua.load(text).valid();
+		}
+
+		void check_component_stubs(Check& check)
+		{
+			const auto field = [](const char* name, FieldType type) { FieldDescriptor f; f.Name = name; f.Type = type; return f; };
+
+			const ComponentInfo light = stub_component("Light", "", { field("Intensity", FieldType::Float), field("Color", FieldType::Color) });
+			const ComponentInfo enemy = stub_component("script:abcd", "Enemy", { field("health", FieldType::Int), field("target", FieldType::Entity), field("icons", FieldType::AssetList) });
+			const std::string text = generate_component_stubs({ &enemy, &light });
+
+			check(contains(text, "---@class Comp.Light"), "stubs_have_a_class_per_component");
+			check(contains(text, "---@field Intensity number") && contains(text, "---@field Color vec4"), "stubs_map_float_and_color_fields");
+			check(contains(text, "---@class Comp.Enemy") && contains(text, "---@field health integer"), "stubs_use_the_script_file_name_and_int_is_integer");
+			check(contains(text, "---@field target Entity?") && contains(text, "---@field icons Asset[]"), "stubs_map_entity_and_asset_list_fields");
+			check(contains(text, "name: \"Enemy\"): Comp.Enemy") && contains(text, "name: \"Light\"): Comp.Light"), "stubs_overload_get_by_component_name");
+			check(contains(text, "---@alias ComponentName \"Enemy\"|\"Light\""), "stubs_list_the_component_names_sorted");
+			check(loads_as_lua(text), "stubs_are_valid_lua");
+			check(text == generate_component_stubs({ &light, &enemy }), "stubs_do_not_depend_on_the_order_of_the_input");
+
+			const std::string empty = generate_component_stubs({});
+			check(loads_as_lua(empty) && !contains(empty, "@overload") && contains(empty, "function Entity:get"), "stubs_of_no_components_are_valid_and_still_declare_get");
+
+			const ComponentInfo odd = stub_component("script:odd", "my \"x\"-script", { field("hp", FieldType::Int) });
+			const std::string oddText = generate_component_stubs({ &odd });
+			check(loads_as_lua(oddText) && contains(oddText, "---@class Comp.my__x__script") && contains(oddText, "name: \"my \\\"x\\\"-script\""), "stubs_sanitize_and_escape_odd_script_names");
+
+			const ComponentInfo twin = stub_component("script:twin", "Enemy", { field("other", FieldType::Bool) });
+			const std::string twinText = generate_component_stubs({ &enemy, &twin });
+			check(loads_as_lua(twinText) && contains(twinText, "-- duplicate: Enemy") && !contains(twinText, "---@field other"), "stubs_skip_a_second_component_with_the_same_name");
+		}
+
+		// The LuaLS support files: stubs the importer must leave alone, the stub the editor writes, and the project settings.
+		void check_lua_stubs(Check& check, AssetPipelineModule& pipeline)
+		{
+			const std::filesystem::path dir = std::filesystem::temp_directory_path() / "wiwa_lua_stubs_smoke";
+			std::filesystem::remove_all(dir);
+			std::filesystem::create_directories(dir);
+
+			const auto write = [](const std::filesystem::path& path, const std::string& text)
+			{
+				std::ofstream(path, std::ios::binary) << text;
+			};
+			const auto read = [](const std::filesystem::path& path)
+			{
+				std::ifstream file(path, std::ios::binary);
+				return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+			};
+
+			// write_if_changed: written once, left alone while the text is the same, written again when it changes
+			const std::filesystem::path out = dir / "lua" / "out.lua";
+			check(write_if_changed(out, "one") && read(out) == "one", "write_if_changed_writes_a_new_file");
+			const auto stamp = std::filesystem::last_write_time(out);
+			std::this_thread::sleep_for(std::chrono::milliseconds(30));
+			check(!write_if_changed(out, "one") && std::filesystem::last_write_time(out) == stamp, "write_if_changed_leaves_identical_text_alone");
+			check(write_if_changed(out, "two") && read(out) == "two", "write_if_changed_writes_changed_text");
+			check(!std::filesystem::exists(out.string() + ".tmp"), "write_if_changed_leaves_no_temp_file");
+			write(dir / "plain_file", "x");
+			check(!write_if_changed(dir / "plain_file" / "nested.lua", "x"), "write_failure_is_not_fatal");
+
+			// the registered components are written; several threads asking at once leave one whole file
+			ComponentRegistry::get().register_component(stub_component("script:lua_stub_smoke", "LuaStubSmoke", { FieldDescriptor{ "hp", FieldType::Int } }));
+			const std::filesystem::path generated = dir / "generated.lua";
+			check(write_component_stubs(generated) && contains(read(generated), "---@class Comp.LuaStubSmoke"), "registered_components_are_written");
+			std::vector<std::thread> threads;
+			for (int i = 0; i < 8; i++)
+			{
+				threads.emplace_back([&]() { write_component_stubs(generated); });
+			}
+			for (std::thread& thread : threads)
+			{
+				thread.join();
+			}
+			const std::string finalText = read(generated);
+			check(loads_as_lua(finalText) && contains(finalText, "---@class Comp.LuaStubSmoke") && !std::filesystem::exists(generated.string() + ".tmp"), "refresh_is_thread_safe");
+			ComponentRegistry::get().unregister_component("script:lua_stub_smoke");
+
+			// .luarc.json: created, then left alone; the editor's own file is refreshed when it is out of date; a file without the marker is the user's
+			const std::filesystem::path luarc = dir / "luarc" / ".luarc.json";
+			check(ensure_luarc(luarc) == LuarcResult::Created, "luarc_is_created");
+			const std::string luarcText = read(luarc);
+			check(luarcText.starts_with("// generated by Wiwa; remove this line to take over the file\n") && contains(luarcText, "\"library/lua\"") && contains(luarcText, "\"engine/lua\"") && contains(luarcText, "Lua 5.4"), "luarc_points_at_both_stubs");
+			check(contains(luarcText, "\"os\": \"disable\"") && contains(luarcText, "\"io\": \"disable\"") && contains(luarcText, "\"debug\": \"disable\"") && contains(luarcText, "\"package\": \"disable\""), "luarc_disables_the_libraries_the_sandbox_lacks");
+			check(ensure_luarc(luarc) == LuarcResult::LeftAlone && read(luarc) == luarcText, "current_luarc_is_left_alone");
+			write(luarc, luarc_text() + " ");
+			check(ensure_luarc(luarc) == LuarcResult::Refreshed && read(luarc) == luarc_text(), "edited_luarc_with_the_marker_is_refreshed");
+			write(luarc, "{ \"runtime.version\": \"LuaJIT\" }\n");
+			check(ensure_luarc(luarc) == LuarcResult::LeftAlone && read(luarc) == "{ \"runtime.version\": \"LuaJIT\" }\n", "luarc_without_the_marker_is_the_users");
+			check(ensure_luarc(dir / "plain_file" / ".luarc.json") == LuarcResult::Failed, "luarc_write_failure_is_not_fatal");
+
+			// the editor itself keeps library/lua/generated.lua current: written at start, rewritten when a component is registered or removed
+			const auto wait_until = [](const std::function<bool()>& condition)
+			{
+				for (int i = 0; i < 60 && !condition(); i++)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(50));
+				}
+				return condition();
+			};
+			const std::filesystem::path live = "library/lua/generated.lua";
+			check(wait_until([&]() { return std::filesystem::exists(live); }), "editor_writes_the_generated_stub_at_start");
+			ComponentRegistry::get().register_component(stub_component("script:lua_stub_live", "LuaStubLive", { FieldDescriptor{ "hp", FieldType::Int } }));
+			check(wait_until([&]() { return contains(read(live), "Comp.LuaStubLive"); }), "generated_stub_follows_a_registered_component");
+			ComponentRegistry::get().unregister_component("script:lua_stub_live");
+			check(wait_until([&]() { return !contains(read(live), "Comp.LuaStubLive"); }), "generated_stub_follows_a_removed_component");
+
+			const std::filesystem::path meta = dir / "meta.lua";
+			const std::filesystem::path plain = dir / "plain.lua";
+			write(meta, "---@meta\nfoo = 1\n");
+			write(plain, "return {}\n");
+			check(is_lua_stub_file(meta), "stub_file_detected");
+			check(!is_lua_stub_file(plain), "plain_lua_is_not_a_stub");
+			check(!is_lua_stub_file(dir / "missing.lua"), "missing_file_is_not_a_stub");
+
+			// a stub inside a source root is not imported: no asset, no .meta sidecar
+			AssetDatabase& database = pipeline.get_database();
+			const std::filesystem::path inRoot = database.get_roots()[1].Source / "lua_stubs_smoke_stub.lua";
+			write(inRoot, "---@meta\nbar = 2\n");
+			database.reimport(inRoot);
+			database.scan();
+			const bool hasMeta = std::filesystem::exists(inRoot.string() + ".meta");
+			std::filesystem::remove(inRoot);
+			std::filesystem::remove(inRoot.string() + ".meta");
+			check(!hasMeta, "stub_file_gets_no_meta");
+
+			std::filesystem::remove_all(dir);
+		}
+
+		bool near_rect(const UiRect& rect, glm::vec2 min, glm::vec2 max, float tolerance = 0.5f)
+		{
+			return glm::length(rect.Min - min) <= tolerance && glm::length(rect.Max - max) <= tolerance;
+		}
+
+		// ---- the UI API ------------------------------------------------------------------------------------------------------------
+
+		UiWidget ui_widget(UiId id, UiId parent, WidgetKind kind, const char* name, glm::vec2 size)
+		{
+			UiWidget widget;
+			widget.Id = id;
+			widget.Parent = parent;
+			widget.Kind = kind;
+			widget.Name = name;
+			widget.OffsetMax = size;
+			return widget;
+		}
+
+		// A scene with a camera, a "Hud" entity that shows a panel (Menu > Start > Label, Volume, Health, Mute, Marker) and the scripts of a test.
+		struct UiHarness
+		{
+			Harness H;
+			UiModule Module{};
+			std::unordered_map<AssetGuid, Ref<AssetSlot>> Slots{};
+			AssetRef Panel{};
+			entt::entity Hud = entt::null;
+			entt::entity Target = entt::null;
+			glm::vec2 Canvas{ 1920.0f, 1080.0f };
+
+			UiHarness()
+			{
+				const entt::entity camera = H.TheScene->create("Camera");
+				H.TheScene->registry().get<Transform>(camera).Position = { 0.0f, 0.0f, 5.0f };
+				H.TheScene->registry().emplace<Camera>(camera).Primary = true;
+				Target = H.TheScene->create("Target");
+
+				UiPanelData data;
+				UiWidget menu = ui_widget(1, 0, WidgetKind::VStack, "Menu", { 300.0f, 300.0f });
+				UiWidget start = ui_widget(2, 1, WidgetKind::Button, "Start", { 100.0f, 30.0f });
+				UiWidget label = ui_widget(3, 2, WidgetKind::Text, "Label", { 0.0f, 0.0f });
+				label.AnchorMax = { 1.0f, 1.0f };
+				label.Text = "Start";
+				UiWidget volume = ui_widget(4, 1, WidgetKind::Slider, "Volume", { 200.0f, 20.0f });
+				UiWidget health = ui_widget(5, 1, WidgetKind::Bar, "Health", { 100.0f, 30.0f });
+				UiWidget mute = ui_widget(6, 1, WidgetKind::Toggle, "Mute", { 30.0f, 30.0f });
+				UiWidget marker = ui_widget(7, 0, WidgetKind::Panel, "Marker", { 40.0f, 40.0f });
+				marker.Color = { 1.0f, 0.0f, 0.0f, 1.0f };
+				marker.AnchorMin = marker.AnchorMax = { 1.0f, 1.0f };
+				marker.OffsetMin = { -40.0f, -40.0f };
+				marker.OffsetMax = { 0.0f, 0.0f };
+				data.Widgets = { menu, start, label, volume, health, mute, marker };
+				data.NextId = 8;
+
+				Panel = AssetRef{ AssetGuid::generate(), 0 };
+				auto slot = std::make_shared<AssetSlot>();
+				slot->Data = std::make_shared<UiPanelData>(data);
+				slot->State = LoadState::Ready;
+				Slots[Panel.Guid] = slot;
+
+				Module.set_panel_loader([this](const AssetRef& ref) -> Handle<UiPanelData>
+				{
+					const auto it = Slots.find(ref.Guid);
+					return it == Slots.end() ? Handle<UiPanelData>{} : Handle<UiPanelData>(ref, it->second);
+				});
+				Module.set_input_source(&Module.scripted_input());
+				H.Instances.context().Ui = &Module;
+
+				Hud = H.TheScene->create("Hud");
+				H.TheScene->registry().emplace<UICanvas>(Hud, UICanvas{ Panel, 0, true });
+			}
+
+			// Adds a script and an entity that has it.
+			entt::entity spawn_script(const std::string& name, const std::string& source)
+			{
+				return H.spawn(name + "_entity", { H.add_script(name, source) });
+			}
+
+			void script(const std::string& name, const std::string& source) { spawn_script(name, source); }
+
+			// One frame as the engine runs it: the UI looks at the input, then the scripts run.
+			void frame()
+			{
+				H.TheScene->update_world_transforms();
+				Module.update_interaction(*H.TheScene, Canvas);
+				H.Instances.update(0.016f);
+			}
+
+			UiDrawList draw()
+			{
+				H.TheScene->update_world_transforms();
+				UiDrawList list;
+				Module.build_draw_list(*H.TheScene, Canvas, list);
+				return list;
+			}
+
+			UiPanelInstance& instance() { return *Module.instance_of(Hud); }
+			void click(float x, float y)
+			{
+				Module.scripted_input().move_to({ x, y });
+				Module.scripted_input().press(0);
+				Module.scripted_input().release(0);
+			}
+		};
+
+		void check_ui(Check& check)
+		{
+			{
+				UiHarness ui;
+				ui.script("finder", R"(return Script:extend{ on_init = function(self)
+					local panel = UI.panel(find_entity('Hud'))
+					local label = panel:find('Menu/Start/Label')
+					record(label.text)
+					label.text = 'Go'
+					record(label.text)
+					record(tostring(panel:find('Menu/Nope')))
+					record(tostring(panel:find('')))
+					record(tostring(UI.panel(find_entity('Camera'))))
+					record(tostring(panel.ready))
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "Start", "Go", "nil", "nil", "nil", "true" }), "ui_lua_find_and_set_text");
+				check(ui.instance().data().Widgets[2].Text == "Go", "ui_lua_find_and_set_text: the instance changed");
+				const UiPanelData* asset = static_cast<const UiPanelData*>(ui.Slots[ui.Panel.Guid]->Data.get());
+				check(asset->Widgets[2].Text == "Start", "ui_lua_find_and_set_text: the asset did not");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("values", R"(return Script:extend{ on_init = function(self)
+					local panel = UI.panel(find_entity('Hud'))
+					local volume = panel:find('Menu/Volume')
+					volume.value = 0.7
+					record(string.format('%.2f', volume.value))
+					record(string.format('%.1f %.1f', volume.min, volume.max))
+					local health = panel:find('Menu/Health')
+					health.value = 0.5
+					health.visible = true
+					health.enabled = false
+					health.color = vec4(0, 1, 0, 1)
+					health.opacity = 0.5
+					record(tostring(health.enabled) .. ' ' .. string.format('%.1f %.1f', health.color.y, health.opacity))
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "0.70", "0.0 1.0", "false 1.0 0.5" }), "ui_lua_value_roundtrip");
+				const UiDrawList list = ui.draw();
+				// the bar: a background quad and a fill quad of half the width, after the 4 quads of the button... find the green one
+				bool halfGreen = false;
+				for (size_t quad = 0; quad * 4 < list.Vertices.size(); quad++)
+				{
+					if (list.Vertices[quad * 4].Color == ui_pack_color({ 0.0f, 1.0f, 0.0f, 0.5f }))
+					{
+						halfGreen = std::abs((list.Vertices[quad * 4 + 1].Pos.x - list.Vertices[quad * 4].Pos.x) - 50.0f) < 0.5f;
+					}
+				}
+				check(halfGreen, "ui_lua_value_roundtrip: the bar is drawn half full in the colour and opacity the script set");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("clicker", R"(return Script:extend{
+					on_init = function(self)
+						local start = UI.panel(find_entity('Hud')):find('Menu/Start')
+						start:on('click', function(me) record('clicked') end)
+					end,
+					on_update = function(self, dt) record('update') end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.H.Events.clear();
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "clicked", "update" }), "ui_lua_click_handler: a click runs the handler once, before that frame's on_update");
+				ui.frame();
+				check(ui.H.count("clicked") == 1, "ui_lua_click_handler: and not again");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("slider", R"(return Script:extend{ on_init = function(self)
+					local volume = UI.panel(find_entity('Hud')):find('Menu/Volume')
+					volume:on('value_changed', function(me, value) record(string.format('%.2f', value)) end)
+					volume:on('hover_enter', function(me) record('enter') end)
+					volume:on('focus', function(me) record('focus') end)
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.Module.scripted_input().move_to({ 50.0f, 40.0f });
+				ui.Module.scripted_input().press(0);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "enter", "focus", "0.25" }), "ui_lua_value_changed_arg: the handlers get their events, and value_changed the new value");
+			}
+
+			{
+				UiHarness ui;
+				const entt::entity ownerEntity = ui.spawn_script("owner", R"(return Script:extend{ on_init = function(self)
+					UI.panel(find_entity('Hud')):find('Menu/Start'):on('click', function(me) record('owner') end)
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.count("owner") == 1, "ui_lua_handler_cleared_on_destroy: the handler works while its script lives");
+
+				ui.H.TheScene->destroy(ownerEntity);
+				ui.frame(); // the script is reaped
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.count("owner") == 1, "ui_lua_handler_cleared_on_destroy: once its entity is gone the handler is gone, and nothing crashes");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("restart", R"(return Script:extend{ on_init = function(self)
+					UI.panel(find_entity('Hud')):find('Menu/Start'):on('click', function(me) record('restart') end)
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.H.Instances.stop();
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.count("restart") == 1, "ui_lua_handler_cleared_on_stop_restart: after a stop and a start the handler is registered once, not twice");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("stale", R"(return Script:extend{
+					on_init = function(self)
+						self.panel = UI.panel(find_entity('Hud'))
+						self.label = self.panel:find('Menu/Start/Label')
+						self.frames = 0
+					end,
+					on_update = function(self, dt)
+						self.frames = self.frames + 1
+						if self.frames == 1 then
+							kill(find_entity('Hud'))
+						elseif self.frames == 2 then
+							record(tostring(self.label.text))
+							self.label.text = 'x'
+							self.label:on('click', function() end)
+							self.label:off('click')
+							self.label:clear_world_anchor()
+							record(tostring(self.panel.visible))
+							record(tostring(self.panel:find('Menu')))
+							record('ok')
+						end
+					end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.frame(); // the canvas is gone
+				check(ui.H.Events == std::vector<std::string>({ "nil", "nil", "nil", "ok" }), "ui_lua_stale_handle_safe: handles to a widget whose canvas is gone read nothing and change nothing, without an error");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("typed", R"(return Script:extend{ on_init = function(self)
+					local label = UI.panel(find_entity('Hud')):find('Menu/Start/Label')
+					local ok, err = pcall(function() label.text = 5 end)
+					record(tostring(ok))
+					record(tostring(string.find(err, 'text', 1, true) ~= nil))
+					local ok2, err2 = pcall(function() label.nonsense = 1 end)
+					record(tostring(ok2))
+					record(tostring((pcall(function() return label.nonsense end))))
+					local start = UI.panel(find_entity('Hud')):find('Menu/Start')
+					local ok3 = pcall(function() start:on('nope', function() end) end)
+					record(tostring(ok3))
+					local ok4 = pcall(function() start:on('click', 5) end)
+					record(tostring(ok4))
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "false", "true", "false", "false", "false", "false" }), "ui_lua_wrong_type_error: a bad value, an unknown property (read or written) or event, and a handler that is not a function are Lua errors");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("anchor", R"(return Script:extend{
+					on_init = function(self)
+						self.marker = UI.panel(find_entity('Hud')):find('Marker')
+					end,
+					on_update = function(self, dt)
+						self.frames = (self.frames or 0) + 1
+						if self.frames == 2 then
+							self.marker.world_anchor = find_entity('Target')
+							record(tostring(self.marker.world_anchor.name))
+						elseif self.frames == 4 then
+							self.marker.world_offset = vec3(0, 1, 0)
+							record(string.format('%.1f', self.marker.world_offset.y))
+						elseif self.frames == 6 then
+							self.marker:clear_world_anchor()
+							record(tostring(self.marker.world_anchor))
+						end
+					end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				const UiDrawList before = ui.draw();
+				ui.frame();
+				const UiDrawList anchored = ui.draw();
+				ui.frame(); // 3
+				ui.frame(); // 4: the offset is set
+				const UiDrawList raised = ui.draw();
+				ui.frame(); // 5
+				ui.frame(); // 6: the anchor is cleared
+				const UiDrawList cleared = ui.draw();
+				auto marker_rect = [](const UiDrawList& list) -> std::optional<UiRect>
+				{
+					for (size_t quad = 0; quad * 4 < list.Vertices.size(); quad++)
+					{
+						if (list.Vertices[quad * 4].Color == ui_pack_color({ 1.0f, 0.0f, 0.0f, 1.0f }))
+						{
+							return UiRect{ list.Vertices[quad * 4].Pos, list.Vertices[quad * 4 + 2].Pos };
+						}
+					}
+					return std::nullopt;
+				};
+				const std::optional<UiRect> a = marker_rect(before);
+				const std::optional<UiRect> b = marker_rect(anchored);
+				const std::optional<UiRect> c = marker_rect(raised);
+				const std::optional<UiRect> d = marker_rect(cleared);
+				check(a && near_rect(*a, { 1880, 1040 }, { 1920, 1080 }), "ui_lua_world_anchor_set: before, the marker is in the corner");
+				check(b && near_rect(*b, { 940, 520 }, { 980, 560 }, 1.0f), "ui_lua_world_anchor_set: after world_anchor = entity it is where the entity is on the screen");
+				check(c && c->Min.y < b->Min.y - 20.0f, "ui_lua_world_anchor_set: world_offset moves it");
+				check(d && near_rect(*d, { 1880, 1040 }, { 1920, 1080 }), "ui_lua_clear_world_anchor: clear_world_anchor puts it back");
+				check(ui.H.Events == std::vector<std::string>({ "Target", "1.0", "nil" }), "ui_lua_world_anchor_set: the properties read back");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("input", R"(return Script:extend{
+					on_init = function(self)
+						UI.panel(find_entity('Hud')):find('Menu/Start'):on('click', function(me) record('click') end)
+					end,
+					on_update = function(self, dt)
+						if self.sent then return end
+						self.sent = true
+						UI.input.move_to(50, 15)
+						UI.input.press(0)
+						UI.input.release(0)
+					end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.frame();
+				check(ui.H.count("click") == 1, "ui_lua_input: input made in Lua reaches the widgets in the next frame");
+
+				UiHarness other;
+				other.script("input2", R"(return Script:extend{ on_init = function(self)
+					UI.input.nav('down')
+					UI.input.nav('submit')
+					UI.input.scroll(1)
+					UI.input.clear_pointer()
+					local ok = pcall(function() UI.input.nav('sideways') end)
+					record(tostring(ok))
+				end })");
+				other.H.Instances.start(other.H.TheScene);
+				other.frame();
+				check(other.H.Events == std::vector<std::string>({ "false" }), "ui_lua_input: navigation, scroll and clear_pointer exist, and an unknown navigation is an error");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("visibility", R"(return Script:extend{ on_init = function(self)
+					local panel = UI.panel(find_entity('Hud'))
+					panel.visible = false
+					record(tostring(panel.visible))
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				check(ui.H.Events == std::vector<std::string>({ "false" }) && ui.draw().empty(), "ui_lua_panel_visible: a hidden panel draws nothing");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("off", R"(return Script:extend{ on_init = function(self)
+					local start = UI.panel(find_entity('Hud')):find('Menu/Start')
+					local function once() record('once') end
+					start:on('click', once)
+					start:on('click', function() record('stays') end)
+					start:off('click', once)
+				end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.count("once") == 0 && ui.H.count("stays") == 1, "ui_lua_off: off(event, fn) removes that handler only");
+			}
+
+			{
+				UiHarness ui;
+				ui.script("thrower", R"(return Script:extend{
+					on_init = function(self)
+						local start = UI.panel(find_entity('Hud')):find('Menu/Start')
+						start:on('click', function() error('boom') end)
+						start:on('click', function() record('second') end)
+					end,
+					on_update = function(self, dt) record('update') end })");
+				ui.H.Instances.start(ui.H.TheScene);
+				ui.frame();
+				ui.H.Events.clear();
+				WI_SCRIPT_LOG(Info, "Smoke test: the next script error is expected");
+				ui.click(50.0f, 15.0f);
+				ui.frame();
+				check(ui.H.count("second") == 1 && ui.H.count("update") == 1, "ui_lua_handler_error: a handler that raises an error does not stop the other handlers or the script's hooks");
+			}
+
+			{
+				Harness h;
+				h.spawn("e", { h.add_script("nomodule", R"(return Script:extend{ on_init = function(self)
+					local ok = pcall(function() return UI.panel(self.entity) end)
+					record(tostring(ok))
+				end })") });
+				h.Instances.start(h.TheScene);
+				h.Instances.update(0.016f);
+				check(h.Events == std::vector<std::string>({ "false" }), "ui_lua_no_module: without a UI module the calls are Lua errors");
+			}
+		}
+
+	}
+
+	namespace
+	{
+		// Check 6: Lua and physics. A script on a ball that falls onto the ground gets on_collision_enter with the ground as `other` and a
+		// normal that pushes the ball up; physics.raycast from a script returns the entity it hit; the ball's script also has on_physics_update.
+		// A script on another entity whose on_physics_update raises an error stops, and the ball's script goes on.
+		void check_physics_scripts(Check& check)
+		{
+			Harness h;
+			PhysicsModule physics;
+			physics.set_auto_start(false);
+			h.Instances.context().Physics = &physics;
+
+			const entt::entity ground = h.TheScene->create("Ground");
+			Collider groundCollider;
+			groundCollider.Size = glm::vec3(20.0f, 0.5f, 20.0f);
+			h.TheScene->registry().emplace<Collider>(ground, groundCollider);
+
+			const AssetRef ballScript = h.add_script("ball", R"(return Script:extend{
+				on_collision_enter = function(self, other, contact)
+					record('enter:' .. other.name .. ':' .. tostring(contact.normal.y > 0.9) .. ':' .. tostring(contact.impulse > 0) .. ':' .. tostring(contact.point.y > 0.4 and contact.point.y < 0.6))
+				end,
+				on_physics_update = function(self, dt)
+					record('tick')
+					if not self.rayDone then
+						self.rayDone = true
+						local hit = physics.raycast(vec3(20, 10, 0), vec3(0, -1, 0), 100)
+						record('ray:' .. (hit and hit.entity.name or 'nil'))
+						local none = physics.raycast(vec3(20, 10, 0), vec3(0, 1, 0), 100)
+						record('rayup:' .. tostring(none))
+						local overlap = physics.overlap_sphere(vec3(0, 0.5, 0), 0.4)
+						record('overlap:' .. #overlap)
+					end
+				end })");
+			const AssetRef badScript = h.add_script("bad", R"(return Script:extend{
+				on_physics_update = function(self, dt) record('bad'); error('boom') end })");
+
+			const entt::entity ball = h.spawn("Ball", { ballScript });
+			h.TheScene->registry().get<Transform>(ball).Position = glm::vec3(0.0f, 3.0f, 0.0f);
+			h.TheScene->registry().emplace<RigidBody>(ball, RigidBody{ MotionType::Dynamic });
+			Collider ballCollider;
+			ballCollider.Shape = ColliderShape::Sphere;
+			ballCollider.Size = glm::vec3(0.5f);
+			h.TheScene->registry().emplace<Collider>(ball, ballCollider);
+			h.spawn("Bad", { badScript });
+
+			check(physics.start_world(h.TheScene), "physics_scripts_world: the world starts");
+			physics.thread().set_paused(false); // the editor's game clock is not playing in this check
+			h.Instances.start(h.TheScene);
+			for (int frame = 0; frame < 400 && h.count("tick") < 90; frame++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(16));
+				physics.pump();
+				h.Instances.dispatch_physics(physics);
+				h.Instances.update(0.016f);
+			}
+			h.Instances.stop();
+			physics.stop_world();
+
+			check(h.count("enter:Ground:true:true:true") == 1, "physics_scripts_enter: on_collision_enter(self, other, contact) arrives once with the ground, an upward normal, an impulse and the point on the ground, got " + [&]() { std::string all; for (const std::string& e : h.Events) { if (e.rfind("enter", 0) == 0) { all += e + " "; } } return all; }());
+			check(h.count("ray:Ground") == 1, "physics_scripts_raycast: physics.raycast returns the entity it hit");
+			check(h.count("rayup:nil") == 1, "physics_scripts_raycast_miss: a ray that hits nothing gives nil");
+			check(h.count("overlap:1") == 1 || h.count("overlap:0") == 1, "physics_scripts_overlap: physics.overlap_sphere returns a table");
+			check(h.count("tick") >= 20, "physics_scripts_update: on_physics_update runs every step, got " + std::to_string(h.count("tick")));
+			check(h.count("bad") == 1, "physics_scripts_error_isolated: a script that raises in on_physics_update runs once and is disabled, got " + std::to_string(h.count("bad")));
+		}
+
+		// Check 6b: Lua and joints. joint.set_motor drives a hinge (and writes the Joint component), joint.set_limits writes the limits, a
+		// joint that breaks calls on_joint_break(self, other) on the entity that owns it (other is nil for a joint to the world), and a bad
+		// call is a Lua error.
+		void check_joint_scripts(Check& check)
+		{
+			Harness h;
+			PhysicsModule physics;
+			physics.set_auto_start(false);
+			h.Instances.context().Physics = &physics;
+
+			const auto anchor_at = [&](const char* name, glm::vec3 position)
+			{
+				const entt::entity anchor = h.TheScene->create(name);
+				h.TheScene->registry().get<Transform>(anchor).Position = position;
+				Collider collider;
+				collider.Size = glm::vec3(0.1f);
+				h.TheScene->registry().emplace<Collider>(anchor, collider);
+				return anchor;
+			};
+
+			// a motor-driven door
+			const entt::entity doorAnchor = anchor_at("DoorAnchor", glm::vec3(0.0f, 5.5f, 0.0f));
+			const AssetRef doorScript = h.add_script("door", R"(return Script:extend{
+				on_physics_update = function(self, dt)
+					self.ticks = (self.ticks or 0) + 1
+					if self.ticks == 1 then
+						joint.set_motor(self.entity, 'velocity', 1.0, 1000000)
+						joint.set_limits(self.entity, -80, 80)
+						record('bad_mode:' .. tostring(pcall(joint.set_motor, self.entity, 'bogus', 1, 1)))
+						record('bad_limits:' .. tostring(pcall(joint.set_limits, self.entity, 'x', 1)))
+					end
+					local w = self.entity:body():get_angular_velocity()
+					if not self.reached and self.ticks >= 10 and self.ticks <= 70 and w ~= nil and math.abs(w.z - 1.0) < 0.1 then
+						self.reached = true
+						record('w:true')
+					end
+					if self.ticks == 100 and not self.reached then record('w:false') end
+				end })");
+			const entt::entity door = h.spawn("Door", { doorScript });
+			h.TheScene->registry().get<Transform>(door).Position = glm::vec3(1.0f, 5.0f, 0.0f);
+			h.TheScene->registry().emplace<RigidBody>(door, RigidBody{ MotionType::Dynamic });
+			Collider plank;
+			plank.Size = glm::vec3(1.0f, 0.1f, 0.1f);
+			h.TheScene->registry().emplace<Collider>(door, plank);
+			Joint hinge;
+			hinge.Type = JointType::Hinge;
+			hinge.Connected = h.TheScene->registry().get<Id>(doorAnchor).Guid;
+			hinge.AnchorA = glm::vec3(-1.0f, 0.0f, 0.0f);
+			hinge.AnchorB = glm::vec3(0.0f, -0.5f, 0.0f);
+			hinge.Axis = glm::vec3(0.0f, 0.0f, 1.0f);
+			h.TheScene->registry().emplace<Joint>(door, hinge);
+
+			// an entity without a Joint: joint.* is a Lua error
+			const AssetRef plainScript = h.add_script("plain", R"(return Script:extend{
+				on_physics_update = function(self, dt)
+					if not self.done then
+						self.done = true
+						record('bad_entity:' .. tostring(pcall(joint.set_motor, self.entity, 'velocity', 1, 1)))
+					end
+				end })");
+			h.spawn("Plain", { plainScript });
+
+			// two boxes that hang by a fixed joint that is too weak: one from the world, one from a static body
+			const AssetRef breakScript = h.add_script("breaker", R"(return Script:extend{
+				on_joint_break = function(self, other)
+					record('break:' .. self.name .. ':' .. (other and other.name or 'nil'))
+				end })");
+			const auto hanger = [&](const char* name, float x, const entt::entity connected)
+			{
+				const entt::entity box = h.spawn(name, { breakScript });
+				h.TheScene->registry().get<Transform>(box).Position = glm::vec3(x, 4.7f, 0.0f);
+				h.TheScene->registry().emplace<RigidBody>(box, RigidBody{ MotionType::Dynamic });
+				Collider collider;
+				collider.Size = glm::vec3(0.5f);
+				h.TheScene->registry().emplace<Collider>(box, collider);
+				Joint joint;
+				joint.Type = JointType::Fixed;
+				joint.AnchorA = glm::vec3(0.0f, 0.5f, 0.0f);
+				joint.AnchorB = connected == entt::null ? glm::vec3(x, 5.2f, 0.0f) : glm::vec3(0.0f, -0.8f, 0.0f);
+				joint.Connected = connected == entt::null ? EntityGuid{} : h.TheScene->registry().get<Id>(connected).Guid;
+				joint.BreakForce = 5000.0f;
+				h.TheScene->registry().emplace<Joint>(box, joint);
+			};
+			hanger("HangWorld", 10.0f, entt::null);
+			hanger("HangAnchor", 20.0f, anchor_at("Ceiling", glm::vec3(20.0f, 6.0f, 0.0f)));
+
+			check(physics.start_world(h.TheScene), "joint_scripts_world: the world starts");
+			physics.thread().set_paused(false); // the editor's game clock is not playing in this check
+			h.Instances.start(h.TheScene);
+			for (int frame = 0; frame < 600 && !(h.count("w:true") + h.count("w:false") > 0 && h.count("break:HangWorld:nil") > 0 && h.count("break:HangAnchor:Ceiling") > 0); frame++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(16));
+				physics.pump();
+				h.Instances.dispatch_physics(physics);
+				h.Instances.update(0.016f);
+				physics.pre_render_update(0.016f); // sends the Joint changes the scripts made, as the engine does every frame
+			}
+			h.Instances.stop();
+			physics.stop_world();
+
+			check(h.count("w:true") == 1, "joint_scripts_motor: joint.set_motor turns the door at 1 rad/s");
+			check(h.count("bad_entity:false") == 1 && h.count("bad_mode:false") == 1 && h.count("bad_limits:false") == 1,
+				"joint_scripts_errors: an entity without a Joint, an unknown mode and a bad limit are Lua errors");
+			const Joint& after = h.TheScene->registry().get<Joint>(door);
+			check(after.MotorMode == JointMotorMode::Velocity && after.MotorTarget == 1.0f && after.LimitMin == -80.0f && after.LimitMax == 80.0f,
+				"joint_scripts_component: the calls are written to the Joint component");
+			check(h.count("break:HangWorld:nil") == 1, "joint_scripts_break_world: on_joint_break(self, nil) arrives once for a joint to the world");
+			check(h.count("break:HangAnchor:Ceiling") == 1, "joint_scripts_break_other: on_joint_break(self, other) names the entity the joint was connected to");
+		}
+
+		// Check 6c: Lua and characters. A script on a character reads whether it is grounded and what it stands on, walks it with
+		// character.move, jumps it with character.jump; a call on an entity without a CharacterController is a Lua error.
+		void check_character_scripts(Check& check)
+		{
+			Harness h;
+			PhysicsModule physics;
+			physics.set_auto_start(false);
+			h.Instances.context().Physics = &physics;
+
+			const entt::entity ground = h.TheScene->create("Ground");
+			Collider groundCollider;
+			groundCollider.Size = glm::vec3(20.0f, 0.5f, 20.0f);
+			h.TheScene->registry().emplace<Collider>(ground, groundCollider);
+
+			const AssetRef heroScript = h.add_script("hero", R"(return Script:extend{
+				on_physics_update = function(self, dt)
+					self.n = (self.n or 0) + 1
+					if self.n == 60 then
+						record('grounded:' .. tostring(character.is_grounded(self.entity)))
+						local s = character.state(self.entity)
+						record('state:' .. tostring(s.grounded) .. ':' .. tostring(s.sliding) .. ':' .. (s.ground and s.ground.name or 'nil') .. ':' .. tostring(s.normal.y > 0.9))
+						character.move(self.entity, vec3(2, 0, 0))
+					end
+					if self.n == 120 then
+						record('walked:' .. tostring(self.transform.position.x > 1.0))
+						character.jump(self.entity, 5)
+					end
+					if self.n == 135 then
+						record('air:' .. tostring(not character.is_grounded(self.entity)))
+					end
+				end })");
+			const AssetRef plainScript = h.add_script("plain_char", R"(return Script:extend{
+				on_physics_update = function(self, dt)
+					if not self.done then
+						self.done = true
+						record('bad_move:' .. tostring(pcall(character.move, self.entity, vec3(1, 0, 0))))
+						record('bad_jump:' .. tostring(pcall(character.jump, self.entity, 3)))
+						record('bad_state:' .. tostring(pcall(character.state, self.entity)))
+					end
+				end })");
+
+			const entt::entity hero = h.spawn("Hero", { heroScript });
+			h.TheScene->registry().get<Transform>(hero).Position = glm::vec3(0.0f, 2.0f, 0.0f);
+			CharacterController controller;
+			controller.Offset = glm::vec3(0.0f, 0.9f, 0.0f);
+			h.TheScene->registry().emplace<CharacterController>(hero, controller);
+			h.spawn("Plain", { plainScript });
+
+			check(physics.start_world(h.TheScene), "character_scripts_world: the world starts");
+			physics.thread().set_paused(false); // the editor's game clock is not playing in this check
+			h.Instances.start(h.TheScene);
+			for (int frame = 0; frame < 900 && h.count("air:true") + h.count("air:false") == 0; frame++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(16));
+				physics.pump();
+				h.Instances.dispatch_physics(physics);
+				h.Instances.update(0.016f);
+				physics.pre_render_update(0.016f); // writes the character's pose to its Transform, as the engine does every frame
+			}
+			h.Instances.stop();
+			physics.stop_world();
+
+			check(h.count("grounded:true") == 1, "character_scripts_grounded: character.is_grounded is true once it has landed");
+			check(h.count("state:true:false:Ground:true") == 1, "character_scripts_state: character.state gives grounded, not sliding, the ground entity and an upward normal");
+			check(h.count("walked:true") == 1, "character_scripts_move: character.move walks the entity");
+			check(h.count("air:true") == 1, "character_scripts_jump: character.jump takes it off the ground");
+			check(h.count("bad_move:false") == 1 && h.count("bad_jump:false") == 1 && h.count("bad_state:false") == 1, "character_scripts_errors: an entity without a CharacterController is a Lua error");
+		}
+	}
+
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1957,6 +2832,13 @@ namespace wiwa
 		check_clone(check);
 		check_editor_document(check);
 		check_play_mode(check);
+		check_ui(check);
+		check_physics_scripts(check);
+		check_joint_scripts(check);
+		check_character_scripts(check);
+		check_stub_globals(check);
+		check_component_stubs(check);
+		check_lua_stubs(check, pipeline);
 
 		if (check.Failures == 0)
 		{

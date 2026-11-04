@@ -12,6 +12,7 @@ namespace
 	const ImVec4 PREFAB_NODE_COLOR(0.60f, 0.76f, 1.00f, 1.0f);
 	const ImVec4 ADDED_CHILD_COLOR(0.60f, 1.00f, 0.65f, 1.0f);
 	const ImVec4 INSTANCE_COLOR(1.00f, 0.80f, 0.45f, 1.0f);
+	const ImVec4 ERROR_COLOR(1.0f, 0.4f, 0.4f, 1.0f);
 }
 
 void HierarchyPanel::on_draw()
@@ -20,7 +21,7 @@ void HierarchyPanel::on_draw()
 	ImGui::SetNextWindowSize(ImVec2(360.0f, 420.0f), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin(get_name(), &m_Open) && m_Editor.get_scene() != nullptr)
 	{
-		draw_toolbar();
+		draw_header();
 		ImGui::Separator();
 
 		wiwa::Scene& scene = m_Editor.scene();
@@ -30,7 +31,7 @@ void HierarchyPanel::on_draw()
 			draw_node(root);
 		}
 
-		// the space under the tree: click to clear the selection, drop an entity to move it to the top level
+		// the space under the tree: click to clear the selection, drop an entity to move it to the top level, right-click to add
 		const ImVec2 remaining = ImGui::GetContentRegionAvail();
 		ImGui::InvisibleButton("##tree_background", ImVec2(-1.0f, std::max(remaining.y, 24.0f)));
 		if (ImGui::IsItemClicked())
@@ -46,6 +47,9 @@ void HierarchyPanel::on_draw()
 			}
 			ImGui::EndDragDropTarget();
 		}
+		draw_background_menu();
+
+		draw_popups();
 
 		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Delete) && m_Editor.selected() != entt::null)
 		{
@@ -63,7 +67,7 @@ void HierarchyPanel::on_draw()
 	}
 }
 
-void HierarchyPanel::draw_toolbar()
+void HierarchyPanel::draw_header()
 {
 	const std::string name = m_Editor.path().empty() ? "untitled" : m_Editor.path().filename().string();
 	ImGui::Text("Scene: %s%s", name.c_str(), m_Editor.dirty() ? " *" : "");
@@ -77,111 +81,137 @@ void HierarchyPanel::draw_toolbar()
 		}
 	}
 
-	if (ImGui::Button("New"))
-	{
-		m_Editor.new_scene();
-	}
-	ImGui::SameLine();
-	if (ImGui::Button("Open..."))
-	{
-		ImGui::OpenPopup("Open scene");
-	}
-	ImGui::SameLine();
-	if (ImGui::Button("Save"))
-	{
-		if (m_Editor.path().empty())
-		{
-			ImGui::OpenPopup("Save scene as");
-		}
-		else if (!m_Editor.save())
-		{
-			m_Status = "Could not save " + m_Editor.path().string() + " (see the log)";
-		}
-		else
-		{
-			m_Status.clear();
-		}
-	}
-	ImGui::SameLine();
-	if (ImGui::Button("Save as..."))
-	{
-		ImGui::OpenPopup("Save scene as");
-	}
-
-	if (ImGui::Button("+ Entity"))
-	{
-		const entt::entity selected = m_Editor.selected();
-		const entt::entity created = m_Editor.create_entity(selected);
-		if (created != entt::null)
-		{
-			m_Editor.select(created);
-		}
-		else
-		{
-			m_Status = "Nothing can be added under that entity";
-		}
-	}
-	ImGui::SameLine();
-	if (ImGui::Button("+ Prefab..."))
-	{
-		ImGui::OpenPopup("Add prefab");
-	}
-
-	draw_popups();
-
 	if (!m_Status.empty())
 	{
-		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_Status.c_str());
+		ImGui::TextColored(ERROR_COLOR, "%s", m_Status.c_str());
 	}
+}
+
+void HierarchyPanel::draw_background_menu()
+{
+	if (!ImGui::BeginPopupContextItem("##tree_menu", ImGuiPopupFlags_MouseButtonRight))
+	{
+		return;
+	}
+
+	if (ImGui::MenuItem("New entity"))
+	{
+		m_Deferred = [this]()
+		{
+			const entt::entity created = m_Editor.create_entity(entt::null);
+			if (created != entt::null)
+			{
+				m_Editor.select(created);
+			}
+		};
+	}
+	if (ImGui::MenuItem("New prefab instance..."))
+	{
+		m_OpenPrefabPicker = true;
+	}
+	ImGui::EndPopup();
+}
+
+void HierarchyPanel::refresh_prefabs()
+{
+	m_Prefabs.clear();
+	for (const wiwa::AssetDatabase::SourceRoot& root : m_Database.get_roots())
+	{
+		std::error_code error;
+		for (std::filesystem::recursive_directory_iterator it(root.Source, error), end; !error && it != end; it.increment(error))
+		{
+			const std::filesystem::path extension = it->path().extension();
+			if (it->is_regular_file(error) && (extension == ".wprefab" || extension == ".gltf" || extension == ".glb" || extension == ".fbx"))
+			{
+				m_Prefabs.push_back({ it->path().lexically_relative(root.Source).generic_string(), it->path().string() });
+			}
+		}
+	}
+	std::sort(m_Prefabs.begin(), m_Prefabs.end(), [](const PrefabChoice& a, const PrefabChoice& b) { return a.Name < b.Name; });
 }
 
 void HierarchyPanel::draw_popups()
 {
-	if (ImGui::BeginPopup("Open scene"))
+	if (m_OpenPrefabPicker)
 	{
-		ImGui::TextUnformatted("Source path of the scene:");
-		ImGui::InputText("##open_path", m_OpenPath, sizeof(m_OpenPath));
-		if (ImGui::Button("Open"))
+		m_OpenPrefabPicker = false;
+		refresh_prefabs();
+		ImGui::OpenPopup("Add prefab");
+	}
+	if (m_OpenRename)
+	{
+		m_OpenRename = false;
+		m_RenameFocus = true;
+		ImGui::OpenPopup("Rename entity");
+	}
+
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Add prefab", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		if (m_Prefabs.empty())
 		{
-			m_Editor.open(m_OpenPath);
-			m_Status.clear();
+			ImGui::TextDisabled("No prefabs or models in the project");
+		}
+		else if (ImGui::BeginChild("##prefab_list", ImVec2(380.0f, 220.0f), ImGuiChildFlags_Borders))
+		{
+			for (const PrefabChoice& choice : m_Prefabs)
+			{
+				if (ImGui::Selectable(choice.Name.c_str()))
+				{
+					wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+					const std::optional<wiwa::AssetRef> prefab = assets->find_asset(choice.Path);
+					if (!prefab)
+					{
+						m_Status = "No asset at " + choice.Name + " (is it imported?)";
+					}
+					else
+					{
+						m_Deferred = [this, ref = *prefab]()
+						{
+							const entt::entity instance = m_Editor.add_prefab(ref, entt::null);
+							if (instance != entt::null)
+							{
+								m_Editor.select(instance);
+							}
+						};
+						m_Status.clear();
+					}
+					ImGui::CloseCurrentPopup();
+				}
+			}
+		}
+		if (!m_Prefabs.empty())
+		{
+			ImGui::EndChild();
+		}
+		if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
 	}
 
-	if (ImGui::BeginPopup("Save scene as"))
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Rename entity", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 	{
-		ImGui::TextUnformatted("File to write (a .wscene in assets/):");
-		ImGui::InputText("##save_path", m_SavePath, sizeof(m_SavePath));
-		if (ImGui::Button("Save"))
+		if (m_RenameFocus)
 		{
-			m_Status = m_Editor.save_as(m_SavePath) ? std::string() : std::string("Could not save ") + m_SavePath + " (see the log)";
+			ImGui::SetKeyboardFocusHere();
+			m_RenameFocus = false;
+		}
+		const bool entered = ImGui::InputText("##rename", m_RenameBuffer, sizeof(m_RenameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+		if (ImGui::Button("OK") || entered)
+		{
+			const entt::entity target = m_Editor.scene().find(m_RenameTarget);
+			if (target != entt::null && !m_Editor.rename_entity(target, m_RenameBuffer))
+			{
+				m_Status = "That entity cannot be renamed";
+			}
 			ImGui::CloseCurrentPopup();
 		}
-		ImGui::EndPopup();
-	}
-
-	if (ImGui::BeginPopup("Add prefab"))
-	{
-		ImGui::TextUnformatted("Source path of the model:");
-		ImGui::InputText("##prefab_path", m_PrefabPath, sizeof(m_PrefabPath));
-		if (ImGui::Button("Add"))
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
 		{
-			wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
-			const std::optional<wiwa::AssetRef> prefab = assets->find_asset(m_PrefabPath);
-			if (!prefab)
-			{
-				m_Status = std::string("No asset at ") + m_PrefabPath + " (is it imported?)";
-			}
-			else
-			{
-				const entt::entity selected = m_Editor.selected();
-				const entt::entity parent = (selected != entt::null && m_Editor.kind_of(selected) == wiwa::SceneEditor::Kind::Authored) ? selected : entt::entity{ entt::null };
-				const entt::entity instance = m_Editor.add_prefab(*prefab, parent);
-				m_Editor.select(instance);
-				m_Status.clear();
-			}
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
@@ -263,12 +293,35 @@ void HierarchyPanel::draw_node(entt::entity entity)
 	if (ImGui::BeginPopupContextItem())
 	{
 		m_Editor.select(entity);
+		const bool authored = kind == wiwa::SceneEditor::Kind::Authored;
 		if (ImGui::MenuItem("Create child"))
 		{
-			m_Deferred = [this, entity]() { if (m_Editor.create_entity(entity) == entt::null) { m_Status = "Nothing can be added under that entity"; } };
+			m_Deferred = [this, entity]()
+			{
+				const entt::entity created = m_Editor.create_entity(entity);
+				if (created == entt::null)
+				{
+					m_Status = "Nothing can be added under that entity";
+				}
+				else
+				{
+					m_Editor.select(created);
+				}
+			};
+		}
+		if (ImGui::MenuItem("Duplicate", nullptr, false, authored))
+		{
+			m_Deferred = [this, entity]() { m_Editor.duplicate_entity(entity); };
+		}
+		if (ImGui::MenuItem("Rename...", nullptr, false, authored))
+		{
+			m_RenameTarget = registry.get<wiwa::Id>(entity).Guid;
+			std::snprintf(m_RenameBuffer, sizeof(m_RenameBuffer), "%s", name.c_str());
+			m_OpenRename = true;
 		}
 		if (isInstance)
 		{
+			ImGui::Separator();
 			if (ImGui::MenuItem("Unpack prefab"))
 			{
 				m_Deferred = [this, entity]() { m_Editor.unpack(entity); };
@@ -278,6 +331,7 @@ void HierarchyPanel::draw_node(entt::entity entity)
 				m_Deferred = [this, entity]() { m_Editor.revert_instance(entity); };
 			}
 		}
+		ImGui::Separator();
 		if (ImGui::MenuItem("Delete"))
 		{
 			m_Deferred = [this, entity]() { m_Editor.delete_entity(entity); };

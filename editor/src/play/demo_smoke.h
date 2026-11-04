@@ -4,6 +4,7 @@
 #include <string>
 
 #include <core/common.h>
+#include <input/scripted_input_backend.h>
 #include <scene/scene.h>
 #include <scene/scene_editor.h>
 
@@ -30,6 +31,9 @@ namespace wiwa
 			Open,
 			Play,
 			Run,
+			Ui,
+			Input,
+			Physics,
 			HotCreate,
 			HotFirst,
 			HotSecond,
@@ -38,6 +42,33 @@ namespace wiwa
 
 		bool wait(u32 frames, const char* what, std::string& failure);
 		std::string finish_checks();
+		bool sample_physics(Scene& play, std::string& failure);
+
+		// The HUD of the demo scene while it plays (the Ui phase), one step per frame.
+		enum class UiResult
+		{
+			Running,
+			Passed,
+			Failed,
+		};
+		UiResult run_ui_step(std::string& failure);
+		void restore_ui();
+
+		// The Input phase: the input demo of the scene (a ball that moves, jumps and rebinds Jump) driven by a scripted input backend.
+		enum class InputStep
+		{
+			Setup,
+			WaitReady,
+			Move,
+			Jump,
+			RebindClick,
+			Heard,
+			OldKey,
+			NewKey,
+			Saved,
+		};
+		UiResult run_input_step(std::string& failure);
+		void restore_input();
 
 		SceneEditor& m_Editor;
 		PlayMode& m_Play;
@@ -54,7 +85,54 @@ namespace wiwa
 		float m_CameraLow = 1e9f, m_CameraHigh = -1e9f;
 		float m_LightLow = 1e9f, m_LightHigh = -1e9f;
 
+		// the Physics phase: the joints demo (door, cart, pendulum, bridge, breaking box) and the character demo (a patrolling character, a sliding
+		// platform) of the scene while it plays
+		struct PhysicsWatch
+		{
+			float DoorSwing = 0.0f;                  // the largest |rotation.y| of the door
+			float CartLow = 1e9f, CartHigh = -1e9f;  // x of the cart on its rail
+			float BobPath = 0.0f;                    // how far the spring pendulum has travelled
+			glm::vec3 BobLast{ 0.0f };
+			bool BobSeen = false;
+			float WeakLow = 1e9f;                    // the lowest y of the hanging box
+			float BridgeStretch = 0.0f;              // the longest distance between two neighbouring planks
+			float BridgeLow = 1e9f;                  // the lowest y of a plank
+			float PatrolLowX = 1e9f, PatrolHighX = -1e9f; // the character that walks its lane on its own
+			float PatrolLowY = 1e9f, PatrolHighY = -1e9f;
+			float PlatformLow = 1e9f, PlatformHigh = -1e9f; // x of the platform that slides
+		};
+		PhysicsWatch m_Watch{};
+
 		EntityGuid m_Probe{};
 		AssetRef m_HotScript{};
+
+		// the Ui phase
+		enum class UiStep
+		{
+			Setup,
+			WaitDrawn,
+			MoveBeacon,
+			ClickOff,
+			ClickOn,
+			Slide,
+			Release,
+			Finish,
+		};
+		UiStep m_UiStep = UiStep::Setup;
+		u32 m_UiStepFrames = 0;
+		bool m_UiTouched = false; // the canvas size and the input source were changed, and have to be put back
+		class IUiInputSource* m_UiPreviousInput = nullptr;
+		glm::vec2 m_ButtonCenter{ 0.0f };
+		glm::vec2 m_SliderPoint{ 0.0f }; // where the middle of the slider's track is
+		float m_BeaconX = 0.0f;
+		float m_LightLevel = 0.0f;
+
+		// the Input phase
+		InputStep m_InputStep = InputStep::Setup;
+		u32 m_InputStepFrames = 0;
+		bool m_InputTouched = false; // the input module reads our backend and the bindings were reset: both are put back
+		ScriptedInputBackend m_InputBackend{};
+		glm::vec3 m_InputStart{ 0.0f };
+		glm::vec2 m_RebindCenter{ 0.0f };
 	};
 }

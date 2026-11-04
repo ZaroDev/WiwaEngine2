@@ -1,0 +1,55 @@
+{
+	"version": 1,
+	"maps": [
+		{
+			"name": "Gameplay",
+			"consume": false,
+			"actions": [
+				{
+					"name": "Move",
+					"type": "Axis2D",
+					"bindings": [
+						{ "up": "Key.W", "down": "Key.S", "left": "Key.A", "right": "Key.D" },
+						{ "x": "Pad.LeftX", "y": "Pad.LeftY", "deadzone": 0.2 }
+					]
+				},
+				{
+					"name": "Look",
+					"type": "Axis2D",
+					"bindings": [
+						{ "x": "Mouse.DeltaX", "y": "Mouse.DeltaY", "scale": 0.1 },
+						{ "x": "Pad.RightX", "y": "Pad.RightY", "deadzone": 0.2 }
+					]
+				},
+				{
+					"name": "Jump",
+					"type": "Button",
+					"bindings": [
+						{ "control": "Key.Space" },
+						{ "control": "Pad.A" }
+					]
+				},
+				{
+					"name": "Fire",
+					"type": "Button",
+					"bindings": [
+						{ "control": "Mouse.Left" },
+						{ "control": "Pad.RightTrigger" }
+					]
+				}
+			]
+		},
+		{
+			"name": "UI",
+			"consume": false,
+			"actions": [
+				{ "name": "NavUp", "type": "Button", "bindings": [ { "control": "Key.Up" }, { "control": "Pad.DPadUp" }, { "control": "Pad.LeftY" } ] },
+				{ "name": "NavDown", "type": "Button", "bindings": [ { "control": "Key.Down" }, { "control": "Pad.DPadDown" }, { "control": "Pad.LeftY", "invert": true } ] },
+				{ "name": "NavLeft", "type": "Button", "bindings": [ { "control": "Key.Left" }, { "control": "Pad.DPadLeft" }, { "control": "Pad.LeftX", "invert": true } ] },
+				{ "name": "NavRight", "type": "Button", "bindings": [ { "control": "Key.Right" }, { "control": "Pad.DPadRight" }, { "control": "Pad.LeftX" } ] },
+				{ "name": "Submit", "type": "Button", "bindings": [ { "control": "Key.Enter" }, { "control": "Pad.A" } ] },
+				{ "name": "Cancel", "type": "Button", "bindings": [ { "control": "Key.Escape" }, { "control": "Pad.B" } ] }
+			]
+		}
+	]
+}

@@ -4,6 +4,8 @@
 
 #include "asset_database.h"
 #include "build_settings.h"
+#include "input_settings_file.h"
+#include "physics_settings_file.h"
 
 namespace wiwa
 {
@@ -27,8 +29,12 @@ namespace wiwa
 		// Writes <outDirectory>/assets.wpak and returns whether it worked (after logging why not). It blocks: run it on a
 		// background thread (AssetPipelineModule::pack_async) and pass a progress object to follow it; without one it just
 		// runs to the end. A cancel request on the progress stops it between assets.
+		// The project's physics layers (physicsSettingsFile, if it exists) go into the pack too.
+		// So do the input settings (inputSettingsFile, if it exists).
 		// With settings the pack holds only what they choose, its catalog lists only that, and the default scene is recorded in
 		// its build info; without them (null) it holds every cooked asset.
-		static bool pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress = nullptr, const BuildSettings* settings = nullptr);
+		static bool pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress = nullptr, const BuildSettings* settings = nullptr,
+			const std::filesystem::path& physicsSettingsFile = PHYSICS_SETTINGS_FILE,
+			const std::filesystem::path& inputSettingsFile = INPUT_SETTINGS_FILE);
 	};
 }

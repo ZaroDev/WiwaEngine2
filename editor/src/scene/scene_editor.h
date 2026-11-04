@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+#include <utility>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -92,11 +94,27 @@ namespace wiwa
 		// child, null (not supported).
 		entt::entity create_entity(entt::entity parent);
 		bool delete_entity(entt::entity entity);
+		// A copy of an authored entity and the authored entities below it, with guids of their own, named "<name> (copy)", right after the
+		// original, and selected. A copied prefab instance generates its own nodes (they appear in update()). entt::null for anything
+		// else, and while the scene plays.
+		entt::entity duplicate_entity(entt::entity entity);
+		// Authored entities only; false for anything else, and while the scene plays.
+		bool rename_entity(entt::entity entity, const std::string& name);
 		// Only between authored entities; false if it would make a loop.
 		bool reparent(entt::entity child, entt::entity parent);
 
 		// The instance root comes back at once; its children appear in update() when the prefab has loaded.
 		entt::entity add_prefab(AssetRef prefab, entt::entity parent);
+		// Saves the entity and everything below it as a prefab file (<folder>/<name>.wprefab) and, once the file has been imported (update()
+		// notices it, and gives up after a few seconds), replaces them by an instance of the prefab: same name, place and Transform, and the
+		// entity's own components and children are the prefab's. Returns why it cannot be done, or an empty string when it has started.
+		std::string make_prefab(entt::entity entity, const std::filesystem::path& folder);
+		bool has_pending_prefab() const { return !m_PendingPrefabs.empty(); }
+		// How long update() waits for the prefab file to be imported before it gives up (5 seconds).
+		void set_prefab_timeout(std::chrono::milliseconds timeout) { m_PrefabTimeout = timeout; }
+		// What went wrong in the background since the last call (a conversion that was given up), or an empty string. The editor shows it.
+		std::string take_message() { return std::exchange(m_Message, {}); }
+
 		// Turns the instance and everything it generated into ordinary entities.
 		bool unpack(entt::entity instance);
 		// Drops all overrides and generates the instance again from the prefab.
@@ -124,6 +142,15 @@ namespace wiwa
 			EntityGuid Root{};
 			Handle<PrefabData> Prefab{};
 		};
+
+		struct PendingPrefab
+		{
+			EntityGuid Entity{};
+			std::filesystem::path File{};
+			std::chrono::steady_clock::time_point Started{};
+		};
+
+		void finish_prefab(entt::entity original, const AssetRef& prefab);
 
 		std::optional<Generated> generated_of(entt::entity entity) const;
 		PrefabOverride* find_added_override(PrefabInstance& instance, EntityGuid rootId, EntityGuid childId);
@@ -153,6 +180,9 @@ namespace wiwa
 		Ref<JobProgress> m_Opening{};
 		std::string m_OpenPath{};
 		std::vector<PendingInstance> m_Pending{};
+		std::vector<PendingPrefab> m_PendingPrefabs{};
+		std::chrono::milliseconds m_PrefabTimeout{ 5000 };
+		std::string m_Message{};
 		std::unordered_map<AssetGuid, Handle<PrefabData>> m_Prefabs{};
 	};
 }

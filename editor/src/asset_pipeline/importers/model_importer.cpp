@@ -6,6 +6,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <physics/cooked_shape.h>
 #include <scene/prefab_node_id.h>
 
 #include "../image_utils.h"
@@ -127,6 +128,43 @@ namespace wiwa
 			}
 		}
 
+		// The collision geometry of a mesh: every vertex for the hull, the triangles of every primitive for the mesh shape.
+		void cook_physics_shapes(ImportContext& ctx, const MeshData& mesh, AssetRef meshRef, size_t index)
+		{
+			std::vector<glm::vec3> positions;
+			positions.reserve(mesh.Vertices.size());
+			for (const MeshVertex& vertex : mesh.Vertices)
+			{
+				positions.emplace_back(vertex.Position[0], vertex.Position[1], vertex.Position[2]);
+			}
+
+			std::vector<u32> indices;
+			for (const MeshPrimitive& primitive : mesh.Primitives)
+			{
+				for (u32 i = 0; i < primitive.IndexCount && primitive.FirstIndex + i < mesh.Indices.size(); i++)
+				{
+					indices.push_back(static_cast<u32>(static_cast<i64>(mesh.Indices[primitive.FirstIndex + i]) + primitive.BaseVertex));
+				}
+			}
+
+			const std::string label = "Mesh " + std::to_string(index) + " (" + mesh.Name + ")";
+			const struct { CookedShapeKind Kind; const char* Name; } kinds[] = { { CookedShapeKind::ConvexHull, "hull" }, { CookedShapeKind::Mesh, "mesh" } };
+			for (const auto& kind : kinds)
+			{
+				CookedShapeData shape;
+				std::string error;
+				const bool cooked = kind.Kind == CookedShapeKind::ConvexHull ? cook_convex_hull(positions, shape, error) : cook_triangle_mesh(positions, indices, shape, error);
+				if (!cooked)
+				{
+					ctx.warn(label + ": no physics " + kind.Name + ": " + error);
+					continue;
+				}
+				const AssetRef ref = cooked_shape_ref(meshRef, kind.Kind);
+				ctx.sub_asset_with_id(std::string("physics/") + kind.Name + "/" + std::to_string(index), ref.LocalId);
+				ctx.emit(ref, shape);
+			}
+		}
+
 		// glTF (.gltf/.glb) and FBX models become a Prefab (the node hierarchy) that refers to Mesh, Material, Skeleton and
 		// AnimationClip sub-assets, plus Texture assets: separate files are imported as their own assets, embedded ones
 		// become sub-assets of the model.
@@ -134,8 +172,10 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "ModelImporter"; }
-			virtual u32 version() const override { return 4; } // 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
+			virtual u32 version() const override { return 5; } // 5: optional cooked physics shapes; 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
 			virtual bool imports_dependencies() const override { return true; }
+			// generatePhysicsShapes: also cook a convex hull and a triangle mesh shape of every mesh, for ConvexHull and Mesh colliders
+			virtual nlohmann::json default_settings() const override { return { { "generatePhysicsShapes", false } }; }
 			virtual std::vector<std::string> extensions() const override { return { ".gltf", ".glb", ".fbx" }; }
 
 			virtual bool import(ImportContext& ctx) override
@@ -347,6 +387,20 @@ namespace wiwa
 
 					meshRefs[i] = ctx.sub_asset("mesh/" + std::to_string(i));
 					ctx.emit(meshRefs[i], mesh.Data, dependencies);
+				}
+
+				// Physics shapes: a convex hull and a triangle mesh of every mesh, at the mesh's local id plus a fixed offset
+				// (cooked_shape.h), so that a Collider that names the mesh names its shapes too.
+				if (ctx.settings().value("generatePhysicsShapes", false))
+				{
+					for (size_t i = 0; i < model.Meshes.size(); i++)
+					{
+						cook_physics_shapes(ctx, model.Meshes[i].Data, meshRefs[i], i);
+					}
+				}
+				else
+				{
+					ctx.drop_sub_assets("physics/");
 				}
 
 				// The prefab ties it together. A skinned mesh node ignores its own transform (the joints place it), as in glTF.

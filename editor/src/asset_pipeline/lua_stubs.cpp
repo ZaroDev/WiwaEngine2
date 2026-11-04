@@ -1,0 +1,312 @@
+#include <editor_common.h>
+#include "lua_stubs.h"
+
+#include <algorithm>
+#include <cctype>
+#include <fstream>
+#include <cstring>
+#include <mutex>
+#include <optional>
+#include <sstream>
+#include <string>
+
+#include <scene/reflection/component_registry.h>
+
+#include "file_utils.h"
+
+namespace wiwa
+{
+	bool is_lua_stub_file(const std::filesystem::path& file)
+	{
+		if (file.extension() != ".lua")
+		{
+			return false;
+		}
+
+		std::ifstream stream(file, std::ios::binary);
+		std::string line;
+		return stream && std::getline(stream, line) && line.starts_with("---@meta");
+	}
+
+	namespace
+	{
+		bool is_name_start(char c) { return std::isalpha(static_cast<unsigned char>(c)) || c == '_'; }
+		bool is_name_char(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
+
+		// The identifier at `pos`, which moves past it. Empty if there is none.
+		std::string read_name(const std::string& line, size_t& pos)
+		{
+			const size_t start = pos;
+			while (pos < line.size() && is_name_char(line[pos]))
+			{
+				pos++;
+			}
+			return line.substr(start, pos - start);
+		}
+	}
+
+	std::set<std::string> declared_globals(const std::string& stubSource)
+	{
+		std::set<std::string> names;
+		std::istringstream lines(stubSource);
+		std::string line;
+		while (std::getline(lines, line))
+		{
+			if (line.empty() || !is_name_start(line[0]))
+			{
+				continue; // blank, a comment, or indented (inside a block)
+			}
+
+			size_t pos = 0;
+			const std::string first = read_name(line, pos);
+			if (first == "local")
+			{
+				continue;
+			}
+
+			if (first == "function")
+			{
+				while (pos < line.size() && line[pos] == ' ')
+				{
+					pos++;
+				}
+				const std::string name = read_name(line, pos);
+				if (!name.empty() && pos < line.size() && line[pos] == '(')
+				{
+					names.insert(name); // function name(...): a member (name.m, name:m) declares no global
+				}
+				continue;
+			}
+
+			while (pos < line.size() && (line[pos] == ' ' || line[pos] == '\t'))
+			{
+				pos++;
+			}
+			if (pos < line.size() && line[pos] == '=' && (pos + 1 >= line.size() || line[pos + 1] != '='))
+			{
+				names.insert(first);
+			}
+		}
+		return names;
+	}
+
+	namespace
+	{
+		// The Lua type a field has in a script (see field_to_lua).
+		const char* lua_type_of(FieldType type)
+		{
+			switch (type)
+			{
+			case FieldType::Bool: return "boolean";
+			case FieldType::Int:
+			case FieldType::Enum: return "integer";
+			case FieldType::Float: return "number";
+			case FieldType::Vec2: return "vec2";
+			case FieldType::Vec3: return "vec3";
+			case FieldType::Vec4:
+			case FieldType::Color: return "vec4";
+			case FieldType::Quat: return "quat";
+			case FieldType::String: return "string";
+			case FieldType::Asset: return "Asset?";
+			case FieldType::AssetList: return "Asset[]";
+			case FieldType::Entity: return "Entity?";
+			}
+			return "any";
+		}
+
+		bool is_identifier(const std::string& name)
+		{
+			return !name.empty() && is_name_start(name[0]) && std::all_of(name.begin(), name.end(), is_name_char);
+		}
+
+		// Comp.<this> : every character a Lua name cannot hold becomes an underscore.
+		std::string class_name_of(const std::string& displayName)
+		{
+			std::string name = displayName;
+			std::replace_if(name.begin(), name.end(), [](char c) { return !is_name_char(c); }, '_');
+			if (name.empty() || std::isdigit(static_cast<unsigned char>(name[0])))
+			{
+				name.insert(name.begin(), '_');
+			}
+			return name;
+		}
+
+		// The text of a Lua double-quoted string, without the quotes.
+		std::string escape_lua(const std::string& text)
+		{
+			std::string out;
+			for (const char c : text)
+			{
+				switch (c)
+				{
+				case '\\': out += "\\\\"; break;
+				case '"': out += "\\\""; break;
+				case '\n': out += "\\n"; break;
+				case '\r': out += "\\r"; break;
+				case '\t': out += "\\t"; break;
+				default:
+					out += static_cast<unsigned char>(c) < 0x20 ? ' ' : c;
+				}
+			}
+			return out;
+		}
+	}
+
+	std::string generate_component_stubs(const std::vector<const ComponentInfo*>& components)
+	{
+		std::vector<const ComponentInfo*> sorted = components;
+		std::sort(sorted.begin(), sorted.end(), [](const ComponentInfo* a, const ComponentInfo* b)
+		{
+			return a->display_name() != b->display_name() ? a->display_name() < b->display_name() : a->Name < b->Name;
+		});
+
+		struct Entry
+		{
+			const ComponentInfo* Info;
+			std::string Class;   // after "Comp."
+			std::string Literal; // the display name, escaped
+		};
+		std::vector<Entry> entries;
+		std::string duplicates;
+		std::set<std::string> seenNames;
+		std::set<std::string> seenClasses;
+		for (const ComponentInfo* info : sorted)
+		{
+			Entry entry{ info, class_name_of(info->display_name()), escape_lua(info->display_name()) };
+			if (!seenNames.insert(info->display_name()).second || !seenClasses.insert(entry.Class).second)
+			{
+				duplicates += "-- duplicate: " + entry.Literal + "\n"; // the first one wins; the engine makes two the same name an error
+				continue;
+			}
+			entries.push_back(std::move(entry));
+		}
+
+		std::string out = "---@meta\n-- Generated by the Wiwa editor from the registered components and scripts. Do not edit: it is written again when they change.\n\n";
+
+		std::string names;
+		for (const Entry& entry : entries)
+		{
+			names += (names.empty() ? "" : "|") + std::string("\"") + entry.Literal + "\"";
+		}
+		out += "---@alias ComponentName " + (names.empty() ? std::string("string") : names) + "\n\n";
+
+		for (const Entry& entry : entries)
+		{
+			out += "---@class Comp." + entry.Class + "\n";
+			for (const FieldDescriptor& field : entry.Info->Fields)
+			{
+				if (is_identifier(field.Name))
+				{
+					out += "---@field " + field.Name + " " + lua_type_of(field.Type) + "\n";
+				}
+			}
+			out += "\n";
+		}
+		out += duplicates;
+		if (!duplicates.empty())
+		{
+			out += "\n";
+		}
+
+		out += "---@class Entity\nlocal Entity = {}\n\n";
+		for (const char* method : { "get", "add" })
+		{
+			for (const Entry& entry : entries)
+			{
+				out += "---@overload fun(self: Entity, name: \"" + entry.Literal + "\"): Comp." + entry.Class + "\n";
+			}
+			out += std::string("---@param name ComponentName\n---@return Component\nfunction Entity:") + method + "(name) end\n\n";
+		}
+		out += "---@param name ComponentName\n---@return boolean\nfunction Entity:has(name) end\n\n";
+		out += "---@param name ComponentName\nfunction Entity:remove(name) end\n";
+		return out;
+	}
+
+	bool write_if_changed(const std::filesystem::path& file, const std::string& text)
+	{
+		std::error_code error;
+		if (const std::optional<std::vector<std::byte>> existing = read_binary_file(file))
+		{
+			if (existing->size() == text.size() && std::memcmp(existing->data(), text.data(), text.size()) == 0)
+			{
+				return false;
+			}
+		}
+
+		if (file.has_parent_path())
+		{
+			std::filesystem::create_directories(file.parent_path(), error);
+		}
+
+		const std::filesystem::path temp = file.string() + ".tmp";
+		{
+			std::ofstream stream(temp, std::ios::binary | std::ios::trunc);
+			stream.write(text.data(), static_cast<std::streamsize>(text.size()));
+			if (!stream)
+			{
+				WI_LOG(Warning, "Assets", "Cannot write {0}: Lua IntelliSense for scripts will be out of date", file.generic_string());
+				stream.close();
+				std::filesystem::remove(temp, error);
+				return false;
+			}
+		}
+
+		std::filesystem::rename(temp, file, error);
+		if (error)
+		{
+			WI_LOG(Warning, "Assets", "Cannot write {0}: {1}", file.generic_string(), error.message());
+			std::filesystem::remove(temp, error);
+			return false;
+		}
+		return true;
+	}
+
+	bool write_component_stubs(const std::filesystem::path& file)
+	{
+		static std::mutex mutex;
+		std::lock_guard<std::mutex> lock(mutex);
+		return write_if_changed(file, generate_component_stubs(ComponentRegistry::get().all()));
+	}
+
+	namespace
+	{
+		constexpr const char* LUARC_MARKER = "// generated by Wiwa; remove this line to take over the file";
+	}
+
+	std::string luarc_text()
+	{
+		// the paths are relative to the folder the editor runs in, which is where this file goes (the asset roots are too)
+		return std::string(LUARC_MARKER) + R"(
+{
+	"runtime.version": "Lua 5.4",
+	"workspace.library": ["engine/lua", "library/lua"],
+	"runtime.builtin": {
+		"io": "disable",
+		"os": "disable",
+		"debug": "disable",
+		"package": "disable"
+	}
+}
+)";
+	}
+
+	LuarcResult ensure_luarc(const std::filesystem::path& file)
+	{
+		const std::optional<std::vector<std::byte>> existing = read_binary_file(file);
+		if (existing)
+		{
+			const std::string text(reinterpret_cast<const char*>(existing->data()), existing->size());
+			const std::string firstLine = text.substr(0, text.find('\n'));
+			if (firstLine != LUARC_MARKER && firstLine != std::string(LUARC_MARKER) + "\r")
+			{
+				return LuarcResult::LeftAlone; // the user took the file over
+			}
+		}
+
+		if (!write_if_changed(file, luarc_text()))
+		{
+			return existing ? LuarcResult::LeftAlone : LuarcResult::Failed; // up to date, or (no file) could not be written
+		}
+		return existing ? LuarcResult::Refreshed : LuarcResult::Created;
+	}
+}

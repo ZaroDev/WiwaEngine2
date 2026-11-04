@@ -22,6 +22,7 @@ namespace wiwa
 		m_PlayScene = clone_scene(*m_EditScene);
 		m_Host.show_scene(m_PlayScene, true);
 		m_Host.time_play();
+		m_Host.start_physics(); // the world is built from the clone, before the scripts' on_init can move anything
 		m_Host.start_scripts();
 		m_Step = Step::None;
 		m_State = PlayState::Playing;
@@ -64,6 +65,7 @@ namespace wiwa
 		}
 
 		m_Host.stop_scripts(); // on_destroy runs while the scene it ran on is still the active one
+		m_Host.stop_physics();
 		m_Host.cancel_loads();
 		m_Host.time_stop();
 		m_Host.show_scene(m_EditScene, false);
@@ -88,6 +90,7 @@ namespace wiwa
 		{
 			m_PlayScene = active;
 			m_Host.stop_scripts(); // the scripts may still hold the scene that was replaced, or already have stopped: start() needs them stopped
+			m_Host.start_physics(); // the old scene's world went with it; the new scene gets its own
 			m_Host.start_scripts();
 		}
 

@@ -49,6 +49,8 @@ namespace wiwa
 		RenderScene& scene() { return m_Renderer.get_scene(); }
 		// The debug shapes of the frames this tester renders: sealed into every batch (shapes with a duration stay for several frames).
 		DebugDraw& debug() { return m_DebugDraw; }
+		// The UI of the frames this tester renders: copied into every batch (set CanvasSize to the size of the image).
+		UiDrawList& ui() { return m_Ui; }
 		GpuResourceCache& cache() { return m_Renderer.get_cache(); }
 		Renderer& renderer() { return m_Renderer; }
 		u32 size() const { return m_Size; }
@@ -207,6 +209,7 @@ namespace wiwa
 			batch.Width = m_Renderer.get_width();
 			batch.Height = m_Renderer.get_height();
 			batch.Debug = m_DebugDraw.seal(m_Delta);
+			batch.Ui = m_Ui;
 			return m_Renderer.render_frame(batch);
 		}
 
@@ -261,5 +264,6 @@ namespace wiwa
 		float m_Delta = 1.0f / 60.0f;
 		u64 m_NextGuid = 0;
 		DebugDraw m_DebugDraw{};
+		UiDrawList m_Ui{};
 	};
 }

@@ -12,6 +12,7 @@ namespace wiwa
 	// turns it into a texture. 0 is ImGui's "no texture", so the first id is 1. Render thread only.
 	constexpr u32 FONT_TEXTURE_ID = 1;     // the font atlas
 	constexpr u32 VIEWPORT_TEXTURE_ID = 2; // the scene's viewport target
+	constexpr u32 UI_PREVIEW_TEXTURE_ID = 3; // the editor's UI canvas, drawn by the UI pass
 	constexpr u32 FIRST_FREE_TEXTURE_ID = 16;
 
 	class TextureRegistry

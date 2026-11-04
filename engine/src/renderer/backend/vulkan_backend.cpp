@@ -256,6 +256,7 @@ namespace wiwa
 			.set_required_features(features)
 			.set_required_features_12(features12)
 			.set_required_features_13(features13)
+			.prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
 			.select();
 		if (!physicalDeviceResult)
 		{

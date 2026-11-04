@@ -37,6 +37,7 @@ project "wiwa"
 		"%{IncludeDirs.NJSON}",
 		"%{IncludeDirs.lua}",
 		"%{IncludeDirs.sol2}",
+		"%{IncludeDirs.Jolt}",
 	}
 
 	links
@@ -48,10 +49,12 @@ project "wiwa"
 		"d3d11",
 		"d3d12",
 		"dxgi",
+		"psapi",
 		"dxguid",
 		"vk-bootstrap",
 		"ImGui",
-		"lua"
+		"lua",
+		"Jolt"
 		-- "Optick",
 		-- "ImGuizmo",
 	}
@@ -61,8 +64,11 @@ project "wiwa"
 		"VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1"
 	}
 
+	-- must match the Jolt library defines
+	JoltDefines()
+
 	filter "files:vendor/imguizmo/**.cpp"
-		flags {"NoPCH"}
+		enablepch "Off"
 
 	-- the sol2 usertypes of the Lua bindings make big object files
 	filter "files:src/scripting/bindings/**.cpp"

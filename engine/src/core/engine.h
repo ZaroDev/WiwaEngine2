@@ -1,6 +1,7 @@
 #pragma once
 
 #include <core/module_manager.h>
+#include <core/perf_stats.h>
 
 #include <time/time.h>
 
@@ -34,6 +35,9 @@ namespace wiwa {
 
 		Time& get_time() { return m_Time; }
 
+		// Timings and memory for the Performance panel. Main thread only.
+		PerfStats& get_perf() { return m_Perf; }
+
 		// The command-line arguments after the program name.
 		const std::vector<std::string>& get_arguments() const { return m_Arguments; }
 	protected:
@@ -44,6 +48,7 @@ namespace wiwa {
 		inline static Engine* s_Engine = nullptr;
 		
 		Time m_Time{};
+		PerfStats m_Perf{};
 		ModuleManager m_ModuleManager{};
 		std::vector<std::string> m_Arguments{};
 		bool m_Running = true;

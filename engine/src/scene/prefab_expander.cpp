@@ -39,6 +39,18 @@ namespace wiwa
 					FieldRecord{ "Mesh", FieldValue(node.Mesh) },
 					FieldRecord{ "Materials", FieldValue(std::vector<AssetRef>{}) } } });
 			}
+
+			for (const ComponentRecord& extra : node.Components)
+			{
+				if (ComponentRecord* existing = find_component(record, extra.Name))
+				{
+					*existing = extra;
+				}
+				else
+				{
+					record.Components.push_back(extra);
+				}
+			}
 			return record;
 		}
 

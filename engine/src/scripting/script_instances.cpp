@@ -3,8 +3,11 @@
 
 #include <algorithm>
 
+#include <input/input_module.h>
+#include <physics/physics_module.h>
 #include <scene/reflection/component_registry.h>
 #include <scene/reflection/value_bag.h>
+#include <ui/ui_module.h>
 #include "bindings/bindings.h"
 #include "script_names.h"
 
@@ -18,7 +21,11 @@ namespace wiwa
 		bind_scene(m_Runtime, m_Context);
 		bind_assets(m_Runtime, m_Context);
 		bind_render(m_Runtime, m_Context);
+		m_Context.UiHandlers = &m_UiHandlers;
 		bind_engine(m_Runtime, m_Context);
+		bind_ui(m_Runtime, m_Context);
+		bind_physics(m_Runtime, m_Context);
+		bind_input(m_Runtime, m_Context);
 	}
 
 	ScriptInstances::~ScriptInstances()
@@ -36,6 +43,13 @@ namespace wiwa
 
 	void ScriptInstances::stop()
 	{
+		// A Lua function waiting in input.listen must not outlive the scripts (it would be called into a state that is gone).
+		if (m_Context.InputListening && m_Context.Input != nullptr)
+		{
+			m_Context.Input->actions().cancel_listen();
+		}
+		m_Context.InputListening = false;
+
 		if (m_Scene == nullptr)
 		{
 			return;
@@ -53,6 +67,7 @@ namespace wiwa
 			instances->clear();
 		}
 		m_Known.clear();
+		m_UiHandlers.clear();
 		m_Context.ActiveScene = nullptr;
 		m_Scene.reset();
 	}
@@ -96,6 +111,22 @@ namespace wiwa
 
 	bool ScriptInstances::call_hook(Instance& instance, const char* hook, const float* deltaTime)
 	{
+		return call_hook_with(instance, hook, [&](const sol::protected_function& function)
+		{
+			return deltaTime != nullptr ? m_Runtime.call(function, instance.Self, *deltaTime) : m_Runtime.call(function, instance.Self);
+		});
+	}
+
+	bool ScriptInstances::call_hook_with(Instance& instance, const char* hook, const std::function<sol::protected_function_result(const sol::protected_function&)>& invoke)
+	{
+		// handlers that the hook registers belong to this instance
+		struct CurrentOwner
+		{
+			UiHandlerTable& Table;
+			CurrentOwner(UiHandlerTable& table, const sol::table* self) : Table(table) { Table.set_current(self); }
+			~CurrentOwner() { Table.set_current(nullptr); }
+		} currentOwner(m_UiHandlers, &instance.Self);
+
 		sol::object member;
 		std::string lookupError;
 		if (!m_Runtime.protected_get(instance.Class->Class, sol::make_object(m_Runtime.state().lua_state(), hook), member, lookupError))
@@ -110,9 +141,7 @@ namespace wiwa
 		}
 
 		sol::protected_function function = member;
-		sol::protected_function_result result = deltaTime != nullptr
-			? m_Runtime.call(function, instance.Self, *deltaTime)
-			: m_Runtime.call(function, instance.Self);
+		sol::protected_function_result result = invoke(function);
 		if (result.valid())
 		{
 			return true;
@@ -163,6 +192,7 @@ namespace wiwa
 				{
 					call_hook(instance, "on_destroy", nullptr);
 				}
+				m_UiHandlers.remove_owner(instance.Self);
 				m_Known.erase({ instance.Entity, instance.Script });
 				instances->erase(instances->begin() + static_cast<std::ptrdiff_t>(i));
 			}
@@ -360,12 +390,184 @@ namespace wiwa
 					const bool reloaded = std::any_of(scripts.begin(), scripts.end(), [&](const AssetRef& script) { return script.resolved() == instance.Script; });
 					if (reloaded && instance.Failed)
 					{
+						m_UiHandlers.remove_owner(instance.Self);
 						m_Known.erase({ instance.Entity, instance.Script });
 						return true;
 					}
 					return false;
 				});
 		}
+	}
+
+	// The widgets' events of this frame, to the functions scripts registered with widget:on. They run before the scripts' on_update, so a
+	// script sees this frame's click in this frame.
+	void ScriptInstances::dispatch_ui_events()
+	{
+		if (m_Context.Ui == nullptr || m_Scene == nullptr || m_UiHandlers.empty())
+		{
+			return;
+		}
+
+		// a handler may create and destroy entities: the canvases are collected first
+		std::vector<EntityGuid> canvases;
+		for (const auto [entity, id, canvas] : m_Scene->registry().view<Id, UICanvas>().each())
+		{
+			canvases.push_back(id.Guid);
+		}
+
+		for (const EntityGuid& canvas : canvases)
+		{
+			UiPanelInstance* instance = m_Context.Ui->instance_for(*m_Scene, canvas);
+			if (instance == nullptr)
+			{
+				continue;
+			}
+
+			const std::vector<UiEvent> events = instance->events();
+			for (const UiEvent& event : events)
+			{
+				for (const UiHandler& handler : m_UiHandlers.matching(canvas, event.Widget, event.Kind))
+				{
+					sol::protected_function_result result = event.Kind == UiEventKind::ValueChanged
+						? m_Runtime.call(handler.Function, handler.Owner, event.Value)
+						: m_Runtime.call(handler.Function, handler.Owner);
+					if (!result.valid())
+					{
+						// the handler that failed is dropped; the others and the script's hooks go on
+						sol::error failure = result;
+						WI_SCRIPT_LOG(Error, "A UI handler failed and was removed: {0}", failure.what());
+						m_UiHandlers.remove(handler.Owner, canvas, handler.Widget, handler.Kind, sol::object(handler.Function));
+					}
+				}
+			}
+		}
+	}
+
+	namespace
+	{
+		const char* physics_hook(PhysicsEventKind kind)
+		{
+			switch (kind)
+			{
+			case PhysicsEventKind::CollisionEnter: return "on_collision_enter";
+			case PhysicsEventKind::CollisionStay: return "on_collision_stay";
+			case PhysicsEventKind::CollisionExit: return "on_collision_exit";
+			case PhysicsEventKind::TriggerEnter: return "on_trigger_enter";
+			case PhysicsEventKind::JointBreak: return "on_joint_break";
+			default: return "on_trigger_exit";
+			}
+		}
+	}
+
+	// An event goes to the scripts on both entities, each told about the other. The contact is described from the receiver's side: `normal`
+	// points from the other body towards the receiver (the way the receiver is pushed out), `relative_velocity` is the receiver's velocity
+	// relative to the other's, before the contact was resolved.
+	void ScriptInstances::deliver_physics_event(const PhysicsEvent& event)
+	{
+		if (m_Scene == nullptr)
+		{
+			return;
+		}
+
+		const char* hook = physics_hook(event.Kind);
+
+		// a joint that broke goes to the entity that owns it only; `other` is the entity it was connected to, nil for the world (or when
+		// that entity is gone)
+		if (event.Kind == PhysicsEventKind::JointBreak)
+		{
+			const bool otherAlive = m_Scene->find(event.B) != entt::null;
+			for (size_t i = 0; i < m_Instances.size(); i++)
+			{
+				Instance& instance = m_Instances[i];
+				if (instance.Entity != event.A || instance.Failed || !alive(instance))
+				{
+					continue;
+				}
+				call_hook_with(instance, hook, [&](const sol::protected_function& function)
+				{
+					if (otherAlive)
+					{
+						return m_Runtime.call(function, instance.Self, EntityHandle{ event.B, &m_Context });
+					}
+					return m_Runtime.call(function, instance.Self, sol::lua_nil);
+				});
+			}
+			return;
+		}
+
+		const bool contact = event.Kind != PhysicsEventKind::TriggerEnter && event.Kind != PhysicsEventKind::TriggerExit;
+		sol::state_view lua = m_Runtime.state().lua_state();
+
+		for (int side = 0; side < 2; side++)
+		{
+			const EntityGuid self = side == 0 ? event.A : event.B;
+			const EntityGuid other = side == 0 ? event.B : event.A;
+			const float toSelf = side == 0 ? -1.0f : 1.0f; // the event's normal points from A to B
+
+			for (size_t i = 0; i < m_Instances.size(); i++)
+			{
+				Instance& instance = m_Instances[i];
+				// an earlier handler may have destroyed either entity
+				if (instance.Entity != self || instance.Failed || !alive(instance) || m_Scene->find(other) == entt::null)
+				{
+					continue;
+				}
+
+				call_hook_with(instance, hook, [&](const sol::protected_function& function)
+				{
+					const EntityHandle otherHandle{ other, &m_Context };
+					if (!contact)
+					{
+						return m_Runtime.call(function, instance.Self, otherHandle);
+					}
+					sol::table info = lua.create_table();
+					info["point"] = LuaVec3{ event.Point, {} };
+					info["normal"] = LuaVec3{ event.Normal * toSelf, {} };
+					info["impulse"] = event.Impulse;
+					info["relative_velocity"] = LuaVec3{ event.RelativeVelocity * -toSelf, {} };
+					return m_Runtime.call(function, instance.Self, otherHandle, info);
+				});
+			}
+		}
+	}
+
+	void ScriptInstances::dispatch_physics(PhysicsModule& physics)
+	{
+		if (m_Scene == nullptr)
+		{
+			return;
+		}
+
+		struct Sink final : IPhysicsStepSink
+		{
+			ScriptInstances& Owner;
+			explicit Sink(ScriptInstances& owner) : Owner(owner) {}
+
+			void on_step_events(const PhysicsStepSnapshot&, const std::vector<PhysicsEvent>& events) override
+			{
+				for (const PhysicsEvent& event : events)
+				{
+					Owner.deliver_physics_event(event);
+				}
+			}
+
+			void on_physics_update(const PhysicsStepSnapshot&, float dt) override
+			{
+				for (std::vector<Instance>* instances : { &Owner.m_SceneInstances, &Owner.m_Instances })
+				{
+					for (size_t i = 0; i < instances->size(); i++)
+					{
+						Instance& instance = (*instances)[i];
+						if (!instance.Failed && Owner.alive(instance))
+						{
+							Owner.call_hook(instance, "on_physics_update", &dt);
+						}
+					}
+				}
+			}
+		} sink(*this);
+
+		physics.dispatch_steps(sink);
 	}
 
 	void ScriptInstances::update(float deltaTime)
@@ -379,6 +581,7 @@ namespace wiwa
 		m_Context.TotalTime += deltaTime;
 
 		reap();
+		dispatch_ui_events();
 		discover();
 
 		for (std::vector<Instance>* instances : { &m_SceneInstances, &m_Instances })

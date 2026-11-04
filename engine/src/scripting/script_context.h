@@ -2,6 +2,8 @@
 
 #include <entt/entt.hpp>
 
+#include <functional>
+
 #include <scene/entity_guid.h>
 #include <scene/scene.h>
 
@@ -9,7 +11,11 @@ namespace wiwa
 {
 	class AssetManager;
 	class DebugDraw;
+	class InputModule;
+	class PhysicsModule;
 	class SceneModule;
+	class UiHandlerTable;
+	class UiModule;
 	class ScriptRuntime;
 
 	// What the Lua bindings reach besides the Lua state: the scene scripts are running on. Set by ScriptInstances.
@@ -20,6 +26,13 @@ namespace wiwa
 		AssetManager* Assets = nullptr; // null where there is no such module (a test): the calls that need them are Lua errors
 		SceneModule* Scenes = nullptr;
 		DebugDraw* Debug = nullptr;     // null without a renderer: debug drawing is ignored
+		UiModule* Ui = nullptr;         // null where there is no such module (a test): the UI calls are Lua errors
+		PhysicsModule* Physics = nullptr; // null where there is no such module (a test): the physics calls are Lua errors
+		InputModule* Input = nullptr;   // null where there is no such module (a test): the input calls are Lua errors
+		bool GamePlaying = true;        // false while the game clock does not play: the input queries then read false / zero
+		bool InputListening = false;    // a Lua function waits in input.listen (cancelled when the scripts stop)
+		UiHandlerTable* UiHandlers = nullptr; // the Lua functions that listen to UI events, owned by the script instances
+		std::function<void()> RequestQuit{}; // what quit() calls; empty where the host has no such thing (a test): quit() is then a Lua error
 		float DeltaTime = 0.0f;         // seconds, of the update that is running
 		double TotalTime = 0.0;         // seconds of updates so far
 	};

@@ -74,6 +74,9 @@ namespace wiwa
 		// The uploaded texture, null until it is (and for good if it failed). Asking starts the load.
 		nvrhi::ITexture* get_texture(const AssetRef& texture);
 
+		// The signed distance field atlas of a font (R8), null until it is uploaded (and for good if it failed). Asking starts the load.
+		nvrhi::ITexture* get_font_atlas(const AssetRef& font);
+
 		u32 page_count() const { return static_cast<u32>(m_Pages.size()); }
 		nvrhi::IBuffer* vertex_buffer(u32 page) const { return m_Pages[page].Vertex; }
 		nvrhi::IBuffer* index_buffer(u32 page) const { return m_Pages[page].Index; }
@@ -91,6 +94,7 @@ namespace wiwa
 		AssetRef add_inline_mesh(MeshData mesh);
 		AssetRef add_inline_material(MaterialData material);
 		AssetRef add_inline_texture(TextureData texture);
+		AssetRef add_inline_font(FontData font);
 		// Replaces the data of an inline asset; invalidate() the reference's guid for the change to show.
 		void set_inline_texture(const AssetRef& texture, TextureData data);
 		void set_inline_mesh(const AssetRef& mesh, MeshData data);
@@ -162,6 +166,16 @@ namespace wiwa
 			bool Reloading = false;
 		};
 
+		struct FontEntry
+		{
+			AssetRef Ref{};
+			Source<FontData> Data{};
+			nvrhi::TextureHandle Atlas{};
+			u64 Bytes = 0;
+			bool Failed = false;
+			bool Reloading = false;
+		};
+
 		struct MaterialEntry
 		{
 			AssetRef Ref{};
@@ -203,6 +217,9 @@ namespace wiwa
 		Source<T> acquire(const AssetRef& ref, const std::unordered_map<AssetGuid, Ref<const T>>& inlineAssets);
 
 		TextureEntry& texture_entry(const AssetRef& ref);
+		FontEntry& font_entry(const AssetRef& ref);
+		void update_fonts();
+		bool upload_font(FontEntry& entry, const FontData& data);
 		void update_meshes();
 		void update_textures();
 		void update_materials();
@@ -236,6 +253,9 @@ namespace wiwa
 
 		std::unordered_map<AssetGuid, std::unique_ptr<MeshEntry>> m_Meshes{};
 		std::unordered_map<AssetGuid, std::unique_ptr<TextureEntry>> m_Textures{};
+		std::unordered_map<AssetGuid, Ref<const FontData>> m_InlineFonts{};
+		std::unordered_map<AssetGuid, std::unique_ptr<FontEntry>> m_Fonts{};
+		std::vector<FontEntry*> m_PendingFonts{};
 		std::unordered_map<AssetGuid, std::unique_ptr<MaterialEntry>> m_MaterialEntries{};
 		std::vector<MeshEntry*> m_PendingMeshes{};
 		std::vector<TextureEntry*> m_PendingTextures{};

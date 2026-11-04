@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <string>
 #include <vector>
@@ -8,6 +9,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <math/math.h>
+#include <scene/scene_data.h>
 #include "asset_guid.h"
 
 // CPU-side data of every asset type. Nothing here knows about the GPU: the renderer builds its own resources
@@ -301,6 +303,9 @@ namespace wiwa
 		std::vector<float> MorphWeights{};
 		AssetRef Mesh{};     // invalid when the node holds no mesh
 		AssetRef Skeleton{}; // invalid when the node is not skinned
+		// Every other reflected component of the node, for prefabs made from scene entities (a model's nodes have none). A component
+		// named here replaces the one the fields above would give the node.
+		std::vector<ComponentRecord> Components{};
 	};
 
 	// The hierarchy of an imported model; it points to the meshes, skeletons and clips by reference.
@@ -318,5 +323,55 @@ namespace wiwa
 	{
 		std::string Source{};
 		std::string SourcePath{};
+	};
+
+	// One character of a font. Lengths are in pixels at FontData::PixelSize; the layout scales them to the size the text is drawn at.
+	struct FontGlyph
+	{
+		u32 Codepoint = 0;
+		glm::vec2 Size{ 0.0f };    // of the quad in the atlas, which includes the SDF margin; 0 for a glyph without an outline (a space)
+		glm::vec2 Bearing{ 0.0f }; // from the pen position, on the baseline, to the top left of the quad (y points down)
+		float Advance = 0.0f;
+		glm::vec2 UvMin{ 0.0f };
+		glm::vec2 UvMax{ 0.0f };
+	};
+
+	struct FontKerning
+	{
+		u32 First = 0;
+		u32 Second = 0;
+		float Amount = 0.0f; // added to the pen position between the two characters
+	};
+
+	// A font cooked from a .ttf or .otf: a signed distance field atlas of its characters, and their metrics. In the atlas a texel is
+	// 128 on the outline, above that inside, below it outside, and it reaches 0 and 255 SdfRange pixels away.
+	struct FontData
+	{
+		std::string Name{};
+		u32 AtlasWidth = 0;
+		u32 AtlasHeight = 0;
+		std::vector<u8> Atlas{}; // R8, row by row
+		float PixelSize = 0.0f;  // the size the glyphs were rendered at (the height of a line without its gap)
+		float SdfRange = 0.0f;   // in pixels at PixelSize
+		float LineHeight = 0.0f;
+		float Ascent = 0.0f;     // from the baseline up to the top of a line, above 0
+		float Descent = 0.0f;    // from the baseline down to the bottom of a line, below 0
+		u32 FallbackCodepoint = 0; // drawn for a character the font does not have; 0 means draw nothing
+		std::vector<FontGlyph> Glyphs{};   // by codepoint, ascending
+		std::vector<FontKerning> Kerning{}; // by First, then Second, ascending
+
+		// Null if the font does not have the character.
+		const FontGlyph* find(u32 codepoint) const
+		{
+			const auto it = std::lower_bound(Glyphs.begin(), Glyphs.end(), codepoint, [](const FontGlyph& glyph, u32 value) { return glyph.Codepoint < value; });
+			return it != Glyphs.end() && it->Codepoint == codepoint ? &*it : nullptr;
+		}
+
+		float kerning(u32 first, u32 second) const
+		{
+			const auto it = std::lower_bound(Kerning.begin(), Kerning.end(), std::pair<u32, u32>(first, second),
+				[](const FontKerning& pair, const std::pair<u32, u32>& value) { return std::pair<u32, u32>(pair.First, pair.Second) < value; });
+			return it != Kerning.end() && it->First == first && it->Second == second ? it->Amount : 0.0f;
+		}
 	};
 }

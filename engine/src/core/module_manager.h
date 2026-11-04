@@ -7,6 +7,8 @@
 
 namespace wiwa
 {
+	class PerfStats;
+
 	class ModuleManager
 	{
 	public:
@@ -31,6 +33,9 @@ namespace wiwa
 			return reinterpret_cast<T*>(m_Modules[typeid(T)]);
 		}
 
+		// The module calls of each frame are timed into this (not owned; may be null).
+		void set_perf_stats(PerfStats* perf) { m_Perf = perf; }
+
 		void begin();
 
 		void clean();
@@ -48,6 +53,10 @@ namespace wiwa
 		void post_render_update(float deltaTime);
 
 	private:
+		template<typename Call>
+		void run_phase(UpdateFlags flag, Call call);
+
+		PerfStats* m_Perf = nullptr;
 		std::unordered_map<std::type_index, IModule*> m_Modules{};
 		// Modules are shut down and deleted in the reverse order they were added: a module may use the ones added before it.
 		std::vector<IModule*> m_CreationOrder{};

@@ -7,11 +7,18 @@
 #include <assets/pak_source.h>
 #include <core/engine.h>
 
+#include "asset_templates.h"
 #include "build_settings.h"
 #include "file_utils.h"
 #include "material_file.h"
 #include "packager.h"
+#include "physics_material_file.h"
+#include "physics_settings_file.h"
+#include <physics/physics_project_settings.h>
+#include "prefab_file.h"
 #include "surface_shader_parser.h"
+
+#include <ui/ui_panel_io.h>
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -87,6 +94,11 @@ namespace wiwa
 			case AssetType::Scene: { auto h = manager.load<SceneData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::Script: { auto h = manager.load<ScriptData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::SurfaceShader: { auto h = manager.load<SurfaceShaderData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::UiPanel: { auto h = manager.load<UiPanelData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::Font: { auto h = manager.load<FontData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::PhysicsMaterial: { auto h = manager.load<PhysicsMaterialData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::PhysicsShape: { auto h = manager.load<CookedShapeData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::InputMap: { auto h = manager.load<InputMapData>(ref); return [h]() { return h.state(); }; }
 			default: return []() { return LoadState::Failed; };
 			}
 		}
@@ -264,7 +276,7 @@ namespace wiwa
 		}
 
 		// 1. import + pack
-		check(Packager::pack(database, temp), "packing the Library");
+		check(Packager::pack(database, temp, nullptr, nullptr, temp / "none.wsettings", temp / "none_input.wsettings"), "packing the Library");
 		const std::vector<CookedFile> cooked = read_library(database.get_library_root());
 		check(!cooked.empty(), "the Library has cooked assets (put some files in Assets/)");
 		WI_ASSET_LOG(Info, "Smoke test: {0} cooked assets", cooked.size());
@@ -1615,6 +1627,422 @@ namespace wiwa
 				check(brokenMaterial && brokenMaterial->Shader.valid() && brokenMaterial->ParamBytes.empty(),
 					"material_missing_shader_still_imports: a shader that fails to compile keeps the reference with no block");
 			}
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+
+		// 9. prefab files (.wprefab)
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_prefab_smoke";
+			std::filesystem::create_directories(dir, error);
+
+			const unsigned char png[] = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0x64, 0xf8, 0xcf, 0x50, 0x0f, 0x00, 0x03, 0x86, 0x01, 0x80, 0x5a, 0x34, 0x7d, 0x6b, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82 };
+			{
+				std::ofstream out(dir / "pixel.png", std::ios::binary);
+				out.write(reinterpret_cast<const char*>(png), sizeof(png));
+			}
+			const std::optional<AssetRef> pixel = database.ensure_imported(dir / "pixel.png");
+			check(pixel.has_value(), "prefab_file: the texture the prefab refers to imports");
+
+			EntityRecord root;
+			root.Id = EntityGuid::generate();
+			root.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Root")) } } });
+			EntityRecord lamp;
+			lamp.Id = EntityGuid::generate();
+			lamp.Parent = root.Id;
+			lamp.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Lamp")) } } });
+			lamp.Components.push_back(ComponentRecord{ "Light", { FieldRecord{ "Intensity", FieldValue(5.0f) } } });
+			lamp.Components.push_back(ComponentRecord{ "MeshRenderer", { FieldRecord{ "Mesh", FieldValue(pixel.value_or(AssetRef{})) } } });
+
+			const std::filesystem::path file = dir / "lamp.wprefab";
+			check(write_prefab_file(file, { root, lamp }, "Lamp"), "prefab_file: the file is written");
+
+			// the cooked prefab of a source file, straight from the Library, with its dependencies
+			const auto cooked_prefab = [&](const std::filesystem::path& source, std::vector<AssetGuid>* dependencies = nullptr) -> std::optional<PrefabData>
+			{
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				if (!meta)
+				{
+					return std::nullopt;
+				}
+				for (const CookedFile& cooked : read_library(database.get_library_root()))
+				{
+					std::span<const std::byte> payload;
+					if (cooked.Guid == meta->Guid && cooked.Type == AssetType::Prefab && parse_wasset_header(cooked.Bytes, payload))
+					{
+						if (dependencies != nullptr)
+						{
+							*dependencies = cooked.Dependencies;
+						}
+						return deserialize<PrefabData>(payload);
+					}
+				}
+				return std::nullopt;
+			};
+
+			std::vector<AssetGuid> dependencies;
+			const std::optional<AssetRef> ref = database.ensure_imported(file);
+			check(ref.has_value(), "prefab_file: the .wprefab imports");
+			std::optional<PrefabData> prefab = cooked_prefab(file, &dependencies);
+			check(prefab && prefab->Nodes.size() == 2 && prefab->Nodes[0].Name == "Root" && prefab->Nodes[0].Parent == -1 && prefab->Nodes[1].Name == "Lamp" && prefab->Nodes[1].Parent == 0,
+				"prefab_file: the cooked prefab has the nodes and the parent of the file");
+			check(prefab && prefab->Nodes.size() == 2 && prefab->Nodes[0].StableId != 0 && prefab->Nodes[1].StableId != 0 && prefab->Nodes[0].StableId != prefab->Nodes[1].StableId, "prefab_file: every node has its own id");
+			check(prefab && prefab->Nodes.size() == 2 && prefab->Nodes[1].Components.size() == 2 && prefab->Nodes[1].Components[0].Name == "Light" && prefab->Nodes[1].Components[1].Name == "MeshRenderer",
+				"prefab_file: the components of a node are kept, and Name and Transform are not among them");
+			check(pixel && std::find(dependencies.begin(), dependencies.end(), pixel->Guid) != dependencies.end(), "prefab_file: an asset a component refers to is a dependency");
+
+			// the same file imported again gives the same node ids
+			const std::vector<u64> firstIds = prefab ? std::vector<u64>{ prefab->Nodes[0].StableId, prefab->Nodes[1].StableId } : std::vector<u64>{};
+			if (ref)
+			{
+				database.reimport(file, true);
+			}
+			std::optional<PrefabData> again = cooked_prefab(file);
+			check(again && again->Nodes.size() == 2 && firstIds.size() == 2 && again->Nodes[0].StableId == firstIds[0] && again->Nodes[1].StableId == firstIds[1], "prefab_file: a forced re-import gives the same node ids");
+
+			// a damaged file is an import error and leaves no prefab
+			const std::filesystem::path broken = dir / "broken.wprefab";
+			{
+				std::ofstream out(broken, std::ios::binary | std::ios::trunc);
+				out << "{";
+			}
+			WI_ASSET_LOG(Info, "Smoke test: the next import error is expected");
+			database.ensure_imported(broken);
+			check(!cooked_prefab(broken).has_value(), "prefab_file: a file that is not JSON cooks no prefab");
+
+			// a prefab file cannot hold an instance of a prefab
+			EntityRecord nested;
+			nested.Id = EntityGuid::generate();
+			nested.Components.push_back(ComponentRecord{ "PrefabInstance", { FieldRecord{ "Prefab", FieldValue(pixel.value_or(AssetRef{})) } } });
+			std::string conversionError;
+			check(!prefab_from_records({ nested }, "Nested", conversionError).has_value() && !conversionError.empty(), "prefab_file: a nested prefab instance is refused with a reason");
+			check(!prefab_from_records({}, "Empty", conversionError).has_value(), "prefab_file: no entities is refused");
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+
+		// 9b. UI panel files (.wuipanel)
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_uipanel_smoke";
+			std::filesystem::create_directories(dir, error);
+
+			const unsigned char png[] = { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0x64, 0xf8, 0xcf, 0x50, 0x0f, 0x00, 0x03, 0x86, 0x01, 0x80, 0x5a, 0x34, 0x7d, 0x6b, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82 };
+			{
+				std::ofstream out(dir / "pixel.png", std::ios::binary);
+				out.write(reinterpret_cast<const char*>(png), sizeof(png));
+			}
+			const std::optional<AssetRef> pixel = database.ensure_imported(dir / "pixel.png");
+			check(pixel.has_value(), "ui_panel: the texture the panel refers to imports");
+
+			// an Image with a real texture and a Text whose font is an asset that does not exist
+			const AssetRef missingFont{ AssetGuid::generate(), 0 };
+			UiPanelData panel;
+			UiWidget image;
+			image.Id = 1;
+			image.Kind = WidgetKind::Image;
+			image.Name = "Logo";
+			image.Texture = pixel.value_or(AssetRef{});
+			UiWidget label;
+			label.Id = 2;
+			label.Kind = WidgetKind::Text;
+			label.Name = "Label";
+			label.Text = "Hello";
+			label.Font = missingFont;
+			panel.Widgets = { image, label };
+			panel.NextId = 3;
+
+			const std::filesystem::path file = dir / "hud.wuipanel";
+			{
+				std::ofstream out(file, std::ios::binary | std::ios::trunc);
+				out << ui_panel_to_json(panel).dump(2);
+			}
+
+			const auto cooked_panel = [&](const std::filesystem::path& source, std::vector<AssetGuid>* dependencies = nullptr, std::vector<std::byte>* bytes = nullptr) -> std::optional<UiPanelData>
+			{
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				if (!meta)
+				{
+					return std::nullopt;
+				}
+				for (const CookedFile& cooked : read_library(database.get_library_root()))
+				{
+					std::span<const std::byte> payload;
+					if (cooked.Guid == meta->Guid && cooked.Type == AssetType::UiPanel && parse_wasset_header(cooked.Bytes, payload))
+					{
+						if (dependencies != nullptr)
+						{
+							*dependencies = cooked.Dependencies;
+						}
+						if (bytes != nullptr)
+						{
+							*bytes = cooked.Bytes;
+						}
+						return deserialize<UiPanelData>(payload);
+					}
+				}
+				return std::nullopt;
+			};
+
+			std::vector<AssetGuid> dependencies;
+			std::vector<std::byte> libraryBytes;
+			const std::optional<AssetRef> ref = database.ensure_imported(file);
+			check(ref.has_value(), "ui_panel_imported: the .wuipanel imports");
+			const std::optional<UiPanelData> cookedPanel = cooked_panel(file, &dependencies, &libraryBytes);
+			check(cookedPanel && cookedPanel->Widgets.size() == 2 && cookedPanel->Widgets[0].Texture == pixel.value_or(AssetRef{}) && cookedPanel->Widgets[1].Text == "Hello",
+				"ui_panel_imported: the cooked panel holds the widgets of the file");
+			check(pixel && std::find(dependencies.begin(), dependencies.end(), pixel->Guid) != dependencies.end(), "ui_panel_dependency_tracked: a texture a widget uses is a dependency");
+			check(std::find(dependencies.begin(), dependencies.end(), missingFont.Guid) == dependencies.end(), "ui_panel_dependency_tracked: a reference to an asset that does not exist is not");
+
+			// it loads through the AssetManager, from the Library and from a pack
+			if (ref)
+			{
+				const std::function<LoadState()> state = request(manager, AssetType::UiPanel, ref->Guid);
+				manager.wait_idle();
+				check(state() == LoadState::Ready, "ui_panel_loads: the cooked panel loads through the AssetManager");
+
+				const std::filesystem::path packDirectory = dir / "pack";
+				check(Packager::pack(database, packDirectory), "ui_panel_packed_loads: packing the Library with a panel in it");
+				PakSource panelPak(packDirectory / "assets.wpak");
+				const std::optional<std::vector<std::byte>> packed = panelPak.valid() ? panelPak.read(ref->Guid) : std::nullopt;
+				check(packed && *packed == libraryBytes, "ui_panel_packed_loads: the pack holds the bytes of the Library");
+				std::span<const std::byte> packedPayload;
+				check(packed && parse_wasset_header(*packed, packedPayload) && deserialize<UiPanelData>(packedPayload).has_value(), "ui_panel_packed_loads: the packed panel decodes");
+			}
+
+			// a damaged file is an import error and leaves no panel
+			const std::filesystem::path broken = dir / "broken.wuipanel";
+			{
+				std::ofstream out(broken, std::ios::binary | std::ios::trunc);
+				out << "{ \"widgets\": [ { \"id\": 1 } ] }";
+			}
+			WI_ASSET_LOG(Info, "Smoke test: the next import error is expected");
+			database.ensure_imported(broken);
+			check(!cooked_panel(broken).has_value(), "ui_panel_invalid_fails_import: a widget without a kind cooks no panel");
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+
+		// 9c. physics material files (.wphysmat)
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_physmat_smoke";
+			std::filesystem::remove_all(dir, error);
+			std::filesystem::create_directories(dir, error);
+
+			const std::filesystem::path file = dir / "bouncy.wphysmat";
+			const auto write_source = [&](const std::filesystem::path& path, const std::string& text)
+			{
+				std::ofstream out(path, std::ios::binary | std::ios::trunc);
+				out << text;
+			};
+			write_source(file, "{ \"friction\": 0.25, \"restitution\": 0.75, \"density\": 2500, \"frictionCombine\": \"Min\", \"restitutionCombine\": \"Multiply\" }");
+
+			const auto cooked_material = [&](const std::filesystem::path& source, std::vector<std::byte>* bytes = nullptr) -> std::optional<PhysicsMaterialData>
+			{
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				if (!meta)
+				{
+					return std::nullopt;
+				}
+				for (const CookedFile& cooked : read_library(database.get_library_root()))
+				{
+					std::span<const std::byte> payload;
+					if (cooked.Guid == meta->Guid && cooked.Type == AssetType::PhysicsMaterial && parse_wasset_header(cooked.Bytes, payload))
+					{
+						if (bytes != nullptr)
+						{
+							*bytes = cooked.Bytes;
+						}
+						return deserialize<PhysicsMaterialData>(payload);
+					}
+				}
+				return std::nullopt;
+			};
+
+			PhysicsMaterialData expected;
+			expected.Friction = 0.25f;
+			expected.Restitution = 0.75f;
+			expected.Density = 2500.0f;
+			expected.FrictionCombine = CombineMode::Min;
+			expected.RestitutionCombine = CombineMode::Multiply;
+
+			std::vector<std::byte> libraryBytes;
+			const std::optional<AssetRef> ref = database.ensure_imported(file);
+			check(ref.has_value(), "physics_material_imported: the .wphysmat imports");
+			const std::optional<PhysicsMaterialData> cooked = cooked_material(file, &libraryBytes);
+			check(cooked && *cooked == expected, "physics_material_imported: the cooked material holds the values of the file");
+
+			// it loads through the AssetManager, from the Library and from a pack
+			if (ref)
+			{
+				Handle<PhysicsMaterialData> handle = manager.load<PhysicsMaterialData>(*ref);
+				manager.wait_idle();
+				check(handle.state() == LoadState::Ready && handle.get() != nullptr && *handle.get() == expected, "physics_material_loads: the cooked material loads through the AssetManager with equal values");
+
+				const std::filesystem::path packDirectory = dir / "pack";
+				check(Packager::pack(database, packDirectory), "physics_material_packed_loads: packing the Library with a material in it");
+				PakSource pak(packDirectory / "assets.wpak");
+				const std::optional<std::vector<std::byte>> packed = pak.valid() ? pak.read(ref->Guid) : std::nullopt;
+				check(packed && *packed == libraryBytes, "physics_material_packed_loads: the pack holds the bytes of the Library");
+				std::span<const std::byte> packedPayload;
+				const std::optional<PhysicsMaterialData> fromPack = packed && parse_wasset_header(*packed, packedPayload) ? deserialize<PhysicsMaterialData>(packedPayload) : std::nullopt;
+				check(fromPack && *fromPack == expected, "physics_material_packed_loads: the packed material decodes to equal values");
+			}
+
+			// the guid survives an edit and a re-import
+			write_source(file, "{ \"friction\": 0.5, \"restitution\": 0.1 }");
+			database.reimport(file);
+			const std::optional<AssetRef> again = database.ensure_imported(file);
+			check(ref && again && again->Guid == ref->Guid, "physics_material_guid_stable: a re-import keeps the guid");
+			const std::optional<PhysicsMaterialData> edited = cooked_material(file);
+			check(edited && edited->Friction == 0.5f && edited->Restitution == 0.1f && edited->Density == 1000.0f && edited->FrictionCombine == CombineMode::Average,
+				"physics_material_defaults: keys that are missing take the defaults");
+
+			// the binary payload has a version field and refuses anything else
+			{
+				std::vector<std::byte> payload = serialize(expected);
+				check(payload.size() >= sizeof(u32), "physics_material_version: the payload starts with a version");
+				std::vector<std::byte> wrongVersion = payload;
+				wrongVersion[0] = std::byte{ 99 };
+				check(!deserialize<PhysicsMaterialData>(wrongVersion).has_value(), "physics_material_version: an unknown version is refused");
+				check(!deserialize<PhysicsMaterialData>(std::span<const std::byte>(payload.data(), payload.size() - 1)).has_value(), "physics_material_version: a truncated payload is refused");
+			}
+
+			// a damaged file is an import error and leaves no .wasset
+			WI_ASSET_LOG(Info, "Smoke test: the next import errors are expected");
+			const auto count_cooked_materials = [&]()
+			{
+				size_t count = 0;
+				for (const CookedFile& cooked : read_library(database.get_library_root()))
+				{
+					count += cooked.Type == AssetType::PhysicsMaterial ? 1 : 0;
+				}
+				return count;
+			};
+			const size_t cookedBefore = count_cooked_materials();
+			for (const auto& [name, text] : std::vector<std::pair<std::string, std::string>>{
+				{ "broken_json", "{ \"friction\": " }, { "negative", "{ \"friction\": -1 }" }, { "bad_mode", "{ \"frictionCombine\": \"Sum\" }" },
+				{ "wrong_type", "{ \"density\": \"heavy\" }" }, { "too_large", "{ \"density\": 1e39 }" } })
+			{
+				const std::filesystem::path broken = dir / (name + ".wphysmat");
+				write_source(broken, text);
+				database.ensure_imported(broken);
+				check(!cooked_material(broken).has_value(), "physics_material_invalid_fails_import: " + name + " cooks no material");
+			}
+			check(count_cooked_materials() == cookedBefore, "physics_material_invalid_fails_import: no .wasset was written for any of them");
+
+			// the Create menu makes a file that imports as the default material
+			check(std::string(extension(CreateKind::PhysicsMaterial)) == ".wphysmat", "physics_material_template: the Create menu kind has the extension");
+			const std::filesystem::path created = create_asset(CreateKind::PhysicsMaterial, dir, "Made");
+			check(!created.empty() && database.ensure_imported(created).has_value(), "physics_material_template: the created file imports");
+			const std::optional<PhysicsMaterialData> made = cooked_material(created);
+			check(made && *made == default_physics_material(), "physics_material_template: the created file is the default material");
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
+
+		// 9b. the project's physics settings: physics.wsettings round-trips, goes into the pack and comes back from it
+		{
+			const std::filesystem::path dir = std::filesystem::temp_directory_path() / "wiwa_physics_settings_smoke";
+			std::filesystem::remove_all(dir, error);
+			std::filesystem::create_directories(dir, error);
+			const std::filesystem::path file = dir / "physics.wsettings";
+
+			PhysicsLayers layers;
+			layers.Names[1] = "Player";
+			layers.Names[2] = "Enemy";
+			layers.set_collides(1, 2, false);
+			layers.set_collides(0, 2, false);
+			std::string saveError;
+			check(save_physics_layers(file, layers, saveError), "physics_settings_save: the file is written");
+
+			PhysicsLayers loaded;
+			check(load_physics_layers(file, loaded, saveError) && loaded.Names == layers.Names && loaded.Matrix == layers.Matrix, "physics_settings_roundtrip: the names and the matrix come back");
+			check(!loaded.collides(1, 2) && !loaded.collides(2, 1) && !loaded.collides(0, 2) && loaded.collides(0, 1) && loaded.collides(1, 1), "physics_settings_cell: a cleared cell stays cleared and the others stay set");
+
+			PhysicsLayers missing;
+			check(load_physics_layers(dir / "none.wsettings", missing, saveError) && missing.Names[0] == "Default" && missing.collides(3, 4), "physics_settings_missing: no file gives the default layers");
+			PhysicsLayers refused;
+			check(!physics_layers_from_text("{ \"matrix\": [1, 2, 3] }", refused, saveError) && !physics_layers_from_text("not json", refused, saveError) &&
+				!physics_layers_from_text("{ \"layers\": [ 5 ] }", refused, saveError), "physics_settings_invalid: a matrix of the wrong size, text that is not JSON and a layer without a name are refused");
+
+			// the pack carries them, and a game reads them back with the module's reader
+			const std::filesystem::path packDirectory = dir / "pack";
+			check(Packager::pack(database, packDirectory, nullptr, nullptr, file), "physics_settings_packed: packing with a settings file");
+			PakSource pak(packDirectory / "assets.wpak");
+			const std::optional<PhysicsLayers> fromPack = pak.valid() ? read_physics_layers(pak) : std::nullopt;
+			check(fromPack && fromPack->Names == layers.Names && fromPack->Matrix == layers.Matrix, "physics_settings_packed: the pack holds the names and the matrix, a cleared cell included");
+
+			const std::filesystem::path noFilePack = dir / "pack_without";
+			check(Packager::pack(database, noFilePack, nullptr, nullptr, dir / "none.wsettings"), "physics_settings_packed: packing without a settings file");
+			PakSource plain(noFilePack / "assets.wpak");
+			check(plain.valid() && !read_physics_layers(plain).has_value(), "physics_settings_packed: a pack made without a file has no settings (the game uses the defaults)");
+
+			std::filesystem::remove_all(dir, error);
+		}
+
+		// 10. assets made from templates (the Asset Browser's Create menu)
+		{
+			const std::filesystem::path dir = database.get_assets_root() / "zz_create_smoke";
+			std::filesystem::create_directories(dir, error);
+
+			check(std::string(extension(CreateKind::Script)) == ".lua" && std::string(extension(CreateKind::Folder)).empty() && std::string(extension(CreateKind::Scene)) == ".wscene" &&
+				std::string(extension(CreateKind::SurfaceShader)) == ".wshader" && std::string(extension(CreateKind::HlslShader)) == ".hlsl" && std::string(extension(CreateKind::HlslInclude)) == ".hlsli" &&
+				std::string(extension(CreateKind::Material)) == ".wmat" && std::string(extension(CreateKind::UiPanel)) == ".wuipanel", "create_asset: every kind has its extension");
+
+			// names that cannot be used say why
+			for (const char* bad : { "", "a/b", "a\\b", "a:b", "x?y", "CON", "con", "Com1", "nul", "bad.", "bad ", " ", "tab\tname" })
+			{
+				check(!validate_name(bad, dir, CreateKind::Script).empty(), std::string("create_asset: the name '") + bad + "' is refused");
+			}
+			check(validate_name("Good name", dir, CreateKind::Script).empty() && validate_name("Console", dir, CreateKind::Script).empty(), "create_asset: an ordinary name is accepted");
+			check(!validate_name(std::string(200, 'a'), dir, CreateKind::Script).empty(), "create_asset: a name that is too long is refused");
+
+			// Windows reserves the part of a name before its first dot
+			check(!validate_name("CON.foo", dir, CreateKind::Script).empty() && !validate_name("nul.x", dir, CreateKind::Script).empty() && !validate_name("Com1.a.b", dir, CreateKind::Script).empty() && validate_name("Console.x", dir, CreateKind::Script).empty(),
+				"create_asset: a device name followed by a dot is refused");
+
+			// a name taken from an entity is made safe instead of refused
+			check(sanitize_file_stem("Lamp") == "Lamp" && sanitize_file_stem("CON") == "_CON" && sanitize_file_stem("com1.x") == "_com1.x" && sanitize_file_stem("a/b:c") == "a_b_c" && sanitize_file_stem("") == "Prefab" &&
+				sanitize_file_stem("bad. ") == "bad" && sanitize_file_stem(std::string(300, 'a')).size() == 100, "sanitize_file_stem: unusable characters, device names, trailing dots and length are fixed");
+
+			// every kind is written, imports and loads
+			struct Case { CreateKind Kind; const char* Name; AssetType Type; };
+			const Case cases[] = {
+				{ CreateKind::Script, "Mover", AssetType::Script }, { CreateKind::Scene, "Level", AssetType::Scene }, { CreateKind::SurfaceShader, "Glow", AssetType::SurfaceShader },
+				{ CreateKind::HlslShader, "Fullscreen", AssetType::Shader }, { CreateKind::HlslInclude, "Helpers", AssetType::Shader }, { CreateKind::Material, "Metal", AssetType::Material },
+				{ CreateKind::UiPanel, "Hud", AssetType::UiPanel } };
+			for (const Case& testCase : cases)
+			{
+				const std::string label = std::string("create_asset: ") + testCase.Name;
+				const std::filesystem::path made = create_asset(testCase.Kind, dir, testCase.Name);
+				check(made == dir / (std::string(testCase.Name) + extension(testCase.Kind)) && std::filesystem::exists(made, error), label + " is written");
+				check(!validate_name(testCase.Name, dir, testCase.Kind).empty(), label + " cannot be made twice");
+
+				const std::optional<AssetRef> ref = database.ensure_imported(made);
+				check(ref.has_value(), label + " imports");
+				if (ref)
+				{
+					const std::function<LoadState()> state = request(manager, testCase.Type, ref->Guid);
+					manager.wait_idle();
+					check(state() == LoadState::Ready, label + " loads as a cooked asset");
+				}
+			}
+
+			const std::filesystem::path folder = create_asset(CreateKind::Folder, dir, "Sub");
+			check(folder == dir / "Sub" && std::filesystem::is_directory(folder, error) && !validate_name("Sub", dir, CreateKind::Folder).empty(), "create_asset: a folder is made, and its name is then taken");
+			check(validate_name("Sub", dir, CreateKind::Script).empty(), "create_asset: a script may share the name of a folder");
+
+			// the script template is a class with the three hooks, named after the file
+			if (std::ifstream in(dir / "Mover.lua"); in)
+			{
+				const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+				check(text.find("local Mover = Script:extend{") != std::string::npos && text.find("function Mover:on_update(dt)") != std::string::npos && text.find("return Mover") != std::string::npos, "create_asset: the script template is named after the file");
+			}
+			check(create_asset(CreateKind::Script, dir, "Mover").empty(), "create_asset: an existing file is not overwritten");
 
 			std::filesystem::remove_all(dir, error);
 			database.scan();

@@ -29,6 +29,13 @@ namespace wiwa
 			}
 			return changed;
 		}
+
+		bool fix_count(u32& value, u32 low, u32 high)
+		{
+			const u32 before = value;
+			value = std::clamp(value, low, high);
+			return value != before;
+		}
 	}
 
 	SceneSettings sanitized(SceneSettings s)
@@ -111,6 +118,15 @@ namespace wiwa
 		changed = fix(mb.ExposureTime, dmb.ExposureTime, 0.0005f, 0.1f) || changed;
 		changed = fix(mb.Strength, dmb.Strength, 0.0f, 4.0f) || changed;
 		changed = fix(mb.MaxBlurPixels, dmb.MaxBlurPixels, 1.0f, 100.0f) || changed;
+
+		PhysicsSettings& ph = s.Physics;
+		const PhysicsSettings& dph = defaults.Physics;
+		changed = fix(ph.Gravity, dph.Gravity, -1000.0f, 1000.0f) || changed;
+		changed = fix(ph.SleepThreshold, dph.SleepThreshold, 0.0f, 10.0f) || changed;
+		changed = fix_count(ph.FixedRateHz, 10, 240) || changed;
+		changed = fix_count(ph.MaxStepsPerWake, 1, 16) || changed;
+		changed = fix_count(ph.VelocityIterations, 1, 64) || changed;
+		changed = fix_count(ph.PositionIterations, 1, 64) || changed;
 
 		const size_t scripts = s.Scripts.size();
 		std::erase_if(s.Scripts, [](const AssetRef& script) { return !script.valid(); });

@@ -265,6 +265,7 @@ namespace wiwa
 			const AssetRef materialB{ AssetGuid::generate(), 0 };
 			const AssetRef prefab{ AssetGuid::generate(), 0 };
 			const AssetRef texture{ AssetGuid::generate(), 0 };
+			const AssetRef uiPanel{ AssetGuid::generate(), 0 };
 
 			Scene source;
 			const EntityGuid rootId = EntityGuid::generate();
@@ -296,6 +297,7 @@ namespace wiwa
 			add.Child.Components.push_back(ComponentRecord{ "MeshRenderer", { FieldRecord{ "Mesh", FieldValue(texture) } } });
 			instance.Overrides = { set, add };
 			source.registry().emplace<PrefabInstance>(child, instance);
+			source.registry().emplace<UICanvas>(child, UICanvas{ uiPanel, 3, false });
 
 			const SceneData first = data_from_scene(source, "test");
 			check(first.Entities.size() == 2 && first.Entities[0].Id == rootId && first.Entities[1].Parent == rootId, "a scene becomes records with parents before children");
@@ -322,11 +324,12 @@ namespace wiwa
 			check(copyChild != entt::null && copy.registry().get<Hierarchy>(copyChild).Parent == copyRoot, "the hierarchy survives");
 			check(copy.registry().get<MeshRenderer>(copyChild).Materials == std::vector<AssetRef>({ materialA, materialB }), "a material list survives");
 			check(copy.registry().get<PrefabInstance>(copyChild).Overrides.size() == 2 && copy.registry().get<PrefabInstance>(copyChild).Overrides[0].Value == FieldValue(glm::vec3(9, 8, 7)), "prefab overrides survive");
+			check(copy.registry().all_of<UICanvas>(copyChild) && copy.registry().get<UICanvas>(copyChild).Panel == uiPanel && copy.registry().get<UICanvas>(copyChild).SortOrder == 3 && !copy.registry().get<UICanvas>(copyChild).Visible, "a UICanvas survives");
 
 			const std::vector<AssetRef> references = collect_references(first);
-			check(references.size() == 5, "collect_references finds each referenced asset once (found " + std::to_string(references.size()) + ")");
+			check(references.size() == 6, "collect_references finds each referenced asset once (found " + std::to_string(references.size()) + ")");
 			auto has_reference = [&](const AssetRef& ref) { return std::find(references.begin(), references.end(), ref) != references.end(); };
-			check(has_reference(mesh) && has_reference(materialA) && has_reference(materialB) && has_reference(prefab) && has_reference(texture), "collect_references names the mesh, materials, prefab and the ref inside an override");
+			check(has_reference(mesh) && has_reference(materialA) && has_reference(materialB) && has_reference(prefab) && has_reference(texture) && has_reference(uiPanel), "collect_references names the mesh, materials, prefab, UI panel and the ref inside an override");
 
 			// Things this engine does not know are kept, not dropped.
 			SceneData unknown;
@@ -526,6 +529,71 @@ namespace wiwa
 				stable = again[i].StableId == imported[i].StableId;
 			}
 			check(stable, "a forced re-import gives the same node ids");
+		}
+
+		const FieldValue* find_field(const std::vector<ComponentRecord>& components, std::string_view component, std::string_view field)
+		{
+			for (const ComponentRecord& candidate : components)
+			{
+				if (candidate.Name != component)
+				{
+					continue;
+				}
+				for (const FieldRecord& value : candidate.Fields)
+				{
+					if (value.Name == field)
+					{
+						return &value.Value;
+					}
+				}
+			}
+			return nullptr;
+		}
+
+		void check_node_components(Check& check)
+		{
+			register_scene_components();
+
+			PrefabData prefab;
+			prefab.Name = "lamp";
+			PrefabNode lamp = make_node("Lamp", -1);
+			lamp.Components.push_back(ComponentRecord{ "Light", { FieldRecord{ "Intensity", FieldValue(5.0f) } } });
+			prefab.Nodes = { lamp };
+			assign_stable_ids(prefab.Nodes);
+			const u64 nodeId = prefab.Nodes[0].StableId;
+
+			const std::vector<std::byte> bytes = serialize(prefab);
+			std::optional<PrefabData> back = deserialize<PrefabData>(bytes);
+			const FieldValue* intensity = back && back->Nodes.size() == 1 ? find_field(back->Nodes[0].Components, "Light", "Intensity") : nullptr;
+			check(intensity != nullptr && std::get_if<float>(intensity) != nullptr && *std::get_if<float>(intensity) == 5.0f, "node_components: a node's components survive the cooked format");
+
+			EntityRecord root;
+			root.Id = EntityGuid::generate();
+			const ExpandResult expanded = expand_prefab(root, prefab);
+			const FieldValue* expandedIntensity = expanded.Entities.size() == 2 ? find_field(expanded.Entities[1].Components, "Light", "Intensity") : nullptr;
+			check(expandedIntensity != nullptr && std::get_if<float>(expandedIntensity) != nullptr && *std::get_if<float>(expandedIntensity) == 5.0f, "node_components: expanding the prefab gives the node its components");
+			check(find_field(expanded.Entities[1].Components, "Name", "Value") != nullptr && find_field(expanded.Entities[1].Components, "Transform", "Position") != nullptr, "node_components: the node keeps its Name and Transform");
+
+			const std::optional<FieldValue> value = prefab_value(prefab, nodeId, "Light", "Intensity");
+			check(value && std::get_if<float>(&*value) != nullptr && *std::get_if<float>(&*value) == 5.0f, "node_components: the prefab's value of a component field is found for override checks");
+
+			// a prefab cooked before nodes had components ends after the bounds: it still loads, with none
+			PrefabData plain;
+			plain.Name = "plain";
+			plain.Nodes = { make_node("A", -1), make_node("B", 0) };
+			assign_stable_ids(plain.Nodes);
+			std::vector<std::byte> old = serialize(plain);
+			old.resize(old.size() - 2 * sizeof(u64)); // the empty component list of each node
+			std::optional<PrefabData> loadedOld = deserialize<PrefabData>(old);
+			check(loadedOld && loadedOld->Nodes.size() == 2 && loadedOld->Nodes[0].Components.empty(), "node_components: a prefab without the component section still loads");
+
+			PrefabData crowded = plain;
+			crowded.Nodes.resize(1);
+			for (u32 i = 0; i < SCENE_MAX_COMPONENTS_PER_ENTITY + 1; i++)
+			{
+				crowded.Nodes[0].Components.push_back(ComponentRecord{ "C" + std::to_string(i), {} });
+			}
+			check(!deserialize<PrefabData>(serialize(crowded)).has_value(), "node_components: more components than a node may have is rejected");
 		}
 
 		EntityRecord make_instance(EntityGuid id, AssetRef prefab)
@@ -1244,6 +1312,178 @@ namespace wiwa
 			module.set_commit_budget_ms(2.0f);
 		}
 
+		void check_make_prefab(Check& check, AssetPipelineModule& pipeline)
+		{
+			register_scene_components();
+			SmokeAssets assets(pipeline);
+			AssetDatabase& database = pipeline.get_database();
+			AssetManager& manager = *Engine::get().get_module<AssetManager>();
+			SceneModule& module = *Engine::get().get_module<SceneModule>();
+
+			SceneEditor editor(manager, module);
+			editor.set_scene(CreateRef<Scene>(), {});
+			Scene& scene = editor.scene();
+			entt::registry& registry = scene.registry();
+			auto pump = [&]()
+			{
+				for (u32 i = 0; i < 2000 && (editor.has_pending_prefab() || editor.has_pending()); i++)
+				{
+					editor.update();
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+			};
+
+			const entt::entity before = editor.create_entity(entt::null);
+			const entt::entity lamp = editor.create_entity(entt::null);
+			const entt::entity bulb = editor.create_entity(lamp);
+			const entt::entity after = editor.create_entity(entt::null);
+			registry.get<Name>(lamp).Value = "Lamp";
+			registry.get<Name>(bulb).Value = "Bulb";
+			registry.get<Transform>(lamp).Position = glm::vec3(1.0f, 2.0f, 3.0f);
+			registry.emplace<Light>(lamp).Intensity = 7.0f;
+			editor.select(lamp);
+
+			// refusals leave the scene as it was
+			const size_t entityCount = registry.storage<Id>().size();
+			editor.set_playing(true);
+			check(!editor.make_prefab(before, assets.folder()).empty() && !editor.has_pending_prefab(), "make_prefab: refused while the scene plays");
+			editor.set_playing(false);
+			check(!editor.make_prefab(entt::null, assets.folder()).empty(), "make_prefab: refused for no entity");
+
+			// the entity becomes an instance of the prefab, in the same place
+			const std::string refusal = editor.make_prefab(lamp, assets.folder());
+			check(refusal.empty() && editor.has_pending_prefab(), "make_prefab: starts for a plain entity (" + refusal + ")");
+			check(registry.valid(lamp), "make_prefab: the entity stays until the prefab has been imported");
+			database.ensure_imported(assets.folder() / "Lamp.wprefab"); // the editor's file watcher does this
+			pump();
+
+			check(!editor.has_pending_prefab() && !registry.valid(lamp) && !registry.valid(bulb), "make_prefab: the original subtree is gone once the prefab is there");
+			check(scene.roots().size() == 3 && scene.roots()[0] == before && scene.roots()[2] == after, "make_prefab: the instance takes the place of the entity among its siblings");
+			const entt::entity instance = scene.roots().size() == 3 ? scene.roots()[1] : entt::entity{ entt::null };
+			check(instance != entt::null && registry.all_of<PrefabInstance>(instance) && registry.get<Name>(instance).Value == "Lamp", "make_prefab: the instance has the entity's name");
+			check(instance != entt::null && registry.get<Transform>(instance).Position == glm::vec3(1.0f, 2.0f, 3.0f), "make_prefab: the instance has the entity's transform");
+			check(registry.storage<Id>().size() == entityCount - 2 + 3, "make_prefab: an instance root and the two nodes of the prefab replace the two entities (" + std::to_string(registry.storage<Id>().size()) + ")");
+			bool hasLight = false;
+			entt::entity generated = entt::null;
+			for (const entt::entity entity : registry.view<PrefabChild>())
+			{
+				generated = entity;
+				const Light* light = registry.try_get<Light>(entity);
+				hasLight = hasLight || (light != nullptr && light->Intensity == 7.0f);
+			}
+			check(hasLight, "make_prefab: the light of the entity is in the prefab");
+			check(editor.selected() == instance && editor.dirty(), "make_prefab: the instance is selected and the scene is changed");
+
+			// what cannot become a prefab
+			const size_t afterCount = registry.storage<Id>().size();
+			check(instance != entt::null && !editor.make_prefab(instance, assets.folder()).empty(), "make_prefab: an instance is refused");
+			check(generated != entt::null && !editor.make_prefab(generated, assets.folder()).empty(), "make_prefab: an entity a prefab made is refused");
+			check(!editor.has_pending_prefab() && registry.storage<Id>().size() == afterCount, "make_prefab: refusals change nothing");
+
+			// an entity deleted while the prefab is being imported is not brought back
+			check(editor.make_prefab(before, assets.folder()).empty(), "make_prefab: starts for another entity");
+			editor.delete_entity(before);
+			pump();
+			check(!editor.has_pending_prefab() && registry.storage<Id>().size() == afterCount - 1, "make_prefab: a deleted entity is simply dropped from the conversion");
+
+			// a name Windows reserves is made safe, not written to the device
+			const entt::entity reserved = editor.create_entity(entt::null);
+			registry.get<Name>(reserved).Value = "CON";
+			std::error_code fileError;
+			check(editor.make_prefab(reserved, assets.folder()).empty() && std::filesystem::exists(assets.folder() / "_CON.wprefab", fileError), "make_prefab: an entity called CON is saved as _CON.wprefab");
+			editor.delete_entity(reserved);
+			editor.update();
+			check(!editor.has_pending_prefab(), "make_prefab: the conversion of a deleted entity ends");
+
+			// a prefab that is not imported in time is given up with a message, and the entity stays
+			const entt::entity ghost = editor.create_entity(entt::null);
+			registry.get<Name>(ghost).Value = "Ghost";
+			check(editor.take_message().empty(), "make_prefab: no message before anything went wrong");
+			editor.set_prefab_timeout(std::chrono::milliseconds(0));
+			check(editor.make_prefab(ghost, assets.folder()).empty(), "make_prefab: starts for an entity whose file will not be imported");
+			editor.update();
+			const std::string message = editor.take_message();
+			check(!editor.has_pending_prefab() && registry.valid(ghost) && !registry.all_of<PrefabInstance>(ghost), "make_prefab: a prefab that is not imported in time leaves the entity as it was");
+			check(message.find("Ghost") != std::string::npos && editor.take_message().empty(), "make_prefab: the user is told, once (" + message + ")");
+		}
+
+		void check_duplicate_rename(Check& check, AssetPipelineModule& pipeline)
+		{
+			register_scene_components();
+			SmokeAssets assets(pipeline);
+			AssetDatabase& database = pipeline.get_database();
+			AssetManager& manager = *Engine::get().get_module<AssetManager>();
+			SceneModule& module = *Engine::get().get_module<SceneModule>();
+
+			const std::optional<AssetRef> prefabRef = database.ensure_imported(assets.write("dup_model.gltf", test_model_gltf()));
+			check(prefabRef.has_value(), "the model for the duplicate checks imports");
+			if (!prefabRef)
+			{
+				return;
+			}
+
+			SceneEditor editor(manager, module);
+			editor.set_scene(CreateRef<Scene>(), {});
+			Scene& scene = editor.scene();
+			entt::registry& registry = scene.registry();
+			auto pump = [&]()
+			{
+				for (u32 i = 0; i < 2000 && editor.has_pending(); i++)
+				{
+					editor.update();
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+			};
+
+			const entt::entity a = editor.create_entity(entt::null);
+			const entt::entity kid = editor.create_entity(a);
+			const entt::entity c = editor.create_entity(entt::null);
+			registry.get<Name>(a).Value = "Root";
+			registry.get<Name>(kid).Value = "Kid";
+			registry.get<Transform>(a).Position = glm::vec3(4.0f, 5.0f, 6.0f);
+			registry.emplace<Light>(a).Intensity = 3.0f;
+
+			// a subtree is copied with new guids and lands right after the original
+			const size_t before = registry.storage<Id>().size();
+			const entt::entity copy = editor.duplicate_entity(a);
+			check(copy != entt::null && registry.storage<Id>().size() == before + 2, "duplicate: the entity and its child are copied");
+			if (copy != entt::null)
+			{
+				check(registry.get<Name>(copy).Value == "Root (copy)" && registry.get<Transform>(copy).Position == glm::vec3(4.0f, 5.0f, 6.0f), "duplicate: the copy has the name (marked as a copy) and the transform");
+				check(registry.all_of<Light>(copy) && registry.get<Light>(copy).Intensity == 3.0f, "duplicate: the components are copied");
+				check(registry.get<Id>(copy).Guid != registry.get<Id>(a).Guid, "duplicate: the copy has a guid of its own");
+				const entt::entity copiedKid = registry.get<Hierarchy>(copy).FirstChild;
+				check(copiedKid != entt::null && copiedKid != kid && registry.get<Name>(copiedKid).Value == "Kid" && registry.get<Id>(copiedKid).Guid != registry.get<Id>(kid).Guid && registry.get<Hierarchy>(copiedKid).Parent == copy,
+					"duplicate: the child is copied under the copy, with a guid of its own");
+				check(scene.roots().size() == 3 && scene.roots()[0] == a && scene.roots()[1] == copy && scene.roots()[2] == c, "duplicate: the copy comes right after the original");
+				check(editor.selected() == copy && editor.dirty(), "duplicate: the copy is selected and the scene is changed");
+			}
+
+			// an instance is copied with its overrides, and generates its own nodes
+			const entt::entity instance = editor.add_prefab(*prefabRef, entt::null);
+			pump();
+			const size_t generatedBefore = registry.view<PrefabChild>().size();
+			check(generatedBefore == 4, "duplicate: the model's instance has its four nodes");
+			const entt::entity instanceCopy = editor.duplicate_entity(instance);
+			pump();
+			check(instanceCopy != entt::null && registry.all_of<PrefabInstance>(instanceCopy) && registry.view<PrefabChild>().size() == generatedBefore * 2, "duplicate: a copied instance generates its own nodes (" + std::to_string(registry.view<PrefabChild>().size()) + ")");
+
+			// what cannot be copied or renamed
+			entt::entity generated = entt::null;
+			for (const entt::entity entity : registry.view<PrefabChild>())
+			{
+				generated = entity;
+			}
+			const size_t count = registry.storage<Id>().size();
+			check(generated != entt::null && editor.duplicate_entity(generated) == entt::null && editor.duplicate_entity(entt::null) == entt::null && registry.storage<Id>().size() == count, "duplicate: a node a prefab made, and no entity, are refused");
+			check(generated != entt::null && !editor.rename_entity(generated, "x"), "rename: a node a prefab made is refused");
+
+			check(editor.rename_entity(a, "Lamp") && registry.get<Name>(a).Value == "Lamp", "rename: an entity takes its new name");
+			editor.set_playing(true);
+			check(editor.duplicate_entity(a) == entt::null && !editor.rename_entity(a, "Other") && registry.get<Name>(a).Value == "Lamp" && registry.storage<Id>().size() == count, "duplicate and rename: refused while the scene plays");
+			editor.set_playing(false);
+		}
+
 		void check_scene_editor(Check& check, AssetPipelineModule& pipeline)
 		{
 			register_scene_components();
@@ -1356,7 +1596,7 @@ namespace wiwa
 			check(serialize(afterLook) == entitiesBefore, "settings_prefab_untouched: editing the settings leaves every entity and prefab override as it was");
 
 			// save, open
-			const std::string relativePath = "Assets/_scene_smoke/edited.wscene";
+			const std::string relativePath = "assets/_scene_smoke/edited.wscene";
 			check(editor.save_as(relativePath) && !editor.dirty(), "the scene saves, and is clean afterwards");
 			const std::optional<AssetRef> editedRef = database.ensure_imported(assets.folder() / "edited.wscene");
 			check(editedRef.has_value(), "the saved file imports");
@@ -1402,6 +1642,252 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		SceneSettings physics_smoke_settings()
+		{
+			SceneSettings s;
+			s.Physics.Gravity = glm::vec3(0.0f, -3.7f, 1.0f);
+			s.Physics.FixedRateHz = 90;
+			s.Physics.MaxStepsPerWake = 6;
+			s.Physics.VelocityIterations = 12;
+			s.Physics.PositionIterations = 3;
+			s.Physics.SleepThreshold = 0.05f;
+			return s;
+		}
+
+		// RigidBody, Collider and the scene's physics settings survive save, cook and load (binary and the text of the file),
+		// and a prefab override of Collider.Size applies.
+		void check_physics_data(Check& check)
+		{
+			register_scene_components();
+			const ComponentRegistry& components = ComponentRegistry::get();
+			check(components.find("RigidBody") != nullptr && components.find("Collider") != nullptr, "physics: RigidBody and Collider are registered");
+
+			const AssetRef material{ AssetGuid::generate(), 0 };
+			const AssetRef meshRef{ AssetGuid::generate(), 1 };
+
+			Scene source;
+			source.set_settings(physics_smoke_settings());
+			const EntityGuid bodyId = EntityGuid::generate();
+			const entt::entity body = source.create(bodyId, "Body");
+			RigidBody rb;
+			rb.Motion = MotionType::Kinematic;
+			rb.MassOverride = 12.5f;
+			rb.LinearDamping = 0.3f;
+			rb.AngularDamping = 0.4f;
+			rb.GravityFactor = 0.5f;
+			rb.ContinuousCollision = true;
+			rb.AllowSleeping = false;
+			rb.ReportContacts = true;
+			rb.LockPositionY = true;
+			rb.LockRotationX = true;
+			rb.LockRotationZ = true;
+			source.registry().emplace<RigidBody>(body, rb);
+			Collider col;
+			col.Shape = ColliderShape::Capsule;
+			col.Size = glm::vec3(0.25f, 1.5f, 0.75f);
+			col.Offset = glm::vec3(0.0f, 0.5f, 0.0f);
+			col.RotationEuler = glm::vec3(10.0f, 20.0f, 30.0f);
+			col.IsTrigger = true;
+			col.Layer = 5;
+			col.Material = material;
+			col.Mesh = meshRef;
+			source.registry().emplace<Collider>(body, col);
+
+			const SceneData first = data_from_scene(source, "physics");
+			check(first.Settings.Physics == physics_smoke_settings().Physics, "physics: the scene's physics settings are in the records");
+			const std::vector<std::byte> bytes = serialize(first);
+			std::optional<SceneData> back = deserialize<SceneData>(bytes);
+			check(back.has_value() && back->Settings.Physics == physics_smoke_settings().Physics, "physics: the settings survive the cooked format");
+			if (!back)
+			{
+				return;
+			}
+
+			Scene copy;
+			const ApplyReport report = apply_scene_data(copy, *back);
+			check(report.UnknownComponents == 0 && report.UnknownFields == 0, "physics: nothing in the saved scene is unknown");
+			check(copy.settings().Physics == physics_smoke_settings().Physics, "physics: the loaded scene has the physics settings");
+			const entt::entity loaded = copy.find(bodyId);
+			check(loaded != entt::null && copy.registry().all_of<RigidBody, Collider>(loaded), "physics: the entity keeps its RigidBody and Collider");
+			if (loaded != entt::null && copy.registry().all_of<RigidBody, Collider>(loaded))
+			{
+				const RigidBody& r = copy.registry().get<RigidBody>(loaded);
+				check(r.Motion == MotionType::Kinematic && r.MassOverride == 12.5f && r.LinearDamping == 0.3f && r.AngularDamping == 0.4f && r.GravityFactor == 0.5f, "physics: RigidBody numbers survive");
+				check(r.ContinuousCollision && !r.AllowSleeping && r.ReportContacts, "physics: RigidBody flags survive");
+				check(!r.LockPositionX && r.LockPositionY && !r.LockPositionZ && r.LockRotationX && !r.LockRotationY && r.LockRotationZ, "physics: RigidBody locks survive");
+				const Collider& c = copy.registry().get<Collider>(loaded);
+				check(c.Shape == ColliderShape::Capsule && c.Size == col.Size && c.Offset == col.Offset && c.RotationEuler == col.RotationEuler, "physics: Collider shape and geometry survive");
+				check(c.IsTrigger && c.Layer == 5, "physics: Collider.IsTrigger and Layer survive");
+				check(c.Material == material && c.Mesh == meshRef, "physics: Collider asset references survive");
+			}
+			check(serialize(data_from_scene(copy, "physics")) == bytes, "physics: save, load, save gives the same bytes");
+
+			// the text of the file
+			const SceneJsonResult viaJson = scene_from_json(SceneJson::parse(scene_to_json(first).dump(2)));
+			check(viaJson.Scene.has_value() && viaJson.Scene->Settings.Physics == physics_smoke_settings().Physics, "physics: the settings survive the text of the file (" + viaJson.Error + ")");
+			check(viaJson.Scene.has_value() && serialize(*viaJson.Scene) == bytes, "physics: the text of the file gives the same binary scene (" + viaJson.Error + ")");
+
+			// a prefab override of Collider.Size
+			PrefabData prefab;
+			prefab.Name = "crate";
+			PrefabNode node = make_node("Crate", -1);
+			node.Components.push_back(ComponentRecord{ "Collider", { FieldRecord{ "Size", FieldValue(glm::vec3(0.5f)) } } });
+			prefab.Nodes = { node };
+			assign_stable_ids(prefab.Nodes);
+			const u64 nodeId = prefab.Nodes[0].StableId;
+			EntityRecord instance = make_instance(EntityGuid::generate(), AssetRef{ AssetGuid::generate(), 0 });
+			instance.Overrides = { set_field_override(nodeId, "Collider", "Size", FieldValue(glm::vec3(2, 3, 4))) };
+			const ExpandResult expanded = expand_prefab(instance, prefab);
+			const FieldValue* size = expanded.Entities.size() == 2 ? find_field(expanded.Entities[1].Components, "Collider", "Size") : nullptr;
+			check(size != nullptr && std::get_if<glm::vec3>(size) != nullptr && *std::get_if<glm::vec3>(size) == glm::vec3(2, 3, 4), "physics: a prefab override of Collider.Size applies");
+
+			// ... and lands on the component of the loaded entity
+			SceneData withInstance;
+			withInstance.Name = "crate_scene";
+			withInstance.Entities = expanded.Entities;
+			Scene crateScene;
+			apply_scene_data(crateScene, withInstance);
+			const entt::entity crate = expanded.Entities.size() == 2 ? crateScene.find(expanded.Entities[1].Id) : entt::null;
+			check(crate != entt::null && crateScene.registry().all_of<Collider>(crate) && crateScene.registry().get<Collider>(crate).Size == glm::vec3(2, 3, 4), "physics: the overridden Collider.Size reaches the loaded component");
+		}
+
+		// Joint survives save, cook, load (binary and the text of the file) and a prefab override of LimitMax applies.
+		void check_joint_data(Check& check)
+		{
+			register_scene_components();
+			check(ComponentRegistry::get().find("Joint") != nullptr, "joint: Joint is registered");
+
+			Scene source;
+			const EntityGuid otherId = EntityGuid::generate();
+			source.create(otherId, "Other");
+			const EntityGuid ownerId = EntityGuid::generate();
+			const entt::entity owner = source.create(ownerId, "Owner");
+			Joint joint;
+			joint.Type = JointType::Slider;
+			joint.Connected = otherId;
+			joint.CollideConnected = true;
+			joint.AnchorA = glm::vec3(1, 2, 3);
+			joint.AnchorB = glm::vec3(-1, -2, -3);
+			joint.Axis = glm::vec3(0, 0, 1);
+			joint.NormalAxis = glm::vec3(0, 1, 0);
+			joint.LimitMin = -1.5f;
+			joint.LimitMax = 2.5f;
+			joint.SwingHalfAngle = 33.0f;
+			joint.TwistHalfAngle = 22.0f;
+			joint.SpringFrequency = 4.0f;
+			joint.SpringDamping = 0.5f;
+			joint.MotorMode = JointMotorMode::Velocity;
+			joint.MotorTarget = 1.25f;
+			joint.MotorMaxForce = 99.0f;
+			joint.BreakForce = 123.0f;
+			joint.BreakTorque = 45.0f;
+			source.registry().emplace<Joint>(owner, joint);
+
+			const SceneData first = data_from_scene(source, "joint");
+			const std::vector<std::byte> bytes = serialize(first);
+			std::optional<SceneData> back = deserialize<SceneData>(bytes);
+			check(back.has_value(), "joint: the scene survives the cooked format");
+			if (!back)
+			{
+				return;
+			}
+			Scene copy;
+			const ApplyReport report = apply_scene_data(copy, *back);
+			check(report.UnknownComponents == 0 && report.UnknownFields == 0, "joint: nothing in the saved scene is unknown");
+			const entt::entity loaded = copy.find(ownerId);
+			check(loaded != entt::null && copy.registry().all_of<Joint>(loaded), "joint: the entity keeps its Joint");
+			if (loaded != entt::null && copy.registry().all_of<Joint>(loaded))
+			{
+				const Joint& j = copy.registry().get<Joint>(loaded);
+				check(j.Type == JointType::Slider && j.Connected == otherId && j.CollideConnected, "joint: type, connection and collide flag survive");
+				check(j.AnchorA == joint.AnchorA && j.AnchorB == joint.AnchorB && j.Axis == joint.Axis && j.NormalAxis == joint.NormalAxis, "joint: anchors and axes survive");
+				check(j.LimitMin == -1.5f && j.LimitMax == 2.5f && j.SwingHalfAngle == 33.0f && j.TwistHalfAngle == 22.0f, "joint: limits survive");
+				check(j.SpringFrequency == 4.0f && j.SpringDamping == 0.5f, "joint: spring survives");
+				check(j.MotorMode == JointMotorMode::Velocity && j.MotorTarget == 1.25f && j.MotorMaxForce == 99.0f, "joint: motor survives");
+				check(j.BreakForce == 123.0f && j.BreakTorque == 45.0f, "joint: break limits survive");
+			}
+			check(serialize(data_from_scene(copy, "joint")) == bytes, "joint: save, load, save gives the same bytes");
+
+			const SceneJsonResult viaJson = scene_from_json(SceneJson::parse(scene_to_json(first).dump(2)));
+			check(viaJson.Scene.has_value() && serialize(*viaJson.Scene) == bytes, "joint: the text of the file gives the same binary scene (" + viaJson.Error + ")");
+
+			PrefabData prefab;
+			prefab.Name = "door";
+			PrefabNode node = make_node("Door", -1);
+			node.Components.push_back(ComponentRecord{ "Joint", { FieldRecord{ "LimitMax", FieldValue(90.0f) } } });
+			prefab.Nodes = { node };
+			assign_stable_ids(prefab.Nodes);
+			const u64 nodeId = prefab.Nodes[0].StableId;
+			EntityRecord instance = make_instance(EntityGuid::generate(), AssetRef{ AssetGuid::generate(), 0 });
+			instance.Overrides = { set_field_override(nodeId, "Joint", "LimitMax", FieldValue(45.0f)) };
+			const ExpandResult expanded = expand_prefab(instance, prefab);
+			const FieldValue* limit = expanded.Entities.size() == 2 ? find_field(expanded.Entities[1].Components, "Joint", "LimitMax") : nullptr;
+			check(limit != nullptr && std::get_if<float>(limit) != nullptr && *std::get_if<float>(limit) == 45.0f, "joint: a prefab override of Joint.LimitMax applies");
+		}
+
+		// CharacterController survives save, cook, load (binary and the text of the file) and a prefab override of StepHeight applies.
+		void check_character_data(Check& check)
+		{
+			register_scene_components();
+			check(ComponentRegistry::get().find("CharacterController") != nullptr, "character: CharacterController is registered");
+
+			Scene source;
+			const EntityGuid ownerId = EntityGuid::generate();
+			const entt::entity owner = source.create(ownerId, "Hero");
+			CharacterController controller;
+			controller.Radius = 0.33f;
+			controller.Height = 1.7f;
+			controller.Offset = glm::vec3(0.0f, 0.1f, 0.0f);
+			controller.StepHeight = 0.4f;
+			controller.MaxSlopeAngle = 50.0f;
+			controller.Mass = 80.0f;
+			controller.PushStrength = 150.0f;
+			controller.GravityFactor = 1.5f;
+			controller.Layer = 3;
+			source.registry().emplace<CharacterController>(owner, controller);
+
+			const SceneData first = data_from_scene(source, "character");
+			const std::vector<std::byte> bytes = serialize(first);
+			std::optional<SceneData> back = deserialize<SceneData>(bytes);
+			check(back.has_value(), "character: the scene survives the cooked format");
+			if (!back)
+			{
+				return;
+			}
+			Scene copy;
+			const ApplyReport report = apply_scene_data(copy, *back);
+			check(report.UnknownComponents == 0 && report.UnknownFields == 0, "character: nothing in the saved scene is unknown");
+			const entt::entity loaded = copy.find(ownerId);
+			check(loaded != entt::null && copy.registry().all_of<CharacterController>(loaded), "character: the entity keeps its CharacterController");
+			if (loaded != entt::null && copy.registry().all_of<CharacterController>(loaded))
+			{
+				const CharacterController& c = copy.registry().get<CharacterController>(loaded);
+				check(c.Radius == 0.33f && c.Height == 1.7f && c.Offset == controller.Offset, "character: the capsule survives");
+				check(c.StepHeight == 0.4f && c.MaxSlopeAngle == 50.0f, "character: step height and slope survive");
+				check(c.Mass == 80.0f && c.PushStrength == 150.0f && c.GravityFactor == 1.5f && c.Layer == 3, "character: mass, push, gravity and layer survive");
+			}
+			check(serialize(data_from_scene(copy, "character")) == bytes, "character: save, load, save gives the same bytes");
+
+			const SceneJsonResult viaJson = scene_from_json(SceneJson::parse(scene_to_json(first).dump(2)));
+			check(viaJson.Scene.has_value() && serialize(*viaJson.Scene) == bytes, "character: the text of the file gives the same binary scene (" + viaJson.Error + ")");
+
+			PrefabData prefab;
+			prefab.Name = "hero";
+			PrefabNode node = make_node("Hero", -1);
+			node.Components.push_back(ComponentRecord{ "CharacterController", { FieldRecord{ "StepHeight", FieldValue(0.35f) } } });
+			prefab.Nodes = { node };
+			assign_stable_ids(prefab.Nodes);
+			const u64 nodeId = prefab.Nodes[0].StableId;
+			EntityRecord instance = make_instance(EntityGuid::generate(), AssetRef{ AssetGuid::generate(), 0 });
+			instance.Overrides = { set_field_override(nodeId, "CharacterController", "StepHeight", FieldValue(0.5f)) };
+			const ExpandResult expanded = expand_prefab(instance, prefab);
+			const FieldValue* step = expanded.Entities.size() == 2 ? find_field(expanded.Entities[1].Components, "CharacterController", "StepHeight") : nullptr;
+			check(step != nullptr && std::get_if<float>(step) != nullptr && *std::get_if<float>(step) == 0.5f, "character: a prefab override of CharacterController.StepHeight applies");
+		}
+	}
+
 	bool run_scene_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1410,11 +1896,17 @@ namespace wiwa
 		check_reflection(check);
 		check_render_components(check);
 		check_scene_data(check);
+		check_physics_data(check);
+		check_joint_data(check);
+		check_character_data(check);
 		check_node_ids(check, pipeline);
+		check_node_components(check);
 		check_prefab(check);
 		check_scene_json(check, pipeline);
 		check_scene_loading(check, pipeline);
 		check_extracted_materials(check, pipeline);
+		check_make_prefab(check, pipeline);
+		check_duplicate_rename(check, pipeline);
 		check_scene_editor(check, pipeline);
 
 		if (check.Failures == 0)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <set>
 #include <span>
 #include <string>
@@ -7,9 +8,11 @@
 
 #include <sol/sol.hpp>
 
+#include <physics/physics_snapshot.h>
 #include <scene/scene.h>
 #include "script_context.h"
 #include "script_runtime.h"
+#include "ui_handlers.h"
 
 namespace wiwa
 {
@@ -19,6 +22,8 @@ namespace wiwa
 	// Every update(): instances whose entity or component is gone get on_destroy; new ones get on_init (found by looking at the
 	// scene, so entities added by a load or created by a script during the frame start on the next update); then the scene scripts'
 	// on_update run, then the entity scripts'. A hook that raises an error is logged and disables that instance only.
+	class PhysicsModule;
+
 	class ScriptInstances
 	{
 	public:
@@ -34,6 +39,11 @@ namespace wiwa
 		void stop();
 		void update(float deltaTime);
 
+		// The physics steps the module took since the last frame: for each, the contact and trigger hooks (on_collision_enter, ..., on_trigger_exit) of
+		// the scripts on the entities involved, then on_physics_update(self, dt) of every script. Before update(), so a script sees this frame's contacts.
+		// While a step is delivered the physics queries see that step.
+		void dispatch_physics(PhysicsModule& physics);
+
 		// After ScriptRuntime::reload_script: an instance that an error had disabled starts over (a new self, on_init) with the new code, and
 		// a script that could not be loaded is tried again. Instances that were running keep their self and carry on with the new code.
 		void script_reloaded(std::span<const AssetRef> scripts);
@@ -43,6 +53,7 @@ namespace wiwa
 		bool running() const { return m_Scene != nullptr; }
 		const Ref<Scene>& scene() const { return m_Scene; }
 		ScriptContext& context() { return m_Context; }
+		UiHandlerTable& ui_handlers() { return m_UiHandlers; }
 
 	private:
 		struct Instance
@@ -57,14 +68,18 @@ namespace wiwa
 		ScriptClass* class_of(AssetGuid script);
 		bool alive(const Instance& instance) const;
 		void reap();
+		void dispatch_ui_events();
 		void discover();
 		void make_self(Instance& instance);
 		void begin(Instance instance);
 		bool call_hook(Instance& instance, const char* hook, const float* deltaTime);
+		bool call_hook_with(Instance& instance, const char* hook, const std::function<sol::protected_function_result(const sol::protected_function&)>& invoke);
+		void deliver_physics_event(const PhysicsEvent& event);
 		std::string describe(const Instance& instance) const;
 
 		ScriptRuntime& m_Runtime;
 		ScriptContext m_Context{};
+		UiHandlerTable m_UiHandlers{};
 		Ref<Scene> m_Scene{};
 		std::vector<Instance> m_Instances{};              // the entity scripts, in the order they were found
 		std::vector<Instance> m_SceneInstances{};         // the scene-level scripts

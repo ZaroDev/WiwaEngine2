@@ -30,6 +30,9 @@ namespace wiwa
 		// make an entity its own ancestor.
 		bool set_parent(entt::entity child, entt::entity parent);
 
+		// Moves entity to the parent of sibling, right after it. False, and nothing changes, if that would make an entity its own ancestor.
+		bool move_after(entt::entity entity, entt::entity sibling);
+
 		entt::entity find(EntityGuid id) const;
 
 		// Recomputes every WorldTransform from the local ones.

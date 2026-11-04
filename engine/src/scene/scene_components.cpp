@@ -39,5 +39,67 @@ namespace wiwa
 		// The overrides are not a field: the record layer saves and applies them.
 		registry.register_component(WI_COMPONENT(PrefabInstance,
 			WI_FIELD_META(Prefab, FieldMeta::asset(AssetType::Prefab))));
+
+		registry.register_component(WI_COMPONENT(UICanvas,
+			WI_FIELD_META(Panel, FieldMeta::asset(AssetType::UiPanel)),
+			WI_FIELD(SortOrder),
+			WI_FIELD(Visible)));
+
+		registry.register_component(WI_COMPONENT(RigidBody,
+			WI_FIELD_META(Motion, FieldMeta::enumeration({ "Static", "Kinematic", "Dynamic" })),
+			WI_FIELD(MassOverride),
+			WI_FIELD(LinearDamping),
+			WI_FIELD(AngularDamping),
+			WI_FIELD(GravityFactor),
+			WI_FIELD(ContinuousCollision),
+			WI_FIELD(AllowSleeping),
+			WI_FIELD(ReportContacts),
+			WI_FIELD(LockPositionX),
+			WI_FIELD(LockPositionY),
+			WI_FIELD(LockPositionZ),
+			WI_FIELD(LockRotationX),
+			WI_FIELD(LockRotationY),
+			WI_FIELD(LockRotationZ)));
+
+		registry.register_component(WI_COMPONENT(Collider,
+			WI_FIELD_META(Shape, FieldMeta::enumeration({ "Box", "Sphere", "Capsule", "Cylinder", "ConvexHull", "Mesh" })),
+			WI_FIELD(Size),
+			WI_FIELD(Offset),
+			WI_FIELD(RotationEuler),
+			WI_FIELD(IsTrigger),
+			WI_FIELD_META(Layer, FieldMeta::range(0.0f, 31.0f)), // PHYSICS_LAYER_COUNT layers; the physics world clamps whatever is stored
+			WI_FIELD_META(Material, FieldMeta::asset(AssetType::PhysicsMaterial)),
+			WI_FIELD_META(Mesh, FieldMeta::asset(AssetType::Mesh))));
+
+		registry.register_component(WI_COMPONENT(Joint,
+			WI_FIELD_META(Type, FieldMeta::enumeration({ "Fixed", "Point", "Hinge", "Slider", "Distance", "Cone", "SwingTwist", "SixDof" })),
+			WI_FIELD(Connected),
+			WI_FIELD(CollideConnected),
+			WI_FIELD(AnchorA),
+			WI_FIELD(AnchorB),
+			WI_FIELD(Axis),
+			WI_FIELD(NormalAxis),
+			WI_FIELD(LimitMin),
+			WI_FIELD(LimitMax),
+			WI_FIELD_META(SwingHalfAngle, FieldMeta::range(0.0f, 180.0f)),
+			WI_FIELD_META(TwistHalfAngle, FieldMeta::range(0.0f, 180.0f)),
+			WI_FIELD(SpringFrequency),
+			WI_FIELD(SpringDamping),
+			WI_FIELD_META(MotorMode, FieldMeta::enumeration({ "Off", "Velocity", "Position" })),
+			WI_FIELD(MotorTarget),
+			WI_FIELD(MotorMaxForce),
+			WI_FIELD(BreakForce),
+			WI_FIELD(BreakTorque)));
+
+		registry.register_component(WI_COMPONENT(CharacterController,
+			WI_FIELD(Radius),
+			WI_FIELD(Height),
+			WI_FIELD(Offset),
+			WI_FIELD(StepHeight),
+			WI_FIELD_META(MaxSlopeAngle, FieldMeta::range(0.0f, 89.0f)),
+			WI_FIELD(Mass),
+			WI_FIELD(PushStrength),
+			WI_FIELD(GravityFactor),
+			WI_FIELD_META(Layer, FieldMeta::range(0.0f, 31.0f))));
 	}
 }

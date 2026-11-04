@@ -21,7 +21,7 @@ project "LZ4"
 		runtime "Debug"
 		symbols "On"
 		optimize "Speed" -- third-party: the high-compression mode is far too slow unoptimized
-		flags { "NoRuntimeChecks" }
+		runtimechecks "Off"
 
 	filter "configurations:Release"
 		runtime "Release"

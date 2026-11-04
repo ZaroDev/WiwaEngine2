@@ -7,7 +7,7 @@
 
 namespace wiwa
 {
-	// Where cooked .wasset files come from: loose files in Library/ (editor) or the packed assets.wpak (Shipping).
+	// Where cooked .wasset files come from: loose files in Library/ (editor) or the packed assets.wpak.
 	// read() may be called from several worker threads at once.
 	class IAssetSource
 	{

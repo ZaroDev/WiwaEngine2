@@ -19,6 +19,8 @@ namespace wiwa
 		virtual void show_scene(Ref<Scene> scene, bool playing) = 0;  // makes it the SceneModule's active scene, and the editor's while playing
 		virtual void restore_document(Ref<Scene> scene, const EditorDocument& document) = 0;
 		virtual Ref<Scene> active_scene() = 0;                        // the SceneModule's active scene now
+		virtual void start_physics() = 0;                             // a new physics world for the active scene (a running one is replaced)
+		virtual void stop_physics() = 0;                              // the physics world is discarded
 		virtual void start_scripts() = 0;
 		virtual void stop_scripts() = 0;
 		virtual void cancel_loads() = 0;                              // scene loads still running: a scene that arrives after Stop must not replace the edit scene

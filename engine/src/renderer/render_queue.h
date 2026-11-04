@@ -9,6 +9,8 @@
 #include <math/math.h>
 
 #include "debug/debug_draw.h"
+#include <ui/ui_draw_list.h>
+
 #include "imgui_draw_data.h"
 
 namespace wiwa
@@ -32,6 +34,7 @@ namespace wiwa
 		std::vector<RenderCommand> Commands{};
 		OwnedDrawData ImGui{};
 		DebugDrawData Debug{}; // the shapes of this frame (DebugDraw::seal)
+		UiDrawList Ui{};       // the game UI of this frame (UiModule), drawn over the scene
 	};
 
 	// A bounded hand-off from one producer (the main thread) to one consumer (the render thread).

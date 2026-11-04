@@ -270,6 +270,7 @@ namespace wiwa
 		description.Backbuffer = m_Backend->get_reference_framebuffer();
 		description.Shaders = m_Shaders.get();
 		description.Textures = &m_Textures;
+		description.Cache = m_Cache.get();
 		return description;
 	}
 
@@ -284,6 +285,7 @@ namespace wiwa
 		frame.FrameIndex = m_FrameIndex;
 		frame.ImGui = &batch.ImGui;
 		frame.Debug = &batch.Debug;
+		frame.Ui = &batch.Ui;
 		frame.Pick = &m_Pick;
 		frame.Scene = &m_SceneData;
 		frame.SceneInViewport = m_SceneInViewport;

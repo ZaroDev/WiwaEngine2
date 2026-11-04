@@ -8,6 +8,7 @@
 #include <assets/asset_guid.h>
 #include "entity_guid.h"
 #include "scene_data.h"
+#include <physics/physics_types.h>
 
 // The components of a scene. They are plain data; the reflection layer (reflection/) describes their fields for the
 // serializer and the editor. Assets are referenced by AssetRef, never by a loaded handle.
@@ -106,5 +107,100 @@ namespace wiwa
 	{
 		AssetRef Prefab{};
 		std::vector<PrefabOverride> Overrides{};
+	};
+
+	// Shows a UI panel over the scene. Canvases are drawn in the order of SortOrder (the higher on top), and the one on top gets the pointer
+	// first. Every canvas has its own copy of the panel's state, so two canvases of one panel do not share what scripts set.
+	struct UICanvas
+	{
+		AssetRef Panel{};
+		i32 SortOrder = 0;
+		bool Visible = true;
+	};
+
+	// A physics body. The shape comes from the Collider on the same entity (and on its descendants, which join it as a compound).
+	// Lock flags are the axes the body may NOT move or turn along.
+	struct RigidBody
+	{
+		MotionType Motion = MotionType::Dynamic;
+		float MassOverride = 0.0f; // 0: from the shape and its material density
+		float LinearDamping = 0.05f;
+		float AngularDamping = 0.05f;
+		float GravityFactor = 1.0f;
+		bool ContinuousCollision = false;
+		bool AllowSleeping = true;
+		bool ReportContacts = false;
+		bool LockPositionX = false;
+		bool LockPositionY = false;
+		bool LockPositionZ = false;
+		bool LockRotationX = false;
+		bool LockRotationY = false;
+		bool LockRotationZ = false;
+	};
+
+	// Only append: the values are saved. A compound shape is implied by child colliders and has no value here.
+	enum class ColliderShape : u32
+	{
+		Box,
+		Sphere,
+		Capsule,
+		Cylinder,
+		ConvexHull,
+		Mesh,
+	};
+
+	struct Collider
+	{
+		ColliderShape Shape = ColliderShape::Box;
+		glm::vec3 Size{ 0.5f };          // half extents (box), radius (sphere: x), radius and half height (capsule, cylinder: x and y)
+		glm::vec3 Offset{ 0.0f };
+		glm::vec3 RotationEuler{ 0.0f }; // degrees
+		bool IsTrigger = false;
+		i32 Layer = 0;                   // an index into the project's physics layers
+		AssetRef Material{};             // PhysicsMaterial
+		AssetRef Mesh{};                 // Mesh, for ConvexHull and Mesh
+	};
+
+	// A constraint between this entity's body (A) and the body of Connected (B; not set: the world). Anchors are in each body's local
+	// space (the world point when Connected is not set); angles are degrees. Only the fields the Type uses count. LimitMin == LimitMax == 0
+	// means no limit; a break value of 0 means unbreakable. Hinge: limits are angles; Slider: distances along Axis; Distance: min and max
+	// length (both 0: the length at the start). Cone and SwingTwist use the half angles.
+	struct Joint
+	{
+		JointType Type = JointType::Hinge;
+		EntityGuid Connected{};
+		bool CollideConnected = false;
+		glm::vec3 AnchorA{ 0.0f };
+		glm::vec3 AnchorB{ 0.0f };
+		glm::vec3 Axis{ 0.0f, 1.0f, 0.0f };
+		glm::vec3 NormalAxis{ 1.0f, 0.0f, 0.0f };
+		float LimitMin = 0.0f;
+		float LimitMax = 0.0f;
+		float SwingHalfAngle = 45.0f;
+		float TwistHalfAngle = 45.0f;
+		float SpringFrequency = 0.0f; // Hz; 0: rigid
+		float SpringDamping = 0.0f;
+		JointMotorMode MotorMode = JointMotorMode::Off;
+		float MotorTarget = 0.0f;     // velocity (rad/s or m/s) or position (degrees or m)
+		float MotorMaxForce = 0.0f;   // N or N m
+		float BreakForce = 0.0f;
+		float BreakTorque = 0.0f;
+	};
+
+	// A character the scripts move (physics.md, Character controller): a capsule that slides along what it meets, climbs steps and stands on
+	// slopes up to MaxSlopeAngle, without being a rigid body. Up is world +Y. Put it on an entity with no Collider or RigidBody of its own.
+	// Height is the whole capsule, caps included (a Height below 2 * Radius is made 2 * Radius); Offset moves the capsule from the entity's
+	// origin; angles are degrees.
+	struct CharacterController
+	{
+		float Radius = 0.4f;
+		float Height = 1.8f;
+		glm::vec3 Offset{ 0.0f, 0.0f, 0.0f };
+		float StepHeight = 0.35f;
+		float MaxSlopeAngle = 45.0f;
+		float Mass = 70.0f;           // kg, for what it pushes and what pushes it
+		float PushStrength = 100.0f;  // the most force (N) it pushes a body with
+		float GravityFactor = 1.0f;
+		i32 Layer = 0;                // an index into the project's physics layers
 	};
 }

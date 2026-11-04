@@ -10,5 +10,15 @@ namespace wiwa
 		time.set_function("delta", [&context]() { return context.DeltaTime; });
 		time.set_function("total", [&context]() { return static_cast<float>(context.TotalTime); });
 		runtime.sandbox()["time"] = time;
+
+		// asks the host to end the program: the game closes, the editor stops play mode
+		runtime.sandbox().set_function("quit", [&context]()
+			{
+				if (!context.RequestQuit)
+				{
+					throw sol::error("quit is not available here");
+				}
+				context.RequestQuit();
+			});
 	}
 }

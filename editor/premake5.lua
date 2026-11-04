@@ -68,7 +68,7 @@ project "wiwa_editor"
 		}
 		postbuildcommands
 		{
-			("{COPY} \"%{cfg.buildtarget.relpath}\" \"%{wks.location}editor\"")
+			("copy /Y \"$(TargetPath)\" \"%{wks.location}editor\\wiwa_editor.exe\"")
 		}
 
 	filter "configurations:Debug"

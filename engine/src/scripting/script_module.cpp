@@ -1,10 +1,14 @@
 #include <pch.h>
 #include "script_module.h"
 
+#include <ui/ui_module.h>
+
 #include <algorithm>
 
 #include <core/engine.h>
 #include <renderer/render_module.h>
+#include <input/input_module.h>
+#include <physics/physics_module.h>
 #include <scene/scene_module.h>
 
 #include "script_component.h"
@@ -24,6 +28,10 @@ namespace wiwa
 		ScriptContext& context = m_Instances->context();
 		context.Assets = assets;
 		context.Scenes = Engine::get().get_module<SceneModule>();
+		context.Ui = Engine::get().get_module<UiModule>();
+		context.Physics = Engine::get().get_module<PhysicsModule>();
+		context.Input = Engine::get().get_module<InputModule>();
+		context.RequestQuit = []() { Engine::get().request_quit(); };
 		if (RenderModule* renderer = Engine::get().get_module<RenderModule>())
 		{
 			context.Debug = &renderer->get_debug_draw();
@@ -190,8 +198,13 @@ namespace wiwa
 
 		// seconds of the game clock, which follows pause and time scale; while it is paused the scripts do not run
 		const Time& time = Engine::get().get_time();
+		m_Instances->context().GamePlaying = time.get_game_clock().IsPlaying;
 		if (time.get_game_clock().IsPlaying)
 		{
+			if (PhysicsModule* physics = Engine::get().get_module<PhysicsModule>())
+			{
+				m_Instances->dispatch_physics(*physics);
+			}
 			m_Instances->update(time.get_delta_time_seconds());
 		}
 	}

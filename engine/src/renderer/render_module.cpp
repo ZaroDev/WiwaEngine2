@@ -12,6 +12,7 @@
 #include "passes/depth_prepass.h"
 #include "passes/forward_pass.h"
 #include "passes/imgui_pass.h"
+#include "passes/ui_pass.h"
 #include "passes/light_cull_pass.h"
 #include "passes/ao_pass.h"
 #include "passes/bloom_pass.h"
@@ -81,6 +82,8 @@ namespace wiwa
 				m_Renderer->set_pick_channel(&m_Picks);
 
 				// The scene first (depth, shading, the 8-bit image); the UI goes over everything else, so its pass is the last one.
+				Scope<UiRenderPass> uiPass = CreateScope<UiRenderPass>();
+				m_UiPass = uiPass.get();
 				Scope<ImGuiRenderPass> imguiPass = CreateScope<ImGuiRenderPass>();
 				m_ImGuiPass = imguiPass.get();
 				return m_Renderer->add_pass(CreateScope<ShadowPass>())
@@ -97,6 +100,7 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<BloomPass>())
 					&& m_Renderer->add_pass(CreateScope<TonemapPass>())
 					&& m_Renderer->add_pass(CreateScope<FxaaPass>())
+					&& m_Renderer->add_pass(std::move(uiPass))
 					&& m_Renderer->add_pass(CreateScope<SelectionOutlinePass>())
 					&& m_Renderer->add_pass(CreateScope<DebugPass>())
 					&& m_Renderer->add_pass(CreateScope<PickPass>())
@@ -105,6 +109,7 @@ namespace wiwa
 			},
 			[this](RenderBatch& batch)
 			{
+				const auto frameStart = std::chrono::steady_clock::now();
 				apply_reloads();
 
 				// The commands first (they change the render-side state), then the frame.
@@ -122,6 +127,18 @@ namespace wiwa
 				run_render_test(world);
 
 				publish_snapshot();
+
+				if (m_LastFrameStart != std::chrono::steady_clock::time_point{})
+				{
+					using Millis = std::chrono::duration<float, std::milli>;
+					std::lock_guard<std::mutex> lock(m_FrameSamplesMutex);
+					if (m_FrameSamples.size() >= Series::Capacity)
+					{
+						m_FrameSamples.erase(m_FrameSamples.begin());
+					}
+					m_FrameSamples.emplace_back(Millis(frameStart - m_LastFrameStart).count(), Millis(std::chrono::steady_clock::now() - frameStart).count());
+				}
+				m_LastFrameStart = frameStart;
 			},
 			[this]()
 			{
@@ -171,6 +188,7 @@ namespace wiwa
 		m_Thread.stop();
 		m_Renderer.reset();
 		m_ImGuiPass = nullptr;
+		m_UiPass = nullptr;
 		m_ImGui.shutdown();
 		m_Started = false;
 		m_DebugDraw.set_enabled(false);
@@ -465,6 +483,57 @@ namespace wiwa
 		}
 	}
 
+	void RenderModule::set_ui_preview(UiDrawList list, u32 width, u32 height, const glm::vec4& background)
+	{
+		if (!m_Started)
+		{
+			return;
+		}
+		auto shared = std::make_shared<UiDrawList>(std::move(list));
+		UiRenderPass* pass = m_UiPass;
+		submit([pass, shared, width, height, background](RenderWorld&)
+			{
+				if (pass != nullptr)
+				{
+					pass->set_preview(std::move(*shared), width, height, background);
+				}
+			});
+	}
+
+	void RenderModule::clear_ui_preview()
+	{
+		if (!m_Started)
+		{
+			return;
+		}
+		UiRenderPass* pass = m_UiPass;
+		submit([pass](RenderWorld&)
+			{
+				if (pass != nullptr)
+				{
+					pass->clear_preview();
+				}
+			});
+	}
+
+	glm::vec2 RenderModule::get_canvas_size() const
+	{
+		if (m_RequestedViewportWidth > 0 && m_RequestedViewportHeight > 0)
+		{
+			return glm::vec2(static_cast<float>(m_RequestedViewportWidth), static_cast<float>(m_RequestedViewportHeight));
+		}
+
+		Window* window = Engine::get().get_module<Window>();
+		if (window == nullptr)
+		{
+			return glm::vec2(0.0f);
+		}
+		int width = 0;
+		int height = 0;
+		window->get_size(width, height);
+		return glm::vec2(static_cast<float>(std::max(width, 0)), static_cast<float>(std::max(height, 0)));
+	}
+
 	void RenderModule::render_update(float deltaTime)
 	{
 		if (!m_Started)
@@ -476,6 +545,23 @@ namespace wiwa
 		{
 			fail_and_quit("The renderer failed");
 			return;
+		}
+
+		{
+			PerfStats& perf = Engine::get().get_perf();
+			std::vector<std::pair<float, float>> samples;
+			{
+				std::lock_guard<std::mutex> lock(m_FrameSamplesMutex);
+				samples.swap(m_FrameSamples);
+			}
+			for (const auto& [frameMs, cpuMs] : samples)
+			{
+				perf.add_render_frame(frameMs, cpuMs);
+			}
+			if (const std::string adapter = get_snapshot().Adapter; !adapter.empty())
+			{
+				perf.set_adapter_name(adapter);
+			}
 		}
 
 		Window* window = Engine::get().get_module<Window>();
@@ -492,6 +578,8 @@ namespace wiwa
 		batch.Commands = std::move(m_PendingCommands);
 		m_PendingCommands.clear();
 		batch.Debug = m_DebugDraw.seal(deltaTime);
+		batch.Ui = m_GameUiVisible ? std::move(m_PendingUi) : UiDrawList{};
+		m_PendingUi = UiDrawList{};
 
 		// What the active scene changed, for the render thread's scene mirror.
 		if (SceneModule* scenes = Engine::get().get_module<SceneModule>())

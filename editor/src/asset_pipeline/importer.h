@@ -53,6 +53,10 @@ namespace wiwa
 		// A sub-asset by name. Its local id is allocated once and kept in the .meta, so the guid survives re-imports.
 		AssetRef sub_asset(const std::string& name);
 
+		// A sub-asset with a local id chosen by the importer (the cooked physics shapes of a mesh are the mesh's id plus an offset). The id is
+		// recorded in the .meta like the others; sub_asset never hands out an id in the range of these.
+		AssetRef sub_asset_with_id(const std::string& name, u64 id);
+
 		// Imports another source file (a texture a model uses) if needed and returns its asset. The path may be
 		// relative to this source's folder. nullopt if there is no importer for it.
 		// defaultSettings only apply if that file has no .meta yet (e.g. a model asks for a normal map to be imported as one).

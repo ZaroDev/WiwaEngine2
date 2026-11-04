@@ -8,6 +8,10 @@
 #include <vector>
 
 #include <scene/scene_data.h>
+#include <physics/cooked_shape.h>
+#include <input/action_types.h>
+#include <physics/physics_material_asset.h>
+#include <ui/ui_widget.h>
 #include "asset_data.h"
 #include "asset_types.h"
 
@@ -123,8 +127,19 @@ namespace wiwa
 	void archive(BinaryArchive& ar, AnimationClipData& v);
 	void archive(BinaryArchive& ar, PrefabData& v);
 	void archive(BinaryArchive& ar, SceneData& v);
+	// The components of one entity or prefab node, at most SCENE_MAX_COMPONENTS_PER_ENTITY of them.
+	void archive_component_list(BinaryArchive& ar, std::vector<ComponentRecord>& list);
 	void archive(BinaryArchive& ar, ScriptData& v);
 	void archive(BinaryArchive& ar, SurfaceShaderData& v);
+	void archive(BinaryArchive& ar, FontData& v);
+	// A panel is kept as its JSON text, so that ui_panel_io is the one description of the format.
+	void archive(BinaryArchive& ar, UiPanelData& v);
+	// A version, then the values; refuses an unknown version and values physics_material_valid refuses (physics_material_asset.cpp).
+	void archive(BinaryArchive& ar, PhysicsMaterialData& v);
+	// A version, the shape kind, then the Jolt binary state of the shape (physics/cooked_shape.cpp).
+	void archive(BinaryArchive& ar, CookedShapeData& v);
+	// A version, then the JSON text (input/input_map_io.h is the one description of the format); refuses another version, trailing bytes and text input_map_from_text refuses.
+	void archive(BinaryArchive& ar, InputMapData& v);
 
 	template<typename T>
 	constexpr AssetType asset_type_of();
@@ -140,6 +155,11 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<SceneData>() { return AssetType::Scene; }
 	template<> constexpr AssetType asset_type_of<ScriptData>() { return AssetType::Script; }
 	template<> constexpr AssetType asset_type_of<SurfaceShaderData>() { return AssetType::SurfaceShader; }
+	template<> constexpr AssetType asset_type_of<FontData>() { return AssetType::Font; }
+	template<> constexpr AssetType asset_type_of<UiPanelData>() { return AssetType::UiPanel; }
+	template<> constexpr AssetType asset_type_of<PhysicsMaterialData>() { return AssetType::PhysicsMaterial; }
+	template<> constexpr AssetType asset_type_of<CookedShapeData>() { return AssetType::PhysicsShape; }
+	template<> constexpr AssetType asset_type_of<InputMapData>() { return AssetType::InputMap; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)

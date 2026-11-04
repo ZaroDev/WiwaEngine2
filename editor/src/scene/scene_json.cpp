@@ -772,6 +772,15 @@ namespace wiwa
 			put_float_if_different(motionBlur, "strength", s.MotionBlur.Strength, d.MotionBlur.Strength);
 			put_float_if_different(motionBlur, "maxBlurPixels", s.MotionBlur.MaxBlurPixels, d.MotionBlur.MaxBlurPixels);
 			put_group("motionBlur", motionBlur);
+
+			SceneJson physics = SceneJson::object();
+			put_vec3_if_different(physics, "gravity", s.Physics.Gravity, d.Physics.Gravity);
+			if (s.Physics.FixedRateHz != d.Physics.FixedRateHz) { physics["fixedRateHz"] = s.Physics.FixedRateHz; }
+			if (s.Physics.MaxStepsPerWake != d.Physics.MaxStepsPerWake) { physics["maxStepsPerWake"] = s.Physics.MaxStepsPerWake; }
+			if (s.Physics.VelocityIterations != d.Physics.VelocityIterations) { physics["velocityIterations"] = s.Physics.VelocityIterations; }
+			if (s.Physics.PositionIterations != d.Physics.PositionIterations) { physics["positionIterations"] = s.Physics.PositionIterations; }
+			put_float_if_different(physics, "sleepThreshold", s.Physics.SleepThreshold, d.Physics.SleepThreshold);
+			put_group("physics", physics);
 			return json;
 		}
 
@@ -802,6 +811,21 @@ namespace wiwa
 				return false;
 			}
 			out = json[key].get<bool>();
+			return true;
+		}
+
+		bool read_u32(const SceneJson& json, const char* key, const std::string& path, u32& out, std::string& error)
+		{
+			if (!json.contains(key))
+			{
+				return true;
+			}
+			if (!json[key].is_number_unsigned())
+			{
+				error = path + "." + key + ": not a non-negative integer";
+				return false;
+			}
+			out = json[key].get<u32>();
 			return true;
 		}
 
@@ -967,6 +991,12 @@ namespace wiwa
 					{
 						return read_bool(g, "enabled", p, s.MotionBlur.Enabled, error) && read_float(g, "exposureTime", p, s.MotionBlur.ExposureTime, error)
 							&& read_float(g, "strength", p, s.MotionBlur.Strength, error) && read_float(g, "maxBlurPixels", p, s.MotionBlur.MaxBlurPixels, error);
+					})
+				|| !read_group(json, "physics", path, error, [&](const SceneJson& g, const std::string& p)
+					{
+						return read_vec3(g, "gravity", p, s.Physics.Gravity, error) && read_u32(g, "fixedRateHz", p, s.Physics.FixedRateHz, error)
+							&& read_u32(g, "maxStepsPerWake", p, s.Physics.MaxStepsPerWake, error) && read_u32(g, "velocityIterations", p, s.Physics.VelocityIterations, error)
+							&& read_u32(g, "positionIterations", p, s.Physics.PositionIterations, error) && read_float(g, "sleepThreshold", p, s.Physics.SleepThreshold, error);
 					}))
 			{
 				return false;

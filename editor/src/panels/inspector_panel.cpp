@@ -171,7 +171,8 @@ bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& 
 	case FieldType::Int:
 	{
 		int v = std::get<i32>(current);
-		if (ImGui::DragInt(label, &v)) { value = static_cast<i32>(v); changed = true; }
+		const bool edited = field.Meta.HasRange ? ImGui::SliderInt(label, &v, static_cast<int>(field.Meta.Min), static_cast<int>(field.Meta.Max)) : ImGui::DragInt(label, &v);
+		if (edited) { value = static_cast<i32>(v); changed = true; }
 		break;
 	}
 	case FieldType::Enum:

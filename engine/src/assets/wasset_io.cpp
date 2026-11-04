@@ -3,6 +3,9 @@
 
 #include <fstream>
 
+#include <input/input_map_io.h>
+#include <ui/ui_panel_io.h>
+
 namespace wiwa
 {
 	BinaryArchive::BinaryArchive(bool writing, std::span<const std::byte> bytes) : m_Writing(writing)
@@ -243,6 +246,43 @@ namespace wiwa
 		}
 	}
 
+	void archive(BinaryArchive& ar, FontData& v)
+	{
+		constexpr u32 MAX_ATLAS_SIDE = 8192;
+
+		ar.string(v.Name);
+		ar.value(v.AtlasWidth);
+		ar.value(v.AtlasHeight);
+		ar.pod_vector(v.Atlas);
+		ar.value(v.PixelSize);
+		ar.value(v.SdfRange);
+		ar.value(v.LineHeight);
+		ar.value(v.Ascent);
+		ar.value(v.Descent);
+		ar.value(v.FallbackCodepoint);
+		ar.pod_vector(v.Glyphs);
+		ar.pod_vector(v.Kerning);
+
+		if (ar.reading() && ar.ok())
+		{
+			bool valid = v.AtlasWidth <= MAX_ATLAS_SIDE && v.AtlasHeight <= MAX_ATLAS_SIDE
+				&& v.Atlas.size() == static_cast<u64>(v.AtlasWidth) * v.AtlasHeight
+				&& std::isfinite(v.PixelSize) && v.PixelSize > 0.0f && std::isfinite(v.SdfRange) && v.SdfRange > 0.0f
+				&& std::isfinite(v.LineHeight) && std::isfinite(v.Ascent) && std::isfinite(v.Descent);
+			for (size_t i = 0; valid && i < v.Glyphs.size(); i++)
+			{
+				const FontGlyph& glyph = v.Glyphs[i];
+				valid = (i == 0 || v.Glyphs[i - 1].Codepoint < glyph.Codepoint) && std::isfinite(glyph.Advance)
+					&& glyph.UvMin.x >= 0.0f && glyph.UvMin.y >= 0.0f && glyph.UvMax.x <= 1.0f && glyph.UvMax.y <= 1.0f
+					&& std::isfinite(glyph.Size.x) && std::isfinite(glyph.Size.y) && std::isfinite(glyph.Bearing.x) && std::isfinite(glyph.Bearing.y);
+			}
+			if (!valid)
+			{
+				ar.fail();
+			}
+		}
+	}
+
 	void archive(BinaryArchive& ar, ScriptData& v)
 	{
 		ar.string(v.Source);
@@ -462,6 +502,15 @@ namespace wiwa
 		ar.value(v.BoundsMin);
 		ar.value(v.BoundsMax);
 
+		// The nodes' components were added after the first cooked prefabs: those end here and load with none. Always written.
+		if (!(ar.reading() && ar.ok() && ar.remaining() == 0))
+		{
+			for (PrefabNode& n : v.Nodes)
+			{
+				archive_component_list(ar, n.Components);
+			}
+		}
+
 		if (ar.reading() && ar.ok())
 		{
 			for (const PrefabNode& n : v.Nodes)
@@ -472,6 +521,58 @@ namespace wiwa
 					return;
 				}
 			}
+		}
+	}
+
+	void archive(BinaryArchive& ar, UiPanelData& v)
+	{
+		std::string text;
+		if (!ar.reading())
+		{
+			text = ui_panel_to_json(v).dump();
+		}
+		ar.string(text);
+
+		if (ar.reading() && ar.ok())
+		{
+			std::string error;
+			std::optional<UiPanelData> panel = ui_panel_from_text(text, error);
+			if (!panel)
+			{
+				ar.fail();
+				return;
+			}
+			v = std::move(*panel);
+		}
+	}
+
+	void archive(BinaryArchive& ar, InputMapData& v)
+	{
+		u32 version = INPUT_MAP_VERSION;
+		ar.value(version);
+		if (ar.reading() && ar.ok() && version != INPUT_MAP_VERSION)
+		{
+			ar.fail();
+			return;
+		}
+
+		std::string text;
+		if (!ar.reading())
+		{
+			text = input_map_to_text(v);
+		}
+		ar.string(text);
+
+		if (ar.reading() && ar.ok())
+		{
+			InputMapData parsed;
+			std::string error;
+			if (ar.remaining() != 0 || !input_map_from_text(text, parsed, error))
+			{
+				ar.fail();
+				return;
+			}
+			v = std::move(parsed);
 		}
 	}
 }

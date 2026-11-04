@@ -583,6 +583,118 @@ namespace wiwa
 		return texture.valid() ? texture_entry(texture).Texture.Get() : nullptr;
 	}
 
+	// ---- fonts -----------------------------------------------------------------------------------------------------------------
+
+	GpuResourceCache::FontEntry& GpuResourceCache::font_entry(const AssetRef& ref)
+	{
+		const AssetGuid guid = ref.resolved();
+		auto found = m_Fonts.find(guid);
+		if (found == m_Fonts.end())
+		{
+			auto entry = std::make_unique<FontEntry>();
+			entry->Ref = ref;
+			entry->Data = acquire<FontData>(ref, m_InlineFonts);
+			m_PendingFonts.push_back(entry.get());
+			found = m_Fonts.emplace(guid, std::move(entry)).first;
+		}
+		return *found->second;
+	}
+
+	bool GpuResourceCache::upload_font(FontEntry& entry, const FontData& data)
+	{
+		nvrhi::TextureDesc description;
+		description.width = data.AtlasWidth;
+		description.height = data.AtlasHeight;
+		description.format = nvrhi::Format::R8_UNORM;
+		description.isShaderResource = true;
+		description.initialState = UploadQueue::resting_state(m_Device);
+		description.keepInitialState = true;
+		description.debugName = "Font atlas";
+		nvrhi::TextureHandle atlas = m_Device->createTexture(description);
+		if (!atlas)
+		{
+			return false;
+		}
+
+		m_Uploads->write_texture(atlas, 0, 0, data.Atlas.data(), data.AtlasWidth);
+		entry.Atlas = std::move(atlas); // the old one, if any, lives on in the frames that still use it
+		entry.Bytes = data.Atlas.size();
+		return true;
+	}
+
+	void GpuResourceCache::update_fonts()
+	{
+		for (size_t i = 0; i < m_PendingFonts.size();)
+		{
+			FontEntry& entry = *m_PendingFonts[i];
+			const LoadState state = entry.Data.state();
+			bool finished = false;
+
+			if (state == LoadState::Failed)
+			{
+				if (!entry.Atlas)
+				{
+					entry.Failed = true;
+					m_FailedCount++;
+					WI_CACHE_LOG(Warning, "font {0} failed to load, its text is not drawn", entry.Ref.Guid.to_string());
+				}
+				else
+				{
+					WI_CACHE_LOG(Warning, "font {0} could not be reloaded, the old version stays", entry.Ref.Guid.to_string());
+				}
+				entry.Reloading = false;
+				finished = true;
+			}
+			else if (state == LoadState::Ready)
+			{
+				const FontData* data = entry.Data.get();
+				const bool usable = data->AtlasWidth > 0 && data->AtlasHeight > 0 && data->Atlas.size() == static_cast<size_t>(data->AtlasWidth) * data->AtlasHeight;
+				if (!usable)
+				{
+					if (!entry.Atlas)
+					{
+						entry.Failed = true;
+						m_FailedCount++;
+					}
+					WI_CACHE_LOG(Warning, "font {0} has no usable atlas, its text is not drawn", entry.Ref.Guid.to_string());
+					entry.Reloading = false;
+					finished = true;
+				}
+				else if (m_Uploads->has_room(data->Atlas.size()))
+				{
+					if (upload_font(entry, *data))
+					{
+						if (entry.Reloading)
+						{
+							m_Reloads++;
+						}
+					}
+					else if (!entry.Atlas)
+					{
+						entry.Failed = true;
+						m_FailedCount++;
+					}
+					entry.Reloading = false;
+					finished = true;
+				}
+			}
+
+			if (!finished)
+			{
+				i++;
+				continue;
+			}
+
+			entry.Data.reset();
+			m_PendingFonts.erase(m_PendingFonts.begin() + static_cast<std::ptrdiff_t>(i));
+		}
+	}
+
+	nvrhi::ITexture* GpuResourceCache::get_font_atlas(const AssetRef& font)
+	{
+		return font.valid() ? font_entry(font).Atlas.Get() : nullptr;
+	}
+
 	// ---- materials -------------------------------------------------------------------------------------------------------------
 
 	u32 GpuResourceCache::get_material_slot(const AssetRef& material)
@@ -1029,6 +1141,7 @@ namespace wiwa
 
 		m_SurfaceShaders->update();
 		update_textures();
+		update_fonts();
 		update_meshes();
 		update_materials();
 
@@ -1087,6 +1200,19 @@ namespace wiwa
 			push_unique(m_PendingTextures, &entry);
 		}
 
+		if (const auto font = m_Fonts.find(resolved); font != m_Fonts.end())
+		{
+			FontEntry& entry = *font->second;
+			entry.Data = acquire<FontData>(entry.Ref, m_InlineFonts);
+			entry.Reloading = entry.Atlas != nullptr;
+			if (entry.Failed)
+			{
+				entry.Failed = false;
+				m_FailedCount--;
+			}
+			push_unique(m_PendingFonts, &entry);
+		}
+
 		if (const auto material = m_MaterialEntries.find(resolved); material != m_MaterialEntries.end())
 		{
 			MaterialEntry& entry = *material->second;
@@ -1124,6 +1250,14 @@ namespace wiwa
 		return ref;
 	}
 
+	AssetRef GpuResourceCache::add_inline_font(FontData font)
+	{
+		AssetRef ref;
+		ref.Guid = AssetGuid::generate();
+		m_InlineFonts[ref.resolved()] = std::make_shared<const FontData>(std::move(font));
+		return ref;
+	}
+
 	void GpuResourceCache::set_inline_texture(const AssetRef& texture, TextureData data)
 	{
 		m_InlineTextures[texture.resolved()] = std::make_shared<const TextureData>(std::move(data));
@@ -1156,7 +1290,7 @@ namespace wiwa
 			stats.Bytes += page.VertexRanges.used() * sizeof(MeshVertex) + page.IndexRanges.used() * sizeof(u32);
 		}
 		stats.Materials = static_cast<u32>(m_Records.size());
-		stats.Pending = static_cast<u32>(m_PendingMeshes.size() + m_PendingTextures.size() + m_PendingMaterials.size());
+		stats.Pending = static_cast<u32>(m_PendingMeshes.size() + m_PendingTextures.size() + m_PendingFonts.size() + m_PendingMaterials.size());
 		stats.Failed = m_FailedCount;
 		stats.Reloads = m_Reloads;
 		return stats;

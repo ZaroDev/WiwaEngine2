@@ -7,6 +7,8 @@
 #include <assets/asset_catalog.h>
 #include <assets/build_info.h>
 #include <assets/pak_format.h>
+#include <input/input_project_settings.h>
+#include <physics/physics_project_settings.h>
 #include <assets/wasset_io.h>
 
 #include <unordered_set>
@@ -72,7 +74,7 @@ namespace wiwa
 		return selected;
 	}
 
-	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings)
+	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile, const std::filesystem::path& inputSettingsFile)
 	{
 		JobProgress local;
 		if (progress == nullptr)
@@ -137,7 +139,18 @@ namespace wiwa
 			}
 
 			std::vector<AssetGuid> missing;
-			const std::unordered_set<AssetGuid> selected = select_pack_set(candidates, *settings, missing);
+			// No scene refers to the project's default input map, so it is packed because the project chose it.
+			BuildSettings effective = *settings;
+			{
+				InputProjectSettings inputSettings;
+				std::string inputError;
+				if (load_input_settings(inputSettingsFile, inputSettings, inputError) && inputSettings.DefaultMap.valid() &&
+					std::find(effective.AlwaysInclude.begin(), effective.AlwaysInclude.end(), inputSettings.DefaultMap.Guid) == effective.AlwaysInclude.end())
+				{
+					effective.AlwaysInclude.push_back(inputSettings.DefaultMap.Guid);
+				}
+			}
+			const std::unordered_set<AssetGuid> selected = select_pack_set(candidates, effective, missing);
 			if (!missing.empty())
 			{
 				for (AssetGuid guid : missing)
@@ -297,6 +310,44 @@ namespace wiwa
 			BuildInfo info;
 			info.DefaultScene = settings->DefaultScene;
 			ok = add_blob(BUILD_INFO_GUID, 0, serialize(info), "build info") && ok;
+		}
+
+		// The project's physics layers, if the editor has saved any.
+		{
+			std::error_code exists;
+			if (std::filesystem::exists(physicsSettingsFile, exists))
+			{
+				PhysicsLayers layers;
+				std::string layersError;
+				if (load_physics_layers(physicsSettingsFile, layers, layersError))
+				{
+					ok = add_blob(PHYSICS_SETTINGS_GUID, 0, serialize(layers), "physics settings") && ok;
+				}
+				else
+				{
+					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", physicsSettingsFile.string(), layersError);
+					ok = false;
+				}
+			}
+		}
+
+		// The project's input settings (the default map), if the editor has saved any.
+		{
+			std::error_code exists;
+			if (std::filesystem::exists(inputSettingsFile, exists))
+			{
+				InputProjectSettings inputSettings;
+				std::string inputError;
+				if (load_input_settings(inputSettingsFile, inputSettings, inputError))
+				{
+					ok = add_blob(INPUT_SETTINGS_GUID, 0, serialize(inputSettings), "input settings") && ok;
+				}
+				else
+				{
+					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", inputSettingsFile.string(), inputError);
+					ok = false;
+				}
+			}
 		}
 
 		header.EntryCount = static_cast<u32>(index.size());

@@ -11,7 +11,9 @@
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <gizmo/viewport_selection.h>
+#include <input/input_module.h>
 #include <renderer/render_module.h>
+#include <ui/ui_module.h>
 #include <scene/components.h>
 
 using wiwa::LogLevel; // for WI_LOG
@@ -37,8 +39,8 @@ namespace
 	}
 }
 
-ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor)
-	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>()), m_GizmoSettings(wiwa::GizmoSettings::load())
+ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor, Ref<ViewOwner> owner)
+	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_Owner(std::move(owner)), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>()), m_GizmoSettings(wiwa::GizmoSettings::load())
 {
 }
 
@@ -84,7 +86,7 @@ void ViewportPanel::on_draw()
 		return;
 	}
 
-	render->set_scene_in_viewport(true); // the scene goes to this panel, not over the window
+	render->set_scene_in_viewport(true); // the scene goes to a panel, not over the window
 	ImGuizmo::BeginFrame();
 
 	ImGui::SetNextWindowPos(ImVec2(376.0f, 12.0f), ImGuiCond_FirstUseEver);
@@ -93,8 +95,17 @@ void ViewportPanel::on_draw()
 	const bool open = ImGui::Begin(get_name(), nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 	ImGui::PopStyleVar();
 
-	if (open)
+	if (open && m_Owner->game_owns_render())
 	{
+		// the Game panel is showing the scene: this panel does not touch the camera, the selection or the input
+		ImGui::SetCursorPos(ImVec2(8.0f, 26.0f));
+		ImGui::TextDisabled("The Game view is showing the scene. Close it or dock it as a tab of this panel to see the Scene view.");
+		(void)render->take_pick_result();
+	}
+	else if (open)
+	{
+		render->get_debug_draw().set_enabled(true); // the Game view switches it off while it shows the scene
+		render->set_game_ui_visible(m_ShowGameUi);
 		const ImVec2 size = ImGui::GetContentRegionAvail();
 		const float scale = ImGui::GetIO().DisplayFramebufferScale.x;
 		const wiwa::u32 width = static_cast<wiwa::u32>(std::max(size.x * scale, 0.0f));
@@ -131,6 +142,7 @@ void ViewportPanel::on_draw()
 			}
 			const bool hovered = ImGui::IsItemHovered();
 			const ImVec2 imageMin = ImGui::GetItemRectMin();
+			m_PlayInput.update(m_Editor.playing(), glm::vec2(imageMin.x, imageMin.y), scale, hovered);
 
 			if (m_UseEditorCamera)
 			{
@@ -149,11 +161,20 @@ void ViewportPanel::on_draw()
 					input.Scroll = io.MouseWheel;
 				}
 				m_Camera.apply(io.DeltaTime, input);
-				render->set_camera_override(m_Camera.get(size.x / std::max(size.y, 1.0f)));
+				const wiwa::RenderCamera camera = m_Camera.get(size.x / std::max(size.y, 1.0f));
+				render->set_camera_override(camera);
+				if (wiwa::UiModule* ui = wiwa::Engine::get().get_module<wiwa::UiModule>())
+				{
+					ui->set_camera_override(camera); // the UI anchors itself to the world with the camera that draws it
+				}
 			}
 			else
 			{
 				render->set_camera_override(std::nullopt);
+				if (wiwa::UiModule* ui = wiwa::Engine::get().get_module<wiwa::UiModule>())
+				{
+					ui->set_camera_override(std::nullopt);
+				}
 			}
 
 			// Over the image, in its corner.
@@ -171,6 +192,8 @@ void ViewportPanel::on_draw()
 			ImGui::SameLine();
 			
 			ImGui::Checkbox("Editor camera", &m_UseEditorCamera);
+			ImGui::SameLine();
+			ImGui::Checkbox("Game UI", &m_ShowGameUi);
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Gizmos"))
 			{

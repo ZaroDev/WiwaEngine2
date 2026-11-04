@@ -18,7 +18,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "SceneImporter"; }
-			virtual u32 version() const override { return 4; } // 4: scripts: the scene-level list and script components as dependencies
+			virtual u32 version() const override { return 5; } // 5: the physics settings; 4: scripts: the scene-level list and script components as dependencies
 			virtual std::vector<std::string> extensions() const override { return { ".wscene" }; }
 
 			virtual bool import(ImportContext& ctx) override

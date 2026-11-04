@@ -1,0 +1,15 @@
+{
+  "shadowDistance": 60.0,
+  "shadowCascades": 4,
+  "shadowSplitLambda": 0.800000011920929,
+  "shadowDepthBias": 0.0006000000284984708,
+  "shadowNormalBias": 1.5,
+  "spotShadowBias": 0.00039999998989515007,
+  "vsync": false,
+  "copyQueue": true,
+  "bloomMips": 6,
+  "aoSlices": 2,
+  "aoSteps": 8,
+  "fxaa": false,
+  "taa": false
+}

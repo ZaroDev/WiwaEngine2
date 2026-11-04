@@ -22,6 +22,7 @@
 namespace wiwa
 {
 	class ImGuiRenderPass;
+	class UiRenderPass;
 	class RenderWorld;
 
 	// The main-thread face of the renderer: the only thing the rest of the engine talks to. It owns the render thread and
@@ -72,6 +73,15 @@ namespace wiwa
 		// thread makes (or remakes) the viewport target a frame or two later. The result is drawn by ImGui as the texture id below.
 		void set_viewport_size(u32 width, u32 height);
 
+		// The size of what the scene is drawn into, in pixels: the Viewport panel when there is one, else the window. 0 by 0 when there is nothing
+		// to draw into (a minimized window).
+		glm::vec2 get_canvas_size() const;
+
+		// The game UI of the frame being built (UiModule::pre_render_update); it is sent with the next batch and drawn over the scene.
+		void set_ui_draw_list(UiDrawList list) { m_PendingUi = std::move(list); }
+		// False: the game UI is left out of the frames that are sent (the editor's Scene view). A game has it on, the default.
+		void set_game_ui_visible(bool visible) { m_GameUiVisible = visible; }
+
 		// True when the UI shows the scene in a panel (the editor's Viewport panel says so); false, the default, draws the scene over the
 		// whole window (a game). Takes effect on the render thread a frame or two later.
 		void set_scene_in_viewport(bool inViewport);
@@ -91,6 +101,13 @@ namespace wiwa
 		void set_camera_override(const std::optional<RenderCamera>& camera);
 
 		static constexpr u32 get_viewport_texture_id() { return VIEWPORT_TEXTURE_ID; }
+
+		// The UI editor's canvas, drawn by the renderer like the viewport: every frame the render thread clears a texture of this size to the
+		// background and draws the list into it (the list is in canvas pixels of list.CanvasSize). ImGui shows it as get_ui_preview_texture_id()
+		// a frame or two later. Call it every frame the canvas is open; clear_ui_preview() when it is not.
+		void set_ui_preview(UiDrawList list, u32 width, u32 height, const glm::vec4& background);
+		void clear_ui_preview();
+		static constexpr u32 get_ui_preview_texture_id() { return UI_PREVIEW_TEXTURE_ID; }
 
 		// The id to draw a texture asset with in the UI (ImGui::Image), or 0 until the texture is on the GPU (and for good if it failed).
 		// Asking starts the load; call it every frame the texture is shown. Main thread.
@@ -112,10 +129,17 @@ namespace wiwa
 		ImGuiLayer m_ImGui{};
 		RenderThread m_Thread{};
 		SnapshotChannel m_Snapshot{};
+		// Per-frame times of the render thread (frame to frame, and the CPU time of the frame), waiting for the main thread to hand them to PerfStats.
+		std::mutex m_FrameSamplesMutex{};
+		std::vector<std::pair<float, float>> m_FrameSamples{};
+		std::chrono::steady_clock::time_point m_LastFrameStart{};
 		Scope<Renderer> m_Renderer{}; // created, used and destroyed on the render thread
 		ImGuiRenderPass* m_ImGuiPass = nullptr; // owned by the renderer; set on the render thread during start
+		UiRenderPass* m_UiPass = nullptr;       // the same, for the game UI
 		std::vector<RenderCommand> m_PendingCommands{};
 		DebugDraw m_DebugDraw{};
+		UiDrawList m_PendingUi{};
+		bool m_GameUiVisible = true;
 		SceneExtractor m_Extractor{}; // main thread: what the active scene changed since the last batch
 
 		// Assets the editor cooked again, noted by whichever thread reports it and taken by the render thread each frame.

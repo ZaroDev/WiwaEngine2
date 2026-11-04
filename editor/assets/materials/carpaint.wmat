@@ -1,0 +1,17 @@
+{
+  "alpha": "opaque",
+  "alphaCutoff": 0.5,
+  "baseColor": [0.5, 0.0, 0.02, 1.0],
+  "clearcoat": 1.0,
+  "clearcoatRoughness": 0.05,
+  "doubleSided": false,
+  "emissive": [0.0, 0.0, 0.0],
+  "metallic": 0.6,
+  "name": "carpaint",
+  "roughness": 0.35,
+  "sheen": 0.0,
+  "sheenRoughness": 0.0,
+  "textures": {},
+  "transmission": 0.0,
+  "version": 1
+}

@@ -1,0 +1,17 @@
+{
+  "alpha": "opaque",
+  "alphaCutoff": 0.5,
+  "baseColor": [0.05, 0.12, 0.35, 1.0],
+  "clearcoat": 0.0,
+  "clearcoatRoughness": 0.0,
+  "doubleSided": false,
+  "emissive": [0.0, 0.0, 0.0],
+  "metallic": 0.0,
+  "name": "cloth",
+  "roughness": 0.9,
+  "sheen": 1.0,
+  "sheenRoughness": 0.5,
+  "textures": {},
+  "transmission": 0.0,
+  "version": 1
+}

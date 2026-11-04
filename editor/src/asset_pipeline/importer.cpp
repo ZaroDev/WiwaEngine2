@@ -18,11 +18,20 @@ namespace wiwa
 		u64 next = 1;
 		for (const auto& [_, id] : m_Meta.SubAssets)
 		{
-			next = std::max(next, id + 1);
+			if (id < PHYSICS_HULL_LOCAL_ID_OFFSET) // the ids above are the importer's own (cooked physics shapes)
+			{
+				next = std::max(next, id + 1);
+			}
 		}
 
 		m_Meta.SubAssets[name] = next;
 		return AssetRef{ m_Meta.Guid, next };
+	}
+
+	AssetRef ImportContext::sub_asset_with_id(const std::string& name, u64 id)
+	{
+		m_Meta.SubAssets[name] = id;
+		return AssetRef{ m_Meta.Guid, id };
 	}
 
 	std::optional<AssetRef> ImportContext::import_dependency(const std::filesystem::path& file, const nlohmann::json* defaultSettings)

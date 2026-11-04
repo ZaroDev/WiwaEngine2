@@ -43,7 +43,7 @@ project "wiwa_game"
 		}
 		postbuildcommands
 		{
-			("{COPY} \"%{cfg.buildtarget.relpath}\" \"%{wks.location}game\"")
+			("copy /Y \"$(TargetPath)\" \"%{wks.location}game\\wiwa_game.exe\"")
 		}
 
 	filter "configurations:Debug"
