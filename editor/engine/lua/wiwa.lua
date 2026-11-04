@@ -573,6 +573,19 @@ function time.delta() end
 ---@return number
 function time.total() end
 
+--- The project's identity (Settings panel, Project): read-only strings and numbers.
+---@class ProjectInfo
+---@field name string
+---@field company string
+---@field description string
+--- "1.2.3", or "1.2.3-label" when the project has a version label.
+---@field version string
+---@field version_major integer
+---@field version_minor integer
+---@field version_patch integer
+---@type ProjectInfo
+project = {}
+
 --- Asks the host to end the program: a game closes, the editor stops play mode.
 function quit() end
 

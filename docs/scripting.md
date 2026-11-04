@@ -79,7 +79,7 @@ or `debug`.
   (`"replace"` or `"additive"`) returns a handle with `progress()`, `done()`, `failed()`, `stage()`.
 - **Rendering:** `debug_draw.line / box / sphere / arrow(..., color?, duration?)`; `camera.primary()` and
   `camera.set_primary(entity)`.
-- **Engine:** `time.delta()`, `time.total()`; `log(title, message)`, `log_warning`, `log_error`; `quit()` asks the host to end the program (a game closes, the editor's Play stops).
+- **Engine:** `time.delta()`, `time.total()`; `project.name`, `project.company`, `project.description`, `project.version` (`"1.2.3"` or `"1.2.3-label"`), `project.version_major/minor/patch` (read-only, from the Settings panel's Project page); `log(title, message)`, `log_warning`, `log_error`; `quit()` asks the host to end the program (a game closes, the editor's Play stops).
 - **UI:** `UI.panel(entity)`, widgets by path, `widget:on(event, fn)`, `UI.input` (see "UI" below).
 
 ## UI
