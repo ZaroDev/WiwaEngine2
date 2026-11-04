@@ -30,6 +30,9 @@ namespace wiwa
 		// Adds an event of the step being finished (a joint that broke); it is sorted with the other events of the step.
 		void add_event(const PhysicsEvent& event);
 
+		// The entity a registered body belongs to (a null key for one that is not registered).
+		BodyKey key_of(JPH::BodyID id) const { const BodyInfo* found = info(id); return found != nullptr ? found->Key : BodyKey{}; }
+
 		void register_body(JPH::BodyID id, BodyKey key, bool sensor, bool reportContacts);
 		// The body is going away: its pairs end with an Exit now (the events go to the commands' group), and Jolt's later callbacks for
 		// its ID are ignored.

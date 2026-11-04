@@ -1941,6 +1941,191 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// ---- characters: made and driven by commands ----
+
+		const CharacterPose* find_character(const PhysicsStepSnapshot* snapshot, BodyKey key)
+		{
+			if (snapshot == nullptr)
+			{
+				return nullptr;
+			}
+			for (const CharacterPose& pose : snapshot->Characters)
+			{
+				if (pose.Key == key)
+				{
+					return &pose;
+				}
+			}
+			return nullptr;
+		}
+
+		// The entity origin is at the character's feet: the capsule (1.8 m, radius 0.4) is lifted by half its height.
+		CharacterDesc standing_character(glm::vec3 feet)
+		{
+			CharacterDesc desc;
+			desc.Offset = glm::vec3(0.0f, 0.9f, 0.0f);
+			desc.Position = feet;
+			return desc;
+		}
+
+		BodyKey make_floor(CommandWorld& world)
+		{
+			const BodyKey floor = EntityGuid::generate();
+			world.send(CreateBody{ floor, box_body(MotionType::Static, glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(40.0f, 0.5f, 10.0f)) });
+			return floor;
+		}
+
+		// A character dropped on a floor stands on it, and walks where it is told to.
+		void check_character_stand_walk(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "character_stand_start: the world starts");
+			make_floor(world);
+			const BodyKey hero = EntityGuid::generate();
+			world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 1.0f, 0.0f)) });
+			auto steps = world.run_steps(60);
+			const CharacterPose* landed = steps.empty() ? nullptr : find_character(steps.back().get(), hero);
+			check(landed != nullptr && landed->Ground == GroundState::Grounded, "character_stand_grounded: a dropped character ends up Grounded");
+			check(landed != nullptr && std::abs(landed->Position.y) < 0.04f && glm::length(landed->Velocity) < 0.05f, "character_stand_rests: it rests on the floor, got " + (landed ? fmt_vec(landed->Position) : std::string("no pose")));
+			check(!steps.empty() && steps.back()->CharacterCount == 1, "character_stand_count: the snapshot counts one character");
+
+			world.send(SetCharacterVelocity{ hero, glm::vec3(2.0f, 0.0f, 0.0f) });
+			steps = world.run_steps(60);
+			const CharacterPose* walked = steps.empty() ? nullptr : find_character(steps.back().get(), hero);
+			check(walked != nullptr && std::abs(walked->Position.x - 2.0f) < 0.2f && std::abs(walked->Position.y) < 0.04f, "character_walk: 60 steps at 2 m/s are 2 m, got " + (walked ? fmt_vec(walked->Position) : std::string("no pose")));
+			world.Thread.stop();
+		}
+
+		// How high a character that walks 4 s at 2 m/s towards +x gets, and how far, over a block (top at `blockTop`, x from 4 to 6) or a ramp.
+		struct WalkResult
+		{
+			float HighestY = 0.0f;
+			float FinalX = 0.0f;
+			float FinalY = 0.0f;
+		};
+
+		WalkResult walk_over(bool ramp, float blockTopOrAngleDegrees, float stepHeight = 0.35f)
+		{
+			WalkResult result;
+			CommandWorld world;
+			if (!world.start())
+			{
+				return result;
+			}
+			make_floor(world);
+			if (!ramp)
+			{
+				const float top = blockTopOrAngleDegrees;
+				world.send(CreateBody{ EntityGuid::generate(), box_body(MotionType::Static, glm::vec3(5.0f, top * 0.5f, 0.0f), glm::vec3(1.0f, top * 0.5f, 5.0f)) });
+			}
+			else
+			{
+				// a plank 6 m long and 0.2 m thick that rises from (3, 0) at the given angle
+				const float angle = glm::radians(blockTopOrAngleDegrees);
+				const glm::vec3 surfaceMid(3.0f + 3.0f * std::cos(angle), 3.0f * std::sin(angle), 0.0f);
+				const glm::vec3 normal(-std::sin(angle), std::cos(angle), 0.0f);
+				BodyDesc plank = box_body(MotionType::Static, surfaceMid - 0.1f * normal, glm::vec3(3.0f, 0.1f, 5.0f));
+				plank.Rotation = glm::angleAxis(angle, glm::vec3(0.0f, 0.0f, 1.0f));
+				world.send(CreateBody{ EntityGuid::generate(), plank });
+			}
+			const BodyKey hero = EntityGuid::generate();
+			CharacterDesc desc = standing_character(glm::vec3(0.0f, 0.05f, 0.0f));
+			desc.StepHeight = stepHeight;
+			world.send(CreateCharacter{ hero, desc });
+			world.run_steps(20);
+			world.send(SetCharacterVelocity{ hero, glm::vec3(2.0f, 0.0f, 0.0f) });
+			for (const auto& step : world.run_steps(240))
+			{
+				if (const CharacterPose* pose = find_character(step.get(), hero))
+				{
+					result.HighestY = std::max(result.HighestY, pose->Position.y);
+					result.FinalX = pose->Position.x;
+					result.FinalY = pose->Position.y;
+				}
+			}
+			world.Thread.stop();
+			return result;
+		}
+
+		// Steps up to StepHeight are climbed, taller ones stop the character; slopes up to MaxSlopeAngle (45) are climbed, steeper ones are not.
+		void check_character_step_slope(Check& check)
+		{
+			const WalkResult low = walk_over(false, 0.3f);
+			check(low.HighestY > 0.25f && low.FinalX > 7.0f, "character_step_low: a 0.3 m step is climbed, got highest " + std::to_string(low.HighestY) + ", x " + std::to_string(low.FinalX));
+			const WalkResult high = walk_over(false, 0.6f);
+			check(high.HighestY < 0.15f && high.FinalX < 4.0f, "character_step_high: a 0.6 m step stops the character, got highest " + std::to_string(high.HighestY) + ", x " + std::to_string(high.FinalX));
+			// the 0.6 m step again with a character whose StepHeight is 0.6: the stair logic climbs it (the capsule's rounded bottom alone would not)
+			const WalkResult stairs = walk_over(false, 0.6f, 0.6f);
+			check(stairs.HighestY > 0.5f && stairs.FinalX > 7.0f, "character_step_stairs: a 0.6 m step is climbed with StepHeight 0.6, got highest " + std::to_string(stairs.HighestY) + ", x " + std::to_string(stairs.FinalX));
+			const WalkResult gentle = walk_over(true, 30.0f);
+			check(gentle.HighestY > 2.0f, "character_slope_walkable: a 30 degree ramp is climbed, got highest " + std::to_string(gentle.HighestY));
+			const WalkResult steep = walk_over(true, 60.0f);
+			check(steep.HighestY < 0.6f, "character_slope_steep: a 60 degree ramp is not climbed, got highest " + std::to_string(steep.HighestY));
+		}
+
+		// A jump of 5 m/s peaks at about v^2 / 2g = 1.27 m, and a jump asked for in the air does nothing.
+		void check_character_jump(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "character_jump_start: the world starts");
+			make_floor(world);
+			const BodyKey hero = EntityGuid::generate();
+			world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 0.05f, 0.0f)) });
+			world.run_steps(40);
+			world.send(CharacterJump{ hero, 5.0f });
+			float peak = 0.0f;
+			for (const auto& step : world.run_steps(20))
+			{
+				if (const CharacterPose* pose = find_character(step.get(), hero))
+				{
+					peak = std::max(peak, pose->Position.y);
+				}
+			}
+			world.send(CharacterJump{ hero, 5.0f }); // in the air: ignored
+			for (const auto& step : world.run_steps(60))
+			{
+				if (const CharacterPose* pose = find_character(step.get(), hero))
+				{
+					peak = std::max(peak, pose->Position.y);
+				}
+			}
+			check(peak > 1.1f && peak < 1.5f, "character_jump_peak: a 5 m/s jump peaks near 1.27 m and a jump in the air adds nothing, got " + std::to_string(peak));
+			world.Thread.stop();
+		}
+
+		// A character on a kinematic platform that moves at 1 m/s is carried along.
+		void check_character_platform(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "character_platform_start: the world starts");
+			const BodyKey platform = EntityGuid::generate();
+			world.send(CreateBody{ platform, box_body(MotionType::Kinematic, glm::vec3(0.0f, 0.15f, 0.0f), glm::vec3(1.5f, 0.15f, 1.5f)) });
+			const BodyKey hero = EntityGuid::generate();
+			world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 0.35f, 0.0f)) });
+			float heroX = -1000.0f;
+			float platformX = 0.0f;
+			for (int i = 0; i < 90; i++)
+			{
+				const auto steps = world.run_steps(1);
+				if (steps.empty())
+				{
+					break;
+				}
+				const PhysicsStepSnapshot& step = *steps.back();
+				platformX = static_cast<float>((step.Time + step.FixedDt) * 1.0);
+				world.send(SetKinematicTarget{ platform, glm::vec3(platformX, 0.15f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f) });
+				if (const CharacterPose* pose = find_character(&step, hero))
+				{
+					heroX = pose->Position.x;
+				}
+			}
+			check(platformX > 1.0f && std::abs(heroX - platformX) < 0.25f, "character_platform: the character rides the platform, platform x " + std::to_string(platformX) + ", character x " + std::to_string(heroX));
+			world.Thread.stop();
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1973,6 +2158,10 @@ namespace wiwa
 		check_joint_world_lifetime(check);
 		check_joint_debug_draw(check);
 		check_joint_stats(check);
+		check_character_stand_walk(check);
+		check_character_step_slope(check);
+		check_character_jump(check);
+		check_character_platform(check);
 
 		if (check.Failures == 0)
 		{

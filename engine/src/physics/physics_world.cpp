@@ -18,6 +18,7 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 
 #include "contact_listener.h"
+#include "character_set.h"
 #include "joint_set.h"
 #include "physics_debug_draw.h"
 #include "physics_layers_jolt.h"
@@ -118,6 +119,7 @@ namespace wiwa
 			~PhysicsWorld() override
 			{
 				m_Joints.clear(); // before the bodies: a constraint must not outlive them
+				m_Characters.clear(); // and a character removes its inner body
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
 				for (const auto& [key, entry] : m_Bodies)
 				{
@@ -200,9 +202,25 @@ namespace wiwa
 					{
 						m_Joints.set_limits(c.Owner, c.Min, c.Max);
 					}
-					else if constexpr (std::is_same_v<T, CreateCharacter> || std::is_same_v<T, DestroyCharacter> || std::is_same_v<T, SetCharacterVelocity> || std::is_same_v<T, CharacterJump> || std::is_same_v<T, TeleportCharacter>)
+					else if constexpr (std::is_same_v<T, CreateCharacter>)
 					{
-						// characters are built in the next task
+						m_Characters.create(c.Key, c.Desc);
+					}
+					else if constexpr (std::is_same_v<T, DestroyCharacter>)
+					{
+						m_Characters.destroy(c.Key);
+					}
+					else if constexpr (std::is_same_v<T, SetCharacterVelocity>)
+					{
+						m_Characters.set_velocity(c.Key, c.Velocity);
+					}
+					else if constexpr (std::is_same_v<T, CharacterJump>)
+					{
+						m_Characters.jump(c.Key, c.Speed);
+					}
+					else if constexpr (std::is_same_v<T, TeleportCharacter>)
+					{
+						m_Characters.teleport(c.Key, c.Position);
 					}
 					else
 					{
@@ -213,6 +231,7 @@ namespace wiwa
 
 			void step() override
 			{
+				m_Characters.step(static_cast<float>(fixed_dt()), m_Temp);
 				m_Contacts.begin_step();
 				const JPH::EPhysicsUpdateError error = m_System.Update(static_cast<float>(fixed_dt()), 1, &m_Temp, &m_Jobs);
 				if (error != JPH::EPhysicsUpdateError::None)
@@ -256,6 +275,7 @@ namespace wiwa
 					snapshot.Poses.push_back(pose);
 				}
 				snapshot.JointCount = m_Joints.made_count();
+				m_Characters.write(snapshot);
 			}
 
 			void take_events(PhysicsStepSnapshot& snapshot) override { m_Contacts.take_events(snapshot.Events); }
@@ -664,6 +684,18 @@ namespace wiwa
 			ShapeBuilder m_Shapes{};
 			JPH::RefConst<JPH::Shape> m_Placeholder{};
 			std::unordered_map<BodyKey, BodyEntry> m_Bodies{};
+			CharacterSet m_Characters{ m_System, [this](JPH::BodyID id) { return m_Contacts.key_of(id); },
+				[this](JPH::BodyID id, BodyKey key, bool made)
+				{
+					if (made)
+					{
+						m_Contacts.register_body(id, key, false, false);
+					}
+					else
+					{
+						m_Contacts.unregister_body(id);
+					}
+				} };
 			JointSet m_Joints{ m_System, [this](BodyKey key) { const auto it = m_Bodies.find(key); return it == m_Bodies.end() ? JPH::BodyID() : it->second.Id; } };
 			std::vector<JPH::BodyID> m_MovedKinematic{};
 			std::shared_ptr<const std::vector<QueryBody>> m_StaticQuery{}; // the static bodies of the query snapshots, until one changes
