@@ -38,6 +38,7 @@ namespace wiwa
 		WI_ENGINE_LOG(Info, "Allocated {0} bytes with {1} allocations", s_AllocatedBytesSize.load(), s_AllocationCount.load());
 
 		s_Engine = this;
+		m_ModuleManager.set_perf_stats(&m_Perf);
 
 		m_Time.init();
 
@@ -71,6 +72,8 @@ namespace wiwa
 					continue;
 				}
 			}
+			const auto frameStart = std::chrono::steady_clock::now();
+			m_Perf.begin_frame();
 			m_Time.update();
 
 			m_ModuleManager.begin();
@@ -93,6 +96,8 @@ namespace wiwa
 			m_ModuleManager.post_render_update(realDeltaTime);
 
 			on_update(realDeltaTime);
+
+			m_Perf.end_frame(std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - frameStart).count());
 		}
 	}
 
