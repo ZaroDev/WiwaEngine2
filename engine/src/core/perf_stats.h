@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-#include <core/common.h>
+#include <math/math.h>
 
 namespace wiwa
 {

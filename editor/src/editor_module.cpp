@@ -170,7 +170,7 @@ void EditorModule::init()
 	m_InputPanel = inputPanel.get();
 	m_Panels.push_back(inputPanel);
 	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<RendererPanel>());
+	m_Panels.push_back(CreateRef<PerformancePanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
 	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 	m_Panels.push_back(materialPanel);
