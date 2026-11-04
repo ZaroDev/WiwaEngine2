@@ -2126,6 +2126,50 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// A standing character is hit by a ray, found by an overlap, and enters and leaves a trigger volume once.
+		void check_character_queries(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "character_queries_start: the world starts");
+			make_floor(world);
+			const BodyKey volume = EntityGuid::generate();
+			BodyDesc trigger = box_body(MotionType::Static, glm::vec3(5.0f, 1.0f, 0.0f), glm::vec3(1.0f, 1.0f, 5.0f));
+			trigger.IsTrigger = true;
+			world.send(CreateBody{ volume, trigger });
+			const BodyKey hero = EntityGuid::generate();
+			world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 0.05f, 0.0f)) });
+
+			auto steps = world.run_steps(40);
+			const Ref<const QuerySnapshot> query = steps.empty() ? nullptr : steps.back()->Query;
+			check(query != nullptr, "character_queries_snapshot: the step has a query snapshot");
+			if (query != nullptr)
+			{
+				const std::optional<RayHit> down = query->raycast(glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), 20.0f);
+				check(down && down->Key == hero && std::abs(down->Distance - 8.2f) < 0.15f, "character_queries_ray: a ray from above hits the character at the top of its capsule, got " +
+					(down ? std::to_string(down->Distance) : std::string("no hit")));
+				const std::vector<BodyKey> inside = query->overlap_sphere(glm::vec3(0.0f, 0.9f, 0.0f), 0.3f);
+				check(std::find(inside.begin(), inside.end(), hero) != inside.end(), "character_queries_overlap: an overlap sphere around its middle finds the character");
+			}
+
+			world.send(SetCharacterVelocity{ hero, glm::vec3(2.0f, 0.0f, 0.0f) });
+			u32 enters = 0;
+			u32 exits = 0;
+			for (const auto& step : world.run_steps(240))
+			{
+				for (const PhysicsEvent& event : step->Events)
+				{
+					const bool pair = (event.A == hero && event.B == volume) || (event.A == volume && event.B == hero);
+					enters += pair && event.Kind == PhysicsEventKind::TriggerEnter ? 1u : 0u;
+					exits += pair && event.Kind == PhysicsEventKind::TriggerExit ? 1u : 0u;
+				}
+			}
+			check(enters == 1 && exits == 1, "character_queries_trigger: walking through a trigger volume gives one enter and one exit, got " + std::to_string(enters) + " and " + std::to_string(exits));
+			world.Thread.stop();
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -2162,6 +2206,7 @@ namespace wiwa
 		check_character_step_slope(check);
 		check_character_jump(check);
 		check_character_platform(check);
+		check_character_queries(check);
 
 		if (check.Failures == 0)
 		{

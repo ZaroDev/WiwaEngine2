@@ -344,6 +344,16 @@ namespace wiwa
 						impl->Moving.push_back(describe(key, entry));
 					}
 				}
+				// a character is a capsule that moves
+				for (const CharacterSet::View& view : m_Characters.views())
+				{
+					QueryBody body;
+					body.Key = view.Key;
+					body.Shape = view.Shape;
+					body.Position = view.Position;
+					body.Layer = static_cast<u32>(std::clamp<i32>(view.Layer, 0, static_cast<i32>(PHYSICS_LAYER_COUNT) - 1));
+					impl->Moving.push_back(body);
+				}
 				snapshot.Query = std::make_shared<QuerySnapshot>(std::move(impl));
 			}
 
