@@ -27,7 +27,7 @@ Vsync and the copy queue stay in `RenderQuality` and are shown under Renderer.
 
 Storage and loading:
 - Editor: `project.wproject` in the working directory. Missing or unreadable gives defaults, logged once.
-- Pak: the packager writes it under a new reserved GUID (`PROJECT_SETTINGS_GUID`) beside `PHYSICS_SETTINGS_GUID` and `INPUT_SETTINGS_GUID`. It also packs `RenderQuality` under a reserved GUID, so a game gets the project's quality from the pak and no longer reads `render_quality.json` from next to the program.
+- Pak: the packager writes it under a new reserved GUID (`PROJECT_SETTINGS_GUID`) beside `PHYSICS_SETTINGS_GUID` and `INPUT_SETTINGS_GUID`. `RenderQuality` is unchanged: it stays in `render_quality.json`, read from next to the program, and is not packed.
 - Game precedence: CLI flag, then pak value, then default.
 - The editor ignores window size and mode (it owns its window). It uses name and version for the title bar and the Export output.
 
@@ -58,7 +58,7 @@ Leftover panels:
 - `RenderModule` reads render scale and the API default (the `--api=` flag still wins, no silent fallback).
 - `Engine` applies the FPS cap and the fixed-timestep rate.
 - Game startup applies debug draw and GPU validation defaults.
-- Pak loading resolves the two new reserved GUIDs.
+- Pak loading resolves the new reserved GUID.
 
 ## Lua API
 
@@ -70,7 +70,7 @@ Documented in `docs/scripting.md` and the scripting spec. `demo.wscene` gets a H
 
 ## Docs to update in the same change
 
-New `project-settings.md` (this design, as it ends up). Update `assets.md` (project files table, reserved GUIDs), `editor.md` (panel list), `rendering.md`, `physics.md`, `input.md` (where their settings are edited), `scripting.md` and `docs/scripting.md` (the `project` table), `README.md` index.
+New `project-settings.md` (this design, as it ends up). Update `assets.md` (project files table, reserved GUIDs), `editor.md` (panel list), `rendering.md`, `physics.md`, `input.md` (where their settings are edited), `scripting.md` and `docs/scripting.md` (the `project` table), `README.md` index. The Renderer category keeps editing `render_quality.json` as today.
 
 ## Verification
 
@@ -78,6 +78,6 @@ No new smoke flags. Existing `--asset-smoke`, `--scene-smoke`, `--script-smoke`,
 
 ## Risks
 
-- Moving render quality to the pak changes where a game reads it; an old pak without the entry falls back to defaults.
+- An old pak without the project entry falls back to defaults.
 - Existing `--render-test` checks use `RenderQuality` directly and must be unaffected.
 - The panels that lose rows are edited in place; keep their public APIs where other code (smokes) calls them.
