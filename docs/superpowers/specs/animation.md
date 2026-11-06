@@ -6,9 +6,9 @@ Part 1 of 5 (foundation). Later parts are the animation graph, root motion, IK a
 
 ## Assets
 
-- `SkeletonData`: `Joints` (prefab node indices), `InverseBind`, `JointNames`, `Parents` (joint index, -1 for a root; **a parent always comes before its children**), `RestTranslation/Rotation/Scale`. The model importer fills them (`finalize_model_skeletons`): it sorts the joints parent first and **remaps the joint indices of every mesh vertex** it skins. The rest pose of a root joint includes the nodes above it, so poses are in the space of the model root (the entity with the `Animator`). More than 256 joints is a warning (the palette cap).
-- `AnimationClipData`: channels keyed by prefab node index, plus `Events` (`{time, name}`, sorted). Events are the `animationEvents` list of the model's import settings (`{clip, time, name}`); the Animation panel writes it. Editing it re-imports the model. **`.meta` files are git-ignored in this repo**, so events live in the local `.meta` only.
-- `WASSET_VERSION` is 2. The import cache entry stores `wassetVersion`, so a bump re-cooks everything (the importer version alone would not).
+- `SkeletonData`: `Joints` (prefab node indices), `InverseBind`, `JointNames`, `Parents` (joint index, -1 for a root; **a parent always comes before its children**), `RestTranslation/Rotation/Scale` (the joint's own node) and `Pre` (the nodes between the joint and its parent joint, or above a root joint: an Armature node scaled 0.01 and turned -90 degrees, for one). A joint's matrix is `parent * Pre * local`, so clips, which animate the joint's own TRS only, never lose what is folded into `Pre`, and poses are in the space of the model root (the entity with the `Animator`). The model importer fills them (`finalize_model_skeletons`): it sorts the joints parent first and **remaps the joint indices of every mesh vertex** it skins. More than 256 joints is a warning (the palette cap).
+- `AnimationClipData`: channels keyed by prefab node index, plus `Events` (`{time, name}`, sorted). Events are the `animationEvents` list of the model's import settings (`{clip, time, name}`); the Animation panel writes it. Editing it re-imports the model. **`.meta` files are git-ignored in this repo**, so events live in the local `.meta`; the two the demo needs (`fox.glb.meta`, `animation_demo.lua.meta`) are force-added.
+- `WASSET_VERSION` is 2: an older `.wpak` fails to load cleanly and has to be packed again. The import cache entry stores `wassetVersion`, so a bump re-cooks everything (the importer version alone would not).
 - A **ClipBinding** (`bind_clip`) maps each channel to a joint by node; channels for nodes outside the skeleton are left out with one warning per clip.
 
 ## Components
@@ -23,19 +23,20 @@ Runtime state is not a component: `AnimationModule` (priority 10, after the scri
 
 `AnimatorInstance`: `play` replaces the root, `crossfade` wraps it as `Blend(old, new)` and ramps, `stop` fades to `RestNode`; a finished blend collapses to its child, and a crossfade started with 24 nodes or more settles the older fades first, so the tree stays bounded. Layers (`add_layer`) are kept beside the base: masked (override) or additive (one clip). A command that needs a clip that has not loaded waits, in order, and runs the frame it can; a name that is unknown once every clip has loaded is logged and dropped.
 
-Palette = `model[j] * inverseBind[j]`, three float4 rows per joint (`JointMatrix`). Sockets are written after evaluation (`AnimationSocket`'s `Transform` from the joint, relative to its parent).
+Palette = `model[j] * inverseBind[j]`, three float4 rows per joint (`JointMatrix`). Sockets are written after evaluation (`AnimationSocket`'s `Transform` from the joint, relative to its parent); **not for previews**, which never write the scene.
 
 ## Skinning and rendering
 
 - A mesh keeps `SkinVertices` (four joints and weights) in a **per-page skin buffer** parallel to the page's vertex buffer, created when the first skinned mesh lands on the page, uploaded with the mesh. Rigid meshes cost nothing.
 - Palettes travel main to render in the same `SceneExtractor::extract` as the world matrix (`SceneDelta::PaletteUpdates`, sent when a pose differs from what was sent; an empty one makes the instance rigid again). `RenderScene` keeps `PrevPalette` and rolls it in `end_frame`, like `PrevWorld`: the render thread keeps the previous one, not main. A skinned instance's world matrix is the **Animator's**, not the mesh node's, and its culling bounds grow by `Animator::BoundsPadding`.
 - `GpuInstance` has a `Skin` row (palette rows now and before; `NO_PALETTE` = rigid). Vertex shaders skin before the world matrix with `SkinPoint`/`SkinNormal` (`scene_common.hlsli`); `PreviousClipPosition` skins with the previous palette. A user surface shader's `VertexOffset` applies before skinning. Non-uniform joint scale is not supported (normals use the upper 3x3). A palette shorter than the mesh's joint count is ignored (drawn rigid) so the shader never reads past it.
-- **Edit mode:** a skinned mesh with no palette is drawn unskinned at the Animator's world, which is exactly the rest pose.
+- **Edit mode:** a skinned mesh with no palette is drawn unskinned at the Animator's world. That is the bind pose, which equals the rest pose of the nodes only when the inverse-bind matrices match them (a rig bound in an A pose with a T-pose node rest shows the T pose in edit mode and pops to the A pose when Play starts).
 
 ## Traps
 
 - **The skin data cannot live in the frame set.** Its registers span 1..9 and the material layout sits in t10..t13 (D3D12 wants each layout's range to be contiguous), and Vulkan's binding 0 is already `b0`. Palettes (`t22`) and skin vertices (`t23`) are their own **skin set, always the last set** of every pass that draws meshes; each mesh shader defines `SKIN_SET` (its number on Vulkan: the count of layouts before it) before including `scene_common.hlsli`. A new pass that draws meshes must append `data.skin_layout()` to its layouts (`scene_pass::draw_items` binds the set).
 - **`SV_VertexID` differs by API:** Vulkan includes the base vertex, D3D does not. The base vertex is the third push constant of a mesh draw (`DrawConstants.BaseVertex`, 12 bytes) and `SkinVertexIndex` adds it on D3D.
+- `BlendNode::collapse` keeps a blend that is ramping at weight 0: a frame of no time (Speed 0, a paused game) must not free the clip that was just started (`m_Current` points at it).
 - Shutdown order: the new handles in `SceneRenderData::shutdown` must be reset before the device goes (Vulkan and D3D12 crash otherwise).
 - `ScriptingModule` reads the animation module when it starts, so `Engine` registers `AnimationModule` before it.
 - Events reach scripts one frame late, like UI events; `joint_world` reads the previous evaluation.

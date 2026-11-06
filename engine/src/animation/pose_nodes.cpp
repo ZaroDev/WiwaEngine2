@@ -292,9 +292,9 @@ namespace wiwa
 		{
 			m_B = std::move(replacement);
 		}
-		if (m_Weight <= 0.0f)
+		if (m_Weight <= 0.0f && m_Rate <= 0.0f)
 		{
-			return std::move(m_A);
+			return std::move(m_A); // not while it ramps: a frame of no time must not drop the clip that is about to fade in
 		}
 		if (m_Weight >= 1.0f)
 		{

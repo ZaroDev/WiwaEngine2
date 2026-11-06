@@ -46,7 +46,7 @@ namespace wiwa
 
 			// the parent joint and the rest pose of every joint, in the order the readers listed them
 			std::vector<i32> parents(count, -1);
-			std::vector<glm::mat4> rest(count, glm::mat4(1.0f));
+			std::vector<glm::mat4> pre(count, glm::mat4(1.0f));
 			for (size_t j = 0; j < count; j++)
 			{
 				const u32 node = skeleton.Joints[j];
@@ -54,7 +54,7 @@ namespace wiwa
 				{
 					continue;
 				}
-				glm::mat4 matrix = local_matrix(model.Nodes[node]);
+				glm::mat4 matrix(1.0f); // the nodes between this joint and its parent joint, or the root
 				i32 up = model.Nodes[node].Parent;
 				for (size_t steps = 0; up >= 0 && static_cast<size_t>(up) < model.Nodes.size() && steps < model.Nodes.size(); steps++)
 				{
@@ -67,7 +67,7 @@ namespace wiwa
 					matrix = local_matrix(model.Nodes[static_cast<size_t>(up)]) * matrix;
 					up = model.Nodes[static_cast<size_t>(up)].Parent;
 				}
-				rest[j] = matrix;
+				pre[j] = matrix;
 			}
 
 			// parents first: a walk down from the roots that keeps the order of the readers among siblings
@@ -123,9 +123,10 @@ namespace wiwa
 				result.InverseBind.push_back(skeleton.InverseBind[j]);
 				result.JointNames.push_back(node < model.Nodes.size() ? model.Nodes[node].Name : std::string{});
 				result.Parents.push_back(parents[j] < 0 ? -1 : static_cast<i32>(newIndexOfOld[static_cast<size_t>(parents[j])]));
+				result.Pre.push_back(pre[j]);
 				glm::vec3 translation, scale;
 				glm::quat rotation;
-				decompose(rest[j], translation, rotation, scale);
+				decompose(node < model.Nodes.size() ? local_matrix(model.Nodes[node]) : glm::mat4(1.0f), translation, rotation, scale);
 				result.RestTranslation.push_back(translation);
 				result.RestRotation.push_back(rotation);
 				result.RestScale.push_back(scale);

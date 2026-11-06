@@ -154,6 +154,14 @@ namespace wiwa
 			module.tick(scene, 0.0f, false);
 			check(near_equal(hip_x(*preview), 5.0f), "and follows a scrub");
 
+			// a preview never writes the scene: the socket entity of a previewed animator stays where it is
+			const entt::entity prop = scene->create("prop", hero);
+			scene->registry().emplace<AnimationSocket>(prop, AnimationSocket{ "hand", glm::vec3(0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f) });
+			scene->registry().get<Transform>(prop).Position = glm::vec3(7.0f, 7.0f, 7.0f);
+			preview->seek(0.2f);
+			module.tick(scene, 0.0f, false);
+			check(near_equal(scene->registry().get<Transform>(prop).Position.x, 7.0f), "a preview does not write the sockets of the edit scene");
+
 			module.tick(scene, 0.1f, true);
 			module.drop_previews();
 			check(module.instance_for(hero) == nullptr, "dropping the previews ends them");
@@ -203,6 +211,19 @@ namespace wiwa
 			check(largest <= ANIMATOR_MAX_TREE_NODES + 2, "crossfades started in a row keep the tree bounded");
 			instance.update(1.0f, events);
 			check(instance.node_count() == 1, "and collapse to one clip when they have faded");
+
+			// a frame of no time must not undo a crossfade or a stop that was just asked for (the new clip would be freed under m_Current)
+			instance.play({ "Idle", {} });
+			instance.crossfade({ "Run", {} }, 0.2f);
+			instance.update(0.0f, events);
+			check(instance.node_count() == 3 && instance.playing(), "a crossfade survives a frame of no time");
+			instance.update(0.2f, events);
+			check(instance.node_count() == 1 && instance.playing(), "and completes afterwards on the new clip");
+			instance.stop(0.3f);
+			instance.update(0.0f, events);
+			check(instance.node_count() == 3, "a stop survives a frame of no time");
+			instance.update(0.3f, events);
+			check(instance.node_count() == 1 && !instance.playing(), "and completes");
 
 			// stop fades to the rest pose
 			instance.play({ "Idle", {} });

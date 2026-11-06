@@ -23,6 +23,10 @@ namespace wiwa
 		for (size_t j = 0; j < count; j++)
 		{
 			glm::mat4 local = glm::translate(glm::mat4(1.0f), pose.T[j]) * glm::mat4_cast(pose.R[j]) * glm::scale(glm::mat4(1.0f), pose.S[j]);
+			if (j < skeleton.Pre.size())
+			{
+				local = skeleton.Pre[j] * local;
+			}
 			const i32 parent = skeleton.Parents[j];
 			out[j] = (parent >= 0 && static_cast<size_t>(parent) < j) ? out[static_cast<size_t>(parent)] * local : local;
 		}

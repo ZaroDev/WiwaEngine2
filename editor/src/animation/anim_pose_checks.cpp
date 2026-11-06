@@ -101,6 +101,31 @@ namespace wiwa
 			check(mask == std::vector<float>({ 0.0f, 1.0f, 1.0f }), "a subtree mask holds the joint and its descendants");
 		}
 
+		// A rig exported with an Armature node above the root joint (scale 0.01, moved up): the node folds into the joint as Pre, and a clip that
+		// animates the joint must not lose it.
+		void folded_nodes(AnimCheck& check)
+		{
+			SkeletonData skeleton = make_skeleton();
+			skeleton.Pre.assign(3, glm::mat4(1.0f));
+			skeleton.Pre[0] = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 5.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
+			skeleton.RestTranslation[0] = glm::vec3(0.0f, 100.0f, 0.0f);
+
+			std::vector<glm::mat4> model;
+			model_matrices(skeleton, rest_pose(skeleton), model);
+			check(near_equal(model[0][3].y, 6.0f) && near_equal(model[0][0][0], 0.01f), "the folded node is part of the joint's matrix");
+			check(near_equal(model[1][3].y, 6.0f) && near_equal(model[1][3].x, 0.01f), "and of its children");
+
+			AnimationClipData clip;
+			clip.Name = "move";
+			clip.Duration = 1.0f;
+			clip.Channels.push_back(make_channel(10, AnimationPath::Translation, AnimationInterpolation::Step, { 0 }, { 0.0f, 200.0f, 0.0f }));
+			auto node = make_clip_node(clip, skeleton);
+			Pose pose = rest_pose(skeleton);
+			node->evaluate(pose);
+			model_matrices(skeleton, pose, model);
+			check(near_equal(model[0][3].y, 7.0f) && near_equal(model[0][1][1], 0.01f), "an animated joint keeps the folded node above it (200 local units are 2 world units on top of the 5)");
+		}
+
 		void sampling(AnimCheck& check)
 		{
 			const SkeletonData skeleton = make_skeleton();
@@ -313,6 +338,7 @@ namespace wiwa
 	void run_pose_checks(AnimCheck& check)
 	{
 		rest_and_hierarchy(check);
+		folded_nodes(check);
 		sampling(check);
 		blending(check);
 		clip_events(check);

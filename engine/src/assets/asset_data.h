@@ -254,7 +254,8 @@ namespace wiwa
 
 	// One skin of a model: the joints (node indices of the Prefab) and the matrices that bring a vertex into each joint's space.
 	// The importer orders the joints so that a parent always comes before its children; the arrays below are parallel to Joints.
-	// The rest pose of a root joint includes the nodes above it, so a pose is in the space of the model's root.
+	// Rest* is the joint's own node. Pre is the product of the nodes between the joint and its parent joint (an Armature node above a root
+	// joint, for one), which clips do not animate: the matrix of a joint is parent * Pre * local, so a pose is in the space of the model's root.
 	struct SkeletonData
 	{
 		std::string Name{};
@@ -265,6 +266,7 @@ namespace wiwa
 		std::vector<glm::vec3> RestTranslation{};
 		std::vector<glm::quat> RestRotation{};
 		std::vector<glm::vec3> RestScale{};
+		std::vector<glm::mat4> Pre{};
 	};
 
 	enum class AnimationPath : u32

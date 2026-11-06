@@ -78,7 +78,8 @@ namespace wiwa
 			check(skeleton.Joints == std::vector<u32>({ 1, 2, 3 }), "joints are ordered parent first");
 			check(skeleton.Parents == std::vector<i32>({ -1, 0, 1 }), "parent indices");
 			check(skeleton.JointNames.size() == 3 && skeleton.JointNames[0] == "hip" && skeleton.JointNames[2] == "tip", "joint names");
-			check(skeleton.RestTranslation.size() == 3 && near_equal(skeleton.RestTranslation[0].y, 3.0f), "a root joint's rest pose includes the nodes above it");
+			check(skeleton.RestTranslation.size() == 3 && near_equal(skeleton.RestTranslation[0].y, 2.0f), "the rest pose of a joint is its own node's");
+			check(skeleton.Pre.size() == 3 && near_equal(skeleton.Pre[0][3].y, 1.0f) && near_equal(skeleton.Pre[1][3].y, 0.0f), "the node above the root joint is folded into Pre");
 			check(skeleton.RestTranslation[2].z == 3.0f, "a child joint's rest pose is local to its parent");
 			check(near_equal(skeleton.RestRotation[1].z, glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)).z), "rest rotation");
 			check(model.Meshes[0].Data.SkinVertices[0].Joints[0] == 2, "a vertex weighted to the tip still names the tip");

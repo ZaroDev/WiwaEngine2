@@ -232,8 +232,9 @@ namespace wiwa
 				continue;
 			}
 
-			const AnimatorInstance& instance = *m_Instances.at(owner).Instance;
-			if (!instance.ready())
+			const Entry& entry = m_Instances.at(owner);
+			const AnimatorInstance& instance = *entry.Instance;
+			if (entry.Preview || !instance.ready())
 			{
 				continue;
 			}

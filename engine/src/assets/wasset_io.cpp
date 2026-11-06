@@ -466,12 +466,13 @@ namespace wiwa
 		ar.pod_vector(v.RestTranslation);
 		ar.pod_vector(v.RestRotation);
 		ar.pod_vector(v.RestScale);
+		ar.pod_vector(v.Pre);
 
 		if (ar.reading() && ar.ok())
 		{
 			const size_t count = v.Joints.size();
 			bool valid = v.InverseBind.size() == count && v.JointNames.size() == count && v.Parents.size() == count
-				&& v.RestTranslation.size() == count && v.RestRotation.size() == count && v.RestScale.size() == count;
+				&& v.RestTranslation.size() == count && v.RestRotation.size() == count && v.RestScale.size() == count && v.Pre.size() == count;
 			for (size_t i = 0; valid && i < count; i++)
 			{
 				valid = v.Parents[i] >= -1 && v.Parents[i] < static_cast<i32>(i); // a parent comes before its children
