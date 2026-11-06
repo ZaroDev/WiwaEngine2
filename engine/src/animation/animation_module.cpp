@@ -99,7 +99,8 @@ namespace wiwa
 			return;
 		}
 		const Time& time = Engine::get().get_time();
-		tick(scenes->get_active(), time.get_delta_time_seconds(), time.get_game_clock().IsPlaying);
+		const bool playing = time.get_game_clock().IsPlaying;
+		tick(scenes->get_active(), step_seconds(playing, time.get_delta_time_seconds(), time.get_real_delta_time_seconds()), playing);
 	}
 
 	void AnimationModule::adopt(const Ref<Scene>& scene)

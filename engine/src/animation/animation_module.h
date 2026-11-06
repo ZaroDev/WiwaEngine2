@@ -42,6 +42,10 @@ namespace wiwa
 		// How skeletons and clips are found. The default asks the AssetManager; tests and tools put their own.
 		void set_sources(AnimationSources sources) { m_Sources = std::move(sources); }
 
+		// The seconds a frame advances the animators: game time while the game plays, real time otherwise (the game clock is stopped in edit mode,
+		// and a stopped clock keeps the delta it had, so a preview would not move or would move by a stale step).
+		static float step_seconds(bool playing, float gameDelta, float realDelta) { return playing ? gameDelta : realDelta; }
+
 		// The work of update() on a given scene: playing is whether the game clock runs. Public for tests and tools.
 		void tick(const Ref<Scene>& scene, float deltaTime, bool playing);
 

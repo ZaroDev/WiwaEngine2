@@ -162,6 +162,10 @@ namespace wiwa
 			module.tick(scene, 0.0f, false);
 			check(near_equal(scene->registry().get<Transform>(prop).Position.x, 7.0f), "a preview does not write the sockets of the edit scene");
 
+			// the clock a frame runs on: the game's while it plays; in edit mode the game clock is stopped (its delta is zero, or the last one it had)
+			check(AnimationModule::step_seconds(true, 0.016f, 0.5f) == 0.016f, "a playing game advances by game time");
+			check(AnimationModule::step_seconds(false, 0.0f, 0.016f) == 0.016f && AnimationModule::step_seconds(false, 0.3f, 0.016f) == 0.016f, "a preview advances by real time, whatever the stopped game clock says");
+
 			module.tick(scene, 0.1f, true);
 			module.drop_previews();
 			check(module.instance_for(hero) == nullptr, "dropping the previews ends them");
