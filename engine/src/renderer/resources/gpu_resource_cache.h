@@ -80,6 +80,8 @@ namespace wiwa
 		u32 page_count() const { return static_cast<u32>(m_Pages.size()); }
 		nvrhi::IBuffer* vertex_buffer(u32 page) const { return m_Pages[page].Vertex; }
 		nvrhi::IBuffer* index_buffer(u32 page) const { return m_Pages[page].Index; }
+		// The skin vertices (four joints and weights each) of the meshes on the page, parallel to its vertex buffer; null until a skinned mesh is placed on it.
+		nvrhi::IBuffer* skin_buffer(u32 page) const { return m_Pages[page].Skin; }
 		// All materials, 64 bytes each (GpuMaterialRecord). Replaced when it has to grow: material_generation() changes then.
 		nvrhi::IBuffer* material_buffer() const { return m_MaterialBuffer; }
 		u32 material_generation() const { return m_MaterialGeneration; }
@@ -132,6 +134,7 @@ namespace wiwa
 		{
 			nvrhi::BufferHandle Vertex{};
 			nvrhi::BufferHandle Index{};
+			nvrhi::BufferHandle Skin{};
 			RangeAllocator VertexRanges{};
 			RangeAllocator IndexRanges{};
 		};

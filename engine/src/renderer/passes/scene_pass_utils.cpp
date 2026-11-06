@@ -115,6 +115,7 @@ namespace wiwa::scene_pass
 				{
 					state.addBindingSet(extraBindings);
 				}
+				state.addBindingSet(data.skin_bindings(item.Page)); // always the last set
 
 				nvrhi::VertexBufferBinding vertexBinding;
 				vertexBinding.buffer = cache.vertex_buffer(item.Page);

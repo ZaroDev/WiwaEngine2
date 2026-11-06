@@ -22,8 +22,9 @@ struct DepthOutput
 
 // Where the point of the surface was in the previous frame, in that frame's clip space. A rigid instance moved with its world matrix;
 // a skinned mesh has to skin the point with the previous frame's pose here instead, so that the velocity includes the animation.
-float4 PreviousClipPosition(float3 position, SceneInstance instance)
+float4 PreviousClipPosition(MeshVertexInput input, float3 position, SceneInstance instance)
 {
+	position = SkinPointWith(instance, input, position, true);
 	float3 world = instance.PrevWorldC0.xyz * position.x + instance.PrevWorldC1.xyz * position.y + instance.PrevWorldC2.xyz * position.z + instance.PrevWorldC3.xyz;
 	return mul(PreviousViewProjection, float4(world, 1.0));
 }
@@ -58,13 +59,13 @@ DepthOutput DepthPixel(DepthVertexOutput input, bool frontFace)
 DepthVertexOutput DepthVertexAt(MeshVertexInput input, float3 position)
 {
 	SceneInstance instance = uInstances[DrawConstants.InstanceIndex];
-	float3 world = TransformPoint(instance, position);
+	float3 world = TransformPoint(instance, SkinPoint(instance, input, position));
 	DepthVertexOutput output;
 	output.Position = mul(ViewProjection, float4(world, 1.0));
 	output.Uv = input.Uv;
-	output.Normal = TransformNormal(instance, input.Normal);
+	output.Normal = TransformNormal(instance, SkinNormal(instance, input, input.Normal));
 	output.CurrentClip = mul(UnjitteredViewProjection, float4(world, 1.0));
-	output.PreviousClip = PreviousClipPosition(position, instance);
+	output.PreviousClip = PreviousClipPosition(input, position, instance);
 	output.WorldPosition = world;
 	return output;
 }

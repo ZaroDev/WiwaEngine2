@@ -62,8 +62,8 @@ namespace wiwa
 		m_OpaqueInputLayout = scene_pass::make_mesh_input_layout(m_Device, opaqueVertex);
 		m_MaskedInputLayout = scene_pass::make_mesh_input_layout(m_Device, maskedVertex);
 
-		const std::vector<nvrhi::IBindingLayout*> opaqueLayouts = { data.frame_layout() };
-		const std::vector<nvrhi::IBindingLayout*> maskedLayouts = { data.frame_layout(), data.cache()->material_layout() };
+		const std::vector<nvrhi::IBindingLayout*> opaqueLayouts = { data.frame_layout(), data.skin_layout() };
+		const std::vector<nvrhi::IBindingLayout*> maskedLayouts = { data.frame_layout(), data.cache()->material_layout(), data.skin_layout() };
 		for (int doubleSided = 0; doubleSided < 2; doubleSided++)
 		{
 			scene_pass::PipelineOptions options;

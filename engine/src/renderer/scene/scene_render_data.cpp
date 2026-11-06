@@ -92,6 +92,14 @@ namespace wiwa
 		aoLayout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(15));
 		m_AoLayout = device->createBindingLayout(aoLayout);
 
+		// t22 and t23 of the skin set (scene_common.hlsli): vertex shaders only
+		nvrhi::BindingLayoutDesc skinLayout;
+		skinLayout.visibility = nvrhi::ShaderType::Vertex;
+		skinLayout.bindingOffsets = make_zero_binding_offsets();
+		skinLayout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(22));
+		skinLayout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(23));
+		m_SkinLayout = device->createBindingLayout(skinLayout);
+
 		nvrhi::BufferDesc constants;
 		constants.byteSize = sizeof(FrameConstants);
 		constants.isConstantBuffer = true;
@@ -111,6 +119,8 @@ namespace wiwa
 			description.debugName = name;
 			return device->createBuffer(description);
 		};
+		m_DummyPalette = make_structured(3, sizeof(glm::vec4), false, "Palette stand-in");
+		m_DummySkin = make_structured(1, 32, false, "Skin vertices stand-in");
 		m_LightBuffer = make_structured(MAX_LIGHTS, sizeof(GpuLight), false, "Scene lights");
 		m_ClusterCounts = make_structured(CLUSTER_COUNT, sizeof(u32), true, "Cluster light counts");
 		m_ClusterIndices = make_structured(static_cast<u64>(CLUSTER_COUNT) * MAX_LIGHTS_PER_CLUSTER, sizeof(u32), true, "Cluster light indices");
@@ -181,6 +191,11 @@ namespace wiwa
 		m_InstanceBuffer = nullptr;
 		m_ConstantBuffer = nullptr;
 		m_FrameLayout = nullptr;
+		m_SkinSets.clear();
+		m_DefaultSkinSet = SkinSet{};
+		m_DummyPalette = nullptr;
+		m_DummySkin = nullptr;
+		m_SkinLayout = nullptr;
 		m_Device = nullptr;
 	}
 
@@ -679,5 +694,38 @@ namespace wiwa
 			m_BoundCube = cube;
 			m_BoundBrdf = brdf;
 		}
+
+		update_skin_sets(cache);
+	}
+
+	// One set per mesh page: the palettes of this frame and the skin vertices of the page (stand-ins where there are none).
+	void SceneRenderData::update_skin_sets(GpuResourceCache& cache)
+	{
+		nvrhi::IBuffer* palettes = m_DummyPalette;
+		auto refresh = [&](SkinSet& set, nvrhi::IBuffer* skin)
+		{
+			if (set.Set == nullptr || set.Palette != palettes || set.Skin != skin)
+			{
+				nvrhi::BindingSetDesc description;
+				description.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(22, palettes));
+				description.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(23, skin));
+				set.Set = m_Device->createBindingSet(description, m_SkinLayout);
+				set.Palette = palettes;
+				set.Skin = skin;
+			}
+		};
+
+		refresh(m_DefaultSkinSet, m_DummySkin);
+		m_SkinSets.resize(cache.page_count());
+		for (u32 page = 0; page < m_SkinSets.size(); page++)
+		{
+			nvrhi::IBuffer* skin = cache.skin_buffer(page);
+			refresh(m_SkinSets[page], skin != nullptr ? skin : m_DummySkin.Get());
+		}
+	}
+
+	nvrhi::IBindingSet* SceneRenderData::skin_bindings(u32 page) const
+	{
+		return page < m_SkinSets.size() && m_SkinSets[page].Set != nullptr ? m_SkinSets[page].Set.Get() : m_DefaultSkinSet.Set.Get();
 	}
 }

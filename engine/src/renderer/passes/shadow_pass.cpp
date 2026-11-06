@@ -68,7 +68,7 @@ namespace wiwa
 		options.DoubleSided = true;
 		options.DepthTest = true;
 		options.DepthWrite = true;
-		const std::vector<nvrhi::IBindingLayout*> layouts = { m_Layout };
+		const std::vector<nvrhi::IBindingLayout*> layouts = { m_Layout, data.skin_layout() };
 
 		m_CascadePipeline = nullptr;
 		m_AtlasPipeline = nullptr;

@@ -52,7 +52,7 @@ namespace wiwa
 		nvrhi::IShader* pixelShader = m_Shaders->get(engine_assets::VELOCITY_BLEND_SHADER, ShaderStage::Pixel);
 		m_InputLayout = scene_pass::make_mesh_input_layout(m_Device, vertexShader);
 
-		const std::vector<nvrhi::IBindingLayout*> layouts = { data.frame_layout(), data.cache()->material_layout() };
+		const std::vector<nvrhi::IBindingLayout*> layouts = { data.frame_layout(), data.cache()->material_layout(), data.skin_layout() };
 		for (int doubleSided = 0; doubleSided < 2; doubleSided++)
 		{
 			scene_pass::PipelineOptions options;

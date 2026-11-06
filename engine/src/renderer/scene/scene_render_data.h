@@ -57,6 +57,8 @@ namespace wiwa
 		float Depth = 0.0f; // view-space distance of the primitive's bounds center (for sorting blended draws)
 	};
 
+	constexpr u32 NO_PALETTE = ~0u; // GpuInstance::Skin.x of an instance that is not skinned (mirrored in scene_common.hlsli)
+
 	// One scene instance as the shaders read it (SceneInstance in scene_common.hlsli): the world matrix, the matrix for normals and the
 	// world matrix of the previous frame, each as four columns.
 	struct GpuInstance
@@ -64,8 +66,9 @@ namespace wiwa
 		glm::mat4 World{ 1.0f };
 		glm::mat4 Normal{ 1.0f };
 		glm::mat4 PrevWorld{ 1.0f };
+		glm::uvec4 Skin{ NO_PALETTE, NO_PALETTE, 0, 0 }; // x, y: row of this frame's and the previous frame's joint palette in uPalettes; NO_PALETTE: a rigid instance
 	};
-	static_assert(sizeof(GpuInstance) == 192);
+	static_assert(sizeof(GpuInstance) == 208);
 
 	// The per-frame constant buffer (FrameBuffer in scene_common.hlsli).
 	struct FrameConstants
@@ -180,6 +183,11 @@ namespace wiwa
 
 		nvrhi::IBindingLayout* frame_layout() const { return m_FrameLayout; }
 		nvrhi::IBindingSet* frame_bindings() const { return m_FrameBindings; }
+		// The skin set (joint palettes t22, the skin vertices of the page t23): the last set of every pass that draws meshes, so its layout is
+		// the last of each pass layouts. A page without skinned meshes gets stand-ins. The frame layout cannot hold it: its registers span 1..9
+		// and the material layout sits in t10..t13 (see ao_layout()).
+		nvrhi::IBindingLayout* skin_layout() const { return m_SkinLayout; }
+		nvrhi::IBindingSet* skin_bindings(u32 page) const;
 
 		// Draw counts of the last build, for the stats.
 		u32 visible_instances() const { return m_VisibleInstances; }
@@ -281,5 +289,18 @@ namespace wiwa
 		const nvrhi::IBuffer* m_BoundInstanceBuffer = nullptr;
 		const nvrhi::IBuffer* m_BoundMaterialBuffer = nullptr;
 		std::vector<GpuInstance> m_InstanceScratch{};
+
+		struct SkinSet
+		{
+			nvrhi::BindingSetHandle Set{};
+			const nvrhi::IBuffer* Palette = nullptr;
+			const nvrhi::IBuffer* Skin = nullptr;
+		};
+		void update_skin_sets(GpuResourceCache& cache);
+		nvrhi::BindingLayoutHandle m_SkinLayout{};
+		nvrhi::BufferHandle m_DummyPalette{};
+		nvrhi::BufferHandle m_DummySkin{};
+		SkinSet m_DefaultSkinSet{};
+		std::vector<SkinSet> m_SkinSets{}; // per mesh page
 	};
 }

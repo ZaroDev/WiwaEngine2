@@ -1,3 +1,4 @@
+#define SKIN_SET 3 // the sets before it in this pass: see scene_common.hlsli
 #include "pbr.hlsli"
 
 // The forward pass: PBR metallic-roughness for opaque and alpha-masked materials (the depth prepass has already cut the masked
@@ -14,12 +15,12 @@ struct ForwardVertexOutput
 ForwardVertexOutput VSMain(MeshVertexInput input)
 {
 	SceneInstance instance = uInstances[DrawConstants.InstanceIndex];
-	float3 worldPosition = TransformPoint(instance, input.Position);
+	float3 worldPosition = TransformPoint(instance, SkinPoint(instance, input, input.Position));
 
 	ForwardVertexOutput output;
 	output.Position = mul(ViewProjection, float4(worldPosition, 1.0));
 	output.WorldPosition = worldPosition;
-	output.WorldNormal = TransformNormal(instance, input.Normal);
+	output.WorldNormal = TransformNormal(instance, SkinNormal(instance, input, input.Normal));
 	output.Uv = input.Uv;
 	return output;
 }
