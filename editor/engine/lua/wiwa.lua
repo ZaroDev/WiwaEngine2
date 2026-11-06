@@ -565,6 +565,80 @@ function UI.input.nav(name) end
 ---@param amount number
 function UI.input.scroll(amount) end
 
+--- What a clip event hands to its handler.
+---@class AnimationEvent
+---@field name string
+---@field clip string the clip that fired it
+---@field time number seconds on the clip's own time
+
+--- A clip by name (one of the animator's clips) or an asset from load_asset.
+---@alias ClipRef string|Asset
+
+---@class AnimationPlayOptions
+---@field loop? boolean default true
+---@field speed? number default 1
+
+---@class AnimationLayerOptions
+---@field mask? string a joint name: the layer reaches that joint and everything below it
+---@field weight? number default 1
+---@field additive? boolean adds the change of the clip from its first frame to the pose below; default false
+---@field loop? boolean default false
+
+--- A layer above the base animation. Nil fields and ignored writes once the layer has ended.
+---@class AnimationLayer
+---@field weight number? 0 to 1
+local AnimationLayer = {}
+--- Fades to another clip (an additive layer swaps its clip at once).
+---@param clip ClipRef
+---@param seconds? number
+---@param options? AnimationPlayOptions
+function AnimationLayer:crossfade(clip, seconds, options) end
+--- Fades the layer out over some seconds, then removes it.
+---@param seconds? number
+function AnimationLayer:stop(seconds) end
+
+--- Plays the clips of an entity's Animator.
+---@class AnimatorHandle
+---@field speed number? the Animator's Speed
+---@field time number? seconds of the clip that plays
+---@field playing boolean? a clip plays and has not finished
+---@field ready boolean? the skeleton has loaded
+local AnimatorHandle = {}
+--- Plays a clip now. An unknown name is an error that lists the clips.
+---@param clip ClipRef
+---@param options? AnimationPlayOptions
+function AnimatorHandle:play(clip, options) end
+--- Fades from what plays to a clip.
+---@param clip ClipRef
+---@param seconds? number
+---@param options? AnimationPlayOptions
+function AnimatorHandle:crossfade(clip, seconds, options) end
+--- Fades to the rest pose.
+---@param seconds? number
+function AnimatorHandle:stop(seconds) end
+--- A named layer above the base; a layer of the same name is replaced.
+---@param name string
+---@param clip ClipRef
+---@param options? AnimationLayerOptions
+---@return AnimationLayer?
+function AnimatorHandle:layer(name, clip, options) end
+--- Calls the function when a clip fires an event of that name, one frame later. Call it from a script hook; it ends with the script.
+---@param event string
+---@param handler fun(self: table, event: AnimationEvent)
+function AnimatorHandle:on(event, handler) end
+---@param event string
+function AnimatorHandle:off(event) end
+--- The world matrix of a joint as of the last evaluated pose. nil if the animator is not running.
+---@param joint string
+---@return mat4?
+function AnimatorHandle:joint_world(joint) end
+
+Animation = {}
+--- The animator of an entity that has an Animator, or nil.
+---@param entity Entity
+---@return AnimatorHandle?
+function Animation.animator(entity) end
+
 time = {}
 --- Seconds of the update that is running.
 ---@return number

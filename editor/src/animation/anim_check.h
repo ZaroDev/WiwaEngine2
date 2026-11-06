@@ -23,4 +23,6 @@ namespace wiwa
 	void run_pose_checks(AnimCheck& check);
 	// Checks of the components, the AnimatorInstance and the AnimationModule (anim_module_checks.cpp).
 	void run_module_checks(AnimCheck& check);
+	// Checks of the Lua API (anim_lua_checks.cpp).
+	void run_lua_checks(AnimCheck& check);
 }

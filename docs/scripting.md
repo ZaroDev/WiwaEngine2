@@ -119,6 +119,35 @@ panel:find("Menu/Volume"):on("value_changed", function(self, value) self.volume 
   `press`, `release`, `nav`, `scroll`, `clear_pointer`) writes to a scripted input source, which only reaches the UI while it is the one in
   use (tests and tools).
 
+## Animation
+
+A model that has animations comes with an `Animator` on its root (the clips of the model, and the `Clip` that plays when the scene
+starts). `Animation.animator(entity)` gives the handle, or `nil` for an entity without one. The game clock must play: in the editor,
+press Play.
+
+```lua
+local anim = Animation.animator(self.entity)
+anim:play("Idle", { loop = true, speed = 1.0 })
+anim:crossfade("Run", 0.2, { loop = true })
+anim:stop(0.3)                                      -- fades to the rest pose
+local up = anim:layer("upper", "Wave", { mask = "Spine", weight = 1.0, additive = false, loop = false })
+up.weight = 0.5; up:crossfade("Aim", 0.1); up:stop(0.2)
+anim:on("footstep", function(self, event) end)      -- event = { name, clip, time }
+anim:off("footstep")
+anim.speed, anim.time, anim.playing, anim.ready
+local m = anim:joint_world("RightHand")             -- mat4, the pose of the last frame
+```
+
+- A clip is a name from the animator's `Clips` or an asset from `load_asset`. An unknown name is an error that lists the clips there are.
+  A clip that has not loaded yet is held and starts the frame it is ready.
+- A handle to an entity that is gone, and a layer that ended, read `nil` and ignore writes.
+- Events are added to a model in the `animationEvents` list of its `.meta` settings (`{ "clip": "Run", "time": 0.4, "name": "footstep" }`)
+  or in the Animation panel. A clip fires an event when it plays through its time, only while it is more than half of the pose, so the
+  two sides of a crossfade do not both fire a footstep. Handlers hear it one frame later, before `on_update`; a handler that raises an
+  error is logged and removed; handlers end with the script that registered them.
+- A joint can drive an entity: put an `AnimationSocket` (joint name, offset) on a descendant of the Animator.
+- Scripts cannot write the pose of a joint (that is IK); graph parameters (`anim:set`) come with the animation graph.
+
 ## Physics
 
 Entities with a `Collider` (and a `RigidBody` for anything that moves) are simulated by Jolt on its own thread at a fixed rate (60 Hz by

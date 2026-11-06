@@ -102,7 +102,7 @@ namespace wiwa
 		tick(scenes->get_active(), time.get_delta_time_seconds(), time.get_game_clock().IsPlaying);
 	}
 
-	void AnimationModule::tick(const Ref<Scene>& scene, float deltaTime, bool playing)
+	void AnimationModule::adopt(const Ref<Scene>& scene)
 	{
 		if (scene != m_Scene)
 		{
@@ -110,6 +110,50 @@ namespace wiwa
 			m_Events.clear();
 			m_Scene = scene;
 		}
+	}
+
+	// A new instance for an enabled Animator that has none, playing its Clip if PlayOnStart.
+	AnimationModule::Entry* AnimationModule::make_entry(entt::registry& registry, entt::entity entity)
+	{
+		const Animator* animator = registry.try_get<Animator>(entity);
+		const Id* id = registry.try_get<Id>(entity);
+		if (animator == nullptr || id == nullptr || !animator->Enabled)
+		{
+			return nullptr;
+		}
+
+		Entry entry;
+		entry.Instance = std::make_unique<AnimatorInstance>(m_Sources, *animator);
+		entry.Guid = id->Guid;
+		if (animator->PlayOnStart && animator->Clip.valid())
+		{
+			entry.Instance->play(ClipSelector{ {}, animator->Clip });
+		}
+		return &m_Instances.emplace(entity, std::move(entry)).first->second;
+	}
+
+	AnimatorInstance* AnimationModule::acquire(const Ref<Scene>& scene, entt::entity entity, bool playing)
+	{
+		if (scene == nullptr)
+		{
+			return nullptr;
+		}
+		adopt(scene);
+		if (AnimatorInstance* existing = instance_for(entity))
+		{
+			return existing;
+		}
+		if (!playing || !scene->registry().valid(entity))
+		{
+			return nullptr;
+		}
+		Entry* entry = make_entry(scene->registry(), entity);
+		return entry != nullptr ? entry->Instance.get() : nullptr;
+	}
+
+	void AnimationModule::tick(const Ref<Scene>& scene, float deltaTime, bool playing)
+	{
+		adopt(scene);
 		if (scene == nullptr)
 		{
 			return;
@@ -139,15 +183,7 @@ namespace wiwa
 				{
 					continue;
 				}
-
-				Entry entry;
-				entry.Instance = std::make_unique<AnimatorInstance>(m_Sources, animator);
-				entry.Guid = id.Guid;
-				if (animator.PlayOnStart && animator.Clip.valid())
-				{
-					entry.Instance->play(ClipSelector{ {}, animator.Clip });
-				}
-				m_Instances.emplace(entity, std::move(entry));
+				make_entry(registry, entity);
 			}
 		}
 

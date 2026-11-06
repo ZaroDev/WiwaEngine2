@@ -49,6 +49,11 @@ namespace wiwa
 		AnimatorInstance* instance_for(entt::entity entity);
 		const AnimatorInstance* instance_for(entt::entity entity) const;
 
+		// For scripts, which run before tick(): the instance of an Animator entity of this scene, made now if the game plays and there is none yet,
+		// so that a script can use its animator in the frame the scene starts. Null for an entity without an enabled Animator, or when the game does
+		// not play and no instance was made.
+		AnimatorInstance* acquire(const Ref<Scene>& scene, entt::entity entity, bool playing);
+
 		// An instance in edit mode, for the editor's preview: made when asked for, advanced by tick() even when the game does not play,
 		// never saved. Null when the entity has no enabled Animator. drop_previews() ends them all.
 		AnimatorInstance* preview(entt::entity entity);
@@ -73,6 +78,8 @@ namespace wiwa
 		};
 
 		void drain_reloads();
+		void adopt(const Ref<Scene>& scene);
+		Entry* make_entry(entt::registry& registry, entt::entity entity);
 		void write_sockets(Scene& scene);
 
 		AssetManager* m_Assets = nullptr;
