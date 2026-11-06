@@ -21,4 +21,6 @@ namespace wiwa
 
 	// Checks of the pose math and the pose nodes (anim_pose_checks.cpp); they need no engine.
 	void run_pose_checks(AnimCheck& check);
+	// Checks of the components, the AnimatorInstance and the AnimationModule (anim_module_checks.cpp).
+	void run_module_checks(AnimCheck& check);
 }

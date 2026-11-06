@@ -124,6 +124,7 @@ namespace wiwa
 		Check check;
 		import_round_trip(check);
 		run_pose_checks(check);
+		run_module_checks(check);
 
 		if (check.Failures == 0)
 		{

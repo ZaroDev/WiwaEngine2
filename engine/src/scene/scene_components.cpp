@@ -101,5 +101,22 @@ namespace wiwa
 			WI_FIELD(PushStrength),
 			WI_FIELD(GravityFactor),
 			WI_FIELD_META(Layer, FieldMeta::range(0.0f, 31.0f))));
+
+		registry.register_component(WI_COMPONENT(Animator,
+			WI_FIELD_META(Skeleton, FieldMeta::asset(AssetType::Skeleton)),
+			WI_FIELD_META(Clips, FieldMeta::asset(AssetType::AnimationClip)),
+			WI_FIELD_META(Clip, FieldMeta::asset(AssetType::AnimationClip)),
+			WI_FIELD(PlayOnStart),
+			WI_FIELD(Speed),
+			WI_FIELD(Enabled),
+			WI_FIELD_META(BoundsPadding, FieldMeta::range(0.0f, 100.0f))));
+
+		registry.register_component(WI_COMPONENT(AnimationSocket,
+			WI_FIELD(Joint),
+			WI_FIELD(OffsetPosition),
+			WI_FIELD(OffsetRotation)));
+
+		registry.register_component(WI_COMPONENT(SkinBinding,
+			WI_FIELD_META(Skeleton, FieldMeta::asset(AssetType::Skeleton))));
 	}
 }

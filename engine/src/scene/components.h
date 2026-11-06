@@ -203,4 +203,31 @@ namespace wiwa
 		float GravityFactor = 1.0f;
 		i32 Layer = 0;                // an index into the project's physics layers
 	};
+	// Plays the clips of a model on its skeleton (animation.md). Put on the root of the model: the prefab expander adds it. The runtime
+	// state (the pose, the nodes being blended) is not a component: the AnimationModule keeps it per Animator.
+	struct Animator
+	{
+		AssetRef Skeleton{};
+		std::vector<AssetRef> Clips{}; // the model's animations; a clip is played by its name
+		AssetRef Clip{};               // played when the scene starts, if PlayOnStart
+		bool PlayOnStart = true;
+		float Speed = 1.0f;
+		bool Enabled = true;
+		float BoundsPadding = 0.0f;    // the mesh bounds grow by this much in every direction for culling
+	};
+
+	// On any descendant of an Animator: follows a joint of its skeleton. After the pose is evaluated the entity's Transform is written.
+	struct AnimationSocket
+	{
+		std::string Joint{};
+		glm::vec3 OffsetPosition{ 0.0f };
+		glm::quat OffsetRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+	};
+
+	// On a skinned mesh node, made by the prefab expander: the skeleton that deforms the mesh. The Animator that drives it is the nearest
+	// ancestor with the same skeleton.
+	struct SkinBinding
+	{
+		AssetRef Skeleton{};
+	};
 }

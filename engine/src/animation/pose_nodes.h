@@ -32,6 +32,16 @@ namespace wiwa
 		virtual u32 node_count() const { return 1; }
 		// The node whose weight is 1 for the pose after the nodes below it faded out, so the tree can be shortened. Null: keep.
 		virtual std::unique_ptr<PoseNode> collapse() { return nullptr; }
+		// Finishes every fade below this node at once, so that collapse() can drop what faded out.
+		virtual void settle() {}
+	};
+
+	// Nothing plays: the rest pose.
+	class RestNode final : public PoseNode
+	{
+	public:
+		virtual void advance(float, float, std::vector<ClipEvent>&) override {}
+		virtual void evaluate(Pose&) const override {}
 	};
 
 	// Plays one clip on one skeleton. The clip, the skeleton and the binding must outlive the node (the animator keeps their handles).
@@ -79,13 +89,18 @@ namespace wiwa
 		virtual u32 node_count() const override;
 		virtual std::unique_ptr<PoseNode> collapse() override;
 
-		void set_weight(float weight) { m_Weight = std::clamp(weight, 0.0f, 1.0f); }
+		virtual void settle() override;
+
+		void set_weight(float weight) { m_Weight = std::clamp(weight, 0.0f, 1.0f); m_Rate = 0.0f; }
 		float weight() const { return m_Weight; }
+		// Starts from a: the weight goes from 0 to 1 in this many seconds of advance() (at once for 0 or less).
+		void ramp(float seconds);
 
 	private:
 		std::unique_ptr<PoseNode> m_A;
 		std::unique_ptr<PoseNode> m_B;
 		float m_Weight;
+		float m_Rate = 0.0f; // weight per second while ramping
 	};
 
 	// base plus the change of a clip from its first frame, by weight (and per joint by the mask, if there is one).
@@ -98,6 +113,8 @@ namespace wiwa
 		virtual void evaluate(Pose& out) const override;
 		virtual u32 node_count() const override;
 		virtual std::unique_ptr<PoseNode> collapse() override;
+
+		virtual void settle() override;
 
 		void set_weight(float weight) { m_Weight = std::clamp(weight, 0.0f, 1.0f); }
 		float weight() const { return m_Weight; }
@@ -120,6 +137,8 @@ namespace wiwa
 		virtual void evaluate(Pose& out) const override;
 		virtual u32 node_count() const override;
 		virtual std::unique_ptr<PoseNode> collapse() override;
+
+		virtual void settle() override;
 
 		void set_weight(float weight) { m_Weight = std::clamp(weight, 0.0f, 1.0f); }
 		float weight() const { return m_Weight; }

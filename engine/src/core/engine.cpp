@@ -4,6 +4,7 @@
 #include "memory.h"
 
 #include <assets/asset_manager.h>
+#include <animation/animation_module.h>
 #include <input/input_module.h>
 #include <physics/physics_module.h>
 #include <renderer/render_module.h>
@@ -56,6 +57,7 @@ namespace wiwa
 		m_ModuleManager.add_module<RenderModule>();
 		m_ModuleManager.add_module<UiModule>(); // before the scripts: the clicks of a frame reach them in that frame
 		m_ModuleManager.add_module<ScriptingModule>();
+		m_ModuleManager.add_module<AnimationModule>(); // after the scripts: it evaluates what they set this frame
 
 		on_init();
 	}

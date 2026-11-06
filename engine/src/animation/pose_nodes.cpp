@@ -109,17 +109,6 @@ namespace wiwa
 			}
 			return true;
 		}
-
-		// Moves a joint's rotation by weight of the way from nothing to delta, along the shortest path.
-		glm::quat partial_rotation(const glm::quat& delta, float weight)
-		{
-			glm::quat target = delta;
-			if (target.w < 0.0f)
-			{
-				target = -target;
-			}
-			return glm::normalize(glm::quat(glm::mix(1.0f, target.w, weight), target.x * weight, target.y * weight, target.z * weight));
-		}
 	}
 
 	ClipNode::ClipNode(const AnimationClipData& clip, const SkeletonData& skeleton, std::shared_ptr<const ClipBinding> binding)
@@ -246,8 +235,30 @@ namespace wiwa
 	{
 	}
 
+	void BlendNode::ramp(float seconds)
+	{
+		m_Weight = 0.0f;
+		m_Rate = seconds > 0.0f ? 1.0f / seconds : 0.0f;
+		if (seconds <= 0.0f)
+		{
+			m_Weight = 1.0f;
+		}
+	}
+
+	void BlendNode::settle()
+	{
+		m_A->settle();
+		m_B->settle();
+		m_Weight = 1.0f;
+		m_Rate = 0.0f;
+	}
+
 	void BlendNode::advance(float deltaTime, float weight, std::vector<ClipEvent>& events)
 	{
+		if (m_Rate > 0.0f)
+		{
+			m_Weight = std::min(1.0f, m_Weight + m_Rate * std::max(deltaTime, 0.0f));
+		}
 		m_A->advance(deltaTime, weight * (1.0f - m_Weight), events);
 		m_B->advance(deltaTime, weight * m_Weight, events);
 	}
@@ -297,6 +308,11 @@ namespace wiwa
 	{
 	}
 
+	void AdditiveNode::settle()
+	{
+		m_Base->settle();
+	}
+
 	void AdditiveNode::advance(float deltaTime, float weight, std::vector<ClipEvent>& events)
 	{
 		m_Base->advance(deltaTime, weight, events);
@@ -318,16 +334,7 @@ namespace wiwa
 		Pose reference = out;
 		m_Additive->sample(0.0f, reference);
 
-		const size_t count = std::min({ base.size(), current.size(), reference.size() });
-		out = std::move(base);
-		for (size_t j = 0; j < count; j++)
-		{
-			const float w = m_Weight * (j < m_Mask.size() ? m_Mask[j] : 1.0f);
-			out.T[j] += w * (current.T[j] - reference.T[j]);
-			const glm::vec3 ratio = glm::mix(glm::vec3(1.0f), current.S[j] / glm::max(glm::abs(reference.S[j]), glm::vec3(1e-6f)), w);
-			out.S[j] *= ratio;
-			out.R[j] = glm::normalize(partial_rotation(current.R[j] * glm::inverse(reference.R[j]), w) * out.R[j]);
-		}
+		add_pose(base, current, reference, m_Weight, &m_Mask, out);
 	}
 
 	u32 AdditiveNode::node_count() const
@@ -347,6 +354,12 @@ namespace wiwa
 	MaskNode::MaskNode(std::unique_ptr<PoseNode> base, std::unique_ptr<PoseNode> layer, std::vector<float> jointWeights, float weight)
 		: m_Base(std::move(base)), m_Layer(std::move(layer)), m_JointWeights(std::move(jointWeights)), m_Weight(std::clamp(weight, 0.0f, 1.0f))
 	{
+	}
+
+	void MaskNode::settle()
+	{
+		m_Base->settle();
+		m_Layer->settle();
 	}
 
 	void MaskNode::advance(float deltaTime, float weight, std::vector<ClipEvent>& events)

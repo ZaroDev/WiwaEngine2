@@ -93,4 +93,40 @@ namespace wiwa
 				glm::mix(a.R[j].w, target.w, w), glm::mix(a.R[j].x, target.x, w), glm::mix(a.R[j].y, target.y, w), glm::mix(a.R[j].z, target.z, w)));
 		}
 	}
+
+	void add_pose(const Pose& base, const Pose& current, const Pose& reference, float weight, const std::vector<float>* mask, Pose& out)
+	{
+		const size_t count = std::min({ base.size(), current.size(), reference.size() });
+		Pose result = base;
+		result.T.resize(count);
+		result.R.resize(count);
+		result.S.resize(count);
+		for (size_t j = 0; j < count; j++)
+		{
+			const float w = std::clamp(weight * (mask != nullptr && j < mask->size() ? (*mask)[j] : 1.0f), 0.0f, 1.0f);
+			result.T[j] += w * (current.T[j] - reference.T[j]);
+			result.S[j] *= glm::mix(glm::vec3(1.0f), current.S[j] / glm::max(glm::abs(reference.S[j]), glm::vec3(1e-6f)), w);
+
+			glm::quat delta = current.R[j] * glm::inverse(reference.R[j]);
+			if (delta.w < 0.0f)
+			{
+				delta = -delta;
+			}
+			const glm::quat partial = glm::normalize(glm::quat(glm::mix(1.0f, delta.w, w), delta.x * w, delta.y * w, delta.z * w));
+			result.R[j] = glm::normalize(partial * result.R[j]);
+		}
+		out = std::move(result);
+	}
+
+	void decompose_matrix(const glm::mat4& matrix, glm::vec3& translation, glm::quat& rotation, glm::vec3& scale)
+	{
+		translation = glm::vec3(matrix[3]);
+		glm::vec3 axes[3] = { glm::vec3(matrix[0]), glm::vec3(matrix[1]), glm::vec3(matrix[2]) };
+		scale = glm::vec3(glm::length(axes[0]), glm::length(axes[1]), glm::length(axes[2]));
+		for (int i = 0; i < 3; i++)
+		{
+			axes[i] = scale[i] > 1e-8f ? axes[i] / scale[i] : axes[i];
+		}
+		rotation = glm::normalize(glm::quat_cast(glm::mat3(axes[0], axes[1], axes[2])));
+	}
 }

@@ -39,6 +39,12 @@ namespace wiwa
 	// 1 for the joint and all its descendants, 0 for the other joints; all 0 for a joint that does not exist.
 	std::vector<float> subtree_mask(const SkeletonData& skeleton, i32 joint);
 
+	// out = base plus the change of current from reference (a clip from its first frame), by weight * mask[j]. out may be base.
+	void add_pose(const Pose& base, const Pose& current, const Pose& reference, float weight, const std::vector<float>* mask, Pose& out);
+
+	// Splits a matrix made of translation, rotation and scale.
+	void decompose_matrix(const glm::mat4& matrix, glm::vec3& translation, glm::quat& rotation, glm::vec3& scale);
+
 	// out = a toward b by weight * mask[j] per joint (translation and scale lerp, rotation nlerp along the shortest path). A null mask is 1 everywhere.
 	void blend_poses(const Pose& a, const Pose& b, float weight, const std::vector<float>* mask, Pose& out);
 }
