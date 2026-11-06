@@ -135,6 +135,7 @@ namespace wiwa
 			nvrhi::BufferHandle Vertex{};
 			nvrhi::BufferHandle Index{};
 			nvrhi::BufferHandle Skin{};
+			u64 VertexCapacity = 0;
 			RangeAllocator VertexRanges{};
 			RangeAllocator IndexRanges{};
 		};
@@ -226,6 +227,7 @@ namespace wiwa
 		void update_meshes();
 		void update_textures();
 		void update_materials();
+		static bool has_skin(const MeshData& data);
 		bool upload_mesh(MeshEntry& entry, const MeshData& data);
 		bool upload_texture(TextureEntry& entry, const TextureData& data);
 		std::optional<Placement> place(u64 vertexCount, u64 indexCount);

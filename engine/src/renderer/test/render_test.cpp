@@ -120,6 +120,7 @@ namespace wiwa
 			register_outline_checks();
 			register_pick_checks();
 			register_temporal_checks();
+			register_skinning_checks();
 			register_material_checks();
 			register_ui_checks();
 

@@ -16,7 +16,7 @@ namespace wiwa
 		constexpr u32 INITIAL_INSTANCE_CAPACITY = 1024;
 		// How many frames' worth of constants the volatile buffer can hold at once.
 		constexpr u32 CONSTANT_BUFFER_VERSIONS = 16;
-		constexpr u32 DRAW_CONSTANTS_BYTES = 8; // instance index, material slot
+		constexpr u32 DRAW_CONSTANTS_BYTES = 12; // instance index, material slot, base vertex of the draw
 
 		nvrhi::VulkanBindingOffsets make_zero_binding_offsets()
 		{
@@ -195,6 +195,7 @@ namespace wiwa
 		m_DefaultSkinSet = SkinSet{};
 		m_DummyPalette = nullptr;
 		m_DummySkin = nullptr;
+		m_PaletteBuffer = nullptr;
 		m_SkinLayout = nullptr;
 		m_Device = nullptr;
 	}
@@ -415,7 +416,8 @@ namespace wiwa
 				}
 				// One primitive: its box is the mesh's box, tested once.
 				const bool single = mesh->Primitives.size() == 1;
-				if (!single && !visible(frustum, instance.World, mesh->BoundsMin, mesh->BoundsMax))
+				const glm::vec3 padding(instance.BoundsPadding);
+				if (!single && !visible(frustum, instance.World, mesh->BoundsMin - padding, mesh->BoundsMax + padding))
 				{
 					continue;
 				}
@@ -424,7 +426,7 @@ namespace wiwa
 				for (size_t p = 0; p < mesh->Primitives.size(); p++)
 				{
 					const GpuPrimitive& primitive = mesh->Primitives[p];
-					if (!visible(frustum, instance.World, primitive.BoundsMin, primitive.BoundsMax))
+					if (!visible(frustum, instance.World, primitive.BoundsMin - padding, primitive.BoundsMax + padding))
 					{
 						continue;
 					}
@@ -544,7 +546,8 @@ namespace wiwa
 			}
 
 			const GpuMesh* mesh = m_Meshes[slot];
-			if (mesh == nullptr || (mesh->Primitives.size() != 1 && !visible(frustum, instance.World, mesh->BoundsMin, mesh->BoundsMax)))
+			const glm::vec3 padding(instance.BoundsPadding);
+			if (mesh == nullptr || (mesh->Primitives.size() != 1 && !visible(frustum, instance.World, mesh->BoundsMin - padding, mesh->BoundsMax + padding)))
 			{
 				continue;
 			}
@@ -552,7 +555,7 @@ namespace wiwa
 			for (size_t p = 0; p < mesh->Primitives.size(); p++)
 			{
 				const GpuPrimitive& primitive = mesh->Primitives[p];
-				if (!visible(frustum, instance.World, primitive.BoundsMin, primitive.BoundsMax))
+				if (!visible(frustum, instance.World, primitive.BoundsMin - padding, primitive.BoundsMax + padding))
 				{
 					continue;
 				}
@@ -601,7 +604,13 @@ namespace wiwa
 			m_WrittenRevision = ~0ull;
 		}
 
-		if (m_InstanceBuffer && (m_WrittenRevision != m_Scene->revision() || m_Scene->previous_stale()))
+		// Skinned instances are written every frame: their palettes are (and the rows they sit at follow from the instances present).
+		bool anySkinned = false;
+		for (size_t slot = 0; slot < instances.size() && !anySkinned; slot++)
+		{
+			anySkinned = instances[slot].Alive && !instances[slot].Palette.empty();
+		}
+		if (m_InstanceBuffer && (m_WrittenRevision != m_Scene->revision() || m_Scene->previous_stale() || anySkinned || m_HadSkinned))
 		{
 			m_InstanceScratch.assign(std::max<size_t>(instances.size(), 1), GpuInstance{});
 			for (size_t slot = 0; slot < instances.size(); slot++)
@@ -613,7 +622,13 @@ namespace wiwa
 					m_InstanceScratch[slot].PrevWorld = instances[slot].PrevWorld;
 				}
 			}
+			const bool packed = pack_palettes();
 			commandList->writeBuffer(m_InstanceBuffer, m_InstanceScratch.data(), m_InstanceScratch.size() * sizeof(GpuInstance));
+			if (packed)
+			{
+				commandList->writeBuffer(m_PaletteBuffer, m_PaletteScratch.data(), m_PaletteScratch.size() * sizeof(glm::vec4));
+			}
+			m_HadSkinned = packed;
 			m_WrittenRevision = m_Scene->revision();
 		}
 
@@ -698,10 +713,50 @@ namespace wiwa
 		update_skin_sets(cache);
 	}
 
+	bool SceneRenderData::pack_palettes()
+	{
+		m_PaletteScratch.clear();
+		const std::vector<RenderInstance>& instances = m_Scene->instances();
+		for (size_t slot = 0; slot < instances.size(); slot++)
+		{
+			const RenderInstance& instance = instances[slot];
+			const GpuMesh* mesh = slot < m_Meshes.size() ? m_Meshes[slot] : nullptr;
+			// a palette that does not reach every joint the mesh names would be read past its end: the mesh is drawn as it is
+			if (!instance.Alive || instance.Palette.empty() || mesh == nullptr || !mesh->Skinned || instance.Palette.size() < static_cast<size_t>(mesh->JointCount) * 3)
+			{
+				continue;
+			}
+
+			m_InstanceScratch[slot].Skin.x = static_cast<u32>(m_PaletteScratch.size());
+			m_PaletteScratch.insert(m_PaletteScratch.end(), instance.Palette.begin(), instance.Palette.end());
+			m_InstanceScratch[slot].Skin.y = static_cast<u32>(m_PaletteScratch.size());
+			const std::vector<glm::vec4>& previous = instance.PrevPalette.size() == instance.Palette.size() ? instance.PrevPalette : instance.Palette;
+			m_PaletteScratch.insert(m_PaletteScratch.end(), previous.begin(), previous.end());
+		}
+
+		if (m_PaletteScratch.empty())
+		{
+			return false;
+		}
+		const u32 needed = static_cast<u32>(m_PaletteScratch.size());
+		if (m_PaletteBuffer == nullptr || needed > m_PaletteCapacity)
+		{
+			m_PaletteCapacity = std::max<u32>(needed + needed / 2, 3 * 256 * 4);
+			nvrhi::BufferDesc description;
+			description.byteSize = static_cast<u64>(m_PaletteCapacity) * sizeof(glm::vec4);
+			description.structStride = sizeof(glm::vec4);
+			description.initialState = nvrhi::ResourceStates::ShaderResource;
+			description.keepInitialState = true;
+			description.debugName = "Joint palettes";
+			m_PaletteBuffer = m_Device->createBuffer(description);
+		}
+		return m_PaletteBuffer != nullptr;
+	}
+
 	// One set per mesh page: the palettes of this frame and the skin vertices of the page (stand-ins where there are none).
 	void SceneRenderData::update_skin_sets(GpuResourceCache& cache)
 	{
-		nvrhi::IBuffer* palettes = m_DummyPalette;
+		nvrhi::IBuffer* palettes = m_PaletteBuffer != nullptr ? m_PaletteBuffer.Get() : m_DummyPalette.Get();
 		auto refresh = [&](SkinSet& set, nvrhi::IBuffer* skin)
 		{
 			if (set.Set == nullptr || set.Palette != palettes || set.Skin != skin)

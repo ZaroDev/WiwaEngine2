@@ -297,9 +297,15 @@ namespace wiwa
 			const nvrhi::IBuffer* Skin = nullptr;
 		};
 		void update_skin_sets(GpuResourceCache& cache);
+		// Fills Skin of the instance scratch and the palette rows of the skinned instances; true when there are any.
+		bool pack_palettes();
 		nvrhi::BindingLayoutHandle m_SkinLayout{};
 		nvrhi::BufferHandle m_DummyPalette{};
 		nvrhi::BufferHandle m_DummySkin{};
+		nvrhi::BufferHandle m_PaletteBuffer{};
+		bool m_HadSkinned = false;                 // the last instance write had palettes: the next one clears them
+		u32 m_PaletteCapacity = 0;                 // rows
+		std::vector<glm::vec4> m_PaletteScratch{};
 		SkinSet m_DefaultSkinSet{};
 		std::vector<SkinSet> m_SkinSets{}; // per mesh page
 	};

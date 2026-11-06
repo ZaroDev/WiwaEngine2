@@ -3,6 +3,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include <animation/animation_module.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <scene/scene_module.h>
@@ -588,7 +589,20 @@ namespace wiwa
 			const u32 shapeWidth = m_RequestedViewportWidth > 0 ? m_RequestedViewportWidth : batch.Width;
 			const u32 shapeHeight = m_RequestedViewportHeight > 0 ? m_RequestedViewportHeight : batch.Height;
 			const float aspect = shapeHeight > 0 ? static_cast<float>(shapeWidth) / static_cast<float>(shapeHeight) : 1.0f;
-			SceneDelta delta = m_Extractor.extract(scenes->get_active(), aspect);
+			PaletteSource palettes;
+			if (const AnimationModule* animation = Engine::get().get_module<AnimationModule>())
+			{
+				palettes = [animation](entt::entity animator) -> std::span<const glm::vec4>
+				{
+					const AnimatorInstance* instance = animation->instance_for(animator);
+					if (instance == nullptr || instance->palette().empty())
+					{
+						return {};
+					}
+					return { reinterpret_cast<const glm::vec4*>(instance->palette().data()), instance->palette().size() * 3 };
+				};
+			}
+			SceneDelta delta = m_Extractor.extract(scenes->get_active(), aspect, palettes);
 			if (!delta.empty())
 			{
 				auto shared = std::make_shared<SceneDelta>(std::move(delta));

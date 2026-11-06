@@ -86,6 +86,7 @@ namespace wiwa::scene_pass
 		{
 			u32 InstanceIndex;
 			u32 MaterialSlot;
+			u32 BaseVertex; // D3D does not count it in SV_VertexID, which skin vertices are indexed by
 		};
 
 		nvrhi::IGraphicsPipeline* currentPipeline = nullptr;
@@ -132,7 +133,7 @@ namespace wiwa::scene_pass
 				currentMaterial = item.Material;
 			}
 
-			const DrawConstants constants{ item.Instance, item.Material };
+			const DrawConstants constants{ item.Instance, item.Material, static_cast<u32>(item.BaseVertex) };
 			commandList->setPushConstants(&constants, sizeof(constants));
 
 			nvrhi::DrawArguments arguments;

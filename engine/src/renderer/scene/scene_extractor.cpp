@@ -127,7 +127,24 @@ namespace wiwa
 		return result;
 	}
 
-	SceneDelta SceneExtractor::extract(const Ref<Scene>& scene, float aspect)
+	namespace
+	{
+		// The Animator that drives a skinned mesh: this entity or the nearest ancestor that has one for the same skeleton.
+		entt::entity find_animator(const entt::registry& registry, entt::entity mesh, const AssetRef& skeleton)
+		{
+			for (entt::entity entity = mesh; entity != entt::null; entity = registry.get<Hierarchy>(entity).Parent)
+			{
+				const Animator* animator = registry.try_get<Animator>(entity);
+				if (animator != nullptr && animator->Skeleton == skeleton)
+				{
+					return entity;
+				}
+			}
+			return entt::null;
+		}
+	}
+
+	SceneDelta SceneExtractor::extract(const Ref<Scene>& scene, float aspect, const PaletteSource& palettes)
 	{
 		SceneDelta delta;
 		if (scene == nullptr)
@@ -163,25 +180,53 @@ namespace wiwa
 			}
 
 			instancesSeen++;
-			auto found = m_Instances.find(id.Guid);
-			const bool known = found != m_Instances.end();
-			if (known && same_matrix(found->second.World, world.Matrix) && found->second.Mesh == renderer.Mesh && found->second.Materials == renderer.Materials)
+
+			// a skinned mesh stands where its Animator does: the joints of the pose place the vertices, not the node
+			glm::mat4 matrix = world.Matrix;
+			float padding = 0.0f;
+			std::span<const glm::vec4> palette{};
+			if (const SkinBinding* binding = registry.try_get<SkinBinding>(entity))
 			{
-				found->second.Seen = pass;
-				continue;
+				const entt::entity animatorEntity = find_animator(registry, entity, binding->Skeleton);
+				if (animatorEntity != entt::null)
+				{
+					if (const WorldTransform* animatorWorld = registry.try_get<WorldTransform>(animatorEntity))
+					{
+						matrix = animatorWorld->Matrix;
+					}
+					padding = registry.get<Animator>(animatorEntity).BoundsPadding;
+					if (palettes)
+					{
+						palette = palettes(animatorEntity);
+					}
+				}
 			}
 
+			auto found = m_Instances.find(id.Guid);
+			const bool known = found != m_Instances.end();
 			SentInstance& sent = known ? found->second : m_Instances[id.Guid];
-			sent.World = world.Matrix;
-			sent.Mesh = renderer.Mesh;
-			sent.Materials = renderer.Materials;
 			sent.Seen = pass;
+			if (!known || !same_matrix(sent.World, matrix) || sent.Mesh != renderer.Mesh || sent.Materials != renderer.Materials || sent.Padding != padding)
+			{
+				sent.World = matrix;
+				sent.Mesh = renderer.Mesh;
+				sent.Materials = renderer.Materials;
+				sent.Padding = padding;
 
-			RenderInstance instance;
-			instance.World = world.Matrix;
-			instance.Mesh = renderer.Mesh;
-			instance.Materials = renderer.Materials;
-			delta.InstanceUpserts.emplace_back(id.Guid, std::move(instance));
+				RenderInstance instance;
+				instance.World = matrix;
+				instance.Mesh = renderer.Mesh;
+				instance.Materials = renderer.Materials;
+				instance.BoundsPadding = padding;
+				delta.InstanceUpserts.emplace_back(id.Guid, std::move(instance));
+			}
+
+			// the palette follows the pose, not the matrix: sent when it is not what the render thread has
+			if (sent.Palette.size() != palette.size() || (!palette.empty() && std::memcmp(sent.Palette.data(), palette.data(), palette.size_bytes()) != 0))
+			{
+				sent.Palette.assign(palette.begin(), palette.end());
+				delta.PaletteUpdates.emplace_back(id.Guid, sent.Palette);
+			}
 		}
 
 		if (m_Instances.size() != instancesSeen)

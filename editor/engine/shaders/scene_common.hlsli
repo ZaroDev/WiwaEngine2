@@ -121,6 +121,7 @@ struct DrawConstantsData
 {
 	uint InstanceIndex;
 	uint MaterialSlot;
+	uint BaseVertex; // of the draw: D3D leaves it out of SV_VertexID (Vulkan includes it), see SkinVertexIndex
 };
 
 PUSH_CONSTANTS(DrawConstantsData, DrawConstants, b1);
@@ -190,6 +191,16 @@ VK_BINDING(23, SKIN_SET) StructuredBuffer<SkinVertex> uSkinVertices : register(t
 
 static const uint NO_PALETTE = 0xFFFFFFFFu;
 
+// Where the vertex is in the page's buffers, which uSkinVertices is parallel to.
+uint SkinVertexIndex(MeshVertexInput input)
+{
+#ifdef VULKAN
+	return input.VertexId;
+#else
+	return input.VertexId + DrawConstants.BaseVertex;
+#endif
+}
+
 bool IsSkinned(SceneInstance instance)
 {
 	return instance.SkinInfo.x != NO_PALETTE;
@@ -204,7 +215,7 @@ float3 SkinPointWith(SceneInstance instance, MeshVertexInput input, float3 posit
 	}
 
 	const uint row = previous ? instance.SkinInfo.y : instance.SkinInfo.x;
-	const SkinVertex skin = uSkinVertices[input.VertexId];
+	const SkinVertex skin = uSkinVertices[SkinVertexIndex(input)];
 	const float4 point4 = float4(position, 1.0);
 	float3 result = float3(0.0, 0.0, 0.0);
 	[unroll]
@@ -233,7 +244,7 @@ float3 SkinNormal(SceneInstance instance, MeshVertexInput input, float3 normal)
 		return normal;
 	}
 
-	const SkinVertex skin = uSkinVertices[input.VertexId];
+	const SkinVertex skin = uSkinVertices[SkinVertexIndex(input)];
 	float3 result = float3(0.0, 0.0, 0.0);
 	[unroll]
 	for (uint k = 0; k < 4; k++)

@@ -32,7 +32,7 @@ namespace wiwa
 		layout.bindingOffsets = offsets;
 		layout.addItem(nvrhi::BindingLayoutItem::VolatileConstantBuffer(0));
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(1));
-		layout.addItem(nvrhi::BindingLayoutItem::PushConstants(1, 8));
+		layout.addItem(nvrhi::BindingLayoutItem::PushConstants(1, 12));
 		m_Layout = m_Device->createBindingLayout(layout);
 		return m_Layout != nullptr;
 	}
@@ -118,7 +118,7 @@ namespace wiwa
 			nvrhi::BindingSetDesc set;
 			set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, data.constant_buffer()));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, data.instance_buffer()));
-			set.addItem(nvrhi::BindingSetItem::PushConstants(1, 8));
+			set.addItem(nvrhi::BindingSetItem::PushConstants(1, 12));
 			m_BindingSet = m_Device->createBindingSet(set, m_Layout);
 			m_BoundInstances = data.instance_buffer();
 		}

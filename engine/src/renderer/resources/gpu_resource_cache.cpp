@@ -288,12 +288,21 @@ namespace wiwa
 			return std::nullopt;
 		}
 
+		page.VertexCapacity = vertexCapacity;
 		page.VertexRanges = RangeAllocator(vertexCapacity);
 		page.IndexRanges = RangeAllocator(indexCapacity);
 		const u64 vertices = *page.VertexRanges.allocate(vertexCount);
 		const u64 indices = *page.IndexRanges.allocate(indexCount);
 		m_Pages.push_back(std::move(page));
 		return Placement{ static_cast<u32>(m_Pages.size() - 1), vertices, vertexCount, indices, indexCount };
+	}
+
+	// A mesh that has joints and weights for every vertex (and says some primitive is skinned).
+	bool GpuResourceCache::has_skin(const MeshData& data)
+	{
+		static_assert(sizeof(MeshSkinVertex) == 32, "the skin buffer holds MeshSkinVertex as is");
+		return !data.SkinVertices.empty() && data.SkinVertices.size() == data.Vertices.size()
+			&& std::any_of(data.Primitives.begin(), data.Primitives.end(), [](const MeshPrimitive& primitive) { return primitive.Skinned; });
 	}
 
 	bool GpuResourceCache::upload_mesh(MeshEntry& entry, const MeshData& data)
@@ -312,6 +321,36 @@ namespace wiwa
 		mesh.Page = where->Page;
 		mesh.BoundsMin = data.BoundsMin;
 		mesh.BoundsMax = data.BoundsMax;
+
+		// the skin vertices go to the same place on the page's skin buffer, which exists once a skinned mesh is on the page
+		if (has_skin(data))
+		{
+			if (page.Skin == nullptr)
+			{
+				nvrhi::BufferDesc skinDescription;
+				skinDescription.byteSize = page.VertexCapacity * sizeof(MeshSkinVertex);
+				skinDescription.structStride = sizeof(MeshSkinVertex);
+				skinDescription.initialState = UploadQueue::resting_state(m_Device);
+				skinDescription.keepInitialState = true;
+				skinDescription.debugName = "Mesh skin vertices";
+				page.Skin = m_Device->createBuffer(skinDescription);
+			}
+			if (page.Skin != nullptr)
+			{
+				m_Uploads->write_buffer(page.Skin, data.SkinVertices.data(), data.SkinVertices.size() * sizeof(MeshSkinVertex), where->VertexOffset * sizeof(MeshSkinVertex));
+				mesh.Skinned = true;
+				for (const MeshSkinVertex& vertex : data.SkinVertices)
+				{
+					for (int k = 0; k < 4; k++)
+					{
+						if (vertex.Weights[k] > 0.0f)
+						{
+							mesh.JointCount = std::max(mesh.JointCount, vertex.Joints[k] + 1);
+						}
+					}
+				}
+			}
+		}
 		for (const MeshPrimitive& primitive : data.Primitives)
 		{
 			GpuPrimitive gpu;
@@ -373,7 +412,8 @@ namespace wiwa
 				}
 				else
 				{
-					const size_t bytes = data->Vertices.size() * sizeof(MeshVertex) + data->Indices.size() * sizeof(u32);
+					const size_t bytes = data->Vertices.size() * sizeof(MeshVertex) + data->Indices.size() * sizeof(u32)
+						+ (has_skin(*data) ? data->SkinVertices.size() * sizeof(MeshSkinVertex) : 0);
 					if (m_Uploads->has_room(bytes))
 					{
 						if (upload_mesh(entry, *data))

@@ -89,7 +89,7 @@ namespace wiwa
 		state.addBindingSet(data.frame_bindings());
 		commandList->setGraphicsState(state);
 
-		const u32 drawConstants[2] = {}; // the frame layout has push constants (instance, material): the sky uses none, but they must be set
+		const u32 drawConstants[3] = {}; // the frame layout has push constants (instance, material, base vertex): the sky uses none, but they must be set
 		commandList->setPushConstants(drawConstants, sizeof(drawConstants));
 
 		nvrhi::DrawArguments arguments;

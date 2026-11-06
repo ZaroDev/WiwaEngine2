@@ -2,6 +2,7 @@
 #include "anim_check.h"
 
 #include <animation/animation_module.h>
+#include <renderer/scene/scene_extractor.h>
 #include <scene/prefab_expander.h>
 #include <scene/scene_clone.h>
 
@@ -331,6 +332,100 @@ namespace wiwa
 			check(waiting.layer_alive(pending), "a layer waiting for its clip counts as alive");
 		}
 
+		void extraction(AnimCheck& check)
+		{
+			Fixture fixture;
+			AnimationModule module;
+			module.set_sources(fixture.Sources);
+			Ref<Scene> scene = CreateRef<Scene>();
+			const entt::entity hero = fixture.make_character(*scene);
+			scene->registry().get<Transform>(hero).Position = glm::vec3(0.0f, 0.0f, 10.0f);
+			scene->registry().get<Animator>(hero).BoundsPadding = 2.5f;
+			const entt::entity body = scene->create("body", hero);
+			scene->registry().get<Transform>(body).Position = glm::vec3(5.0f, 0.0f, 0.0f); // a skinned mesh node ignores its own transform
+			scene->registry().emplace<MeshRenderer>(body, MeshRenderer{ make_ref(40), {} });
+			scene->registry().emplace<SkinBinding>(body, SkinBinding{ fixture.SkeletonRef });
+			const entt::entity prop = scene->create("rigid", hero);
+			scene->registry().get<Transform>(prop).Position = glm::vec3(1.0f, 0.0f, 0.0f);
+			scene->registry().emplace<MeshRenderer>(prop, MeshRenderer{ make_ref(41), {} });
+			scene->update_world_transforms();
+
+			PaletteSource palettes = [&module](entt::entity animator) -> std::span<const glm::vec4>
+			{
+				const AnimatorInstance* instance = module.instance_for(animator);
+				if (instance == nullptr || instance->palette().empty())
+				{
+					return {};
+				}
+				return { reinterpret_cast<const glm::vec4*>(instance->palette().data()), instance->palette().size() * 3 };
+			};
+			auto world_of = [&](const SceneDelta& delta, entt::entity entity) -> std::optional<RenderInstance>
+			{
+				const EntityGuid guid = scene->registry().get<Id>(entity).Guid;
+				for (const auto& [id, instance] : delta.InstanceUpserts)
+				{
+					if (id == guid)
+					{
+						return instance;
+					}
+				}
+				return std::nullopt;
+			};
+			auto palette_of = [&](const SceneDelta& delta, entt::entity entity) -> const std::vector<glm::vec4>*
+			{
+				const EntityGuid guid = scene->registry().get<Id>(entity).Guid;
+				for (const auto& [id, rows] : delta.PaletteUpdates)
+				{
+					if (id == guid)
+					{
+						return &rows;
+					}
+				}
+				return nullptr;
+			};
+
+			// editing: no animator instance, so no palette; the mesh stands where the animator does
+			SceneExtractor extractor;
+			SceneDelta first = extractor.extract(scene, 1.0f, palettes);
+			const std::optional<RenderInstance> editBody = world_of(first, body);
+			check(editBody && near_equal(editBody->World[3].z, 10.0f) && near_equal(editBody->World[3].x, 0.0f), "a skinned mesh stands where its animator does, not at its own node");
+			check(editBody && near_equal(editBody->BoundsPadding, 2.5f), "and its culling bounds carry the animator padding");
+			check(palette_of(first, body) == nullptr, "an animator that is not running sends no palette");
+			const std::optional<RenderInstance> rigid = world_of(first, prop);
+			check(rigid && near_equal(rigid->World[3].x, 1.0f) && near_equal(rigid->BoundsPadding, 0.0f), "a rigid mesh is extracted as before");
+			check(palette_of(first, prop) == nullptr, "and has no palette");
+
+			// playing: the palette arrives, with no change of the instance
+			module.tick(scene, 0.1f, true);
+			SceneDelta second = extractor.extract(scene, 1.0f, palettes);
+			const std::vector<glm::vec4>* sent = palette_of(second, body);
+			check(sent != nullptr && sent->size() == 6 && second.InstanceUpserts.empty(), "the palette is sent alone: the instance did not change");
+
+			// the same pose again: nothing is sent
+			SceneDelta third = extractor.extract(scene, 1.0f, palettes);
+			check(third.empty(), "an unchanged pose and instance send nothing");
+
+			// a pose that changed with the world matrix unchanged
+			module.instance_for(hero)->play({ "Run", {} });
+			module.tick(scene, 0.5f, true);
+			SceneDelta fourth = extractor.extract(scene, 1.0f, palettes);
+			check(palette_of(fourth, body) != nullptr && fourth.InstanceUpserts.empty(), "a changed pose sends a palette and no instance");
+
+			// the animator moves: the instance follows it
+			scene->registry().get<Transform>(hero).Position = glm::vec3(0.0f, 0.0f, 20.0f);
+			scene->update_world_transforms();
+			SceneDelta fifth = extractor.extract(scene, 1.0f, palettes);
+			const std::optional<RenderInstance> moved = world_of(fifth, body);
+			check(moved && near_equal(moved->World[3].z, 20.0f), "the skinned instance follows the animator");
+
+			// the animator is disabled: the palette ends (an empty one makes the instance rigid again)
+			scene->registry().get<Animator>(hero).Enabled = false;
+			module.tick(scene, 0.1f, true);
+			SceneDelta sixth = extractor.extract(scene, 1.0f, palettes);
+			const std::vector<glm::vec4>* cleared = palette_of(sixth, body);
+			check(cleared != nullptr && cleared->empty(), "a stopped animator clears the palette");
+		}
+
 		void sockets(AnimCheck& check)
 		{
 			Fixture fixture;
@@ -368,5 +463,6 @@ namespace wiwa
 		play_tree(check);
 		layers(check);
 		sockets(check);
+		extraction(check);
 	}
 }
