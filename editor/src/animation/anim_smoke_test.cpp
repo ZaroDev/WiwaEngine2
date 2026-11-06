@@ -1,7 +1,7 @@
 #include <editor_common.h>
 #include "anim_smoke_test.h"
 
-#include <animation/animation_log.h>
+#include "anim_check.h"
 #include <assets/wasset_io.h>
 
 #include "../asset_pipeline/importers/model_import.h"
@@ -11,19 +11,7 @@ namespace wiwa
 {
 	namespace
 	{
-		struct Check
-		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_ANIM_LOG(Error, "Animation smoke test FAILED: {0}", what);
-				}
-			}
-		};
+		using Check = AnimCheck;
 
 		bool near_equal(float a, float b)
 		{
@@ -135,6 +123,7 @@ namespace wiwa
 	{
 		Check check;
 		import_round_trip(check);
+		run_pose_checks(check);
 
 		if (check.Failures == 0)
 		{
