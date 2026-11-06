@@ -136,7 +136,10 @@ void InspectorPanel::draw_component(entt::entity entity, const wiwa::ComponentIn
 				ImGui::PushID(static_cast<int>(i));
 				const wiwa::FieldValue current = info.Get(m_Editor.scene().registry(), entity, i);
 				wiwa::FieldValue edited = current;
-				if (draw_field(entity, info, i, current, edited))
+				const bool changed = info.Name == "AnimationSocket" && info.Fields[i].Name == "Joint"
+					? draw_joint_picker(entity, std::get<std::string>(current), edited)
+					: draw_field(entity, info, i, current, edited);
+				if (changed)
 				{
 					m_Editor.set_field(entity, info.Name, info.Fields[i].Name, edited);
 				}
@@ -145,6 +148,48 @@ void InspectorPanel::draw_component(entt::entity entity, const wiwa::ComponentIn
 		}
 	}
 	ImGui::PopID();
+}
+
+// The Joint of an AnimationSocket: a drop-down of the joints of the skeleton of the Animator above it (a text box when there is none).
+bool InspectorPanel::draw_joint_picker(entt::entity entity, const std::string& current, wiwa::FieldValue& value)
+{
+	using namespace wiwa;
+	entt::registry& registry = m_Editor.scene().registry();
+	const Animator* animator = nullptr;
+	for (entt::entity up = registry.get<Hierarchy>(entity).Parent; up != entt::null && animator == nullptr; up = registry.get<Hierarchy>(up).Parent)
+	{
+		animator = registry.try_get<Animator>(up);
+	}
+
+	AssetManager* assets = Engine::get().get_module<AssetManager>();
+	const Handle<SkeletonData> handle = (animator != nullptr && assets != nullptr) ? assets->load<SkeletonData>(animator->Skeleton) : Handle<SkeletonData>{};
+	const SkeletonData* skeleton = handle.get();
+	bool changed = false;
+	if (skeleton == nullptr)
+	{
+		char buffer[128] = {};
+		std::strncpy(buffer, current.c_str(), sizeof(buffer) - 1);
+		if (ImGui::InputText("Joint", buffer, sizeof(buffer)))
+		{
+			value = std::string(buffer);
+			changed = true;
+		}
+		return changed;
+	}
+
+	if (ImGui::BeginCombo("Joint", current.empty() ? "(none)" : current.c_str()))
+	{
+		for (const std::string& name : skeleton->JointNames)
+		{
+			if (ImGui::Selectable(name.c_str(), name == current))
+			{
+				value = name;
+				changed = true;
+			}
+		}
+		ImGui::EndCombo();
+	}
+	return changed;
 }
 
 bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& info, size_t index, const wiwa::FieldValue& current, wiwa::FieldValue& value)

@@ -126,6 +126,7 @@ namespace wiwa
 		run_pose_checks(check);
 		run_module_checks(check);
 		run_lua_checks(check);
+		run_edit_checks(check);
 
 		if (check.Failures == 0)
 		{

@@ -133,6 +133,38 @@ namespace wiwa
 			check(fresh != nullptr && module.instance_count() == 1 && near_equal(fresh->time(), 0.1f), "a scene clone starts with fresh instances (one tick old, not two)");
 		}
 
+		void previews(AnimCheck& check)
+		{
+			Fixture fixture;
+			AnimationModule module;
+			module.set_sources(fixture.Sources);
+			Ref<Scene> scene = CreateRef<Scene>();
+			const entt::entity hero = fixture.make_character(*scene);
+
+			module.tick(scene, 0.1f, false);
+			check(module.preview(hero) != nullptr && module.preview(scene->create("plain")) == nullptr, "a preview exists for an entity with an Animator only");
+			AnimatorInstance* preview = module.preview(hero);
+			preview->play({ "Run", {} });
+			module.tick(scene, 0.25f, false);
+			check(near_equal(hip_x(*preview), 2.5f), "a preview advances while the game does not play");
+			module.set_preview_paused(hero, true);
+			module.tick(scene, 0.25f, false);
+			check(near_equal(hip_x(*preview), 2.5f), "a paused preview holds its pose");
+			preview->seek(0.5f);
+			module.tick(scene, 0.0f, false);
+			check(near_equal(hip_x(*preview), 5.0f), "and follows a scrub");
+
+			module.tick(scene, 0.1f, true);
+			module.drop_previews();
+			check(module.instance_for(hero) == nullptr, "dropping the previews ends them");
+
+			// an instance the game made is not a preview
+			module.tick(scene, 0.1f, true);
+			check(module.instance_for(hero) != nullptr, "the game makes its own");
+			module.drop_previews();
+			check(module.instance_for(hero) != nullptr, "and dropping previews leaves it");
+		}
+
 		void play_tree(AnimCheck& check)
 		{
 			Fixture fixture;
@@ -362,6 +394,7 @@ namespace wiwa
 	{
 		prefab_and_components(check);
 		module_playback(check);
+		previews(check);
 		play_tree(check);
 		layers(check);
 		sockets(check);

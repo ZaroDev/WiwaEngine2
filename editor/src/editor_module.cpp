@@ -8,6 +8,7 @@
 #include <asset_pipeline/asset_pipeline_module.h>
 #include <asset_pipeline/asset_templates.h>
 #include <asset_pipeline/input_settings_file.h>
+#include <asset_pipeline/meta_file.h>
 #include <asset_pipeline/physics_settings_file.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
@@ -18,6 +19,8 @@
 #include <scripting/script_module.h>
 #include <ui/ui_module.h>
 
+#include "animation/animation_edit_model.h"
+#include "animation/animation_panel.h"
 #include "ui/ui_editor_panel.h"
 #include "ui/ui_smoke_test.h"
 
@@ -146,6 +149,7 @@ void EditorModule::init()
 		m_UiEditorSmoke = m_UiEditorSmoke || argument == "--ui-editor-smoke";
 		m_PhysicsPanelSmoke = m_PhysicsPanelSmoke || argument == "--physics-panel-smoke";
 		m_InputPanelSmoke = m_InputPanelSmoke || argument == "--input-panel-smoke";
+		m_AnimPanelSmoke = m_AnimPanelSmoke || argument == "--anim-panel-smoke";
 		if (argument == "--demo-smoke")
 		{
 			m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
@@ -170,6 +174,10 @@ void EditorModule::init()
 	Ref<InputPanel> inputPanel = CreateRef<InputPanel>(m_InputPanelSmoke ? std::filesystem::temp_directory_path() / "wiwa_input_panel_smoke.wsettings" : std::filesystem::path(wiwa::INPUT_SETTINGS_FILE));
 	m_InputPanel = inputPanel.get();
 	m_Panels.push_back(inputPanel);
+	Ref<AnimationPanel> animationPanel = CreateRef<AnimationPanel>(*m_SceneEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database(),
+		[this]() { return m_PlayMode->state() == wiwa::PlayState::Edit; });
+	m_AnimationPanel = animationPanel.get();
+	m_Panels.push_back(animationPanel);
 	Ref<EditorSection> editorSection = CreateRef<EditorSection>();
 	// every project-wide setting in one place (closed until opened from the Window menu); it shares the sections the Physics and Input panels made
 	m_Panels.push_back(CreateRef<SettingsPanel>(CreateRef<ProjectSection>(), CreateRef<RendererSection>(), physicsPanel->section(), inputPanel->section(), editorSection));
@@ -304,6 +312,64 @@ void EditorModule::update(float deltaTime)
 				read && !saved.Maps.empty() ? saved.Maps[0].Actions.size() : 0, m_InputPanel->last_error());
 			std::error_code removed;
 			std::filesystem::remove(m_InputPanelFile, removed);
+			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+		}
+	}
+
+	if (m_AnimPanelSmoke && m_AnimationPanel != nullptr)
+	{
+		if (m_Frame == 10)
+		{
+			m_AnimationPanel->request_focus();
+		}
+		if (m_Frame == 100)
+		{
+			// a model with a .meta in a folder of its own: open its clips, add an event through the model and save it
+			m_AnimPanelDir = std::filesystem::temp_directory_path() / "wiwa_anim_panel_smoke";
+			std::error_code ignored;
+			std::filesystem::remove_all(m_AnimPanelDir, ignored);
+			std::filesystem::create_directories(m_AnimPanelDir, ignored);
+			const std::filesystem::path model = m_AnimPanelDir / "rig.glb";
+			{
+				std::ofstream out(model, std::ios::binary | std::ios::trunc);
+				out << "not really a model";
+			}
+			wiwa::MetaFile meta;
+			meta.Guid = wiwa::AssetGuid::generate();
+			meta.Importer = "ModelImporter";
+			meta.Settings = nlohmann::json::parse(R"({"generatePhysicsShapes":true,"animationEvents":[{"clip":"Walk","time":0.5,"name":"left"}]})");
+			meta.save(wiwa::MetaFile::meta_path_for(model));
+			if (m_AnimationPanel->open_events(model, { { "Walk", 2.0f }, { "Run", 1.0f } }) && m_AnimationPanel->model() != nullptr)
+			{
+				wiwa::AnimationEditModel* events = m_AnimationPanel->model();
+				events->add_event(0, 1.5f, "right");
+				events->add_event(1, 0.25f, "turn");
+				m_AnimationPanel->save();
+			}
+		}
+		if (m_Frame == 130)
+		{
+			const std::filesystem::path model = m_AnimPanelDir / "rig.glb";
+			const std::optional<wiwa::MetaFile> saved = wiwa::MetaFile::load(wiwa::MetaFile::meta_path_for(model));
+			bool passed = saved.has_value() && m_AnimationPanel->frames_drawn() >= 100 && m_AnimationPanel->last_error().empty()
+				&& m_AnimationPanel->model() != nullptr && !m_AnimationPanel->model()->dirty();
+			std::string names;
+			if (passed)
+			{
+				const wiwa::AnimationEditModel reread = wiwa::AnimationEditModel::from_settings({ { "Walk", 2.0f }, { "Run", 1.0f } }, saved->Settings);
+				for (const wiwa::EditableClip& clip : reread.clips())
+				{
+					for (const wiwa::AnimationEvent& event : clip.Events)
+					{
+						names += clip.Name + "/" + event.Name + " ";
+					}
+				}
+				passed = names == "Walk/left Walk/right Run/turn " && saved->Settings.value("generatePhysicsShapes", false);
+			}
+			WI_INFO("Editor", "Animation panel smoke test {0} (frames {1}, events \"{2}\", error \"{3}\")", passed ? "passed" : "FAILED", m_AnimationPanel->frames_drawn(), names, m_AnimationPanel->last_error());
+			std::error_code ignored;
+			std::filesystem::remove_all(m_AnimPanelDir, ignored);
 			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
 			wiwa::Engine::get().request_quit();
 		}

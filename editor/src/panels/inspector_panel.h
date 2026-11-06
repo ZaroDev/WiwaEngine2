@@ -24,6 +24,7 @@ public:
 private:
 	void draw_component(entt::entity entity, const wiwa::ComponentInfo& info);
 	// true if the user changed the value (and the new one is in value)
+	bool draw_joint_picker(entt::entity entity, const std::string& current, wiwa::FieldValue& value);
 	bool draw_field(entt::entity entity, const wiwa::ComponentInfo& info, size_t index, const wiwa::FieldValue& current, wiwa::FieldValue& value);
 
 	wiwa::SceneEditor& m_Editor;

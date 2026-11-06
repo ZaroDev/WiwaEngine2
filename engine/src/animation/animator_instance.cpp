@@ -76,6 +76,14 @@ namespace wiwa
 		submit(std::move(command));
 	}
 
+	void AnimatorInstance::seek(float time)
+	{
+		if (m_Current != nullptr)
+		{
+			m_Current->set_time(time);
+		}
+	}
+
 	AnimatorInstance::Layer* AnimatorInstance::find_layer(LayerId id)
 	{
 		for (Layer& layer : m_Layers)

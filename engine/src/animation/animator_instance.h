@@ -78,6 +78,9 @@ namespace wiwa
 		// The names of the clips that have loaded.
 		std::vector<std::string> clip_names() const;
 
+		// Moves the clip that plays to a time (a scrub); the pose follows with the next update. Events between are not fired.
+		void seek(float time);
+
 		// Runs the waiting commands, moves time (events go to the list), evaluates and builds the palette.
 		void update(float deltaTime, std::vector<ClipEvent>& events);
 

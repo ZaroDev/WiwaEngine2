@@ -77,6 +77,9 @@ private:
 	class InputPanel* m_InputPanel = nullptr;     // owned by m_Panels
 	bool m_InputPanelSmoke = false;              // --input-panel-smoke: draw the Input panel for a while with ImGui asserts on, edit a map through the panel, check it was saved
 	std::filesystem::path m_InputPanelFile{};
+	class AnimationPanel* m_AnimationPanel = nullptr; // owned by m_Panels
+	bool m_AnimPanelSmoke = false;               // --anim-panel-smoke: draw the Animation panel for a while with ImGui asserts on, edit a clip event through the panel, check it was saved
+	std::filesystem::path m_AnimPanelDir{};
 	std::filesystem::path m_UiEditorSmokeFile{};
 	wiwa::u32 m_Frame = 0;
 	wiwa::u32 m_PlaySmokeFinalFrame = 0;
