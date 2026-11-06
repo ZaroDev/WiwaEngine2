@@ -1,5 +1,4 @@
--- Character demo: a kinematic platform that slides back and forth along x. A character standing on it is carried along.
--- The body follows the entity: the physics sync turns a moved Transform into the platform's movement (it pushes what it meets).
+-- Moves a kinematic body along x with the physics step; characters standing on it ride along.
 local SlidePlatform = Script:extend{
   properties = {
     amplitude = { type = "float", default = 2.5, min = 0, max = 20 },

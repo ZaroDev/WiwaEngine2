@@ -1,3 +1,4 @@
+-- Turns the entity around an axis. Change degrees_per_second in the Inspector while playing.
 local Spinner = Script:extend{
   properties = {
     degrees_per_second = { type = "float", default = 60, min = -720, max = 720 },

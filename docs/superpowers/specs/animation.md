@@ -1,13 +1,13 @@
 # Animation
 
-Code: `engine/src/animation` (poses, nodes, `AnimatorInstance`, `AnimationModule`), `engine/src/scripting/bindings/bind_animation.cpp`, the skinning parts of `engine/src/renderer`, `editor/src/animation` (panel, edit model, smoke tests), importers in `editor/src/asset_pipeline/importers/model_skeleton.*`. User API: `docs/scripting.md`. Verified by `--anim-smoke`, `--anim-panel-smoke`, `--render-test` (`skinning_checks.cpp`) and the fox in `--demo-smoke`.
+Code: `engine/src/animation` (poses, nodes, `AnimatorInstance`, `AnimationModule`), `engine/src/scripting/bindings/bind_animation.cpp`, the skinning parts of `engine/src/renderer`, `editor/src/animation` (panel, edit model, smoke tests), importers in `editor/src/asset_pipeline/importers/model_skeleton.*`. User API: `docs/scripting.md`. Verified by `--anim-smoke`, `--anim-panel-smoke`, `--render-test` (`skinning_checks.cpp`) and the animated warrior in `--demo-smoke`.
 
 Part 1 of 5 (foundation). Later parts are the animation graph, root motion, IK and ragdoll; this area only keeps them possible (see the end).
 
 ## Assets
 
 - `SkeletonData`: `Joints` (prefab node indices), `InverseBind`, `JointNames`, `Parents` (joint index, -1 for a root; **a parent always comes before its children**), `RestTranslation/Rotation/Scale` (the joint's own node) and `Pre` (the nodes between the joint and its parent joint, or above a root joint: an Armature node scaled 0.01 and turned -90 degrees, for one). A joint's matrix is `parent * Pre * local`, so clips, which animate the joint's own TRS only, never lose what is folded into `Pre`, and poses are in the space of the model root (the entity with the `Animator`). The model importer fills them (`finalize_model_skeletons`): it sorts the joints parent first and **remaps the joint indices of every mesh vertex** it skins. More than 256 joints is a warning (the palette cap).
-- `AnimationClipData`: channels keyed by prefab node index, plus `Events` (`{time, name}`, sorted). Events are the `animationEvents` list of the model's import settings (`{clip, time, name}`); the Animation panel writes it. Editing it re-imports the model. **`.meta` files are git-ignored in this repo**, so events live in the local `.meta`; the two the demo needs (`fox.glb.meta`, `animation_demo.lua.meta`) are force-added.
+- `AnimationClipData`: channels keyed by prefab node index, plus `Events` (`{time, name}`, sorted). Events are the `animationEvents` list of the model's import settings (`{clip, time, name}`); the Animation panel writes it. Editing it re-imports the model. **`.meta` files are git-ignored in this repo**, so events live in the local `.meta`; the demo hall's are written by `scripts/gen_demo_scene.py` (the footstep events of `Warrior.fbx.meta`, plus the pre-assigned GUIDs and mesh local ids the scene points at) and have to be force-added.
 - `WASSET_VERSION` is 2: an older `.wpak` fails to load cleanly and has to be packed again. The import cache entry stores `wassetVersion`, so a bump re-cooks everything (the importer version alone would not).
 - A **ClipBinding** (`bind_clip`) maps each channel to a joint by node; channels for nodes outside the skeleton are left out with one warning per clip.
 
@@ -47,7 +47,7 @@ Palette = `model[j] * inverseBind[j]`, three float4 rows per joint (`JointMatrix
 
 ## Checks
 
-`--anim-smoke` (import, sampling, nodes, events, module, previews, layers, sockets, extractor, Lua API, edit model); `--anim-panel-smoke` (the panel for 130 frames with ImGui asserts on, events saved into a `.meta`); `--render-test` (`palette_previous_follows_end_frame`, `skinned_quad_follows_palette` at a nonzero base vertex, `skinned_without_palette_equals_rigid`, `skinned_palette_too_short_is_ignored`, `skinned_velocity_uses_previous_palette` with a no-motion control); `--demo-smoke` (the fox).
+`--anim-smoke` (import, sampling, nodes, events, module, previews, layers, sockets, extractor, Lua API, edit model); `--anim-panel-smoke` (the panel for 130 frames with ImGui asserts on, events saved into a `.meta`); `--render-test` (`palette_previous_follows_end_frame`, `skinned_quad_follows_palette` at a nonzero base vertex, `skinned_without_palette_equals_rigid`, `skinned_palette_too_short_is_ignored`, `skinned_velocity_uses_previous_palette` with a no-motion control); `--demo-smoke` (the warrior).
 
 ## Hooks for later parts
 

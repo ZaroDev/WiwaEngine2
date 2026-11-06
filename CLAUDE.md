@@ -60,7 +60,7 @@ Rules that cut across areas:
 | Project settings, Settings page | [project-settings.md](docs/superpowers/specs/project-settings.md) | `engine/src/core/project_settings.*`, `editor/src/settings` |
 | Editor, play mode, gizmos, performance stats | [editor.md](docs/superpowers/specs/editor.md) | `editor/src` |
 
-Animation in one line: `AnimationModule` (after the scripts) evaluates a tree of pose nodes per `Animator` into a joint palette; palettes ride the scene delta to the render thread, which keeps the previous palette like `PrevWorld`, and vertex shaders skin through their own last binding set (`t22`/`t23`). The demo scene has an animated fox (its clip events live in `fox.glb.meta`, force-added although `.meta` files are ignored).
+Animation in one line: `AnimationModule` (after the scripts) evaluates a tree of pose nodes per `Animator` into a joint palette; palettes ride the scene delta to the render thread, which keeps the previous palette like `PrevWorld`, and vertex shaders skin through their own last binding set (`t22`/`t23`). The demo hall (`editor/assets/scenes/demo.wscene`) is written by `scripts/gen_demo_scene.py`, with CC0 FBX characters (the warrior's footstep events live in `Warrior.fbx.meta`; the scene points at the GUIDs and mesh local ids in the `.meta` files, so they are force-added although `.meta` files are ignored).
 
 Renderer in one line: the render thread owns all GPU state and a GUID-keyed `GpuResourceCache`, is fed per-frame deltas through a bounded queue, and runs Forward+ (shadows, depth/normal/velocity prepass, light culling, AO, forward, sky, TAA, motion blur, exposure, bloom, tonemap, FXAA, UI, outline, debug, blit, ImGui).
 

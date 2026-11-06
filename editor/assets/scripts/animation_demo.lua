@@ -1,13 +1,12 @@
--- Animation demo: the fox crossfades between its idle clip (Survey) and its run clip (Run). It runs while the Gameplay Move action is held
--- (WASD or the left stick, the same action the Input demo uses); with `autopilot` on it alternates by itself, so that the demo shows both
--- without input. "footstep" is an event on the Run clip (set in the model's import settings), counted in `steps` for the demo smoke test.
--- The prop that follows the fox's head is an AnimationSocket on a child entity: no script involved.
-
+-- The Animation API: plays the idle clip and crossfades between it and the run clip every period; "footstep" events are counted.
+-- With autopilot off the Move action decides (the Gameplay map must be on the stack).
 local AnimationDemo = Script:extend{
   properties = {
     autopilot = { type = "bool", default = true },
     period = { type = "float", default = 3, min = 0.5, max = 20 },
     fade = { type = "float", default = 0.2, min = 0, max = 2 },
+    idle = { type = "string", default = "CharacterArmature|Idle" },
+    run = { type = "string", default = "CharacterArmature|Run" },
   },
 }
 
@@ -23,7 +22,7 @@ function AnimationDemo:on_init()
   self.anim:on("footstep", function(me, event)
     me.steps = me.steps + 1
   end)
-  self.anim:play("Survey", { loop = true })
+  self.anim:play(self.idle, { loop = true })
 end
 
 function AnimationDemo:on_update(dt)
@@ -45,7 +44,7 @@ function AnimationDemo:on_update(dt)
 
   if want_run ~= self.running then
     self.running = want_run
-    self.anim:crossfade(want_run and "Run" or "Survey", self.fade, { loop = true })
+    self.anim:crossfade(want_run and self.run or self.idle, self.fade, { loop = true })
   end
 end
 

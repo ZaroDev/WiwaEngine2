@@ -94,3 +94,6 @@ editor/.luarc.json
 game/wiwa.log
 game/wiwa_game.exe
 *.slnx
+
+# demo hall generator download cache (scripts/gen_demo_scene.py)
+.demo_cache/

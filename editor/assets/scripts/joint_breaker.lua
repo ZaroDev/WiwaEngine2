@@ -1,4 +1,4 @@
--- Joints demo: this entity hangs by a joint that breaks under load (Joint.BreakForce). on_joint_break arrives when it does.
+-- Hears on_joint_break when its Joint goes over its break force.
 local Breaker = Script:extend{}
 
 function Breaker:on_joint_break(other)

@@ -288,31 +288,28 @@ The editor sets this up itself each time it starts, so there is nothing to confi
 
 ## The demo scene
 
-`assets/scenes/demo.wscene` has scripts to try all of this (the sources are in `assets/scripts/`). Press Play and watch the Console:
+`assets/scenes/demo.wscene` is a hall of seven stations (written by `scripts/gen_demo_scene.py`; the sources are in `assets/scripts/`). Press
+Play, click the Viewport and press **1 to 7** to jump between them; the labels over the stations are widgets of the HUD anchored to entities.
 
-- **spinner** (gold knot, blue ring, crate C): turns the entity; change `degrees_per_second` or `axis` in the Inspector while playing.
-- **bobber** (neon balls): bobs them using `lib/wave.lua`. Edit `wave.sine` there while playing and every ball changes.
-- **light_pulse** (podium spot, neon lights): reads and writes the `Light` component.
-- **camera_sway** (camera): drifts the camera sideways.
-- **scene_overlay** (a scene-level script, in the scene settings): logs on Play and Stop and draws debug shapes around the podium.
-- **demo_ui** (the Hud entity, `assets/ui/demo_hud.wuipanel`): the HUD. The score counts up, a health bar breathes, the button toggles the
-  "Demo light" and the slider sets its intensity (click and drag with the mouse over the Viewport in Play mode), and the tag over the
-  "Beacon" sphere follows it on the screen. It waits for the panel to be `ready` before it looks its widgets up.
-- **input_demo** (the "Input demo" ball, `assets/input/demo.winput`): move it with WASD or the left stick, jump with Space or the pad's A, fire (a flash) with the
-  left mouse button or the right trigger. In the editor click the Viewport image first (it takes the keyboard and the mouse; Escape gives them
-  back). The panel at the right of the HUD shows the last device, the Move vector and the Jump bindings; "Rebind Jump" waits for a key or a
-  button, binds Jump to it and saves it to `input_overrides.json`. The project's default map is chosen in the Input panel (`input.wsettings`).
+| Station | Scripts and what they show |
+| --- | --- |
+| 1 Lighting and post | **spinner** (blue ring), **light_pulse** (podium spot, neon lights), **bobber** (neon balls, `lib/wave.lua`), a prefab (`street_lamp.wprefab`) instanced three times |
+| 2 Materials and shaders | PBR grid, textured bricks, glass, carpaint, cloth, double-sided, the `toon` and `hologram` surface shaders |
+| 3 Models and animation | **animation_demo** (the warrior crossfades Idle and Run, counts `footstep` events, has a head socket), **clip_player** (a lineup of FBX characters and monsters) |
+| 4 Physics | **physics_hopper** (velocity, raycast, collision events), bouncy balls, crates, **trigger_zone** (a trigger that lights up) |
+| 5 Joints | **joint_motor_swing** (door and cart motors), a spring pendulum, a bridge, **joint_breaker** and **joint_wrecker** |
+| 6 Character controller | **character_demo** (Hero is yours, Patrol walks and jumps by itself), steps, ramps, **slide_platform** |
+| 7 Scripts, input and UI | **demo_ui** (HUD: score, health bar, light button and slider, a tag following the Beacon), **input_demo** (the "Input demo" ball moves with WASD or the stick, jumps with Space or pad A, fires with the left mouse button; "Rebind Jump" waits for a key and saves it to `input_overrides.json`) |
+
+Scripts that act on the whole hall: **camera_rig** (the camera drifts and handles the station keys) and **scene_overlay** (a scene-level script
+listed in the scene settings: logs on Play and Stop and draws debug boxes). The project's default input map is `assets/input/demo.winput`
+(`input.wsettings`).
 
 Try: Pause, then Step; edit a script into a syntax error and save (the old version keeps running, the Console says why); fix it; add a
 property to `spinner.lua` and see it in the Inspector without stopping.
 
-## Orb Rush
-
-A small game built only from scripts, scenes and UI panels: `assets/scenes/orb_title.wscene` (main menu) and `orb_arena.wscene`, with the scripts in
-`assets/scripts/orbrush/`. Roll the ball (WASD or left stick), dash (Space or pad A), collect orbs before the 60 seconds end, chain pickups for
-a x5 combo, and avoid the red hazards. P or pad Start pauses; the pause, end-of-round and settings menus are UI panels driven by
-`game_manager.lua`, and Settings rebinds Dash and Pause and sets the field of view. `scripts/gen_orbrush.py` writes the scenes and panels
-(run it again after changing it). The manual play-through is in `docs/superpowers/specs/orb-rush-checklist.md`.
+Assets are free: Quaternius characters and monsters (CC0, FBX with animations), ambientCG textures (CC0), a Poly Haven sky (CC0), Lato (OFL).
+Each folder has its license file.
 
 ## Editor and builds
 

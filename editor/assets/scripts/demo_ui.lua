@@ -1,9 +1,5 @@
--- The HUD of the demo scene (assets/ui/demo_hud.wuipanel), on the entity that has the UICanvas. It shows the three things scripts do with
--- UI: change a widget (the score, the health bar, the beacon's bar), listen to one (the button toggles the light, the slider sets its
--- intensity) and use a widget that follows an entity on the screen (the tag over the Beacon entity needs no code at all).
---
--- Click the button or drag the slider in Play mode with the mouse over the Viewport.
-
+-- The HUD (assets/ui/demo_hud.wuipanel) on the entity that has the UICanvas: change a widget (score, health bar, beacon bar),
+-- listen to one (the button switches the light, the slider sets its intensity) and use a widget that follows an entity on the screen.
 local DemoUi = Script:extend{
   properties = {},
 }
@@ -16,7 +12,7 @@ function DemoUi:on_init()
   self.ready = false
 end
 
--- The panel is an asset that loads in the background, so its widgets are looked up once it says it is ready.
+-- The panel is an asset that loads in the background: its widgets are looked up once it is ready.
 function DemoUi:setup()
   local panel = self.panel
   self.score = panel:find("Stats/Score")
@@ -39,7 +35,6 @@ function DemoUi:setup()
   self:apply_light()
 end
 
--- the light follows the switch and the slider
 function DemoUi:apply_light()
   if self.light ~= nil and self.light:is_valid() then
     self.light:get("Light").intensity = self.on and self.level or 0

@@ -1,162 +1,764 @@
 {
   "version": 1,
-  "referenceResolution": [1920, 1080],
+  "referenceResolution": [
+    1920,
+    1080
+  ],
   "match": 0.5,
-  "nextId": 19,
+  "nextId": 27,
   "widgets": [
     {
-      "id": 2, "kind": "VStack",
+      "id": 2,
+      "kind": "VStack",
       "Name": "Stats",
-      "OffsetMin": [24, 24], "OffsetMax": [344, 184],
-      "Color": [0, 0, 0, 0.35],
+      "OffsetMin": [
+        24,
+        24
+      ],
+      "OffsetMax": [
+        344,
+        184
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0.35
+      ],
       "Spacing": 8,
-      "Padding": [12, 12, 12, 12]
+      "Padding": [
+        12,
+        12,
+        12,
+        12
+      ]
     },
     {
-      "id": 3, "parent": 2, "kind": "Text",
+      "id": 3,
+      "kind": "Text",
       "Name": "Title",
-      "OffsetMax": [296, 36],
-      "Text": "WIWA2 UI DEMO",
-      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
+      "parent": 2,
+      "OffsetMax": [
+        296,
+        36
+      ],
+      "Text": "WIWA2 DEMO HALL",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
       "FontSize": 30,
       "Outline": 0.15,
-      "OutlineColor": [0.05, 0.1, 0.3, 1],
+      "OutlineColor": [
+        0.05,
+        0.1,
+        0.3,
+        1
+      ],
       "Shadow": true
     },
     {
-      "id": 4, "parent": 2, "kind": "Text",
+      "id": 4,
+      "kind": "Text",
       "Name": "Score",
-      "OffsetMax": [296, 30],
+      "parent": 2,
+      "OffsetMax": [
+        296,
+        30
+      ],
       "Text": "Score 0",
-      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
-      "Color": [1, 0.85, 0.3, 1]
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "Color": [
+        1,
+        0.85,
+        0.3,
+        1
+      ]
     },
     {
-      "id": 5, "parent": 2, "kind": "Bar",
+      "id": 5,
+      "kind": "Bar",
       "Name": "Health",
-      "OffsetMax": [296, 22],
+      "parent": 2,
+      "OffsetMax": [
+        296,
+        22
+      ],
       "Value": 0.75,
-      "Color": [0.9, 0.25, 0.25, 1]
+      "Color": [
+        0.9,
+        0.25,
+        0.25,
+        1
+      ]
     },
     {
-      "id": 6, "kind": "VStack",
+      "id": 6,
+      "kind": "VStack",
       "Name": "Controls",
-      "AnchorMin": [0, 1], "AnchorMax": [0, 1],
-      "OffsetMin": [24, -148], "OffsetMax": [344, -24],
-      "Color": [0, 0, 0, 0.35],
+      "AnchorMin": [
+        0,
+        1
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        24,
+        -148
+      ],
+      "OffsetMax": [
+        344,
+        -24
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0.35
+      ],
       "Spacing": 10,
-      "Padding": [12, 12, 12, 12]
+      "Padding": [
+        12,
+        12,
+        12,
+        12
+      ]
     },
     {
-      "id": 7, "parent": 6, "kind": "Button",
+      "id": 7,
+      "kind": "Button",
       "Name": "ToggleLight",
-      "OffsetMax": [296, 44],
-      "Color": [0.2, 0.35, 0.6, 1],
-      "HoverColor": [0.3, 0.5, 0.85, 1],
-      "PressedColor": [0.15, 0.25, 0.45, 1]
+      "parent": 6,
+      "OffsetMax": [
+        296,
+        44
+      ],
+      "Color": [
+        0.2,
+        0.35,
+        0.6,
+        1
+      ],
+      "HoverColor": [
+        0.3,
+        0.5,
+        0.85,
+        1
+      ],
+      "PressedColor": [
+        0.15,
+        0.25,
+        0.45,
+        1
+      ]
     },
     {
-      "id": 8, "parent": 7, "kind": "Text",
+      "id": 8,
+      "kind": "Text",
       "Name": "Label",
-      "AnchorMax": [1, 1],
-      "OffsetMin": [0, 9], "OffsetMax": [0, 0],
+      "parent": 7,
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        9
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
       "Text": "Light: on",
-      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
       "FontSize": 22,
       "Align": "Center"
     },
     {
-      "id": 9, "parent": 6, "kind": "Slider",
+      "id": 9,
+      "kind": "Slider",
       "Name": "LightIntensity",
-      "OffsetMax": [296, 24],
-      "Color": [0.95, 0.6, 0.1, 1],
+      "parent": 6,
+      "OffsetMax": [
+        296,
+        24
+      ],
+      "Color": [
+        0.95,
+        0.6,
+        0.1,
+        1
+      ],
       "Value": 2,
       "MaxValue": 20,
       "Step": 0.5
     },
     {
-      "id": 10, "kind": "VStack",
+      "id": 10,
+      "kind": "VStack",
       "Name": "BeaconTag",
-      "Pivot": [0.5, 1],
-      "OffsetMax": [150, 52],
-      "Color": [0, 0, 0, 0.5],
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        150,
+        52
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0.5
+      ],
       "Spacing": 4,
-      "Padding": [6, 4, 6, 4],
-      "WorldEntity": "044336c837964bd19c10925db01ba960",
-      "WorldOffset": [0, 1.2, 0],
+      "Padding": [
+        6,
+        4,
+        6,
+        4
+      ],
+      "WorldEntity": "3601341888678577d371966dd31480f6",
+      "WorldOffset": [
+        0,
+        1.2,
+        0
+      ],
       "WorldScaleWithDistance": true,
       "WorldRefDistance": 14,
       "WorldMinScale": 0.4,
       "WorldMaxScale": 1.5
     },
     {
-      "id": 11, "parent": 10, "kind": "Text",
+      "id": 11,
+      "kind": "Text",
       "Name": "BeaconName",
-      "OffsetMax": [138, 22],
+      "parent": 10,
+      "OffsetMax": [
+        138,
+        22
+      ],
       "Text": "Beacon",
-      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
       "FontSize": 18,
       "Align": "Center"
     },
     {
-      "id": 12, "parent": 10, "kind": "Bar",
+      "id": 12,
+      "kind": "Bar",
       "Name": "BeaconBar",
-      "OffsetMax": [138, 14],
+      "parent": 10,
+      "OffsetMax": [
+        138,
+        14
+      ],
       "Value": 0.3,
-      "Color": [0.2, 0.9, 1, 1],
-      "BackgroundColor": [0.9, 0.2, 0.9, 0.8]
+      "Color": [
+        0.2,
+        0.9,
+        1,
+        1
+      ],
+      "BackgroundColor": [
+        0.9,
+        0.2,
+        0.9,
+        0.8
+      ]
     },
     {
-      "id": 13, "kind": "VStack",
+      "id": 13,
+      "kind": "VStack",
       "Name": "InputInfo",
-      "AnchorMin": [1, 0], "AnchorMax": [1, 0],
-      "OffsetMin": [-344, 24], "OffsetMax": [-24, 214],
-      "Color": [0, 0, 0, 0.35],
+      "AnchorMin": [
+        1,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        0
+      ],
+      "OffsetMin": [
+        -344,
+        24
+      ],
+      "OffsetMax": [
+        -24,
+        214
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0.35
+      ],
       "Spacing": 8,
-      "Padding": [12, 12, 12, 12]
+      "Padding": [
+        12,
+        12,
+        12,
+        12
+      ]
     },
     {
-      "id": 14, "parent": 13, "kind": "Text",
+      "id": 14,
+      "kind": "Text",
       "Name": "Device",
-      "OffsetMax": [296, 26],
+      "parent": 13,
+      "OffsetMax": [
+        296,
+        26
+      ],
       "Text": "Device: keyboard_mouse",
-      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
       "FontSize": 20
     },
     {
-      "id": 15, "parent": 13, "kind": "Text",
+      "id": 15,
+      "kind": "Text",
       "Name": "Move",
-      "OffsetMax": [296, 26],
+      "parent": 13,
+      "OffsetMax": [
+        296,
+        26
+      ],
       "Text": "Move: 0.00, 0.00",
-      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
       "FontSize": 20
     },
     {
-      "id": 16, "parent": 13, "kind": "Text",
+      "id": 16,
+      "kind": "Text",
       "Name": "JumpKey",
-      "OffsetMax": [296, 26],
+      "parent": 13,
+      "OffsetMax": [
+        296,
+        26
+      ],
       "Text": "Jump: Key.Space",
-      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
       "FontSize": 20,
-      "Color": [1, 0.85, 0.3, 1]
+      "Color": [
+        1,
+        0.85,
+        0.3,
+        1
+      ]
     },
     {
-      "id": 17, "parent": 13, "kind": "Button",
+      "id": 17,
+      "kind": "Button",
       "Name": "RebindJump",
-      "OffsetMax": [296, 44],
-      "Color": [0.55, 0.2, 0.5, 1],
-      "HoverColor": [0.75, 0.3, 0.7, 1],
-      "PressedColor": [0.4, 0.15, 0.35, 1]
+      "parent": 13,
+      "OffsetMax": [
+        296,
+        44
+      ],
+      "Color": [
+        0.55,
+        0.2,
+        0.5,
+        1
+      ],
+      "HoverColor": [
+        0.75,
+        0.3,
+        0.7,
+        1
+      ],
+      "PressedColor": [
+        0.4,
+        0.15,
+        0.35,
+        1
+      ]
     },
     {
-      "id": 18, "parent": 17, "kind": "Text",
+      "id": 18,
+      "kind": "Text",
       "Name": "Label",
-      "AnchorMax": [1, 1],
-      "OffsetMin": [0, 9], "OffsetMax": [0, 0],
+      "parent": 17,
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        9
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
       "Text": "Rebind Jump",
-      "Font": { "guid": "317d558de2f2bb590b21a7c9426086a4" },
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
       "FontSize": 22,
       "Align": "Center"
+    },
+    {
+      "id": 19,
+      "kind": "Text",
+      "Name": "Hint",
+      "AnchorMin": [
+        0.5,
+        1
+      ],
+      "AnchorMax": [
+        0.5,
+        1
+      ],
+      "OffsetMin": [
+        -320,
+        -52
+      ],
+      "OffsetMax": [
+        320,
+        -16
+      ],
+      "Text": "Keys 1-7: jump between the stations",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 24,
+      "Align": "Center",
+      "Color": [
+        0.85,
+        0.95,
+        1,
+        1
+      ],
+      "Outline": 0.2,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": 20,
+      "kind": "Text",
+      "Name": "Label 1",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        360,
+        36
+      ],
+      "Text": "1  Lighting and post",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.9,
+        0.95,
+        1,
+        1
+      ],
+      "Outline": 0.25,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "WorldEntity": "47cbbe6fddae2c1128773928e0d99b56",
+      "WorldOffset": [
+        0,
+        0,
+        0
+      ],
+      "WorldScaleWithDistance": true,
+      "WorldRefDistance": 18,
+      "WorldMinScale": 0.5,
+      "WorldMaxScale": 2.0
+    },
+    {
+      "id": 21,
+      "kind": "Text",
+      "Name": "Label 2",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        360,
+        36
+      ],
+      "Text": "2  Materials and shaders",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.9,
+        0.95,
+        1,
+        1
+      ],
+      "Outline": 0.25,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "WorldEntity": "74e764b0d3bb9694efc111a594c7bfb4",
+      "WorldOffset": [
+        0,
+        0,
+        0
+      ],
+      "WorldScaleWithDistance": true,
+      "WorldRefDistance": 18,
+      "WorldMinScale": 0.5,
+      "WorldMaxScale": 2.0
+    },
+    {
+      "id": 22,
+      "kind": "Text",
+      "Name": "Label 3",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        360,
+        36
+      ],
+      "Text": "3  Models and animation",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.9,
+        0.95,
+        1,
+        1
+      ],
+      "Outline": 0.25,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "WorldEntity": "12d11813456518368a059c1d9dc2c4bb",
+      "WorldOffset": [
+        0,
+        0,
+        0
+      ],
+      "WorldScaleWithDistance": true,
+      "WorldRefDistance": 18,
+      "WorldMinScale": 0.5,
+      "WorldMaxScale": 2.0
+    },
+    {
+      "id": 23,
+      "kind": "Text",
+      "Name": "Label 4",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        360,
+        36
+      ],
+      "Text": "4  Physics",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.9,
+        0.95,
+        1,
+        1
+      ],
+      "Outline": 0.25,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "WorldEntity": "d11fc692da627b552e00b48a11f4a63b",
+      "WorldOffset": [
+        0,
+        0,
+        0
+      ],
+      "WorldScaleWithDistance": true,
+      "WorldRefDistance": 18,
+      "WorldMinScale": 0.5,
+      "WorldMaxScale": 2.0
+    },
+    {
+      "id": 24,
+      "kind": "Text",
+      "Name": "Label 5",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        360,
+        36
+      ],
+      "Text": "5  Joints",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.9,
+        0.95,
+        1,
+        1
+      ],
+      "Outline": 0.25,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "WorldEntity": "1d26f52c9983562ffd6f5a448aaa8266",
+      "WorldOffset": [
+        0,
+        0,
+        0
+      ],
+      "WorldScaleWithDistance": true,
+      "WorldRefDistance": 18,
+      "WorldMinScale": 0.5,
+      "WorldMaxScale": 2.0
+    },
+    {
+      "id": 25,
+      "kind": "Text",
+      "Name": "Label 6",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        360,
+        36
+      ],
+      "Text": "6  Character controller",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.9,
+        0.95,
+        1,
+        1
+      ],
+      "Outline": 0.25,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "WorldEntity": "6602dc1cf238b559b2ce19ccf6d1fd84",
+      "WorldOffset": [
+        0,
+        0,
+        0
+      ],
+      "WorldScaleWithDistance": true,
+      "WorldRefDistance": 18,
+      "WorldMinScale": 0.5,
+      "WorldMaxScale": 2.0
+    },
+    {
+      "id": 26,
+      "kind": "Text",
+      "Name": "Label 7",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        360,
+        36
+      ],
+      "Text": "7  Scripts, input and UI",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.9,
+        0.95,
+        1,
+        1
+      ],
+      "Outline": 0.25,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "WorldEntity": "71aee876f9944b67ebb4413696a61160",
+      "WorldOffset": [
+        0,
+        0,
+        0
+      ],
+      "WorldScaleWithDistance": true,
+      "WorldRefDistance": 18,
+      "WorldMinScale": 0.5,
+      "WorldMaxScale": 2.0
     }
   ]
 }

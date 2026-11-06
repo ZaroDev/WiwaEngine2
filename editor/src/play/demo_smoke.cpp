@@ -63,12 +63,12 @@ namespace wiwa
 	}
 
 	// Waits are in seconds as well as frames: with vsync off a frame is a fraction of a millisecond, and the file watcher and the import need real time.
-	// The animated fox of the scene (an Animator the prefab expander made, the demo script that crossfades Survey and Run, a socket on its head).
+	// The animated warrior of the scene (an Animator the prefab expander made, the demo script that crossfades Survey and Run, a socket on its head).
 	void DemoSmoke::sample_fox(Scene& play)
 	{
 		AnimationModule* animation = Engine::get().get_module<AnimationModule>();
-		const entt::entity fox = find_named(play, "Fox (animated)");
-		const entt::entity socket = find_named(play, "Fox head socket");
+		const entt::entity fox = find_named(play, "Warrior (animated)");
+		const entt::entity socket = find_named(play, "Warrior head socket");
 		if (animation == nullptr || fox == entt::null || socket == entt::null)
 		{
 			return;
@@ -103,23 +103,23 @@ namespace wiwa
 	{
 		if (!m_Fox.HasAnimator)
 		{
-			return "the fox has no Animator (the prefab expander adds one to a model with animations)";
+			return "the warrior has no Animator (the prefab expander adds one to a model with animations)";
 		}
 		if (glm::length(m_Fox.SocketHigh - m_Fox.SocketLow) < 0.001f)
 		{
-			return "the head socket of the fox did not move";
+			return "the head socket of the warrior did not move";
 		}
 		if (!m_Fox.PaletteMoved)
 		{
-			return "the fox never left its rest pose";
+			return "the warrior never left its rest pose";
 		}
 		if (!m_Fox.Crossfaded)
 		{
-			return "the fox script never crossfaded between its clips";
+			return "the warrior script never crossfaded between its clips";
 		}
 		if (m_Fox.EventsSeen == 0)
 		{
-			return "no footstep of the fox was fired";
+			return "no footstep of the warrior was fired";
 		}
 		return {};
 	}

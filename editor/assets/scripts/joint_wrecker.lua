@@ -1,4 +1,4 @@
--- Joints demo: flies sideways at the start to hit the box that hangs by a weak joint (see joint_breaker.lua).
+-- Launches its body once with set_velocity.
 local Wrecker = Script:extend{
   properties = {
     velocity = { type = "vec3", default = { -10, 0, 0 } },

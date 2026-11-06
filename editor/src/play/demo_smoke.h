@@ -87,7 +87,7 @@ namespace wiwa
 		float m_CameraLow = 1e9f, m_CameraHigh = -1e9f;
 		float m_LightLow = 1e9f, m_LightHigh = -1e9f;
 
-		// the animated fox: its head socket moves, its palette leaves the rest pose, a crossfade happens, its footsteps are heard
+		// the animated warrior: its head socket moves, its palette leaves the rest pose, a crossfade happens, its footsteps are heard
 		struct FoxWatch
 		{
 			glm::vec3 SocketLow{ 1e9f }, SocketHigh{ -1e9f };
