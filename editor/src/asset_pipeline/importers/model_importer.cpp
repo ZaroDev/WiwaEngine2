@@ -12,6 +12,7 @@
 #include "../image_utils.h"
 #include "../material_file.h"
 #include "model_import.h"
+#include "model_skeleton.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -172,7 +173,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "ModelImporter"; }
-			virtual u32 version() const override { return 5; } // 5: optional cooked physics shapes; 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
+			virtual u32 version() const override { return 6; } // 6: skeletons have names, parents and a rest pose, clips have events; 5: optional cooked physics shapes; 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
 			virtual bool imports_dependencies() const override { return true; }
 			// generatePhysicsShapes: also cook a convex hull and a triangle mesh shape of every mesh, for ConvexHull and Mesh colliders
 			virtual nlohmann::json default_settings() const override { return { { "generatePhysicsShapes", false } }; }
@@ -188,6 +189,9 @@ namespace wiwa
 					WI_ASSET_LOG(Error, "{0}", error);
 					return false;
 				}
+
+				finalize_model_skeletons(model);
+				merge_animation_events(model, ctx.settings());
 
 				for (const std::string& warning : model.Warnings)
 				{

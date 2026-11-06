@@ -461,10 +461,25 @@ namespace wiwa
 		ar.string(v.Name);
 		ar.pod_vector(v.Joints);
 		ar.pod_vector(v.InverseBind);
+		ar.list(v.JointNames, [&](std::string& name) { ar.string(name); });
+		ar.pod_vector(v.Parents);
+		ar.pod_vector(v.RestTranslation);
+		ar.pod_vector(v.RestRotation);
+		ar.pod_vector(v.RestScale);
 
-		if (ar.reading() && ar.ok() && v.Joints.size() != v.InverseBind.size())
+		if (ar.reading() && ar.ok())
 		{
-			ar.fail();
+			const size_t count = v.Joints.size();
+			bool valid = v.InverseBind.size() == count && v.JointNames.size() == count && v.Parents.size() == count
+				&& v.RestTranslation.size() == count && v.RestRotation.size() == count && v.RestScale.size() == count;
+			for (size_t i = 0; valid && i < count; i++)
+			{
+				valid = v.Parents[i] >= -1 && v.Parents[i] < static_cast<i32>(i); // a parent comes before its children
+			}
+			if (!valid)
+			{
+				ar.fail();
+			}
 		}
 	}
 
@@ -480,6 +495,11 @@ namespace wiwa
 				ar.value(c.Components);
 				ar.pod_vector(c.Times);
 				ar.pod_vector(c.Values);
+			});
+		ar.list(v.Events, [&](AnimationEvent& e)
+			{
+				ar.value(e.Time);
+				ar.string(e.Name);
 			});
 	}
 

@@ -20,7 +20,7 @@
 namespace wiwa
 {
 	constexpr u32 WASSET_MAGIC = 0x53534157; // "WASS"
-	constexpr u32 WASSET_VERSION = 1;
+	constexpr u32 WASSET_VERSION = 2; // 2: skeletons carry names, parents and a rest pose; clips carry events
 
 	struct WAssetHeader
 	{

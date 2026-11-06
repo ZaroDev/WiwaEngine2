@@ -253,11 +253,18 @@ namespace wiwa
 	};
 
 	// One skin of a model: the joints (node indices of the Prefab) and the matrices that bring a vertex into each joint's space.
+	// The importer orders the joints so that a parent always comes before its children; the arrays below are parallel to Joints.
+	// The rest pose of a root joint includes the nodes above it, so a pose is in the space of the model's root.
 	struct SkeletonData
 	{
 		std::string Name{};
 		std::vector<u32> Joints{};
 		std::vector<glm::mat4> InverseBind{};
+		std::vector<std::string> JointNames{};
+		std::vector<i32> Parents{};              // joint index of the parent, -1 for a root joint
+		std::vector<glm::vec3> RestTranslation{};
+		std::vector<glm::quat> RestRotation{};
+		std::vector<glm::vec3> RestScale{};
 	};
 
 	enum class AnimationPath : u32
@@ -285,11 +292,19 @@ namespace wiwa
 		std::vector<float> Values{};
 	};
 
+	// A named moment on the clip's own time, which scripts hear about when the clip plays through it.
+	struct AnimationEvent
+	{
+		float Time = 0.0f;
+		std::string Name{};
+	};
+
 	struct AnimationClipData
 	{
 		std::string Name{};
 		float Duration = 0.0f;
 		std::vector<AnimationChannel> Channels{};
+		std::vector<AnimationEvent> Events{}; // sorted by time
 	};
 
 	struct PrefabNode

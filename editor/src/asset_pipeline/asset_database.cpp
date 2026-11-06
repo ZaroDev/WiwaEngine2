@@ -725,7 +725,8 @@ namespace wiwa
 
 		bool upToDate = !force && previous.is_object() && previous.value("sourceHash", "") == sourceHash && previous.value("settingsHash", "") == settingsHash
 			&& previous.value("version", 0u) == importer->version() && previous.contains("assets")
-			&& previous.contains("unresolved"); // an entry from before this was recorded is cooked once more
+			&& previous.contains("unresolved") // an entry from before this was recorded is cooked once more
+			&& previous.value("wassetVersion", 0u) == WASSET_VERSION; // the cooked format changed: everything is cooked again
 		if (upToDate && has_resolvable(previous))
 		{
 			upToDate = false; // a reference it dropped as missing exists now
@@ -838,6 +839,7 @@ namespace wiwa
 			nlohmann::json entry;
 			entry["source"] = key;
 			entry["sourceHash"] = sourceHash;
+			entry["wassetVersion"] = WASSET_VERSION;
 			entry["settingsHash"] = settingsHash;
 			entry["version"] = importer->version();
 			entry["assets"] = cookedGuids;
