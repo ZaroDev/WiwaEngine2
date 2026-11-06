@@ -88,6 +88,7 @@ HLSL in `editor/engine/shaders` (user shaders in `Assets/`). The editor's shader
 | frame: `b0/b1`, `t1..t9`, `s10/s11` | instances, materials, lights, clusters, cascades, spot atlas, environment, BRDF, samplers |
 | material set 1: `t10..t13`, `s14` | base color, normal, ORM, emissive, material sampler |
 | `t15` | ambient occlusion |
+| skin set (the last set of every pass that draws meshes): `t22` palettes, `t23` skin vertices | GPU skinning, animation.md |
 | surface set 3: `t16..t19`, `t20/t21`, `s15` | user textures, surface records, parameter bytes, sampler |
 
 New passes use their own binding layouts rather than extending the frame set.
@@ -102,3 +103,7 @@ New passes use their own binding layouts rather than extending the frame set.
 ## Stats
 
 `RenderSnapshot` carries per-pass GPU times, scene/cache counters, upload stats and the per-frame render times that feed `PerfStats` (editor.md).
+
+## Skinning
+
+Skinned meshes are deformed in the vertex shaders by a joint palette (`scene_common.hlsli`: `SkinPoint`, `SkinNormal`; the previous palette for the velocity). Palettes arrive in `SceneDelta::PaletteUpdates`, the previous palette is rolled in `RenderScene::end_frame` like `PrevWorld`, skin vertices live in a per-page buffer next to the vertex buffer, and both are bound in a skin set that is the last set of every pass that draws meshes (`SceneRenderData::skin_layout`). The base vertex of a draw is a push constant because `SV_VertexID` excludes it on D3D. Everything is in animation.md.

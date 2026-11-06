@@ -9,6 +9,7 @@ Code: `engine/src/assets` (runtime), `editor/src/asset_pipeline` (import, cook, 
 - Engine-owned assets (shaders, fonts, the Lua stub) live in `editor/engine/` and are cooked like user assets (the `engine` root).
 - `AssetRef` = GUID + `localId`. `Handle<T>` is what `AssetManager::load` returns (Loading / Ready / Failed). **Components and settings store `AssetRef` only**; only the render thread holds handles.
 - Asset data is CPU-side only and immutable once Ready. GPU objects are made by the renderer (see rendering.md). Assets never touch NVRHI.
+- `WASSET_VERSION` is 2 (skeletons carry names, parents and a rest pose; clips carry events). A bump re-cooks everything: the import cache stores the version it was cooked with. Details of skeletons and clips: animation.md.
 - `AssetType` is written to files: append new types before `Last`, never reorder. Current types: Texture, Mesh, Material, Skeleton, AnimationClip, Prefab, Environment, Lut, Shader, Scene, Script, SurfaceShader, Font, UiPanel, PhysicsMaterial, PhysicsShape, InputMap.
 
 ## Editor vs game

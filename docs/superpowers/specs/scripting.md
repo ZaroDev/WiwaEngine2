@@ -34,3 +34,7 @@ A hand-written `---@meta` stub `editor/engine/lua/wiwa.lua` documents the static
 ## Editor play mode
 
 See editor.md (Play runs on a scene clone; `ScriptingModule::update` is gated on the game clock).
+
+## Animation API
+
+`bind_animation.cpp`: `Animation.animator(entity)` gives a handle (`play`, `crossfade`, `stop`, `layer`, `on`, `off`, `joint_world`, `speed`, `time`, `playing`, `ready`); layer handles have `weight`, `crossfade`, `stop`. Handles resolve through the active scene on every use: a destroyed entity or an ended layer reads nil and ignores writes. `ScriptContext` carries the module and `ActiveSceneRef`, so a handle can make its animator instance on demand (scripts run before `AnimationModule::tick`). Clip event handlers live in `AnimHandlerTable`, delivered by `ScriptInstances::dispatch_animation_events` at the start of `update()` (one frame late), owned by the script instance like UI handlers (the owner is `UiHandlerTable::current()`), removed when they raise an error. `AnimationModule` must be registered before `ScriptingModule` (engine.cpp).

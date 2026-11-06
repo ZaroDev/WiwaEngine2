@@ -1,0 +1,28 @@
+{
+  "alpha": "opaque",
+  "alphaCutoff": 0.5,
+  "baseColor": [
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "clearcoat": 0.0,
+  "clearcoatRoughness": 0.0,
+  "doubleSided": false,
+  "emissive": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "metallic": 0.0,
+  "name": "fox_material",
+  "roughness": 0.58,
+  "sheen": 0.0,
+  "sheenRoughness": 0.0,
+  "textures": {
+    "baseColor": "56ee699ee1c075af0dc7aee403b246d4"
+  },
+  "transmission": 0.0,
+  "version": 1
+}

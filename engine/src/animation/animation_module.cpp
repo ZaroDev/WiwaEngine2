@@ -197,6 +197,7 @@ namespace wiwa
 			const float speed = registry.get<Animator>(entity).Speed;
 			events.clear();
 			entry.Instance->update(entry.Paused ? 0.0f : deltaTime * speed, events);
+			m_EventsTotal += events.size();
 			for (ClipEvent& event : events)
 			{
 				m_Events.push_back(QueuedAnimationEvent{ entry.Guid, std::move(event) });

@@ -67,6 +67,8 @@ namespace wiwa
 		glm::mat4 joint_world(entt::entity animator, const std::string& joint) const;
 
 		size_t instance_count() const { return m_Instances.size(); }
+		// How many clip events fired since the module started (the demo smoke test asks whether the fox's footsteps were heard).
+		u64 events_total() const { return m_EventsTotal; }
 
 	private:
 		struct Entry
@@ -87,6 +89,7 @@ namespace wiwa
 		Ref<Scene> m_Scene{};
 		std::unordered_map<entt::entity, Entry> m_Instances{};
 		std::vector<QueuedAnimationEvent> m_Events{};
+		u64 m_EventsTotal = 0;
 
 		// the assets the default sources loaded: kept for as long as an instance may point into them
 		std::unordered_map<AssetGuid, Handle<SkeletonData>> m_SkeletonHandles{};

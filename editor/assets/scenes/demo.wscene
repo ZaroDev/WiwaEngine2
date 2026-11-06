@@ -3924,6 +3924,123 @@
                              }
                          },
                          "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "fa0977fd9e614769801bd90808cc8ab2",
+                         "components": {
+                             "Name": {
+                                 "Value": "Fox (animated)"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -6,
+                                     0,
+                                     9
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.025,
+                                     0.025,
+                                     0.025
+                                 ]
+                             },
+                             "PrefabInstance": {
+                                 "Prefab": {
+                                     "guid": "f8ea0fa56428f1ed59573a5bd2817121",
+                                     "localId": 0
+                                 }
+                             },
+                             "script:16f3d751d21a3188aa57124fdf7121d3": {
+                                     "period": 0.5,
+                                     "fade": 0.1
+                                 }
+                         },
+                         "parent": "c6fd9a9738344ef3be6d052f29c68596"
+                     },
+                     {
+                         "id": "c9fd5e5527d14f8a94ed85fef8cb5e1a",
+                         "components": {
+                             "Name": {
+                                 "Value": "Fox head socket"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     0,
+                                     0,
+                                     0
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1,
+                                     1,
+                                     1
+                                 ]
+                             },
+                             "AnimationSocket": {
+                                 "Joint": "b_Head_05",
+                                 "OffsetPosition": [
+                                     0,
+                                     4,
+                                     0
+                                 ],
+                                 "OffsetRotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ]
+                             }
+                         },
+                         "parent": "fa0977fd9e614769801bd90808cc8ab2"
+                     },
+                     {
+                         "id": "70c1b21896ae4956810dbb70d812d811",
+                         "components": {
+                             "Name": {
+                                 "Value": "Fox head ornament"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     0,
+                                     0,
+                                     0
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     8,
+                                     8,
+                                     8
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 2
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "4ae7e8927e833b7511667468a3f23eb3",
+                                         "localId": 0
+                                     }
+                                 ]
+                             }
+                         },
+                         "parent": "c9fd5e5527d14f8a94ed85fef8cb5e1a"
                      }
                  ],
     "settings":  {

@@ -56,8 +56,8 @@ namespace wiwa
 		m_ModuleManager.add_module<InputModule>(); // after the window (it listens to it), before the render module whose ImGui backend chains onto its callbacks
 		m_ModuleManager.add_module<RenderModule>();
 		m_ModuleManager.add_module<UiModule>(); // before the scripts: the clicks of a frame reach them in that frame
+		m_ModuleManager.add_module<AnimationModule>(); // runs after the scripts (priority 10) but must exist when they start: they ask for it
 		m_ModuleManager.add_module<ScriptingModule>();
-		m_ModuleManager.add_module<AnimationModule>(); // after the scripts: it evaluates what they set this frame
 
 		on_init();
 	}

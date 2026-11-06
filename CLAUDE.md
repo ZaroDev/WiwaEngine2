@@ -25,6 +25,7 @@ No test framework (the user decided a suite isn't needed). Smoke commands: run t
 | `--ui-smoke` / `--ui-editor-smoke` | editor | game UI (files, layout, interaction, edit model) / UI Editor panel for 130 frames |
 | `--physics-smoke` / `--physics-panel-smoke` | editor | Jolt behaviour, queries, dispatch, repeatability / Physics panel for 130 frames |
 | `--input-smoke` / `--input-panel-smoke` | editor | input, actions, rebinding, `.winput`, Lua API / Input panel for 130 frames |
+| `--anim-smoke` / `--anim-panel-smoke` | editor | skeleton import, pose math and nodes, Animator module, sockets, extraction, Lua API, event edit model / Animation panel for 130 frames |
 | `--play-smoke` / `--demo-smoke` | editor | play mode / the demo scene end to end |
 | `--render-test` | any | GPU pixel checks in `engine/src/renderer/test/*_checks.cpp`, run on the render thread |
 | `--render-smoke <frames>` | any | render N frames then exit (1 if a validation message or error was logged) |
@@ -34,7 +35,7 @@ Other flags: `--debug-draw` (game: a game starts with debug draw off), `--scene 
 
 ## Architecture in one page
 
-Modules (`IModule`, registered in `Engine`, [engine.cpp](engine/src/core/engine.cpp)), by update priority: `AssetManager` -100, `AssetPipelineModule` (editor) -90, `SceneModule` -80, `RenderModule` -50, `InputModule` -30, `PhysicsModule` -20, `UiModule` -10, `ScriptingModule` 0, plus `Window` and the editor's `EditorModule`. Reach a module with `Engine::get_module`, except from the render and physics threads, which must never call it.
+Modules (`IModule`, registered in `Engine`, [engine.cpp](engine/src/core/engine.cpp)), by update priority: `AssetManager` -100, `AssetPipelineModule` (editor) -90, `SceneModule` -80, `RenderModule` -50, `InputModule` -30, `PhysicsModule` -20, `UiModule` -10, `ScriptingModule` 0, `AnimationModule` 10, plus `Window` and the editor's `EditorModule`. Reach a module with `Engine::get_module`, except from the render and physics threads, which must never call it.
 
 Rules that cut across areas:
 
@@ -53,10 +54,13 @@ Rules that cut across areas:
 | Materials, surface shaders | [materials.md](docs/superpowers/specs/materials.md) | `.wmat`, `.wshader` |
 | Lua scripting (user API: [docs/scripting.md](docs/scripting.md)) | [scripting.md](docs/superpowers/specs/scripting.md) | `engine/src/scripting` |
 | Physics (Jolt) | [physics.md](docs/superpowers/specs/physics.md) | `engine/src/physics`, vendored `engine/vendor/JoltPhysics`; `JPH::` stays inside it |
+| Animation (skeletons, GPU skinning, `Animator`, Lua `Animation`) | [animation.md](docs/superpowers/specs/animation.md) | `engine/src/animation`, `editor/src/animation` |
 | Input | [input.md](docs/superpowers/specs/input.md) | `engine/src/input` |
 | Game UI | [ui.md](docs/superpowers/specs/ui.md) | `engine/src/ui`, `editor/src/ui` |
 | Project settings, Settings page | [project-settings.md](docs/superpowers/specs/project-settings.md) | `engine/src/core/project_settings.*`, `editor/src/settings` |
 | Editor, play mode, gizmos, performance stats | [editor.md](docs/superpowers/specs/editor.md) | `editor/src` |
+
+Animation in one line: `AnimationModule` (after the scripts) evaluates a tree of pose nodes per `Animator` into a joint palette; palettes ride the scene delta to the render thread, which keeps the previous palette like `PrevWorld`, and vertex shaders skin through their own last binding set (`t22`/`t23`). The demo scene has an animated fox (`fox.glb` is untracked and its clip events live in the git-ignored `.meta`).
 
 Renderer in one line: the render thread owns all GPU state and a GUID-keyed `GpuResourceCache`, is fed per-frame deltas through a bounded queue, and runs Forward+ (shadows, depth/normal/velocity prepass, light culling, AO, forward, sky, TAA, motion blur, exposure, bloom, tonemap, FXAA, UI, outline, debug, blit, ImGui).
 

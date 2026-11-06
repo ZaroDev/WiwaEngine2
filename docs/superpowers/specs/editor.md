@@ -39,3 +39,7 @@ The Performance panel (replaced the old Renderer panel) shows a header (FPS, API
 ## Smoke flags
 
 Each panel or system with a headless check runs through `editor_module.cpp`/its own `*_smoke_test.cpp`; the full table is in CLAUDE.md. A smoke check is trusted only after it was seen to fail under a negative control (break a line, confirm failure, restore). After editing a shader, run `wiwa_editor.exe --render-smoke 100 --api=d3d11` before `--render-test`.
+
+## Animation panel (`editor/src/animation`)
+
+Preview of a clip for the selected Animator (also in edit mode; dropped when the selection changes or Play starts), a timeline for the clip events, undo/redo, Save (writes `animationEvents` into the model's `.meta`), and the skeleton overlay. Details: animation.md. Smoke: `--anim-smoke`, `--anim-panel-smoke`.

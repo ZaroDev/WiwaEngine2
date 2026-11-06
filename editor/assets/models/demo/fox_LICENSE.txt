@@ -1,0 +1,5 @@
+fox.glb is the "Fox" model from the Khronos glTF Sample Assets (https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox).
+
+Model: PixelMannen, CC0 1.0 (public domain). Rigging and animation: @tomkranis on Sketchfab, CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+Original: https://sketchfab.com/models/371dea88d7e04a76af5763f2a36866bc
+glTF conversion: @AsoboStudio and @javagl.

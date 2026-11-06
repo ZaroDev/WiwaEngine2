@@ -6,7 +6,7 @@ The scene and ECS live on the main thread. Off-thread work uses immutable data.
 
 ## Scene and components
 
-`Scene` owns the `entt::registry` and an `EntityGuid`-to-entity map. `SceneModule` (priority -80) owns the active scene and the loader. Registered components (`scene_components.cpp`): `Id` (128-bit `EntityGuid`, stable across save/load), `Name`, `Transform` (local TRS), `Camera`, `Light`, `MeshRenderer` (mesh + per-primitive material `AssetRef` list), `PrefabInstance`, `UICanvas`, `RigidBody`, `Collider`, plus script value-bag components. Runtime-only: `Hierarchy` (parent, first child, next sibling; saved as parent guid), `WorldTransform` (cached, recomputed for dirty subtrees, never saved), `PrefabChild`, `UnknownComponents`.
+`Scene` owns the `entt::registry` and an `EntityGuid`-to-entity map. `SceneModule` (priority -80) owns the active scene and the loader. Registered components (`scene_components.cpp`): `Id` (128-bit `EntityGuid`, stable across save/load), `Name`, `Transform` (local TRS), `Camera`, `Light`, `MeshRenderer` (mesh + per-primitive material `AssetRef` list), `PrefabInstance`, `Animator`, `AnimationSocket`, `SkinBinding` (animation.md), `UICanvas`, `RigidBody`, `Collider`, plus script value-bag components. Runtime-only: `Hierarchy` (parent, first child, next sibling; saved as parent guid), `WorldTransform` (cached, recomputed for dirty subtrees, never saved), `PrefabChild`, `UnknownComponents`.
 
 ## Reflection
 
@@ -50,3 +50,7 @@ Replace keeps rendering the old scene until the new one is Ready, then swaps in 
 ## Time
 
 `Time` has real-time, engine and game clocks. `Time::init()` starts the game clock (a game runs by default); the editor stops it after init and starts it on Play. `Clock::start()` sets `LastTime` so the first delta is not time-since-boot. Scripts and physics run only while the game clock is playing and not paused.
+
+## Animation components
+
+`expand_prefab` adds an `Animator` (skeleton, the model's clips, the first clip) to the root of an instance of a model that has animations, unless the scene's record of the root already has one, and a `SkinBinding` to every node with a skeleton. Clones of a scene copy them like any component; the runtime state (`AnimatorInstance`) is not copied: the play-mode clone starts with fresh instances (animation.md).
