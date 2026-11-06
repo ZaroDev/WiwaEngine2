@@ -90,6 +90,26 @@ namespace wiwa
 		}
 	}
 
+	void ContactCollector::add_event(const PhysicsEvent& event)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		m_StepEvents.push_back(event);
+	}
+
+	JPH::ValidateResult ContactCollector::OnContactValidate(const JPH::Body& body1, const JPH::Body& body2, JPH::RVec3Arg, const JPH::CollideShapeResult&)
+	{
+		if (m_NoCollide != nullptr && !m_NoCollide->empty())
+		{
+			const JPH::uint32 first = body1.GetID().GetIndexAndSequenceNumber();
+			const JPH::uint32 second = body2.GetID().GetIndexAndSequenceNumber();
+			if (m_NoCollide->contains({ std::min(first, second), std::max(first, second) }))
+			{
+				return JPH::ValidateResult::RejectAllContactsForThisBodyPair;
+			}
+		}
+		return JPH::ValidateResult::AcceptAllContactsForThisBodyPair;
+	}
+
 	void ContactCollector::take_events(std::vector<PhysicsEvent>& events)
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);

@@ -79,6 +79,8 @@ namespace wiwa
 
 		// The game UI of the frame being built (UiModule::pre_render_update); it is sent with the next batch and drawn over the scene.
 		void set_ui_draw_list(UiDrawList list) { m_PendingUi = std::move(list); }
+		// False: the game UI is left out of the frames that are sent (the editor's Scene view). A game has it on, the default.
+		void set_game_ui_visible(bool visible) { m_GameUiVisible = visible; }
 
 		// True when the UI shows the scene in a panel (the editor's Viewport panel says so); false, the default, draws the scene over the
 		// whole window (a game). Takes effect on the render thread a frame or two later.
@@ -127,12 +129,17 @@ namespace wiwa
 		ImGuiLayer m_ImGui{};
 		RenderThread m_Thread{};
 		SnapshotChannel m_Snapshot{};
+		// Per-frame times of the render thread (frame to frame, and the CPU time of the frame), waiting for the main thread to hand them to PerfStats.
+		std::mutex m_FrameSamplesMutex{};
+		std::vector<std::pair<float, float>> m_FrameSamples{};
+		std::chrono::steady_clock::time_point m_LastFrameStart{};
 		Scope<Renderer> m_Renderer{}; // created, used and destroyed on the render thread
 		ImGuiRenderPass* m_ImGuiPass = nullptr; // owned by the renderer; set on the render thread during start
 		UiRenderPass* m_UiPass = nullptr;       // the same, for the game UI
 		std::vector<RenderCommand> m_PendingCommands{};
 		DebugDraw m_DebugDraw{};
 		UiDrawList m_PendingUi{};
+		bool m_GameUiVisible = true;
 		SceneExtractor m_Extractor{}; // main thread: what the active scene changed since the last batch
 
 		// Assets the editor cooked again, noted by whichever thread reports it and taken by the render thread each frame.

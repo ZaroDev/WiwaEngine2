@@ -31,6 +31,7 @@ namespace wiwa
 		context.Ui = Engine::get().get_module<UiModule>();
 		context.Physics = Engine::get().get_module<PhysicsModule>();
 		context.Input = Engine::get().get_module<InputModule>();
+		context.RequestQuit = []() { Engine::get().request_quit(); };
 		if (RenderModule* renderer = Engine::get().get_module<RenderModule>())
 		{
 			context.Debug = &renderer->get_debug_draw();

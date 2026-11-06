@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <string>
 
 #include <assets/asset_manager.h>
 #include <core/engine.h>
@@ -87,6 +88,13 @@ namespace wiwa
 			std::error_code error;
 			m_LogStart = std::filesystem::exists("wiwa.log", error) ? std::filesystem::file_size("wiwa.log", error) : 0;
 			m_Started = true;
+		}
+
+		// the joints and character demos are watched from the start of the play to the end of the Input phase
+		if (m_Phase >= Phase::Run && m_Phase <= Phase::Physics && m_Play.play_scene() != nullptr && !sample_physics(*m_Play.play_scene(), failure))
+		{
+			m_Phase = Phase::Done;
+			return true;
 		}
 
 		switch (m_Phase)
@@ -191,6 +199,50 @@ namespace wiwa
 			return false;
 		}
 
+		case Phase::Physics:
+		{
+			// what sample_physics watched since the play started (the motors turn around every 2.5 to 3 seconds, so the run has seen whole swings)
+			const PhysicsWatch& watch = m_Watch;
+			if (!(watch.DoorSwing > 0.5f && watch.DoorSwing < 0.82f))
+			{
+				failure = "the door did not swing within its limits (largest |rotation.y| " + std::to_string(watch.DoorSwing) + ", expected 0.5 to 0.82)";
+				return true;
+			}
+			if (!(watch.CartHigh - watch.CartLow > 2.0f && watch.CartLow > -14.4f && watch.CartHigh < -9.6f))
+			{
+				failure = "the cart did not slide along its rail within its limits (x " + std::to_string(watch.CartLow) + " to " + std::to_string(watch.CartHigh) + ")";
+				return true;
+			}
+			if (watch.BobPath < 1.5f)
+			{
+				failure = "the spring pendulum did not swing (it travelled " + std::to_string(watch.BobPath) + " m)";
+				return true;
+			}
+			if (watch.BridgeStretch > 1.25f || watch.BridgeLow < 1.0f)
+			{
+				failure = "the bridge came apart (longest link distance " + std::to_string(watch.BridgeStretch) + ", lowest plank " + std::to_string(watch.BridgeLow) + ")";
+				return true;
+			}
+			if (watch.WeakLow > 3.0f)
+			{
+				failure = "the hanging box never broke away (lowest y " + std::to_string(watch.WeakLow) + ")";
+				return true;
+			}
+			if (!(watch.PatrolHighX - watch.PatrolLowX > 4.0f && watch.PatrolLowY > -0.3f && watch.PatrolHighY > 0.9f))
+			{
+				failure = "the patrolling character did not walk and jump on its lane (x " + std::to_string(watch.PatrolLowX) + " to " + std::to_string(watch.PatrolHighX) + ", y " + std::to_string(watch.PatrolLowY) + " to " + std::to_string(watch.PatrolHighY) + ")";
+				return true;
+			}
+			if (!(watch.PlatformHigh - watch.PlatformLow > 2.0f))
+			{
+				failure = "the platform did not slide (x " + std::to_string(watch.PlatformLow) + " to " + std::to_string(watch.PlatformHigh) + ")";
+				return true;
+			}
+			m_Phase = Phase::HotCreate;
+			m_PhaseFrames = 0;
+			return false;
+		}
+
 		case Phase::Ui:
 		{
 			if (m_Play.play_scene() == nullptr)
@@ -246,7 +298,7 @@ namespace wiwa
 				return true;
 			case UiResult::Passed:
 				restore_input();
-				m_Phase = Phase::HotCreate;
+				m_Phase = Phase::Physics;
 				m_PhaseFrames = 0;
 				return false;
 			}
@@ -774,6 +826,59 @@ namespace wiwa
 		}
 		}
 		return UiResult::Passed;
+	}
+
+	// One frame of the joints demo (door on a hinge, cart on a slider, spring pendulum, bridge, box that breaks away): what the Joints phase judges.
+	bool DemoSmoke::sample_physics(Scene& play, std::string& failure)
+	{
+		const auto transform_of = [&](const std::string& name) -> const Transform*
+		{
+			const entt::entity entity = find_named(play, name);
+			return entity == entt::null ? nullptr : &play.registry().get<Transform>(entity);
+		};
+		const Transform* door = transform_of("Door");
+		const Transform* cart = transform_of("Slider cart");
+		const Transform* bob = transform_of("Pendulum bob");
+		const Transform* weak = transform_of("Weak box");
+		const Transform* patrol = transform_of("Patrol");
+		const Transform* platform = transform_of("Sliding platform");
+		const Transform* links[5];
+		bool linksFound = true;
+		for (int i = 0; i < 5; i++)
+		{
+			links[i] = transform_of("Bridge link " + std::to_string(i));
+			linksFound = linksFound && links[i] != nullptr;
+		}
+		if (door == nullptr || cart == nullptr || bob == nullptr || weak == nullptr || !linksFound || patrol == nullptr || platform == nullptr)
+		{
+			failure = std::string("the joints and character demo entities are missing in the running scene (patrol ") + (patrol ? "yes" : "NO") + ", platform " + (platform ? "yes" : "NO") + ", door " + (door ? "yes" : "NO") + ", cart " + (cart ? "yes" : "NO") +
+				", bob " + (bob ? "yes" : "NO") + ", weak box " + (weak ? "yes" : "NO") + ", bridge " + (linksFound ? "yes" : "NO") + ")";
+			return false;
+		}
+
+		PhysicsWatch& watch = m_Watch;
+		watch.DoorSwing = std::max(watch.DoorSwing, std::abs(door->Rotation.y));
+		watch.CartLow = std::min(watch.CartLow, cart->Position.x);
+		watch.CartHigh = std::max(watch.CartHigh, cart->Position.x);
+		watch.BobPath += watch.BobSeen ? glm::length(bob->Position - watch.BobLast) : 0.0f;
+		watch.BobLast = bob->Position;
+		watch.BobSeen = true;
+		watch.WeakLow = std::min(watch.WeakLow, weak->Position.y);
+		watch.PatrolLowX = std::min(watch.PatrolLowX, patrol->Position.x);
+		watch.PatrolHighX = std::max(watch.PatrolHighX, patrol->Position.x);
+		watch.PatrolLowY = std::min(watch.PatrolLowY, patrol->Position.y);
+		watch.PatrolHighY = std::max(watch.PatrolHighY, patrol->Position.y);
+		watch.PlatformLow = std::min(watch.PlatformLow, platform->Position.x);
+		watch.PlatformHigh = std::max(watch.PlatformHigh, platform->Position.x);
+		for (int i = 0; i < 5; i++)
+		{
+			watch.BridgeLow = std::min(watch.BridgeLow, links[i]->Position.y);
+			if (i > 0)
+			{
+				watch.BridgeStretch = std::max(watch.BridgeStretch, glm::length(links[i]->Position - links[i - 1]->Position));
+			}
+		}
+		return true;
 	}
 
 	// The end of a good run: Stop, remove the files the test made, and see that nothing was logged as an error.

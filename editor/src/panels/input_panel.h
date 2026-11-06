@@ -11,15 +11,15 @@
 #include <input/input_project_settings.h>
 
 #include "../input/input_edit_model.h"
+#include "../settings/input_section.h"
 
 // The "Input" panel: edits a .winput asset (action maps -> actions -> bindings) through an InputEditModel, so every edit can be undone, and
-// saves the text file back (the asset pipeline re-cooks it). It also sets the project's default input map (input.wsettings), lets the player's
-// press pick a control ("Listen"), and shows the live value of each action while its map is on the stack.
+// saves the text file back (the asset pipeline re-cooks it). It lets the player's press pick a control ("Listen"), and shows the live value of each action while its map is on the stack.
 // Main thread, between the ImGui frame's begin and end.
 class InputPanel final : public Panel
 {
 public:
-	// `settingsFile`: where the default map is saved (input.wsettings in the editor's working directory).
+	// `settingsFile`: where the default map is saved (input.wsettings in the editor's working directory); the Settings panel edits it.
 	explicit InputPanel(std::filesystem::path settingsFile);
 	virtual ~InputPanel() override;
 
@@ -34,9 +34,10 @@ public:
 	wiwa::InputEditModel* model() { return m_Model.get(); }
 	const std::filesystem::path& file() const { return m_File; }
 
-	// Makes the asset the project's default input map: saves the settings file and tells the input module.
+	// Makes the asset the project's default input map (InputSection): saves the settings file and tells the input module.
 	bool set_default_map(const wiwa::AssetRef& ref);
-	const wiwa::InputProjectSettings& settings() const { return m_Settings; }
+	const wiwa::InputProjectSettings& settings() const { return m_Section->settings(); }
+	const Ref<InputSection>& section() const { return m_Section; }
 
 	const std::string& last_error() const { return m_Error; }
 	wiwa::u32 frames_drawn() const { return m_Frames; }
@@ -53,7 +54,6 @@ private:
 	};
 
 	void toolbar();
-	void default_map_row();
 	void maps_tree();
 	void action_row(size_t map, size_t action);
 	void binding_row(size_t map, size_t action, size_t binding);
@@ -61,8 +61,7 @@ private:
 	void apply_heard_control();
 	void stop_listening();
 
-	std::filesystem::path m_SettingsFile;
-	wiwa::InputProjectSettings m_Settings{};
+	Ref<InputSection> m_Section;
 	std::filesystem::path m_File{};
 	Scope<wiwa::InputEditModel> m_Model{};
 	std::string m_Error{};

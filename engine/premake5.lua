@@ -49,6 +49,7 @@ project "wiwa"
 		"d3d11",
 		"d3d12",
 		"dxgi",
+		"psapi",
 		"dxguid",
 		"vk-bootstrap",
 		"ImGui",

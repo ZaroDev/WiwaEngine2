@@ -10,8 +10,6 @@
 #include <input/input_map_io.h>
 #include <input/input_module.h>
 
-#include <asset_pipeline/input_settings_file.h>
-
 namespace
 {
 	wiwa::InputModule* input_module()
@@ -92,13 +90,8 @@ namespace
 }
 
 InputPanel::InputPanel(std::filesystem::path settingsFile)
-	: Panel("Input", PanelCategory::Window), m_SettingsFile(std::move(settingsFile))
+	: Panel("Input", PanelCategory::Window), m_Section(CreateRef<InputSection>(std::move(settingsFile)))
 {
-	std::string error;
-	if (!wiwa::load_input_settings(m_SettingsFile, m_Settings, error))
-	{
-		WI_WARN("Input", "{0}: {1}", m_SettingsFile.string(), error);
-	}
 }
 
 InputPanel::~InputPanel()
@@ -193,21 +186,12 @@ bool InputPanel::save()
 
 bool InputPanel::set_default_map(const wiwa::AssetRef& ref)
 {
-	wiwa::InputProjectSettings settings;
-	settings.DefaultMap = ref;
-	std::string error;
-	if (!wiwa::save_input_settings(m_SettingsFile, settings, error))
+	if (!m_Section->set_default_map(ref))
 	{
-		m_Error = error;
+		m_Error = m_Section->last_error();
 		return false;
 	}
-
 	m_Error.clear();
-	m_Settings = settings;
-	if (wiwa::InputModule* module = input_module())
-	{
-		module->set_default_map(ref);
-	}
 	return true;
 }
 
@@ -264,7 +248,7 @@ void InputPanel::on_draw()
 	if (ImGui::Begin(get_name(), &m_Open))
 	{
 		toolbar();
-		default_map_row();
+		ImGui::TextDisabled("The default input map is a project setting: see the Settings panel.");
 		ImGui::Separator();
 		if (m_Model != nullptr)
 		{
@@ -332,51 +316,6 @@ void InputPanel::toolbar()
 		save();
 	}
 	ImGui::EndDisabled();
-}
-
-void InputPanel::default_map_row()
-{
-	ImGui::Text("Default input map:");
-	ImGui::SameLine();
-	if (!m_Settings.DefaultMap.valid())
-	{
-		ImGui::TextDisabled("none");
-	}
-	else
-	{
-		std::string name = m_Settings.DefaultMap.Guid.to_string();
-		if (wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>())
-		{
-			for (const wiwa::AssetCatalog::Entry& entry : assets->catalog_entries())
-			{
-				if (entry.Guid == m_Settings.DefaultMap.Guid)
-				{
-					name = entry.Path;
-				}
-			}
-		}
-		ImGui::TextUnformatted(name.c_str());
-	}
-
-	if (m_Model != nullptr && !m_File.empty())
-	{
-		ImGui::SameLine();
-		if (ImGui::SmallButton("Use the open map"))
-		{
-			if (wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>())
-			{
-				const std::optional<wiwa::AssetRef> ref = assets->find_asset(m_File.generic_string());
-				if (ref)
-				{
-					set_default_map(*ref);
-				}
-				else
-				{
-					m_Error = "the open map is not imported yet";
-				}
-			}
-		}
-	}
 }
 
 void InputPanel::maps_tree()

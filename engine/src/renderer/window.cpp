@@ -26,9 +26,39 @@ namespace wiwa
 #endif
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-		std::string windowTitle = fmt::format("Wiwa 2 <{0}>", WI_BUILD_CONFIGURATION);
-		m_Window = glfwCreateWindow(1280, 720, windowTitle.c_str(), nullptr, nullptr);
-	
+		// A game takes its window from the project in its pack; the editor owns its window and only sets the title later.
+		const Engine& engine = Engine::get();
+		const ProjectSettings& project = engine.project();
+		const bool fromProject = engine.project_from_pak();
+
+		std::string windowTitle = fromProject ? window_title(project) : fmt::format("Wiwa 2 <{0}>", WI_BUILD_CONFIGURATION);
+		int width = fromProject ? static_cast<int>(project.WindowWidth) : 1280;
+		int height = fromProject ? static_cast<int>(project.WindowHeight) : 720;
+		GLFWmonitor* monitor = nullptr;
+		if (fromProject)
+		{
+			glfwWindowHint(GLFW_RESIZABLE, project.Resizable ? GLFW_TRUE : GLFW_FALSE);
+			if (project.Mode != WindowMode::Windowed)
+			{
+				monitor = glfwGetPrimaryMonitor();
+				const GLFWvidmode* mode = monitor != nullptr ? glfwGetVideoMode(monitor) : nullptr;
+				if (mode != nullptr)
+				{
+					width = mode->width;
+					height = mode->height;
+					if (project.Mode == WindowMode::Borderless)
+					{
+						glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+						glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+						glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+						glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+						glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+					}
+				}
+			}
+		}
+		// Borderless is a window the size of the screen with no frame; only fullscreen takes the monitor over.
+		m_Window = glfwCreateWindow(width, height, windowTitle.c_str(), project.Mode == WindowMode::Fullscreen && fromProject ? monitor : nullptr, nullptr);
 
 		glfwSetWindowCloseCallback(m_Window, [](GLFWwindow* window)
 			{

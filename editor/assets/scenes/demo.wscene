@@ -2381,6 +2381,1549 @@
                                             "script:69dc8dd9bfff73c4dd80c95aca60bba5":  { "speed": 4, "jump_speed": 6 }
                                         },
                          "parent":  "552c39691eb7de2f4475a53ceed20380"
+                     },
+                     {
+                         "id": "27579b799ca34765b41f8b05211c4efb",
+                         "components": {
+                             "Name": {
+                                 "Value": "Joints demo"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     0,
+                                     0,
+                                     0
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1,
+                                     1,
+                                     1
+                                 ]
+                             }
+                         }
+                     },
+                     {
+                         "id": "5f25b55ea5ee429db51f1a8f76b68f3f",
+                         "components": {
+                             "Name": {
+                                 "Value": "Door post"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -14.5,
+                                     1.2,
+                                     8
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.2,
+                                     2.4,
+                                     0.2
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "5e8bfbb911934c25833ea544d1281956",
+                         "components": {
+                             "Name": {
+                                 "Value": "Door"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -13.65,
+                                     1.1,
+                                     8
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1.5,
+                                     2.0,
+                                     0.12
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "603d84a8d1d2225094f02730986fb069",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Dynamic"
+                             },
+                             "Joint": {
+                                 "Type": "Hinge",
+                                 "Connected": "5f25b55ea5ee429db51f1a8f76b68f3f",
+                                 "AnchorA": [
+                                     -0.75,
+                                     0,
+                                     0
+                                 ],
+                                 "AnchorB": [
+                                     0.1,
+                                     -0.1,
+                                     0
+                                 ],
+                                 "Axis": [
+                                     0,
+                                     1,
+                                     0
+                                 ],
+                                 "LimitMin": -100,
+                                 "LimitMax": 100
+                             },
+                             "script:0493a15c503b457c8a068be058259f4f": {
+                                 "speed": 1.2,
+                                 "period": 3,
+                                 "max_force": 3000
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "46e0bcca9ef745ccb44e01a2bfa7ceeb",
+                         "components": {
+                             "Name": {
+                                 "Value": "Slider rail"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -12,
+                                     1.0,
+                                     5.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     5,
+                                     0.1,
+                                     0.1
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "4ad03524bf3342c0a04a6e30aa1b4e28",
+                         "components": {
+                             "Name": {
+                                 "Value": "Slider cart"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -12,
+                                     1.5,
+                                     5.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.6,
+                                     0.6,
+                                     0.6
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "4ae7e8927e833b7511667468a3f23eb3",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Dynamic"
+                             },
+                             "Joint": {
+                                 "Type": "Slider",
+                                 "Connected": "46e0bcca9ef745ccb44e01a2bfa7ceeb",
+                                 "AnchorA": [
+                                     0,
+                                     0,
+                                     0
+                                 ],
+                                 "AnchorB": [
+                                     0,
+                                     0.5,
+                                     0
+                                 ],
+                                 "Axis": [
+                                     1,
+                                     0,
+                                     0
+                                 ],
+                                 "NormalAxis": [
+                                     0,
+                                     1,
+                                     0
+                                 ],
+                                 "LimitMin": -2,
+                                 "LimitMax": 2
+                             },
+                             "script:0493a15c503b457c8a068be058259f4f": {
+                                 "speed": 1.5,
+                                 "period": 2.5,
+                                 "max_force": 5000
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "59551173b6d84614aa9e223f1ce9cd4d",
+                         "components": {
+                             "Name": {
+                                 "Value": "Pendulum beam"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -10,
+                                     5.2,
+                                     8
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1.2,
+                                     0.2,
+                                     0.2
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "5491b824ed474ad89db3b176d7470ef9",
+                         "components": {
+                             "Name": {
+                                 "Value": "Pendulum bob"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -9,
+                                     3.2,
+                                     8
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.8,
+                                     0.8,
+                                     0.8
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 2
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "2dbad0e89dad4905669b41cf505f133f",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Sphere",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Dynamic"
+                             },
+                             "Joint": {
+                                 "Type": "Distance",
+                                 "Connected": "59551173b6d84614aa9e223f1ce9cd4d",
+                                 "AnchorA": [
+                                     0,
+                                     0,
+                                     0
+                                 ],
+                                 "AnchorB": [
+                                     0,
+                                     0,
+                                     0
+                                 ],
+                                 "LimitMin": 2,
+                                 "LimitMax": 2,
+                                 "SpringFrequency": 1.2,
+                                 "SpringDamping": 0.15
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "61c4a18874714b05bf81998eb097a847",
+                         "components": {
+                             "Name": {
+                                 "Value": "Bridge post L"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -15,
+                                     3,
+                                     10.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.3,
+                                     0.3,
+                                     0.6
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "46eb93c2a6304af5a02fc24261a61451",
+                         "components": {
+                             "Name": {
+                                 "Value": "Bridge link 0"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -14.35,
+                                     3,
+                                     10.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1.0,
+                                     0.12,
+                                     0.5
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "603d84a8d1d2225094f02730986fb069",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Dynamic"
+                             },
+                             "Joint": {
+                                 "Type": "Hinge",
+                                 "Connected": "61c4a18874714b05bf81998eb097a847",
+                                 "AnchorA": [
+                                     -0.5,
+                                     0,
+                                     0
+                                 ],
+                                 "AnchorB": [
+                                     0.15,
+                                     0,
+                                     0
+                                 ],
+                                 "Axis": [
+                                     0,
+                                     0,
+                                     1
+                                 ]
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "b2482cad9d88490e8766f43c6aedef34",
+                         "components": {
+                             "Name": {
+                                 "Value": "Bridge link 1"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -13.35,
+                                     3,
+                                     10.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1.0,
+                                     0.12,
+                                     0.5
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "603d84a8d1d2225094f02730986fb069",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Dynamic"
+                             },
+                             "Joint": {
+                                 "Type": "Hinge",
+                                 "Connected": "46eb93c2a6304af5a02fc24261a61451",
+                                 "AnchorA": [
+                                     -0.5,
+                                     0,
+                                     0
+                                 ],
+                                 "AnchorB": [
+                                     0.5,
+                                     0,
+                                     0
+                                 ],
+                                 "Axis": [
+                                     0,
+                                     0,
+                                     1
+                                 ]
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "28f77a4399c7465c93d98dfd087f1d7d",
+                         "components": {
+                             "Name": {
+                                 "Value": "Bridge link 2"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -12.35,
+                                     3,
+                                     10.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1.0,
+                                     0.12,
+                                     0.5
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "603d84a8d1d2225094f02730986fb069",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Dynamic"
+                             },
+                             "Joint": {
+                                 "Type": "Hinge",
+                                 "Connected": "b2482cad9d88490e8766f43c6aedef34",
+                                 "AnchorA": [
+                                     -0.5,
+                                     0,
+                                     0
+                                 ],
+                                 "AnchorB": [
+                                     0.5,
+                                     0,
+                                     0
+                                 ],
+                                 "Axis": [
+                                     0,
+                                     0,
+                                     1
+                                 ]
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "67fa8340c3544c4497538222beef19a6",
+                         "components": {
+                             "Name": {
+                                 "Value": "Bridge link 3"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -11.35,
+                                     3,
+                                     10.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1.0,
+                                     0.12,
+                                     0.5
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "603d84a8d1d2225094f02730986fb069",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Dynamic"
+                             },
+                             "Joint": {
+                                 "Type": "Hinge",
+                                 "Connected": "28f77a4399c7465c93d98dfd087f1d7d",
+                                 "AnchorA": [
+                                     -0.5,
+                                     0,
+                                     0
+                                 ],
+                                 "AnchorB": [
+                                     0.5,
+                                     0,
+                                     0
+                                 ],
+                                 "Axis": [
+                                     0,
+                                     0,
+                                     1
+                                 ]
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "8a0a647d093745cf90d3a4a317a718a9",
+                         "components": {
+                             "Name": {
+                                 "Value": "Bridge link 4"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -10.35,
+                                     3,
+                                     10.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1.0,
+                                     0.12,
+                                     0.5
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "603d84a8d1d2225094f02730986fb069",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Dynamic"
+                             },
+                             "Joint": {
+                                 "Type": "Hinge",
+                                 "Connected": "67fa8340c3544c4497538222beef19a6",
+                                 "AnchorA": [
+                                     -0.5,
+                                     0,
+                                     0
+                                 ],
+                                 "AnchorB": [
+                                     0.5,
+                                     0,
+                                     0
+                                 ],
+                                 "Axis": [
+                                     0,
+                                     0,
+                                     1
+                                 ]
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "ee9afcbbcd4945ed8d75c980a054d945",
+                         "components": {
+                             "Name": {
+                                 "Value": "Bridge post R"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -9.7,
+                                     3,
+                                     10.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.3,
+                                     0.3,
+                                     0.6
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "Joint": {
+                                 "Type": "Hinge",
+                                 "Connected": "8a0a647d093745cf90d3a4a317a718a9",
+                                 "AnchorA": [
+                                     -0.15,
+                                     0,
+                                     0
+                                 ],
+                                 "AnchorB": [
+                                     0.5,
+                                     0,
+                                     0
+                                 ],
+                                 "Axis": [
+                                     0,
+                                     0,
+                                     1
+                                 ]
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "4fb1e612e5c643fcb3a20bdce0b9cb66",
+                         "components": {
+                             "Name": {
+                                 "Value": "Weak beam"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -8.5,
+                                     5.2,
+                                     6.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1.0,
+                                     0.2,
+                                     0.2
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "ab2351fda6974749b7e1787de0445764",
+                         "components": {
+                             "Name": {
+                                 "Value": "Weak box"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -8.5,
+                                     4.8,
+                                     6.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "603d84a8d1d2225094f02730986fb069",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Dynamic"
+                             },
+                             "Joint": {
+                                 "Type": "Fixed",
+                                 "Connected": "4fb1e612e5c643fcb3a20bdce0b9cb66",
+                                 "AnchorA": [
+                                     0,
+                                     0.25,
+                                     0
+                                 ],
+                                 "AnchorB": [
+                                     0,
+                                     -0.15,
+                                     0
+                                 ],
+                                 "BreakForce": 2500
+                             },
+                             "script:054a0f1183904c178824de3a331faaee": {}
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "30af1c115dcf4fe9b9713db38281a584",
+                         "components": {
+                             "Name": {
+                                 "Value": "Wrecker"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     -5.8,
+                                     4.7,
+                                     6.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.7,
+                                     0.7,
+                                     0.7
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 2
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "2dbad0e89dad4905669b41cf505f133f",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Sphere",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Dynamic"
+                             },
+                             "script:7b264575d7884ad0a1aa48c7ef942421": {}
+                         },
+                         "parent": "27579b799ca34765b41f8b05211c4efb"
+                     },
+                     {
+                         "id": "e2e2dcc77819494192f08c0513b76735",
+                         "components": {
+                             "Name": {
+                                 "Value": "Character demo"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     0,
+                                     0,
+                                     0
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1,
+                                     1,
+                                     1
+                                 ]
+                             }
+                         }
+                     },
+                     {
+                         "id": "1cfbe16efe524bd184fb2f7ba51f2508",
+                         "components": {
+                             "Name": {
+                                 "Value": "Hero"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     19,
+                                     0,
+                                     1.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1,
+                                     1,
+                                     1
+                                 ]
+                             },
+                             "CharacterController": {
+                                 "Offset": [
+                                     0,
+                                     0.9,
+                                     0
+                                 ]
+                             },
+                             "script:25ad6587b5044ffc833f36b7cdb06519": {
+                                 "speed": 4,
+                                 "jump_speed": 6
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "cd086fbae13840a4b5ea79ee47fe511d",
+                         "components": {
+                             "Name": {
+                                 "Value": "Hero body"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     0,
+                                     0.9,
+                                     0
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.8,
+                                     1.8,
+                                     0.8
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 2
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "4ae7e8927e833b7511667468a3f23eb3",
+                                         "localId": 0
+                                     }
+                                 ]
+                             }
+                         },
+                         "parent": "1cfbe16efe524bd184fb2f7ba51f2508"
+                     },
+                     {
+                         "id": "2aa396399606422994b3e94270f84ebf",
+                         "components": {
+                             "Name": {
+                                 "Value": "Patrol"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     19,
+                                     0,
+                                     5.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1,
+                                     1,
+                                     1
+                                 ]
+                             },
+                             "CharacterController": {
+                                 "Offset": [
+                                     0,
+                                     0.9,
+                                     0
+                                 ]
+                             },
+                             "script:25ad6587b5044ffc833f36b7cdb06519": {
+                                 "speed": 2,
+                                 "jump_speed": 5,
+                                 "autopilot": true,
+                                 "leg": 4
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "c23cb70cb41e4440a78b28fe7e97412d",
+                         "components": {
+                             "Name": {
+                                 "Value": "Patrol body"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     0,
+                                     0.9,
+                                     0
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     0.8,
+                                     1.8,
+                                     0.8
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 2
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "2dbad0e89dad4905669b41cf505f133f",
+                                         "localId": 0
+                                     }
+                                 ]
+                             }
+                         },
+                         "parent": "2aa396399606422994b3e94270f84ebf"
+                     },
+                     {
+                         "id": "c42546a9b496403abffcd86833f7001e",
+                         "components": {
+                             "Name": {
+                                 "Value": "Low step"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     21.5,
+                                     0.1,
+                                     3.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1,
+                                     0.2,
+                                     7.4
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "bfd8c35c77f0422b8238bc3e6dd9c5b4",
+                         "components": {
+                             "Name": {
+                                 "Value": "Tall step"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     23.2,
+                                     0.3,
+                                     1.2
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     1.5,
+                                     0.6,
+                                     2.4
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "b7a65eb209a142acb0c239d8880dfb58",
+                         "components": {
+                             "Name": {
+                                 "Value": "Walkable ramp"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     26.648,
+                                     1.413,
+                                     5.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0.2588190451,
+                                     0.9659258263
+                                 ],
+                                 "Scale": [
+                                     6,
+                                     0.2,
+                                     5
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "40880e2407064d84b0f820d98658490a",
+                         "components": {
+                             "Name": {
+                                 "Value": "Steep ramp"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     25.0866,
+                                     1.682,
+                                     -1.2
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0.5,
+                                     0.8660254038
+                                 ],
+                                 "Scale": [
+                                     4,
+                                     0.2,
+                                     2
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "ae6798e27316997a8c7cb0b819be8e9a",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
+                     },
+                     {
+                         "id": "f488b0fce21c4e11865c1706a9a76427",
+                         "components": {
+                             "Name": {
+                                 "Value": "Sliding platform"
+                             },
+                             "Transform": {
+                                 "Position": [
+                                     28,
+                                     0.15,
+                                     -4.5
+                                 ],
+                                 "Rotation": [
+                                     0,
+                                     0,
+                                     0,
+                                     1
+                                 ],
+                                 "Scale": [
+                                     2.4,
+                                     0.3,
+                                     2.4
+                                 ]
+                             },
+                             "MeshRenderer": {
+                                 "Mesh": {
+                                     "guid": "bc5be7b0a418adf9828a98ca0a27d3dd",
+                                     "localId": 1
+                                 },
+                                 "Materials": [
+                                     {
+                                         "guid": "603d84a8d1d2225094f02730986fb069",
+                                         "localId": 0
+                                     }
+                                 ]
+                             },
+                             "Collider": {
+                                 "Shape": "Box",
+                                 "Size": [
+                                     0.5,
+                                     0.5,
+                                     0.5
+                                 ],
+                                 "Offset": [
+                                     0,
+                                     0,
+                                     0
+                                 ]
+                             },
+                             "RigidBody": {
+                                 "Motion": "Kinematic"
+                             },
+                             "script:9f16f5c9a1914fb4855b650df899d9ae": {
+                                 "amplitude": 2.5,
+                                 "speed": 0.6
+                             }
+                         },
+                         "parent": "e2e2dcc77819494192f08c0513b76735"
                      }
                  ],
     "settings":  {

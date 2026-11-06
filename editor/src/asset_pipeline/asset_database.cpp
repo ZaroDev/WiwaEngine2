@@ -157,6 +157,33 @@ namespace wiwa
 		return m_PendingAssets.contains(guid);
 	}
 
+	std::unordered_map<AssetGuid, std::string> AssetDatabase::cooked_sources() const
+	{
+		std::unordered_map<AssetGuid, std::string> sources;
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto& [guidText, entry] : m_ImportCache.items())
+		{
+			if (!entry.is_object() || !entry.contains("assets"))
+			{
+				continue;
+			}
+			const std::string source = entry.value("source", std::string{});
+			for (const nlohmann::json& asset : entry["assets"])
+			{
+				if (const std::optional<AssetGuid> guid = asset.is_string() ? AssetGuid::from_string(asset.get<std::string>()) : std::nullopt)
+				{
+					sources[*guid] = source;
+				}
+			}
+		}
+		return sources;
+	}
+
+	bool AssetDatabase::guid_exists(AssetGuid guid) const
+	{
+		return path_of(guid).has_value() || is_pending_asset(guid) || is_cooked_asset(guid);
+	}
+
 	bool AssetDatabase::is_cooked_asset(AssetGuid guid) const
 	{
 		const std::string text = guid.to_string();
@@ -315,6 +342,11 @@ namespace wiwa
 
 		if (!progress.cancel_requested())
 		{
+			progress.set_stage("Resolving references");
+			if (const u32 refreshed = refresh_unresolved())
+			{
+				WI_ASSET_LOG(Info, "Cooked {0} asset file(s) again: they refer to assets that were not known the first time", refreshed);
+			}
 			progress.set_stage("Removing deleted assets");
 			const u32 removed = remove_orphans();
 			if (removed > 0)
@@ -495,6 +527,7 @@ namespace wiwa
 
 		import_source(source, true, force, nullptr);
 		write_catalog(); // a file that is new has a path now
+		refresh_unresolved(); // and files that refer to it were cooked without it
 
 		// Whatever was cooked with this file as an input (a shader that includes it) is checked again; its record holds the
 		// hash of this file, so it is cooked again only if the content really changed.
@@ -506,6 +539,65 @@ namespace wiwa
 				import_source(dependent, true, false, nullptr);
 			}
 		}
+	}
+
+	bool AssetDatabase::has_resolvable(const nlohmann::json& entry) const
+	{
+		if (!entry.is_object() || !entry.contains("unresolved") || !entry["unresolved"].is_array())
+		{
+			return false;
+		}
+		for (const nlohmann::json& text : entry["unresolved"])
+		{
+			const std::optional<AssetGuid> guid = text.is_string() ? AssetGuid::from_string(text.get<std::string>()) : std::nullopt;
+			if (guid && guid_exists(*guid))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	u32 AssetDatabase::refresh_unresolved()
+	{
+		// A file cooked before the asset it refers to was known (or while that was being imported on another thread) left the reference out of its
+		// dependencies; cook it again now. That can make a new guid known, so go on until nothing changes.
+		u32 refreshed = 0;
+		for (int pass = 0; pass < 4; pass++)
+		{
+			std::vector<std::string> stale;
+			{
+				std::vector<std::pair<std::string, nlohmann::json>> candidates;
+				{
+					std::lock_guard<std::mutex> lock(m_Mutex);
+					for (auto& [guid, entry] : m_ImportCache.items())
+					{
+						if (entry.is_object() && entry.contains("unresolved") && !entry["unresolved"].empty())
+						{
+							candidates.emplace_back(entry.value("source", std::string{}), entry);
+						}
+					}
+				}
+				for (const auto& [source, entry] : candidates)
+				{
+					std::error_code error;
+					if (!source.empty() && has_resolvable(entry) && std::filesystem::exists(source, error))
+					{
+						stale.push_back(source);
+					}
+				}
+			}
+			if (stale.empty())
+			{
+				break;
+			}
+			for (const std::string& source : stale)
+			{
+				import_source(source, true, false, nullptr);
+				refreshed++;
+			}
+		}
+		return refreshed;
 	}
 
 	std::optional<AssetRef> AssetDatabase::ensure_imported(const std::filesystem::path& source, const nlohmann::json* defaultSettings)
@@ -632,7 +724,12 @@ namespace wiwa
 		}
 
 		bool upToDate = !force && previous.is_object() && previous.value("sourceHash", "") == sourceHash && previous.value("settingsHash", "") == settingsHash
-			&& previous.value("version", 0u) == importer->version() && previous.contains("assets");
+			&& previous.value("version", 0u) == importer->version() && previous.contains("assets")
+			&& previous.contains("unresolved"); // an entry from before this was recorded is cooked once more
+		if (upToDate && has_resolvable(previous))
+		{
+			upToDate = false; // a reference it dropped as missing exists now
+		}
 		if (upToDate && previous.contains("extraSources"))
 		{
 			// the files the last import read besides the source (shader includes) must be unchanged too
@@ -745,6 +842,12 @@ namespace wiwa
 			entry["version"] = importer->version();
 			entry["assets"] = cookedGuids;
 			entry["extraSources"] = extraSources;
+			nlohmann::json unresolved = nlohmann::json::array();
+			for (AssetGuid guid : context.unresolved())
+			{
+				unresolved.push_back(guid.to_string());
+			}
+			entry["unresolved"] = std::move(unresolved);
 			m_ImportCache[guidText] = std::move(entry);
 			save_cache_locked();
 			listeners = m_Listeners;

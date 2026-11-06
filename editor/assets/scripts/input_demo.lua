@@ -59,7 +59,8 @@ function InputDemo:update_hud()
   end
 
   local move = input.action("Gameplay", "Move"):vector()
-  self.device.text = "Device: " .. input.last_device()
+  -- the project name and version show where a game can read them (Settings panel, Project)
+  self.device.text = project.name .. " " .. project.version .. " - Device: " .. input.last_device()
   self.move.text = string.format("Move: %.2f, %.2f", move.x, move.y)
 
   local keys = {}

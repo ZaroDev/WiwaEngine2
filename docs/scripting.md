@@ -79,10 +79,8 @@ or `debug`.
   (`"replace"` or `"additive"`) returns a handle with `progress()`, `done()`, `failed()`, `stage()`.
 - **Rendering:** `debug_draw.line / box / sphere / arrow(..., color?, duration?)`; `camera.primary()` and
   `camera.set_primary(entity)`.
-- **Engine:** `time.delta()`, `time.total()`; `log(title, message)`, `log_warning`, `log_error`.
+- **Engine:** `time.delta()`, `time.total()`; `project.name`, `project.company`, `project.description`, `project.version` (`"1.2.3"` or `"1.2.3-label"`), `project.version_major/minor/patch` (read-only, from the Settings panel's Project page); `log(title, message)`, `log_warning`, `log_error`; `quit()` asks the host to end the program (a game closes, the editor's Play stops).
 - **UI:** `UI.panel(entity)`, widgets by path, `widget:on(event, fn)`, `UI.input` (see "UI" below).
-
-Physics and keyboard input are not bound yet (the UI has its own input, below).
 
 ## UI
 
@@ -136,6 +134,7 @@ trigger handlers, then `on_physics_update(self, dt)` of every script (`dt` is th
 | `on_collision_enter` / `on_collision_exit` | scripts on the two entities of a touching pair | `other` (Entity), `contact` |
 | `on_collision_stay` | the same, once per step, only if one of the bodies has `ReportContacts` | `other`, `contact` |
 | `on_trigger_enter` / `on_trigger_exit` | scripts on the two entities when either collider is a trigger | `other` |
+| `on_joint_break` | scripts on the entity that owns a `Joint` that went over its break force or torque | `other` (the entity it was connected to; `nil` for the world or an entity that is gone) |
 
 `contact` is described from the receiver's side: `point` (world space), `normal` (unit, from the other entity towards the receiver, the
 way it is pushed out), `impulse` (an estimate of the normal impulse, kg m/s) and `relative_velocity` (the receiver's velocity relative to the
@@ -154,6 +153,22 @@ against the newest step elsewhere. Triggers and shapes that do not collide are n
 snapshot of step N+1: `entity:body()` is a `Body` with `add_force` (during one step), `add_impulse`, `add_torque`, `set_velocity`,
 `set_angular_velocity`, `get_velocity`, `get_angular_velocity` (the newest step; `nil` without a body), `set_kinematic_target(position, rotation)` and `wake()`.
 `physics.set_gravity(vec3)` changes the world's gravity. A command for a body that no longer exists is ignored.
+
+**Characters** are the `CharacterController` component (see the physics spec): a capsule that walks, climbs steps and stands on
+slopes without being a rigid body. `character.move(entity, velocity)` sets the horizontal velocity (m/s, world space; `y` is ignored) the
+character keeps until the next call, `character.jump(entity, speed)` jumps with an upward speed if it stands on something,
+`character.is_grounded(entity)` and `character.state(entity)` (`grounded`, `sliding`, `ground` (an entity or `nil`), `normal`, `velocity`)
+read the newest step (`nil` while the world has no such character). Like the body control, commands take effect one step later, and a
+call on an entity without a `CharacterController` is a Lua error. Triggers see characters: `on_trigger_enter/exit` arrive with the character
+as `other` (and the trigger for the character). Physics queries hit characters too.
+
+**Joints** are the `Joint` component (see the physics spec). `joint.set_motor(entity, mode, target, max_force)` (`mode` is `"off"`,
+`"velocity"` or `"position"`) and `joint.set_limits(entity, min, max)` write the component, and the physics world gets the change at the
+start of the next step like the body control above, keeping the joint's rest pose. A positive target turns (hinge, rad/s or degrees) or
+moves (slider, m/s or metres) the entity that owns the joint, relative to the one it is connected to, the right-handed way around the
+`Axis`, or along it. Hinge limits are degrees and slider limits metres, counted from the pose the joint was made in (`min <= 0 <= max`;
+both 0 is no limit). An entity without a `Joint`, an unknown mode and `min > max` are Lua errors. A joint that breaks is gone for good
+(`on_joint_break`); put a new `Joint` on the entity to make another.
 
 ```lua
 return Script:extend{
@@ -244,8 +259,7 @@ The editor sets this up itself each time it starts, so there is nothing to confi
 
 ## The demo scene
 
-`assets/scenes/demo.wscene` has scripts to try all of this (the sources are in `assets/scripts/`; `scripts/gen_demo_scene.py` puts them
-on the scene). Press Play and watch the Console:
+`assets/scenes/demo.wscene` has scripts to try all of this (the sources are in `assets/scripts/`). Press Play and watch the Console:
 
 - **spinner** (gold knot, blue ring, crate C): turns the entity; change `degrees_per_second` or `axis` in the Inspector while playing.
 - **bobber** (neon balls): bobs them using `lib/wave.lua`. Edit `wave.sine` there while playing and every ball changes.
@@ -262,6 +276,14 @@ on the scene). Press Play and watch the Console:
 
 Try: Pause, then Step; edit a script into a syntax error and save (the old version keeps running, the Console says why); fix it; add a
 property to `spinner.lua` and see it in the Inspector without stopping.
+
+## Orb Rush
+
+A small game built only from scripts, scenes and UI panels: `assets/scenes/orb_title.wscene` (main menu) and `orb_arena.wscene`, with the scripts in
+`assets/scripts/orbrush/`. Roll the ball (WASD or left stick), dash (Space or pad A), collect orbs before the 60 seconds end, chain pickups for
+a x5 combo, and avoid the red hazards. P or pad Start pauses; the pause, end-of-round and settings menus are UI panels driven by
+`game_manager.lua`, and Settings rebinds Dash and Pause and sets the field of view. `scripts/gen_orbrush.py` writes the scenes and panels
+(run it again after changing it). The manual play-through is in `docs/superpowers/specs/orb-rush-checklist.md`.
 
 ## Editor and builds
 

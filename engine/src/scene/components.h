@@ -160,4 +160,47 @@ namespace wiwa
 		AssetRef Material{};             // PhysicsMaterial
 		AssetRef Mesh{};                 // Mesh, for ConvexHull and Mesh
 	};
+
+	// A constraint between this entity's body (A) and the body of Connected (B; not set: the world). Anchors are in each body's local
+	// space (the world point when Connected is not set); angles are degrees. Only the fields the Type uses count. LimitMin == LimitMax == 0
+	// means no limit; a break value of 0 means unbreakable. Hinge: limits are angles; Slider: distances along Axis; Distance: min and max
+	// length (both 0: the length at the start). Cone and SwingTwist use the half angles.
+	struct Joint
+	{
+		JointType Type = JointType::Hinge;
+		EntityGuid Connected{};
+		bool CollideConnected = false;
+		glm::vec3 AnchorA{ 0.0f };
+		glm::vec3 AnchorB{ 0.0f };
+		glm::vec3 Axis{ 0.0f, 1.0f, 0.0f };
+		glm::vec3 NormalAxis{ 1.0f, 0.0f, 0.0f };
+		float LimitMin = 0.0f;
+		float LimitMax = 0.0f;
+		float SwingHalfAngle = 45.0f;
+		float TwistHalfAngle = 45.0f;
+		float SpringFrequency = 0.0f; // Hz; 0: rigid
+		float SpringDamping = 0.0f;
+		JointMotorMode MotorMode = JointMotorMode::Off;
+		float MotorTarget = 0.0f;     // velocity (rad/s or m/s) or position (degrees or m)
+		float MotorMaxForce = 0.0f;   // N or N m
+		float BreakForce = 0.0f;
+		float BreakTorque = 0.0f;
+	};
+
+	// A character the scripts move (physics.md, Character controller): a capsule that slides along what it meets, climbs steps and stands on
+	// slopes up to MaxSlopeAngle, without being a rigid body. Up is world +Y. Put it on an entity with no Collider or RigidBody of its own.
+	// Height is the whole capsule, caps included (a Height below 2 * Radius is made 2 * Radius); Offset moves the capsule from the entity's
+	// origin; angles are degrees.
+	struct CharacterController
+	{
+		float Radius = 0.4f;
+		float Height = 1.8f;
+		glm::vec3 Offset{ 0.0f, 0.0f, 0.0f };
+		float StepHeight = 0.35f;
+		float MaxSlopeAngle = 45.0f;
+		float Mass = 70.0f;           // kg, for what it pushes and what pushes it
+		float PushStrength = 100.0f;  // the most force (N) it pushes a body with
+		float GravityFactor = 1.0f;
+		i32 Layer = 0;                // an index into the project's physics layers
+	};
 }

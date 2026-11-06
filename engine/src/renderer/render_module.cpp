@@ -109,6 +109,7 @@ namespace wiwa
 			},
 			[this](RenderBatch& batch)
 			{
+				const auto frameStart = std::chrono::steady_clock::now();
 				apply_reloads();
 
 				// The commands first (they change the render-side state), then the frame.
@@ -126,6 +127,18 @@ namespace wiwa
 				run_render_test(world);
 
 				publish_snapshot();
+
+				if (m_LastFrameStart != std::chrono::steady_clock::time_point{})
+				{
+					using Millis = std::chrono::duration<float, std::milli>;
+					std::lock_guard<std::mutex> lock(m_FrameSamplesMutex);
+					if (m_FrameSamples.size() >= Series::Capacity)
+					{
+						m_FrameSamples.erase(m_FrameSamples.begin());
+					}
+					m_FrameSamples.emplace_back(Millis(frameStart - m_LastFrameStart).count(), Millis(std::chrono::steady_clock::now() - frameStart).count());
+				}
+				m_LastFrameStart = frameStart;
 			},
 			[this]()
 			{
@@ -534,6 +547,23 @@ namespace wiwa
 			return;
 		}
 
+		{
+			PerfStats& perf = Engine::get().get_perf();
+			std::vector<std::pair<float, float>> samples;
+			{
+				std::lock_guard<std::mutex> lock(m_FrameSamplesMutex);
+				samples.swap(m_FrameSamples);
+			}
+			for (const auto& [frameMs, cpuMs] : samples)
+			{
+				perf.add_render_frame(frameMs, cpuMs);
+			}
+			if (const std::string adapter = get_snapshot().Adapter; !adapter.empty())
+			{
+				perf.set_adapter_name(adapter);
+			}
+		}
+
 		Window* window = Engine::get().get_module<Window>();
 		int width = 0;
 		int height = 0;
@@ -548,7 +578,7 @@ namespace wiwa
 		batch.Commands = std::move(m_PendingCommands);
 		m_PendingCommands.clear();
 		batch.Debug = m_DebugDraw.seal(deltaTime);
-		batch.Ui = std::move(m_PendingUi);
+		batch.Ui = m_GameUiVisible ? std::move(m_PendingUi) : UiDrawList{};
 		m_PendingUi = UiDrawList{};
 
 		// What the active scene changed, for the render thread's scene mirror.
@@ -610,6 +640,15 @@ namespace wiwa
 	bool RenderModule::read_arguments()
 	{
 		constexpr std::string_view apiPrefix = "--api=";
+
+		// The project's launch settings of a game's pack come first; the command line below overrides them.
+		const Engine& engine = Engine::get();
+		if (engine.project_from_pak())
+		{
+			const ProjectSettings& project = engine.project();
+			m_Description.Api = project.Api == LaunchApi::D3D11 ? GraphicsApi::D3D11 : project.Api == LaunchApi::D3D12 ? GraphicsApi::D3D12 : GraphicsApi::Vulkan;
+			m_Description.EnableValidation = project.GpuValidation;
+		}
 
 		for (const std::string& argument : Engine::get().get_arguments())
 		{

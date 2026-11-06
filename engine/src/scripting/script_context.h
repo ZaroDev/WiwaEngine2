@@ -2,6 +2,8 @@
 
 #include <entt/entt.hpp>
 
+#include <functional>
+
 #include <scene/entity_guid.h>
 #include <scene/scene.h>
 
@@ -30,6 +32,7 @@ namespace wiwa
 		bool GamePlaying = true;        // false while the game clock does not play: the input queries then read false / zero
 		bool InputListening = false;    // a Lua function waits in input.listen (cancelled when the scripts stop)
 		UiHandlerTable* UiHandlers = nullptr; // the Lua functions that listen to UI events, owned by the script instances
+		std::function<void()> RequestQuit{}; // what quit() calls; empty where the host has no such thing (a test): quit() is then a Lua error
 		float DeltaTime = 0.0f;         // seconds, of the update that is running
 		double TotalTime = 0.0;         // seconds of updates so far
 	};

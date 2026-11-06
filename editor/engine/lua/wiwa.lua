@@ -342,6 +342,48 @@ function physics.shape_cast(shape, from, to, layer_mask) end
 ---@param gravity vec3
 function physics.set_gravity(gravity) end
 
+--- Joints: these write the entity's `Joint` component, the physics world gets the change at the start of the next step.
+--- A motor of a hinge turns, and one of a slider moves, the entity that owns the joint relative to the one it is connected to.
+joint = {}
+--- `mode` is "off", "velocity" (rad/s for a hinge, m/s for a slider) or "position" (degrees, metres). `max_force` (N or N m, nil: as it was)
+--- limits the motor; 0 is no limit. Raises an error for an entity without a `Joint` and for an unknown mode.
+---@param entity Entity
+---@param mode "off"|"velocity"|"position"
+---@param target number
+---@param max_force? number
+function joint.set_motor(entity, mode, target, max_force) end
+--- Limits of the joint from its rest pose (degrees for a hinge, metres for a slider): `min <= 0 <= max`; both 0 is no limit.
+---@param entity Entity
+---@param min number
+---@param max number
+function joint.set_limits(entity, min, max) end
+
+--- Characters (the `CharacterController` component): commands go to the physics world and take effect in the next step; reads are from the newest step.
+--- Up is +Y. A call on an entity without a `CharacterController` is an error.
+character = {}
+--- The horizontal velocity (m/s, world space) the character tries to keep until the next call; `y` is ignored (gravity and jumps are the physics world's).
+---@param entity Entity
+---@param velocity vec3
+function character.move(entity, velocity) end
+--- Jumps with an upward speed (m/s) in the next step, only if the character stands on something then.
+---@param entity Entity
+---@param speed number
+function character.jump(entity, speed) end
+--- True when it stands on ground it can walk on.
+---@param entity Entity
+---@return boolean
+function character.is_grounded(entity) end
+--- `grounded`, `sliding` (on a slope too steep to stand on), `ground` (the entity it stands on, nil for none), `ground normal`, and its real `velocity`; nil while the world has no such character.
+---@class CharacterState
+---@field grounded boolean
+---@field sliding boolean
+---@field ground Entity?
+---@field normal vec3
+---@field velocity vec3
+---@param entity Entity
+---@return CharacterState?
+function character.state(entity) end
+
 --------------------------------------------------------------------------------------------------------------------------------
 -- Input
 --------------------------------------------------------------------------------------------------------------------------------
@@ -531,6 +573,22 @@ function time.delta() end
 ---@return number
 function time.total() end
 
+--- The project's identity (Settings panel, Project): read-only strings and numbers.
+---@class ProjectInfo
+---@field name string
+---@field company string
+---@field description string
+--- "1.2.3", or "1.2.3-label" when the project has a version label.
+---@field version string
+---@field version_major integer
+---@field version_minor integer
+---@field version_patch integer
+---@type ProjectInfo
+project = {}
+
+--- Asks the host to end the program: a game closes, the editor stops play mode.
+function quit() end
+
 ---@param title string
 ---@param message string
 function log(title, message) end
@@ -589,6 +647,9 @@ function ScriptClass:on_collision_exit(other, contact) end
 function ScriptClass:on_trigger_enter(other) end
 ---@param other Entity
 function ScriptClass:on_trigger_exit(other) end
+--- A joint of this entity went over its break force or torque and is gone. `other` is the entity it was connected to, nil for the world.
+---@param other Entity?
+function ScriptClass:on_joint_break(other) end
 ---@param definition? ScriptDefinition
 ---@return ScriptClass
 function ScriptClass:extend(definition) end

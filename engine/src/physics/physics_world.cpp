@@ -18,6 +18,8 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 
 #include "contact_listener.h"
+#include "character_set.h"
+#include "joint_set.h"
 #include "physics_debug_draw.h"
 #include "physics_layers_jolt.h"
 #include "physics_material_jolt.h"
@@ -106,6 +108,7 @@ namespace wiwa
 				m_System.Init(kMaxBodies, 0, kMaxBodyPairs, kMaxContactConstraints, m_BroadPhase, m_ObjectVsBroad, m_Pairs);
 					m_Contacts.set_bodies(&m_System.GetBodyInterfaceNoLock());
 					m_System.SetContactListener(&m_Contacts);
+				m_Contacts.set_no_collide(&m_Joints.no_collide_pairs());
 				apply(settings);
 				// the friction and restitution of a contact come from the two shapes' materials (physics_material_jolt.h), not from the bodies
 				m_System.SetCombineFriction(&combine_friction);
@@ -115,6 +118,8 @@ namespace wiwa
 
 			~PhysicsWorld() override
 			{
+				m_Joints.clear(); // before the bodies: a constraint must not outlive them
+				m_Characters.clear(); // and a character removes its inner body
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
 				for (const auto& [key, entry] : m_Bodies)
 				{
@@ -181,6 +186,42 @@ namespace wiwa
 					{
 						set_layers(c.Layers);
 					}
+					else if constexpr (std::is_same_v<T, CreateJoint>)
+					{
+						m_Joints.create(c.Desc);
+					}
+					else if constexpr (std::is_same_v<T, DestroyJoint>)
+					{
+						m_Joints.destroy(c.Owner);
+					}
+					else if constexpr (std::is_same_v<T, SetJointMotor>)
+					{
+						m_Joints.set_motor(c.Owner, c.Mode, c.Target, c.MaxForce);
+					}
+					else if constexpr (std::is_same_v<T, SetJointLimits>)
+					{
+						m_Joints.set_limits(c.Owner, c.Min, c.Max);
+					}
+					else if constexpr (std::is_same_v<T, CreateCharacter>)
+					{
+						m_Characters.create(c.Key, c.Desc);
+					}
+					else if constexpr (std::is_same_v<T, DestroyCharacter>)
+					{
+						m_Characters.destroy(c.Key);
+					}
+					else if constexpr (std::is_same_v<T, SetCharacterVelocity>)
+					{
+						m_Characters.set_velocity(c.Key, c.Velocity);
+					}
+					else if constexpr (std::is_same_v<T, CharacterJump>)
+					{
+						m_Characters.jump(c.Key, c.Speed);
+					}
+					else if constexpr (std::is_same_v<T, TeleportCharacter>)
+					{
+						m_Characters.teleport(c.Key, c.Position);
+					}
 					else
 					{
 						static_assert(always_false<T>, "a PhysicsCommand kind is not handled by PhysicsWorld::execute");
@@ -190,6 +231,7 @@ namespace wiwa
 
 			void step() override
 			{
+				m_Characters.step(static_cast<float>(fixed_dt()), m_Temp);
 				m_Contacts.begin_step();
 				const JPH::EPhysicsUpdateError error = m_System.Update(static_cast<float>(fixed_dt()), 1, &m_Temp, &m_Jobs);
 				if (error != JPH::EPhysicsUpdateError::None)
@@ -205,6 +247,13 @@ namespace wiwa
 				}
 				m_MovedKinematic.clear();
 				m_Contacts.end_step();
+
+				std::vector<PhysicsEvent> broken;
+				m_Joints.check_breaks(static_cast<float>(fixed_dt()), broken);
+				for (const PhysicsEvent& event : broken)
+				{
+					m_Contacts.add_event(event);
+				}
 			}
 
 			void write_poses(PhysicsStepSnapshot& snapshot) const override
@@ -225,6 +274,8 @@ namespace wiwa
 					pose.Active = bodies.IsActive(entry.Id);
 					snapshot.Poses.push_back(pose);
 				}
+				snapshot.JointCount = m_Joints.made_count();
+				m_Characters.write(snapshot);
 			}
 
 			void take_events(PhysicsStepSnapshot& snapshot) override { m_Contacts.take_events(snapshot.Events); }
@@ -244,6 +295,15 @@ namespace wiwa
 				draw.mDrawShape = true;
 				draw.mDrawShapeWireframe = true;
 				m_System.DrawBodies(draw, m_DebugRenderer.get());
+				m_System.DrawConstraints(m_DebugRenderer.get());
+				m_System.DrawConstraintLimits(m_DebugRenderer.get());
+				// a character is drawn in a colour for its state: green on ground, yellow sliding, red in the air
+				for (const CharacterSet::View& view : m_Characters.views())
+				{
+					const JPH::Color color = view.Ground == GroundState::Grounded ? JPH::Color(60, 255, 120) : view.Ground == GroundState::Sliding ? JPH::Color(255, 220, 40) : JPH::Color(255, 70, 50);
+					m_DebugRenderer->DrawCapsule(JPH::RMat44::sTranslation(JPH::RVec3(view.Position.x, view.Position.y, view.Position.z)), view.HalfCylinder, view.Radius, color,
+						JPH::DebugRenderer::ECastShadow::Off, JPH::DebugRenderer::EDrawMode::Wireframe);
+				}
 				snapshot.Debug = m_DebugRenderer->take();
 #else
 				(void)snapshot;
@@ -290,6 +350,16 @@ namespace wiwa
 					{
 						impl->Moving.push_back(describe(key, entry));
 					}
+				}
+				// a character is a capsule that moves
+				for (const CharacterSet::View& view : m_Characters.views())
+				{
+					QueryBody body;
+					body.Key = view.Key;
+					body.Shape = view.Shape;
+					body.Position = view.Position;
+					body.Layer = static_cast<u32>(std::clamp<i32>(view.Layer, 0, static_cast<i32>(PHYSICS_LAYER_COUNT) - 1));
+					impl->Moving.push_back(body);
 				}
 				snapshot.Query = std::make_shared<QuerySnapshot>(std::move(impl));
 			}
@@ -427,6 +497,7 @@ namespace wiwa
 				m_Bodies[key] = entry;
 				m_StaticDirty = true;
 				m_Contacts.register_body(entry.Id, key, desc.IsTrigger, desc.ReportContacts);
+				m_Joints.body_created(key);
 			}
 
 			void destroy_body(BodyKey key)
@@ -437,6 +508,7 @@ namespace wiwa
 					return;
 				}
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
+				m_Joints.body_destroyed(key);
 				m_Contacts.unregister_body(it->second.Id);
 				m_StaticDirty = true;
 				bodies.RemoveBody(it->second.Id);
@@ -629,6 +701,19 @@ namespace wiwa
 			ShapeBuilder m_Shapes{};
 			JPH::RefConst<JPH::Shape> m_Placeholder{};
 			std::unordered_map<BodyKey, BodyEntry> m_Bodies{};
+			CharacterSet m_Characters{ m_System, [this](JPH::BodyID id) { return m_Contacts.key_of(id); },
+				[this](JPH::BodyID id, BodyKey key, bool made)
+				{
+					if (made)
+					{
+						m_Contacts.register_body(id, key, false, false);
+					}
+					else
+					{
+						m_Contacts.unregister_body(id);
+					}
+				} };
+			JointSet m_Joints{ m_System, [this](BodyKey key) { const auto it = m_Bodies.find(key); return it == m_Bodies.end() ? JPH::BodyID() : it->second.Id; } };
 			std::vector<JPH::BodyID> m_MovedKinematic{};
 			std::shared_ptr<const std::vector<QueryBody>> m_StaticQuery{}; // the static bodies of the query snapshots, until one changes
 			bool m_StaticDirty = true;

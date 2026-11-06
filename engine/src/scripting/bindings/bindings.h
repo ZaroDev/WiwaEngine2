@@ -23,7 +23,7 @@ namespace wiwa
 	// debug_draw.line / box / sphere / arrow, camera.primary / set_primary.
 	void bind_render(ScriptRuntime& runtime, ScriptContext& context);
 
-	// time.delta / time.total.
+	// time.delta / time.total, and quit.
 	void bind_engine(ScriptRuntime& runtime, ScriptContext& context);
 
 	// physics.raycast / raycast_all / overlap_sphere / overlap_box / shape_cast / set_gravity, and entity:body() with its Body methods.

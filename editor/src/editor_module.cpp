@@ -106,8 +106,7 @@ namespace
 
 void EditorModule::init()
 {
-	const std::string editorTitle = fmt::format("Wiwa2 Editor - ({0}) <{1}>", "Default project", WI_BUILD_CONFIGURATION);
-	wiwa::Engine::get().get_module<wiwa::Window>()->set_title(editorTitle);
+	wiwa::Engine::get().get_module<wiwa::Window>()->set_title(ProjectSection::editor_title(wiwa::Engine::get().project()));
 
 	// ImGui owns the keyboard and the mouse; the Viewport hands them to the game while a scene plays
 	wiwa::Engine::get().get_module<wiwa::InputModule>()->set_capture(false);
@@ -139,6 +138,8 @@ void EditorModule::init()
 
 	m_PlayHost = CreateScope<EditorPlayHost>(*m_SceneEditor, *scenes, *wiwa::Engine::get().get_module<wiwa::ScriptingModule>());
 	m_PlayMode = CreateScope<wiwa::PlayMode>(*m_PlayHost);
+	// quit() in a script ends play mode, not the editor; the stop waits for post_update because the call comes from inside a script hook
+	wiwa::Engine::get().get_module<wiwa::ScriptingModule>()->set_quit_handler([this]() { m_StopPlayRequested = true; });
 	for (const std::string& argument : wiwa::Engine::get().get_arguments())
 	{
 		m_PlaySmoke = m_PlaySmoke || argument == "--play-smoke";
@@ -169,8 +170,14 @@ void EditorModule::init()
 	Ref<InputPanel> inputPanel = CreateRef<InputPanel>(m_InputPanelSmoke ? std::filesystem::temp_directory_path() / "wiwa_input_panel_smoke.wsettings" : std::filesystem::path(wiwa::INPUT_SETTINGS_FILE));
 	m_InputPanel = inputPanel.get();
 	m_Panels.push_back(inputPanel);
-	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor));
-	m_Panels.push_back(CreateRef<RendererPanel>());
+	Ref<EditorSection> editorSection = CreateRef<EditorSection>();
+	// every project-wide setting in one place (closed until opened from the Window menu); it shares the sections the Physics and Input panels made
+	m_Panels.push_back(CreateRef<SettingsPanel>(CreateRef<ProjectSection>(), CreateRef<RendererSection>(), physicsPanel->section(), inputPanel->section(), editorSection));
+	// the Scene and Game panels share the renderer's one view: the Game panel, added first, wins when both are visible
+	Ref<ViewOwner> viewOwner = CreateRef<ViewOwner>();
+	m_Panels.push_back(CreateRef<GamePanel>(*m_SceneEditor, viewOwner));
+	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor, viewOwner, editorSection));
+	m_Panels.push_back(CreateRef<PerformancePanel>());
 	m_Panels.push_back(CreateRef<ConsolePanel>());
 	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 	m_Panels.push_back(materialPanel);
@@ -379,6 +386,11 @@ void EditorModule::post_update(float deltaTime)
 {
 	// after the scripts ran: a step ends here, and a scene a script loaded becomes the one that plays
 	m_PlayMode->update();
+	if (m_StopPlayRequested)
+	{
+		m_StopPlayRequested = false;
+		m_PlayMode->stop();
+	}
 }
 
 void EditorModule::pre_physics_update(float deltaTime)

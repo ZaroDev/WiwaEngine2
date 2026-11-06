@@ -2626,6 +2626,185 @@ namespace wiwa
 			check(h.count("tick") >= 20, "physics_scripts_update: on_physics_update runs every step, got " + std::to_string(h.count("tick")));
 			check(h.count("bad") == 1, "physics_scripts_error_isolated: a script that raises in on_physics_update runs once and is disabled, got " + std::to_string(h.count("bad")));
 		}
+
+		// Check 6b: Lua and joints. joint.set_motor drives a hinge (and writes the Joint component), joint.set_limits writes the limits, a
+		// joint that breaks calls on_joint_break(self, other) on the entity that owns it (other is nil for a joint to the world), and a bad
+		// call is a Lua error.
+		void check_joint_scripts(Check& check)
+		{
+			Harness h;
+			PhysicsModule physics;
+			physics.set_auto_start(false);
+			h.Instances.context().Physics = &physics;
+
+			const auto anchor_at = [&](const char* name, glm::vec3 position)
+			{
+				const entt::entity anchor = h.TheScene->create(name);
+				h.TheScene->registry().get<Transform>(anchor).Position = position;
+				Collider collider;
+				collider.Size = glm::vec3(0.1f);
+				h.TheScene->registry().emplace<Collider>(anchor, collider);
+				return anchor;
+			};
+
+			// a motor-driven door
+			const entt::entity doorAnchor = anchor_at("DoorAnchor", glm::vec3(0.0f, 5.5f, 0.0f));
+			const AssetRef doorScript = h.add_script("door", R"(return Script:extend{
+				on_physics_update = function(self, dt)
+					self.ticks = (self.ticks or 0) + 1
+					if self.ticks == 1 then
+						joint.set_motor(self.entity, 'velocity', 1.0, 1000000)
+						joint.set_limits(self.entity, -80, 80)
+						record('bad_mode:' .. tostring(pcall(joint.set_motor, self.entity, 'bogus', 1, 1)))
+						record('bad_limits:' .. tostring(pcall(joint.set_limits, self.entity, 'x', 1)))
+					end
+					local w = self.entity:body():get_angular_velocity()
+					if not self.reached and self.ticks >= 10 and self.ticks <= 70 and w ~= nil and math.abs(w.z - 1.0) < 0.1 then
+						self.reached = true
+						record('w:true')
+					end
+					if self.ticks == 100 and not self.reached then record('w:false') end
+				end })");
+			const entt::entity door = h.spawn("Door", { doorScript });
+			h.TheScene->registry().get<Transform>(door).Position = glm::vec3(1.0f, 5.0f, 0.0f);
+			h.TheScene->registry().emplace<RigidBody>(door, RigidBody{ MotionType::Dynamic });
+			Collider plank;
+			plank.Size = glm::vec3(1.0f, 0.1f, 0.1f);
+			h.TheScene->registry().emplace<Collider>(door, plank);
+			Joint hinge;
+			hinge.Type = JointType::Hinge;
+			hinge.Connected = h.TheScene->registry().get<Id>(doorAnchor).Guid;
+			hinge.AnchorA = glm::vec3(-1.0f, 0.0f, 0.0f);
+			hinge.AnchorB = glm::vec3(0.0f, -0.5f, 0.0f);
+			hinge.Axis = glm::vec3(0.0f, 0.0f, 1.0f);
+			h.TheScene->registry().emplace<Joint>(door, hinge);
+
+			// an entity without a Joint: joint.* is a Lua error
+			const AssetRef plainScript = h.add_script("plain", R"(return Script:extend{
+				on_physics_update = function(self, dt)
+					if not self.done then
+						self.done = true
+						record('bad_entity:' .. tostring(pcall(joint.set_motor, self.entity, 'velocity', 1, 1)))
+					end
+				end })");
+			h.spawn("Plain", { plainScript });
+
+			// two boxes that hang by a fixed joint that is too weak: one from the world, one from a static body
+			const AssetRef breakScript = h.add_script("breaker", R"(return Script:extend{
+				on_joint_break = function(self, other)
+					record('break:' .. self.name .. ':' .. (other and other.name or 'nil'))
+				end })");
+			const auto hanger = [&](const char* name, float x, const entt::entity connected)
+			{
+				const entt::entity box = h.spawn(name, { breakScript });
+				h.TheScene->registry().get<Transform>(box).Position = glm::vec3(x, 4.7f, 0.0f);
+				h.TheScene->registry().emplace<RigidBody>(box, RigidBody{ MotionType::Dynamic });
+				Collider collider;
+				collider.Size = glm::vec3(0.5f);
+				h.TheScene->registry().emplace<Collider>(box, collider);
+				Joint joint;
+				joint.Type = JointType::Fixed;
+				joint.AnchorA = glm::vec3(0.0f, 0.5f, 0.0f);
+				joint.AnchorB = connected == entt::null ? glm::vec3(x, 5.2f, 0.0f) : glm::vec3(0.0f, -0.8f, 0.0f);
+				joint.Connected = connected == entt::null ? EntityGuid{} : h.TheScene->registry().get<Id>(connected).Guid;
+				joint.BreakForce = 5000.0f;
+				h.TheScene->registry().emplace<Joint>(box, joint);
+			};
+			hanger("HangWorld", 10.0f, entt::null);
+			hanger("HangAnchor", 20.0f, anchor_at("Ceiling", glm::vec3(20.0f, 6.0f, 0.0f)));
+
+			check(physics.start_world(h.TheScene), "joint_scripts_world: the world starts");
+			physics.thread().set_paused(false); // the editor's game clock is not playing in this check
+			h.Instances.start(h.TheScene);
+			for (int frame = 0; frame < 600 && !(h.count("w:true") + h.count("w:false") > 0 && h.count("break:HangWorld:nil") > 0 && h.count("break:HangAnchor:Ceiling") > 0); frame++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(16));
+				physics.pump();
+				h.Instances.dispatch_physics(physics);
+				h.Instances.update(0.016f);
+				physics.pre_render_update(0.016f); // sends the Joint changes the scripts made, as the engine does every frame
+			}
+			h.Instances.stop();
+			physics.stop_world();
+
+			check(h.count("w:true") == 1, "joint_scripts_motor: joint.set_motor turns the door at 1 rad/s");
+			check(h.count("bad_entity:false") == 1 && h.count("bad_mode:false") == 1 && h.count("bad_limits:false") == 1,
+				"joint_scripts_errors: an entity without a Joint, an unknown mode and a bad limit are Lua errors");
+			const Joint& after = h.TheScene->registry().get<Joint>(door);
+			check(after.MotorMode == JointMotorMode::Velocity && after.MotorTarget == 1.0f && after.LimitMin == -80.0f && after.LimitMax == 80.0f,
+				"joint_scripts_component: the calls are written to the Joint component");
+			check(h.count("break:HangWorld:nil") == 1, "joint_scripts_break_world: on_joint_break(self, nil) arrives once for a joint to the world");
+			check(h.count("break:HangAnchor:Ceiling") == 1, "joint_scripts_break_other: on_joint_break(self, other) names the entity the joint was connected to");
+		}
+
+		// Check 6c: Lua and characters. A script on a character reads whether it is grounded and what it stands on, walks it with
+		// character.move, jumps it with character.jump; a call on an entity without a CharacterController is a Lua error.
+		void check_character_scripts(Check& check)
+		{
+			Harness h;
+			PhysicsModule physics;
+			physics.set_auto_start(false);
+			h.Instances.context().Physics = &physics;
+
+			const entt::entity ground = h.TheScene->create("Ground");
+			Collider groundCollider;
+			groundCollider.Size = glm::vec3(20.0f, 0.5f, 20.0f);
+			h.TheScene->registry().emplace<Collider>(ground, groundCollider);
+
+			const AssetRef heroScript = h.add_script("hero", R"(return Script:extend{
+				on_physics_update = function(self, dt)
+					self.n = (self.n or 0) + 1
+					if self.n == 60 then
+						record('grounded:' .. tostring(character.is_grounded(self.entity)))
+						local s = character.state(self.entity)
+						record('state:' .. tostring(s.grounded) .. ':' .. tostring(s.sliding) .. ':' .. (s.ground and s.ground.name or 'nil') .. ':' .. tostring(s.normal.y > 0.9))
+						character.move(self.entity, vec3(2, 0, 0))
+					end
+					if self.n == 120 then
+						record('walked:' .. tostring(self.transform.position.x > 1.0))
+						character.jump(self.entity, 5)
+					end
+					if self.n == 135 then
+						record('air:' .. tostring(not character.is_grounded(self.entity)))
+					end
+				end })");
+			const AssetRef plainScript = h.add_script("plain_char", R"(return Script:extend{
+				on_physics_update = function(self, dt)
+					if not self.done then
+						self.done = true
+						record('bad_move:' .. tostring(pcall(character.move, self.entity, vec3(1, 0, 0))))
+						record('bad_jump:' .. tostring(pcall(character.jump, self.entity, 3)))
+						record('bad_state:' .. tostring(pcall(character.state, self.entity)))
+					end
+				end })");
+
+			const entt::entity hero = h.spawn("Hero", { heroScript });
+			h.TheScene->registry().get<Transform>(hero).Position = glm::vec3(0.0f, 2.0f, 0.0f);
+			CharacterController controller;
+			controller.Offset = glm::vec3(0.0f, 0.9f, 0.0f);
+			h.TheScene->registry().emplace<CharacterController>(hero, controller);
+			h.spawn("Plain", { plainScript });
+
+			check(physics.start_world(h.TheScene), "character_scripts_world: the world starts");
+			physics.thread().set_paused(false); // the editor's game clock is not playing in this check
+			h.Instances.start(h.TheScene);
+			for (int frame = 0; frame < 900 && h.count("air:true") + h.count("air:false") == 0; frame++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(16));
+				physics.pump();
+				h.Instances.dispatch_physics(physics);
+				h.Instances.update(0.016f);
+				physics.pre_render_update(0.016f); // writes the character's pose to its Transform, as the engine does every frame
+			}
+			h.Instances.stop();
+			physics.stop_world();
+
+			check(h.count("grounded:true") == 1, "character_scripts_grounded: character.is_grounded is true once it has landed");
+			check(h.count("state:true:false:Ground:true") == 1, "character_scripts_state: character.state gives grounded, not sliding, the ground entity and an upward normal");
+			check(h.count("walked:true") == 1, "character_scripts_move: character.move walks the entity");
+			check(h.count("air:true") == 1, "character_scripts_jump: character.jump takes it off the ground");
+			check(h.count("bad_move:false") == 1 && h.count("bad_jump:false") == 1 && h.count("bad_state:false") == 1, "character_scripts_errors: an entity without a CharacterController is a Lua error");
+		}
 	}
 
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
@@ -2655,6 +2834,8 @@ namespace wiwa
 		check_play_mode(check);
 		check_ui(check);
 		check_physics_scripts(check);
+		check_joint_scripts(check);
+		check_character_scripts(check);
 		check_stub_globals(check);
 		check_component_stubs(check);
 		check_lua_stubs(check, pipeline);

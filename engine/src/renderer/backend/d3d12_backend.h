@@ -40,6 +40,8 @@ namespace wiwa
 		static constexpr u32 BUFFER_COUNT = 3;
 
 		bool create_d3d_objects(const RendererDescription& description, u32 width, u32 height);
+		bool create_on_adapter(const Microsoft::WRL::ComPtr<IDXGIFactory4>& factory, const Microsoft::WRL::ComPtr<IDXGIAdapter1>& adapter,
+			const RendererDescription& description, HWND windowHandle, u32 width, u32 height);
 		void wait_for_queue();
 		bool create_backbuffers();
 		void destroy_backbuffers();
