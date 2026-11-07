@@ -29,6 +29,12 @@ namespace
 	}
 }
 
+InspectorPanel::InspectorPanel(wiwa::SceneEditor& editor) 
+	: m_Editor(editor), Panel("Inspector", PanelCategory::Window)
+{
+	m_AssetManager = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+}
+
 void InspectorPanel::on_draw()
 {
 	ImGui::SetNextWindowPos(ImVec2(984.0f, 12.0f), ImGuiCond_FirstUseEver);
@@ -296,8 +302,7 @@ bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& 
 		{
 		case AssetFieldEvent::Dropped:
 		{
-			wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
-			const std::optional<wiwa::AssetRef> found = assets != nullptr ? assets->find_asset(dropped) : std::nullopt;
+			const std::optional<wiwa::AssetRef> found = m_AssetManager != nullptr ? m_AssetManager->find_asset(dropped) : std::nullopt;
 			if (found)
 			{
 				value = *found;

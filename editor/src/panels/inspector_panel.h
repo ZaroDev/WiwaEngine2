@@ -14,7 +14,7 @@
 class InspectorPanel : public Panel
 {
 public:
-	explicit InspectorPanel(wiwa::SceneEditor& editor) : m_Editor(editor), Panel("Inspector", PanelCategory::Window) {}
+	explicit InspectorPanel(wiwa::SceneEditor& editor);
 
 	virtual void on_draw() override;
 
@@ -30,6 +30,8 @@ private:
 	wiwa::SceneEditor& m_Editor;
 	std::function<void()> m_Deferred{};
 	std::function<void(const wiwa::AssetRef&)> m_Locate{};
+
+	wiwa::AssetManager* m_AssetManager = nullptr;
 
 	// A quaternion is edited as Euler angles (degrees); this keeps the angles the user typed while the quaternion they make is the
 	// one on the entity, so that they do not jump around.
