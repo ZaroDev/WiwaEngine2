@@ -29,6 +29,7 @@ namespace wiwa
 	{
 		UiQuadKind Kind = UiQuadKind::Solid;
 		AssetRef Texture{}; // the texture of an Image, the font of an Sdf
+		u32 ViewTexture = 0; // an Image of an offscreen view: its id in the texture registry (Texture is not used)
 		glm::vec4 ClipRect{ 0.0f }; // min x, min y, max x, max y in canvas pixels
 		u32 FirstIndex = 0;
 		u32 IndexCount = 0;

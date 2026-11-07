@@ -18,12 +18,31 @@
 #include "render_snapshot.h"
 #include "render_thread.h"
 #include "scene/scene_extractor.h"
+#include "view/render_view.h"
+#include "view/view_host_system.h"
+#include "view/view_registry.h"
 
 namespace wiwa
 {
 	class ImGuiRenderPass;
 	class UiRenderPass;
 	class RenderWorld;
+
+	// What the main thread keeps for one offscreen view (views.md): the handle's settings and the extractor that mirrors the view's scene.
+	struct ViewRecord
+	{
+		ViewId Id = INVALID_VIEW;
+		ViewDesc Desc{};
+		std::weak_ptr<Scene> Scene{};
+		SceneExtractor Extractor{};
+		RenderCamera Camera{};
+		bool CameraDirty = false;
+		bool RenderPending = false; // a OneShot view was asked to render: it is extracted on the next frame
+		bool HadScene = false;
+		bool WarnedGone = false;
+		u32 Width = 1;
+		u32 Height = 1;
+	};
 
 	// The main-thread face of the renderer: the only thing the rest of the engine talks to. It owns the render thread and
 	// hands it one batch per frame; the Renderer, the backend and every GPU object live on that thread.
@@ -102,6 +121,20 @@ namespace wiwa
 
 		static constexpr u32 get_viewport_texture_id() { return VIEWPORT_TEXTURE_ID; }
 
+		// Offscreen views: a scene of its own drawn into a texture, continuously or on request (RenderView). Returns an invalid handle (and logs
+		// once) when MAX_VIEWS views are live. The view_* functions are what RenderView calls; use the handle.
+		RenderView create_view(const ViewDesc& desc);
+		void view_destroy(ViewId id);
+		void view_set_scene(ViewId id, const Ref<Scene>& scene);
+		void view_set_camera(ViewId id, const RenderCamera& camera);
+		void view_resize(ViewId id, u32 width, u32 height);
+		void view_request_render(ViewId id);
+		void view_read_back(ViewId id, std::function<void(ImageData)> done, bool premultiplied);
+		bool view_failed(ViewId id) const;
+		// Names views so that a UI widget can show one (the ViewHost component sets them).
+		ViewRegistry& get_view_names() { return m_ViewNames; }
+		u32 view_count() const { return static_cast<u32>(m_ViewRecords.size()); }
+
 		// The UI editor's canvas, drawn by the renderer like the viewport: every frame the render thread clears a texture of this size to the
 		// background and draws the list into it (the list is in canvas pixels of list.CanvasSize). ImGui shows it as get_ui_preview_texture_id()
 		// a frame or two later. Call it every frame the canvas is open; clear_ui_preview() when it is not.
@@ -141,6 +174,22 @@ namespace wiwa
 		UiDrawList m_PendingUi{};
 		bool m_GameUiVisible = true;
 		SceneExtractor m_Extractor{}; // main thread: what the active scene changed since the last batch
+		std::vector<Scope<ViewRecord>> m_ViewRecords{}; // main thread: the offscreen views, by creation
+		ViewRegistry m_ViewNames{};
+		ViewHostSystem m_ViewHosts{}; // the views of the ViewHost components of the active scene
+		std::shared_ptr<bool> m_Alive = std::make_shared<bool>(true); // handles keep a weak reference: it expires at shutdown
+		ViewId m_NextViewId = 1;
+		bool m_WarnedViewLimit = false;
+		ReadbackChannel m_Readbacks{};
+		struct PendingReadback
+		{
+			ViewId View = INVALID_VIEW;
+			std::function<void(ImageData)> Done{};
+		};
+		std::unordered_map<u64, PendingReadback> m_PendingReadbacks{}; // by request id; main thread
+		u64 m_NextReadbackId = 1;
+		std::vector<ViewId> m_FailedViews{}; // from the latest snapshot
+		ViewRecord* find_view_record(ViewId id);
 
 		// Assets the editor cooked again, noted by whichever thread reports it and taken by the render thread each frame.
 		std::mutex m_ReloadMutex{};

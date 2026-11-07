@@ -10,6 +10,7 @@
 #include "../resources/gpu_resource_cache.h"
 #include "../environment/environment_cache.h"
 #include "../render_quality.h"
+#include "../view/view_types.h"
 #include "../viewport_target.h"
 #include "render_scene.h"
 
@@ -125,12 +126,22 @@ namespace wiwa
 	class SceneRenderData
 	{
 	public:
-		bool initialize(nvrhi::IDevice* device);
+		// shareLayoutsFrom: the data of another view. Every view uses the binding layouts of the first one, so that a pipeline made with them
+		// fits the binding sets of all views (pipelines are made once, not per view).
+		bool initialize(nvrhi::IDevice* device, const SceneRenderData* shareLayoutsFrom = nullptr);
 		void shutdown();
 
 		// Culls the scene against the effective camera and fills the draw lists and the constants. Without a viewport target there
 		// is nothing to draw into and the data is inactive.
 		void build(RenderScene& scene, GpuResourceCache& cache, ViewportTarget& viewport);
+
+		// What the view this data belongs to switches on (the main view is Full). Applied by build(): the settings copy loses the effects the
+		// view does not run, shadows are cut down, light culling can go.
+		void set_view_flags(const ViewFlags& flags) { m_Flags = flags; }
+		// The background is nothing (alpha 0), not the sky or the colour: views made for UI widgets and thumbnails. The alpha of the HDR image is
+		// coverage then, and the LDR image holds straight alpha. Never for the main view.
+		void set_transparent_background(bool transparent) { m_TransparentBackground = transparent; }
+		bool transparent_background() const { return m_TransparentBackground; }
 
 		// The index of the frame about to be built: it picks the jitter.
 		void set_frame_index(u64 index) { m_FrameIndex = index; }
@@ -229,6 +240,8 @@ namespace wiwa
 		const RenderScene* m_Scene = nullptr;
 		SceneSettings m_Settings{};
 		RenderQuality m_Quality{};
+		ViewFlags m_Flags{};
+		bool m_TransparentBackground = false;
 		FrameConstants m_Constants{};
 		u64 m_FrameIndex = 0;
 		bool m_TemporalActive = false;

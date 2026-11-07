@@ -48,16 +48,15 @@ namespace wiwa
 		}
 
 		const SceneRenderData& data = *frame.Scene;
-		if (data.settings().Background != BackgroundMode::Sky || data.sky_kind() == SceneRenderData::SkyKind::None)
+		if (data.transparent_background() || data.settings().Background != BackgroundMode::Sky || data.sky_kind() == SceneRenderData::SkyKind::None)
 		{
 			return;
 		}
 
 		const u32 shaderGeneration = m_Shaders->get_generation();
-		if (m_Pipeline == nullptr || shaderGeneration != m_BuiltShaderGeneration || data.viewport()->generation() != m_BuiltViewportGeneration)
+		if (m_Pipeline == nullptr || shaderGeneration != m_BuiltShaderGeneration)
 		{
 			m_BuiltShaderGeneration = shaderGeneration;
-			m_BuiltViewportGeneration = data.viewport()->generation();
 
 			auto make = [&](const char* shader)
 			{

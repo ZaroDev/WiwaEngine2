@@ -196,6 +196,7 @@ void EditorModule::init()
 		m_Hierarchy->set_focus([viewportPanel, focusEditor](entt::entity entity) { if (!focusEditor->playing()) { viewportPanel->focus_on(entity); } });
 	}
 	m_Panels.push_back(CreateRef<PerformancePanel>());
+	m_Panels.push_back(CreateRef<ViewPreviewPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
 	m_Panels.push_back(CreateRef<ConsolePanel>());
 	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 	m_Panels.push_back(materialPanel);

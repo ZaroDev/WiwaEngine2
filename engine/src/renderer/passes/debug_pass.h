@@ -21,6 +21,7 @@ namespace wiwa
 		virtual bool is_ready() const override;
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
+		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return isMain; }
 
 	private:
 		// Mirrors DebugData in debug_common.hlsli.

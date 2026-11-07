@@ -15,6 +15,8 @@ namespace wiwa
 		Renderer& get_renderer() { return m_Renderer; }
 		RenderScene& get_scene() { return m_Renderer.get_scene(); }
 		GpuResourceCache& get_cache() { return m_Renderer.get_cache(); }
+		// The state of a view (null when it is gone: a command for a view destroyed in the meantime does nothing).
+		ViewState* get_view(ViewId id) { return m_Renderer.find_view(id); }
 		EnvironmentCache& get_environments() { return m_Renderer.get_environments(); }
 
 	private:

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../render_pass.h"
+#include "../view/view_types.h"
 #include "../shader_library.h"
 #include "scene_pass_utils.h"
 
@@ -18,6 +19,7 @@ namespace wiwa
 		virtual bool is_ready() const override;
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
+		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return flags.VelocityPrepass; }
 
 	private:
 		void build_pipelines(const FrameDescription& frame);
@@ -30,6 +32,5 @@ namespace wiwa
 		nvrhi::GraphicsPipelineHandle m_Pipelines[2]{}; // [double sided]
 		scene_pass::SurfacePipelines m_Surface{}; // materials with a surface shader (the Velocity variant)
 		u32 m_BuiltShaderGeneration = ~0u;
-		u32 m_BuiltViewportGeneration = ~0u;
 	};
 }

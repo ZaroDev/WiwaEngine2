@@ -196,6 +196,54 @@
       }
     },
     {
+      "id": "c22916f708fee75f394814b0f332eeb0",
+      "components": {
+        "Name": {
+          "Value": "Wizard portrait"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "ViewHost": {
+          "Name": "wizard_portrait",
+          "Model": {
+            "guid": "97a52376805e5e2b05c209ff8e1825ef",
+            "localId": 0
+          },
+          "Target": [
+            0,
+            1,
+            0
+          ],
+          "Distance": 5.5,
+          "Yaw": 20,
+          "Pitch": 8,
+          "Fov": 35,
+          "SpinSpeed": 40,
+          "Width": 256,
+          "Height": 256,
+          "Profile": "Preview",
+          "Transparent": true,
+          "Continuous": true
+        }
+      }
+    },
+    {
       "id": "3601341888678577d371966dd31480f6",
       "components": {
         "Name": {

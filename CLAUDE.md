@@ -55,6 +55,7 @@ Rules that cut across areas:
 | Lua scripting (user API: [docs/scripting.md](docs/scripting.md)) | [scripting.md](docs/superpowers/specs/scripting.md) | `engine/src/scripting` |
 | Physics (Jolt) | [physics.md](docs/superpowers/specs/physics.md) | `engine/src/physics`, vendored `engine/vendor/JoltPhysics`; `JPH::` stays inside it |
 | Animation (skeletons, GPU skinning, `Animator`, Lua `Animation`) | [animation.md](docs/superpowers/specs/animation.md) | `engine/src/animation`, `editor/src/animation` |
+| Offscreen views (previews, 3D UI widgets, readback; `ViewHost`, `ViewImage`) | [views.md](docs/superpowers/specs/views.md) | `engine/src/renderer/view`, `engine/src/scene/preview_scene.*` |
 | Input | [input.md](docs/superpowers/specs/input.md) | `engine/src/input` |
 | Game UI | [ui.md](docs/superpowers/specs/ui.md) | `engine/src/ui`, `editor/src/ui` |
 | Project settings, Settings page | [project-settings.md](docs/superpowers/specs/project-settings.md) | `engine/src/core/project_settings.*`, `editor/src/settings` |

@@ -44,6 +44,5 @@ namespace wiwa
 		scene_pass::SurfacePipelines m_Surface{};      // the same for materials with a surface shader
 		scene_pass::SurfacePipelines m_SurfaceBlend{};
 		u32 m_BuiltShaderGeneration = ~0u;
-		u32 m_BuiltViewportGeneration = ~0u;
 	};
 }

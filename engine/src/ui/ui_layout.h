@@ -41,6 +41,8 @@ namespace wiwa
 		std::function<const FontData*(const AssetRef&)> Fonts{};
 		// The size in texels of a texture, or nothing while it is not loaded (a 9-slice Image is then drawn as a plain quad).
 		std::function<std::optional<glm::vec2>(const AssetRef&)> TextureSize{};
+		// The texture id (renderer/view/view_types.h: view_texture_id) of the offscreen view with this name, or 0 when there is none (a ViewImage then draws nothing).
+		std::function<u32(std::string_view)> ViewTexture{};
 	};
 
 	// Per widget, by its index in UiPanelData::Widgets.

@@ -20,7 +20,8 @@ SamplerState uSampler : register(s1);
 struct FxaaData
 {
 	float2 RcpFrame; // 1 / size in pixels
-	float2 Padding;
+	float Transparent; // 1: the image has straight alpha; the filter works on premultiplied color and keeps the alpha
+	float Padding;
 };
 
 PUSH_CONSTANTS(FxaaData, Constants, b2);
@@ -32,9 +33,30 @@ float4 VSMain(uint vertex_id : SV_VertexID) : SV_Position
 	return float4(uv * 2.0 - 1.0, 0.0, 1.0);
 }
 
+// The image with the color premultiplied by the alpha when the view is transparent (so that the edge against nothing blends right).
+float4 SampleRgba(float2 uv)
+{
+	float4 color = uColor.SampleLevel(uSampler, uv, 0);
+	if (Constants.Transparent > 0.5)
+	{
+		color.rgb *= color.a;
+	}
+	return color;
+}
+
 float3 SampleColor(float2 uv)
 {
-	return uColor.SampleLevel(uSampler, uv, 0).rgb;
+	return SampleRgba(uv).rgb;
+}
+
+float4 Resolve(float4 color)
+{
+	if (Constants.Transparent > 0.5)
+	{
+		color.rgb = color.a > 0.0001 ? color.rgb / color.a : float3(0.0, 0.0, 0.0);
+		return color;
+	}
+	return float4(color.rgb, 1.0);
 }
 
 float SampleLuma(float2 uv)
@@ -47,7 +69,8 @@ float4 PSMain(float4 frag_coord : SV_Position) : SV_Target0
 	float2 rcp_frame = Constants.RcpFrame;
 	float2 uv = frag_coord.xy * rcp_frame; // frag_coord is at the pixel centre
 
-	float3 color_centre = SampleColor(uv);
+	float4 sample_centre = SampleRgba(uv);
+	float3 color_centre = sample_centre.rgb;
 	float luma_centre = color_centre.g;
 	float luma_down = SampleLuma(uv + float2(0.0, 1.0) * rcp_frame);
 	float luma_up = SampleLuma(uv + float2(0.0, -1.0) * rcp_frame);
@@ -61,7 +84,7 @@ float4 PSMain(float4 frag_coord : SV_Position) : SV_Target0
 	// Not on an edge.
 	if (luma_range < max(EDGE_THRESHOLD_MIN, luma_max * EDGE_THRESHOLD))
 	{
-		return float4(color_centre, 1.0);
+		return Resolve(sample_centre);
 	}
 
 	float luma_down_left = SampleLuma(uv + float2(-1.0, 1.0) * rcp_frame);
@@ -194,5 +217,5 @@ float4 PSMain(float4 frag_coord : SV_Position) : SV_Target0
 		final_uv.x += final_offset * step_length;
 	}
 
-	return float4(SampleColor(final_uv), 1.0);
+	return Resolve(SampleRgba(final_uv));
 }

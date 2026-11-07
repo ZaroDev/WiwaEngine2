@@ -37,5 +37,7 @@ float4 PSMain(SurfaceForwardVertexOutput input, bool frontFace : SV_IsFrontFace)
 		discard;
 	}
 
-	return float4(ForwardLighting(surface, input.Position.xy), surface.Alpha);
+	// The alpha of the HDR image is coverage: opaque and masked surfaces cover the pixel.
+	const float alpha = (material.Flags & MATERIAL_ALPHA_BLEND_BIT) != 0u ? surface.Alpha : 1.0;
+	return float4(ForwardLighting(surface, input.Position.xy), alpha);
 }

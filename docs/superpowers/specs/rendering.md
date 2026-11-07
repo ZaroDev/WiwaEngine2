@@ -9,7 +9,7 @@ Code: `engine/src/renderer`, shaders in `editor/engine/shaders`. Verified by `--
 - During a frame the main thread appends deltas to the current `RenderBatch`; `end_frame()` seals it (frame time, window size, copied ImGui draw data, debug-draw data, UI draw list) and pushes it to a bounded queue (depth 2 frames ahead; blocks when full). Queue depth adds up to two frames of latency; it is a constant.
 - Back to main: stats, pass timings, shader status, pick results and the per-frame times go through double-buffered snapshots. There are no commands back.
 - Resize: main sends the viewport size; a minimized window pauses rendering. Shutdown: quit command, join, `waitForIdle` before destroying resources.
-- ImGui is built on the main thread and its draw data copied into the batch; the font atlas is sent once. ImGui texture ids map to render-side textures through a registry (entry 0 is the font atlas); the Viewport panel shows the viewport target through it.
+- ImGui is built on the main thread and its draw data copied into the batch; the font atlas is sent once. ImGui texture ids map to render-side textures through a registry (entry 0 is the font atlas); the Viewport panel shows the viewport target through it. Offscreen views (views.md) add dynamic ids, `FIRST_VIEW_TEXTURE_ID + view id`.
 
 ## Backends
 
@@ -17,7 +17,7 @@ Code: `engine/src/renderer`, shaders in `editor/engine/shaders`. Verified by `--
 
 ## Scene to render thread
 
-`SceneExtractor` (main thread, every frame) compares `MeshRenderer`, `Light`, `Camera` and scene settings with what it last sent, keyed by `EntityGuid`, and emits deltas: `UpsertInstance/RemoveInstance`, `UpsertLight/RemoveLight`, `SetCamera`, settings, one `ResetScene` when the active scene changes. Commands carry `AssetRef`s, never handles. `RenderScene` (render thread) keeps instances/lights/camera in flat arrays by stable slot with a guid-to-slot map; bounds come from `MeshData` once the mesh is Ready. `RenderInstance` keeps `PrevWorld` for velocity; `RenderScene::end_frame()` sets it after the passes are recorded.
+`SceneExtractor` (main thread, every frame; the main view's, and one per offscreen view, see views.md) compares `MeshRenderer`, `Light`, `Camera` and scene settings with what it last sent, keyed by `EntityGuid`, and emits deltas: `UpsertInstance/RemoveInstance`, `UpsertLight/RemoveLight`, `SetCamera`, settings, one `ResetScene` when the active scene changes. Commands carry `AssetRef`s, never handles. `RenderScene` (render thread) keeps instances/lights/camera in flat arrays by stable slot with a guid-to-slot map; bounds come from `MeshData` once the mesh is Ready. `RenderInstance` keeps `PrevWorld` for velocity; `RenderScene::end_frame()` sets it after the passes are recorded.
 
 ## GPU resources
 
@@ -38,7 +38,7 @@ Vulkan ownership trap: NVRHI creates buffers/images `EXCLUSIVE` and does no queu
 
 ## The frame
 
-Registration order in `render_module.cpp`:
+Registration order in `render_module.cpp` (the whole list runs once per view: the offscreen views first, the main view last; views.md):
 
 ```
 Shadows -> Depth+Normal+Velocity prepass -> Light culling -> AO

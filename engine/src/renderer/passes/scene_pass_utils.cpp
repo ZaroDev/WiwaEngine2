@@ -73,19 +73,18 @@ namespace wiwa::scene_pass
 		return device->createGraphicsPipeline(description, framebuffer);
 	}
 
-	void SurfacePipelines::configure(nvrhi::IDevice* device, nvrhi::IFramebuffer* framebuffer, std::vector<nvrhi::IBindingLayout*> layouts, const PipelineOptions& options)
+	void SurfacePipelines::configure(nvrhi::IDevice* device, std::vector<nvrhi::IBindingLayout*> layouts, const PipelineOptions& options)
 	{
 		m_Device = device;
-		m_Framebuffer = framebuffer;
 		m_Layouts = std::move(layouts);
 		m_Options = options;
 		m_Entries.clear();
 	}
 
-	nvrhi::IGraphicsPipeline* SurfacePipelines::get(GpuResourceCache& cache, u32 shader, SurfaceVariantKind kind, bool doubleSided)
+	nvrhi::IGraphicsPipeline* SurfacePipelines::get(GpuResourceCache& cache, u32 shader, SurfaceVariantKind kind, bool doubleSided, nvrhi::IFramebuffer* framebuffer)
 	{
 		const GpuSurfaceShader* gpu = cache.surface_shaders().get(shader);
-		if (gpu == nullptr || !gpu->ready() || m_Device == nullptr || m_Framebuffer == nullptr)
+		if (gpu == nullptr || !gpu->ready() || m_Device == nullptr || framebuffer == nullptr)
 		{
 			return nullptr;
 		}
@@ -107,7 +106,7 @@ namespace wiwa::scene_pass
 			PipelineOptions options = m_Options;
 			options.DoubleSided = doubleSided;
 			nvrhi::InputLayoutHandle inputLayout = make_mesh_input_layout(m_Device, vertexShader);
-			entry.Pipeline = make_pipeline(m_Device, inputLayout, vertexShader, depthOnly ? nullptr : pixelShader, m_Layouts, m_Framebuffer, options);
+			entry.Pipeline = make_pipeline(m_Device, inputLayout, vertexShader, depthOnly ? nullptr : pixelShader, m_Layouts, framebuffer, options);
 		}
 		if (entry.Pipeline == nullptr)
 		{
@@ -146,7 +145,7 @@ namespace wiwa::scene_pass
 			bool custom = false;
 			if (surface != nullptr && surface->Pipelines != nullptr && item.Shader != 0)
 			{
-				pipeline = surface->Pipelines->get(cache, item.Shader, item.Masked ? surface->MaskedKind : surface->Kind, item.DoubleSided);
+				pipeline = surface->Pipelines->get(cache, item.Shader, item.Masked ? surface->MaskedKind : surface->Kind, item.DoubleSided, framebuffer);
 				custom = pipeline != nullptr;
 			}
 			if (!custom)

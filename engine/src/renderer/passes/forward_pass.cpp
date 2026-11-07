@@ -39,12 +39,11 @@ namespace wiwa
 	{
 		const SceneRenderData& data = *frame.Scene;
 		const u32 shaderGeneration = m_Shaders->get_generation();
-		if (shaderGeneration == m_BuiltShaderGeneration && data.viewport()->generation() == m_BuiltViewportGeneration)
+		if (shaderGeneration == m_BuiltShaderGeneration)
 		{
 			return;
 		}
 		m_BuiltShaderGeneration = shaderGeneration;
-		m_BuiltViewportGeneration = data.viewport()->generation();
 
 		nvrhi::IShader* vertexShader = m_Shaders->get(engine_assets::FORWARD_SHADER, ShaderStage::Vertex);
 		nvrhi::IShader* pixelShader = m_Shaders->get(engine_assets::FORWARD_SHADER, ShaderStage::Pixel);
@@ -57,9 +56,9 @@ namespace wiwa
 		scene_pass::PipelineOptions surfaceOptions;
 		surfaceOptions.DepthTest = true;
 		surfaceOptions.DepthWrite = false;
-		m_Surface.configure(m_Device, data.viewport()->hdr_framebuffer(), surfaceLayouts, surfaceOptions);
+		m_Surface.configure(m_Device, surfaceLayouts, surfaceOptions);
 		surfaceOptions.Blend = true;
-		m_SurfaceBlend.configure(m_Device, data.viewport()->hdr_framebuffer(), surfaceLayouts, surfaceOptions);
+		m_SurfaceBlend.configure(m_Device, surfaceLayouts, surfaceOptions);
 
 		for (int doubleSided = 0; doubleSided < 2; doubleSided++)
 		{
@@ -88,8 +87,10 @@ namespace wiwa
 		const SceneRenderData& data = *frame.Scene;
 		if (m_Stage == Stage::Opaque)
 		{
+			// A transparent background clears to nothing: alpha 0, so that coverage is what gets drawn.
 			const glm::vec3& background = data.settings().BackgroundColor;
-			commandList->clearTextureFloat(data.viewport()->hdr(), nvrhi::AllSubresources, nvrhi::Color(background.r, background.g, background.b, 1.0f));
+			const nvrhi::Color clear = data.transparent_background() ? nvrhi::Color(0.0f, 0.0f, 0.0f, 0.0f) : nvrhi::Color(background.r, background.g, background.b, 1.0f);
+			commandList->clearTextureFloat(data.viewport()->hdr(), nvrhi::AllSubresources, clear);
 		}
 
 		const bool nothing = m_Stage == Stage::Opaque ? (data.opaque().empty() && data.masked().empty()) : data.blended().empty();

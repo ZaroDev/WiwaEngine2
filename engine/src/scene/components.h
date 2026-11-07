@@ -224,6 +224,30 @@ namespace wiwa
 		glm::quat OffsetRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
 	};
 
+	// What a ViewHost's preview is drawn with (the profiles of renderer/view/view_types.h; the values match).
+	enum class ViewHostProfile : u32 { Full, Preview, Thumbnail };
+
+	// Shows a prefab in a small scene of its own, drawn into a texture: a 3D widget for the game UI (a ViewImage widget names the host). Everything is
+	// looked at from an orbit camera; SpinSpeed turns the model. The view exists while the entity does (views.md).
+	struct ViewHost
+	{
+		std::string Name{};          // what a ViewImage widget calls it; unique in the scene
+		AssetRef Model{};            // the prefab to show
+		glm::vec3 Target{ 0.0f, 1.0f, 0.0f }; // the point the camera looks at
+		float Distance = 4.0f;
+		float Yaw = 20.0f;           // degrees about the vertical axis
+		float Pitch = 10.0f;         // degrees above the target
+		float Fov = 35.0f;
+		float SpinSpeed = 0.0f;      // degrees per second the model turns about the vertical axis
+		i32 Width = 256;             // pixels of the texture
+		i32 Height = 256;
+		ViewHostProfile Profile = ViewHostProfile::Preview;
+		bool Transparent = true;     // nothing behind the model: the widget shows what is under it
+		bool Continuous = true;      // false: drawn again only when something above changed
+
+		bool operator==(const ViewHost&) const = default;
+	};
+
 	// On a skinned mesh node, made by the prefab expander: the skeleton that deforms the mesh. The Animator that drives it is the nearest
 	// ancestor with the same skeleton.
 	struct SkinBinding

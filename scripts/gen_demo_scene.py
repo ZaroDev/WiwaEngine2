@@ -1082,6 +1082,9 @@ def build_ui(font, beacon_id, labels):
 			Color=[0.9, 0.95, 1, 1], Outline=0.25, OutlineColor=[0, 0, 0, 1], WorldEntity=entity_id, WorldOffset=[0, 0, 0],
 			WorldScaleWithDistance=True, WorldRefDistance=18, WorldMinScale=0.5, WorldMaxScale=2.0)
 		next_id += 1
+	# a ViewImage: the wizard portrait that the "Wizard portrait" ViewHost of the scene draws (views.md), at the top right
+	w(next_id, "ViewImage", "WizardPortrait", AnchorMin=[1, 1], AnchorMax=[1, 1], OffsetMin=[-264, -264], OffsetMax=[-24, -24], ViewName="wizard_portrait")
+	next_id += 1
 	rel = "ui/demo_hud.wuipanel"
 	write_json(rel, {"version": 1, "referenceResolution": [1920, 1080], "match": 0.5, "nextId": next_id, "widgets": widgets})
 	return write_meta(rel, "UiPanelImporter", 1)
@@ -1176,6 +1179,9 @@ def build_scene(g):
 	s.add("Sun", pos=(0, 20, 0), rot=euler(-45, 35, 0), **light("Directional", (1, 0.96, 0.9, 1), 3.5, shadows=True))
 	s.add("Hud", UICanvas={"Panel": ref(g["ui"]), "SortOrder": 0, "Visible": True}, **script("demo_ui"))
 	s.add("Demo light", pos=(-5, 3, 6), **light("Point", (0.6, 0.8, 1, 1), 2, rng=14))
+	# a 3D widget of the HUD: the wizard turning in a view of its own, shown by the ViewImage "WizardPortrait" of the HUD
+	s.add("Wizard portrait", ViewHost={"Name": "wizard_portrait", "Model": ref(g["models"]["Wizard"][0]), "Target": [0, 1, 0], "Distance": 5.5, "Yaw": 20, "Pitch": 8,
+		"Fov": 35, "SpinSpeed": 40, "Width": 256, "Height": 256, "Profile": "Preview", "Transparent": True, "Continuous": True})
 	s.add("Beacon", pos=(-3, 1.5, 3), scale=(0.3, 0.3, 0.3), **mesh("sphere", "hologram"))
 
 	# --- ground: textured, with the physics ground under every station --------------------------------------

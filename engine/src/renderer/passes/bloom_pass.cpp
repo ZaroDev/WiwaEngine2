@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "bloom_pass.h"
 
+#include "../view/view_state.h"
+
 #include "../engine_assets.h"
 #include "../scene/scene_render_data.h"
 #include "bloom_math.h"
@@ -67,7 +69,7 @@ namespace wiwa
 		}
 	}
 
-	bool BloomPass::create_binding_sets(ViewportTarget& viewport)
+	bool BloomPass::create_binding_sets(ViewportTarget& viewport, ViewCache& c)
 	{
 		bool ok = true;
 		for (u32 level = 0; level < ViewportTarget::MAX_BLOOM_MIPS; level++)
@@ -78,8 +80,8 @@ namespace wiwa
 			set.addItem(nvrhi::BindingSetItem::Texture_SRV(1, source));
 			set.addItem(nvrhi::BindingSetItem::Texture_UAV(2, viewport.bloom_down(level)));
 			set.addItem(nvrhi::BindingSetItem::Sampler(3, m_Sampler));
-			m_DownSets[level] = m_Device->createBindingSet(set, m_DownLayout);
-			ok = ok && m_DownSets[level] != nullptr;
+			c.DownSets[level] = m_Device->createBindingSet(set, m_DownLayout);
+			ok = ok && c.DownSets[level] != nullptr;
 		}
 
 		for (u32 level = 0; level + 1 < ViewportTarget::MAX_BLOOM_MIPS; level++)
@@ -98,7 +100,7 @@ namespace wiwa
 				set.addItem(nvrhi::BindingSetItem::Texture_SRV(2, viewport.bloom_down(level)));
 				set.addItem(nvrhi::BindingSetItem::Texture_UAV(3, viewport.bloom_up(level)));
 				set.addItem(nvrhi::BindingSetItem::Sampler(4, m_Sampler));
-				nvrhi::BindingSetHandle& slot = deepest ? m_UpDeepestSets[level] : m_UpSets[level];
+				nvrhi::BindingSetHandle& slot = deepest ? c.UpDeepestSets[level] : c.UpSets[level];
 				slot = m_Device->createBindingSet(set, m_UpLayout);
 				ok = ok && slot != nullptr;
 			}
@@ -108,6 +110,7 @@ namespace wiwa
 
 	void BloomPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
 	{
+		ViewCache& c = m_PerView.get(frame.View->Target);
 		if (frame.Scene == nullptr || !frame.Scene->active() || m_Failed)
 		{
 			return;
@@ -141,10 +144,9 @@ namespace wiwa
 			}
 		}
 
-		if (viewport.generation() != m_BuiltViewportGeneration)
+		if (c.DownSets[0] == nullptr)
 		{
-			m_BuiltViewportGeneration = viewport.generation();
-			if (!create_binding_sets(viewport))
+			if (!create_binding_sets(viewport, c))
 			{
 				WI_BLOOM_LOG(Error, "Could not create the bloom bindings");
 				m_Failed = true;
@@ -167,7 +169,7 @@ namespace wiwa
 
 			nvrhi::ComputeState state;
 			state.pipeline = m_DownPipeline;
-			state.addBindingSet(m_DownSets[level]);
+			state.addBindingSet(c.DownSets[level]);
 			commandList->setComputeState(state);
 			commandList->setPushConstants(&constants, sizeof(constants));
 			commandList->dispatch((viewport.bloom_width(level) + GROUP_SIZE - 1) / GROUP_SIZE, (viewport.bloom_height(level) + GROUP_SIZE - 1) / GROUP_SIZE, 1);
@@ -178,7 +180,7 @@ namespace wiwa
 		{
 			nvrhi::ComputeState state;
 			state.pipeline = m_UpPipeline;
-			state.addBindingSet(level == count - 2 ? m_UpDeepestSets[level] : m_UpSets[level]);
+			state.addBindingSet(level == count - 2 ? c.UpDeepestSets[level] : c.UpSets[level]);
 			commandList->setComputeState(state);
 			commandList->dispatch((viewport.bloom_width(level) + GROUP_SIZE - 1) / GROUP_SIZE, (viewport.bloom_height(level) + GROUP_SIZE - 1) / GROUP_SIZE, 1);
 		}

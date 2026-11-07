@@ -37,9 +37,10 @@ namespace wiwa::scene_pass
 	class SurfacePipelines
 	{
 	public:
-		void configure(nvrhi::IDevice* device, nvrhi::IFramebuffer* framebuffer, std::vector<nvrhi::IBindingLayout*> layouts, const PipelineOptions& options);
+		// Nothing about a framebuffer is kept: an entry is made when it is first drawn, against the framebuffer being drawn into (all views have the same formats).
+		void configure(nvrhi::IDevice* device, std::vector<nvrhi::IBindingLayout*> layouts, const PipelineOptions& options);
 		// Null while the shader is not ready or when the pipeline cannot be made (logged once); the draw then falls back to the built-in one.
-		nvrhi::IGraphicsPipeline* get(GpuResourceCache& cache, u32 shader, SurfaceVariantKind kind, bool doubleSided);
+		nvrhi::IGraphicsPipeline* get(GpuResourceCache& cache, u32 shader, SurfaceVariantKind kind, bool doubleSided, nvrhi::IFramebuffer* framebuffer);
 
 	private:
 		struct Entry
@@ -50,7 +51,6 @@ namespace wiwa::scene_pass
 		};
 
 		nvrhi::IDevice* m_Device = nullptr;
-		nvrhi::IFramebuffer* m_Framebuffer = nullptr;
 		std::vector<nvrhi::IBindingLayout*> m_Layouts{};
 		PipelineOptions m_Options{};
 		std::unordered_map<u64, Entry> m_Entries{};

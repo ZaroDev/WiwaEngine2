@@ -5,7 +5,7 @@
     1080
   ],
   "match": 0.5,
-  "nextId": 27,
+  "nextId": 28,
   "widgets": [
     {
       "id": 2,
@@ -759,6 +759,28 @@
       "WorldRefDistance": 18,
       "WorldMinScale": 0.5,
       "WorldMaxScale": 2.0
+    },
+    {
+      "id": 27,
+      "kind": "ViewImage",
+      "Name": "WizardPortrait",
+      "AnchorMin": [
+        1,
+        1
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        -264,
+        -264
+      ],
+      "OffsetMax": [
+        -24,
+        -24
+      ],
+      "ViewName": "wizard_portrait"
     }
   ]
 }

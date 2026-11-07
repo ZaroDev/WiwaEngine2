@@ -327,7 +327,7 @@ namespace wiwa
 			switch (batch.Kind)
 			{
 			case UiQuadKind::Solid: texture = m_White; break;
-			case UiQuadKind::Image: texture = cache.get_texture(batch.Texture); break;
+			case UiQuadKind::Image: texture = batch.ViewTexture != 0 ? (m_Textures != nullptr ? m_Textures->get(batch.ViewTexture) : nullptr) : cache.get_texture(batch.Texture); break;
 			case UiQuadKind::Sdf: texture = cache.get_font_atlas(batch.Texture); break;
 			}
 			if (texture == nullptr)

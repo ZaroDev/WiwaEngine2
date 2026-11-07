@@ -116,6 +116,21 @@ namespace wiwa
 			WI_FIELD(OffsetPosition),
 			WI_FIELD(OffsetRotation)));
 
+		registry.register_component(WI_COMPONENT(ViewHost,
+			WI_FIELD(Name),
+			WI_FIELD_META(Model, FieldMeta::asset(AssetType::Prefab)),
+			WI_FIELD(Target),
+			WI_FIELD_META(Distance, FieldMeta::range(0.1f, 200.0f)),
+			WI_FIELD(Yaw),
+			WI_FIELD_META(Pitch, FieldMeta::range(-89.0f, 89.0f)),
+			WI_FIELD_META(Fov, FieldMeta::range(1.0f, 120.0f)),
+			WI_FIELD(SpinSpeed),
+			WI_FIELD_META(Width, FieldMeta::range(1.0f, 4096.0f)),
+			WI_FIELD_META(Height, FieldMeta::range(1.0f, 4096.0f)),
+			WI_FIELD_META(Profile, FieldMeta::enumeration({ "Full", "Preview", "Thumbnail" })),
+			WI_FIELD(Transparent),
+			WI_FIELD(Continuous)));
+
 		registry.register_component(WI_COMPONENT(SkinBinding,
 			WI_FIELD_META(Skeleton, FieldMeta::asset(AssetType::Skeleton))));
 	}

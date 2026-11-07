@@ -21,6 +21,7 @@ namespace wiwa
 		virtual bool is_ready() const override { return m_Pipeline != nullptr && m_FontTexture != nullptr; }
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
+		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return isMain; }
 
 		// Render thread: creates the font texture from the atlas the main thread built (RGBA8). Called by a render command.
 		void set_font_atlas(u32 width, u32 height, const u8* pixels);

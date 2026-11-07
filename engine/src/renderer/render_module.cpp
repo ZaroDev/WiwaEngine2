@@ -81,6 +81,7 @@ namespace wiwa
 				}
 
 				m_Renderer->set_pick_channel(&m_Picks);
+				m_Renderer->set_readback_channel(&m_Readbacks);
 
 				// The scene first (depth, shading, the 8-bit image); the UI goes over everything else, so its pass is the last one.
 				Scope<UiRenderPass> uiPass = CreateScope<UiRenderPass>();
@@ -185,6 +186,13 @@ namespace wiwa
 		}
 
 		const bool wasStarted = m_Started;
+
+		// The views die with the renderer: the handles that are still around go inert.
+		m_ViewHosts.clear();
+		m_Alive.reset();
+		m_ViewRecords.clear();
+		m_PendingReadbacks.clear();
+		m_ViewNames = ViewRegistry{};
 
 		m_Thread.stop();
 		m_Renderer.reset();
@@ -315,6 +323,147 @@ namespace wiwa
 			{
 				world.get_renderer().set_viewport_size(width, height);
 			});
+	}
+
+	ViewRecord* RenderModule::find_view_record(ViewId id)
+	{
+		for (const Scope<ViewRecord>& record : m_ViewRecords)
+		{
+			if (record->Id == id)
+			{
+				return record.get();
+			}
+		}
+		return nullptr;
+	}
+
+	RenderView RenderModule::create_view(const ViewDesc& desc)
+	{
+		if (!m_Started)
+		{
+			return {};
+		}
+		if (m_ViewRecords.size() + 1 >= MAX_VIEWS)
+		{
+			if (!m_WarnedViewLimit)
+			{
+				WI_RENDER_LOG(Warning, "Cannot make another view: {0} views are live", MAX_VIEWS);
+				m_WarnedViewLimit = true;
+			}
+			return {};
+		}
+
+		Scope<ViewRecord> record = CreateScope<ViewRecord>();
+		record->Id = m_NextViewId++;
+		record->Desc = desc;
+		record->Width = std::max(desc.Width, 1u);
+		record->Height = std::max(desc.Height, 1u);
+		record->Desc.Width = record->Width;
+		record->Desc.Height = record->Height;
+		const ViewId id = record->Id;
+		const ViewDesc sent = record->Desc;
+		m_ViewRecords.push_back(std::move(record));
+		submit([id, sent](RenderWorld& world)
+			{
+				world.get_renderer().add_view(id, sent);
+			});
+		return RenderView(this, m_Alive, id);
+	}
+
+	void RenderModule::view_destroy(ViewId id)
+	{
+		for (size_t i = 0; i < m_ViewRecords.size(); i++)
+		{
+			if (m_ViewRecords[i]->Id == id)
+			{
+				m_ViewRecords.erase(m_ViewRecords.begin() + static_cast<std::ptrdiff_t>(i));
+				m_ViewNames.remove(id);
+				m_WarnedViewLimit = false;
+				for (auto pending = m_PendingReadbacks.begin(); pending != m_PendingReadbacks.end();)
+				{
+					pending = pending->second.View == id ? m_PendingReadbacks.erase(pending) : std::next(pending);
+				}
+				submit([id](RenderWorld& world)
+					{
+						world.get_renderer().remove_view(id);
+					});
+				return;
+			}
+		}
+	}
+
+	void RenderModule::view_set_scene(ViewId id, const Ref<Scene>& scene)
+	{
+		if (ViewRecord* record = find_view_record(id))
+		{
+			record->Scene = scene;
+			record->HadScene = scene != nullptr;
+			record->WarnedGone = false;
+		}
+	}
+
+	void RenderModule::view_set_camera(ViewId id, const RenderCamera& camera)
+	{
+		if (ViewRecord* record = find_view_record(id))
+		{
+			record->Camera = camera;
+			record->CameraDirty = true;
+		}
+	}
+
+	void RenderModule::view_resize(ViewId id, u32 width, u32 height)
+	{
+		ViewRecord* record = find_view_record(id);
+		if (record == nullptr || width == 0 || height == 0 || (width == record->Width && height == record->Height))
+		{
+			return;
+		}
+		record->Width = width;
+		record->Height = height;
+		submit([id, width, height](RenderWorld& world)
+			{
+				world.get_renderer().resize_view(id, width, height);
+			});
+	}
+
+	void RenderModule::view_request_render(ViewId id)
+	{
+		ViewRecord* record = find_view_record(id);
+		if (record == nullptr || record->Desc.Mode != ViewMode::OneShot)
+		{
+			return;
+		}
+		record->RenderPending = true;
+		submit([id](RenderWorld& world)
+			{
+				if (ViewState* view = world.get_view(id))
+				{
+					view->RenderRequested = true;
+				}
+			});
+	}
+
+	void RenderModule::view_read_back(ViewId id, std::function<void(ImageData)> done, bool premultiplied)
+	{
+		if (find_view_record(id) == nullptr)
+		{
+			if (done)
+			{
+				done(ImageData{});
+			}
+			return;
+		}
+		const u64 requestId = m_NextReadbackId++;
+		m_PendingReadbacks[requestId] = { id, std::move(done) };
+		submit([id, requestId, premultiplied](RenderWorld& world)
+			{
+				world.get_renderer().request_readback(id, requestId, premultiplied);
+			});
+	}
+
+	bool RenderModule::view_failed(ViewId id) const
+	{
+		return std::find(m_FailedViews.begin(), m_FailedViews.end(), id) != m_FailedViews.end();
 	}
 
 	// --render-smoke starts counting frames when there is something to render: at once without --scene, else once the scene has loaded
@@ -465,6 +614,13 @@ namespace wiwa
 			m_UploadMs = uploads.last_submit_ms();
 		}
 		snapshot.UploadMs = m_UploadMs;
+		for (const Scope<ViewState>& view : m_Renderer->extra_views())
+		{
+			if (view->Failed)
+			{
+				snapshot.FailedViews.push_back(view->Id);
+			}
+		}
 
 		const bool gpu = m_Renderer->are_gpu_timings_available();
 		for (const PassTiming& timing : m_Renderer->get_pass_timings())
@@ -609,6 +765,81 @@ namespace wiwa
 				batch.Commands.push_back([shared](RenderWorld& world)
 					{
 						world.get_scene().apply(std::move(*shared));
+					});
+			}
+		}
+
+		// The views of the ViewHost components of the scene in use are kept up to date first.
+		if (SceneModule* scenes = Engine::get().get_module<SceneModule>())
+		{
+			m_ViewHosts.update(*this, scenes->get_active(), deltaTime);
+		}
+
+		// The offscreen views: what changed in their scenes, for their render-side scenes. A OneShot view is extracted only when it was asked
+		// to render; the render thread draws it when it gets to it.
+		if (!m_ViewRecords.empty())
+		{
+			m_FailedViews = get_snapshot().FailedViews;
+		}
+		for (auto& [requestId, image] : m_Readbacks.take())
+		{
+			const auto pending = m_PendingReadbacks.find(requestId);
+			if (pending == m_PendingReadbacks.end())
+			{
+				continue; // its view is gone
+			}
+			std::function<void(ImageData)> done = std::move(pending->second.Done);
+			m_PendingReadbacks.erase(pending);
+			if (done)
+			{
+				done(std::move(image));
+			}
+		}
+		for (const Scope<ViewRecord>& record : m_ViewRecords)
+		{
+			const bool wanted = record->Desc.Mode == ViewMode::Continuous || record->RenderPending;
+			record->RenderPending = false;
+			if (!wanted)
+			{
+				continue;
+			}
+
+			const Ref<Scene> scene = record->Scene.lock();
+			if (scene == nullptr)
+			{
+				if (record->HadScene && !record->WarnedGone)
+				{
+					WI_RENDER_LOG(Warning, "The scene of view {0} is gone: the view keeps its last image", record->Id);
+					record->WarnedGone = true;
+				}
+				continue;
+			}
+
+			scene->update_world_transforms();
+			const float viewAspect = static_cast<float>(record->Width) / static_cast<float>(std::max(record->Height, 1u));
+			SceneDelta viewDelta = record->Extractor.extract(scene, viewAspect);
+			const ViewId viewId = record->Id;
+			if (!viewDelta.empty())
+			{
+				auto shared = std::make_shared<SceneDelta>(std::move(viewDelta));
+				batch.Commands.push_back([viewId, shared](RenderWorld& world)
+					{
+						if (ViewState* view = world.get_view(viewId))
+						{
+							view->Scene.apply(std::move(*shared));
+						}
+					});
+			}
+			if (record->CameraDirty)
+			{
+				record->CameraDirty = false;
+				const RenderCamera camera = record->Camera;
+				batch.Commands.push_back([viewId, camera](RenderWorld& world)
+					{
+						if (ViewState* view = world.get_view(viewId))
+						{
+							view->Scene.set_camera_override(camera);
+						}
 					});
 			}
 		}

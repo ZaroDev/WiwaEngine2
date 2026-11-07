@@ -66,7 +66,7 @@ namespace wiwa
 		return m_Device->createTexture(description);
 	}
 
-	bool SceneRenderData::initialize(nvrhi::IDevice* device)
+	bool SceneRenderData::initialize(nvrhi::IDevice* device, const SceneRenderData* shareLayoutsFrom)
 	{
 		m_Device = device;
 
@@ -103,6 +103,14 @@ namespace wiwa
 		skinLayout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(22));
 		skinLayout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(23));
 		m_SkinLayout = device->createBindingLayout(skinLayout);
+
+		if (shareLayoutsFrom != nullptr)
+		{
+			// Pipelines are made once, with the layouts of the first view, and used with the binding sets of every view.
+			m_FrameLayout = shareLayoutsFrom->m_FrameLayout;
+			m_AoLayout = shareLayoutsFrom->m_AoLayout;
+			m_SkinLayout = shareLayoutsFrom->m_SkinLayout;
+		}
 
 		nvrhi::BufferDesc constants;
 		constants.byteSize = sizeof(FrameConstants);
@@ -221,6 +229,10 @@ namespace wiwa
 		m_Cache = &cache;
 		m_Scene = &scene;
 		m_Settings = scene.settings();
+		m_Settings.Ao.Enabled = m_Settings.Ao.Enabled && m_Flags.Ao;
+		m_Settings.Bloom.Enabled = m_Settings.Bloom.Enabled && m_Flags.Bloom;
+		m_Settings.Exposure.Auto = m_Settings.Exposure.Auto && m_Flags.AutoExposure;
+		m_Settings.MotionBlur.Enabled = m_Settings.MotionBlur.Enabled && m_Flags.MotionBlur;
 		m_AoActive = false;
 		if (!m_Active)
 		{
@@ -315,7 +327,7 @@ namespace wiwa
 				WI_LOG(Warning, "Renderer", "{0} lights over the limit of {1} are not used", m_DroppedLights, MAX_LIGHTS);
 			}
 		}
-		constants.ClusterParams.w = m_ClusterCulling ? 0.0f : 1.0f;
+		constants.ClusterParams.w = (m_ClusterCulling && m_Flags.LightCulling) ? 0.0f : 1.0f;
 		if (useAtmosphere)
 		{
 			const AtmosphereDescription atmosphere = make_atmosphere_description(m_Settings.Atmosphere, sunLight != nullptr ? -sunLight->Direction : glm::vec3(0.0f));
@@ -402,7 +414,7 @@ namespace wiwa
 			// Slices are exponential in view depth between near and far: slice = log2(depth) * scale + bias.
 			const float depthRatio = std::log2(std::max(camera->Far / camera->Near, 1.0001f));
 			const float sliceScale = static_cast<float>(CLUSTERS_Z) / depthRatio;
-			constants.ClusterParams = glm::vec4(sliceScale, -std::log2(camera->Near) * sliceScale, camera->Projection[3][3] == 1.0f ? 1.0f : 0.0f, m_ClusterCulling ? 0.0f : 1.0f);
+			constants.ClusterParams = glm::vec4(sliceScale, -std::log2(camera->Near) * sliceScale, camera->Projection[3][3] == 1.0f ? 1.0f : 0.0f, (m_ClusterCulling && m_Flags.LightCulling) ? 0.0f : 1.0f);
 
 			const Frustum frustum(constants.UnjitteredViewProjection);
 			const std::vector<RenderInstance>& instances = scene.instances();
@@ -472,9 +484,9 @@ namespace wiwa
 			}
 
 			// Shadows: the sun's cascades fitted to the camera, and up to four spot lights with a tile of the atlas each.
-			if (sunLight != nullptr && sunLight->CastsShadows)
+			if (sunLight != nullptr && sunLight->CastsShadows && m_Flags.ShadowCascades > 0)
 			{
-				const u32 cascades = std::clamp(m_Quality.ShadowCascades, 1u, MAX_CASCADES);
+				const u32 cascades = std::clamp(std::min(m_Quality.ShadowCascades, m_Flags.ShadowCascades), 1u, MAX_CASCADES);
 				const CascadeSet set = compute_cascades(*camera, sunLight->Direction, cascades, m_Quality.ShadowDistance, m_Quality.ShadowSplitLambda);
 				constants.ShadowParams = glm::vec4(1.0f, static_cast<float>(cascades), m_Quality.ShadowDepthBias, m_Quality.ShadowNormalBias);
 				for (u32 i = 0; i < MAX_CASCADES; i++)
@@ -501,7 +513,7 @@ namespace wiwa
 				constants.ShadowParams.w = m_Quality.ShadowNormalBias; // the spot lights use it too
 			}
 			u32 spotShadows = 0;
-			for (size_t i = 0; i < m_Lights.size() && spotShadows < MAX_SPOT_SHADOWS; i++)
+			for (size_t i = 0; i < m_Lights.size() && m_Flags.SpotShadows && spotShadows < MAX_SPOT_SHADOWS; i++)
 			{
 				if (m_Lights[i].Type != 1u || !sources[i]->CastsShadows)
 				{

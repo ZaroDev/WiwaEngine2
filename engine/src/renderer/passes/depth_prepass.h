@@ -32,6 +32,5 @@ namespace wiwa
 		nvrhi::GraphicsPipelineHandle m_Masked[2]{};
 		scene_pass::SurfacePipelines m_Surface{}; // materials with a surface shader (the Depth and DepthMasked variants)
 		u32 m_BuiltShaderGeneration = ~0u;
-		u32 m_BuiltViewportGeneration = ~0u;
 	};
 }

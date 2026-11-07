@@ -119,6 +119,24 @@ panel:find("Menu/Volume"):on("value_changed", function(self, value) self.volume 
   `press`, `release`, `nav`, `scroll`, `clear_pointer`) writes to a scripted input source, which only reaches the UI while it is the one in
   use (tests and tools).
 
+## Views (3D widgets)
+
+A `ViewHost` component shows a prefab in a small scene of its own, drawn into a texture; a `ViewImage` widget (in the UI editor) names the host
+and shows the picture, so a character, an item or a model can sit in a menu. Hosts are components like any other, so a script moves the camera
+or swaps the model:
+
+```lua
+local portrait = find_entity("Wizard portrait"):get("ViewHost")
+portrait.yaw = portrait.yaw + 90 * time.delta()    -- orbit the camera (degrees)
+portrait.SpinSpeed = 0                             -- or stop the model turning (fields match exactly, or ignoring case)
+portrait.distance = 3
+portrait.model = load_asset("models/characters/Cleric.fbx")
+```
+
+`name` is what the widget's `ViewName` says (unique in the scene); `width` / `height` are the texture's pixels; `profile` is `Full`, `Preview` or
+`Thumbnail`; `transparent` leaves nothing behind the model; `continuous = false` draws only when a field changed. The model shows its bind pose
+for now (views do not play animations yet). See `docs/superpowers/specs/views.md`.
+
 ## Animation
 
 A model that has animations comes with an `Animator` on its root (the clips of the model, and the `Clip` that plays when the scene

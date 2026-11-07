@@ -37,5 +37,7 @@ float4 PSMain(ForwardVertexOutput input, bool frontFace : SV_IsFrontFace) : SV_T
 	}
 
 	float3 color = ForwardLighting(surface, input.Position.xy);
-	return float4(color, surface.Alpha);
+	// The alpha of the HDR image is coverage (views with a transparent background): opaque and masked surfaces cover the pixel.
+	float alpha = (material.Flags & MATERIAL_ALPHA_BLEND_BIT) != 0u ? surface.Alpha : 1.0;
+	return float4(color, alpha);
 }

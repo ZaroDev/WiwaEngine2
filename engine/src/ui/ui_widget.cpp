@@ -11,7 +11,7 @@ namespace wiwa
 {
 	namespace
 	{
-		constexpr const char* KIND_NAMES[] = { "Panel", "HStack", "VStack", "Text", "Image", "Button", "Slider", "Toggle", "Bar" };
+		constexpr const char* KIND_NAMES[] = { "Panel", "HStack", "VStack", "Text", "Image", "Button", "Slider", "Toggle", "Bar", "ViewImage" };
 		static_assert(std::size(KIND_NAMES) == static_cast<size_t>(WidgetKind::Last));
 
 		template<typename Accessor>
@@ -86,6 +86,7 @@ namespace wiwa
 			UI_FIELD_META(Texture, FieldMeta::asset(AssetType::Texture));
 			UI_FIELD(Slice9);
 			UI_FIELD(SliceBorders);
+			UI_FIELD(ViewName);
 
 			UI_FIELD(Value);
 			UI_FIELD(MinValue);
@@ -131,7 +132,7 @@ namespace wiwa
 			static const std::vector<std::string_view> names = {
 				"Color", "BackgroundColor", "ClipChildren",
 				"Text", "Font", "FontSize", "Align", "Wrap", "Outline", "OutlineColor", "Shadow",
-				"Texture", "Slice9", "SliceBorders",
+				"Texture", "Slice9", "SliceBorders", "ViewName",
 				"Value", "MinValue", "MaxValue", "Step", "Direction",
 				"Spacing", "Padding", "ChildAlign", "ForceExpand",
 				"HoverColor", "PressedColor", "DisabledColor" };
@@ -150,6 +151,7 @@ namespace wiwa
 				{ WidgetKind::Slider, { "Color", "BackgroundColor", "Value", "MinValue", "MaxValue", "Step", "Direction" } },
 				{ WidgetKind::Toggle, { "Color", "BackgroundColor", "Value" } },
 				{ WidgetKind::Bar, { "Color", "BackgroundColor", "Value", "Direction" } },
+				{ WidgetKind::ViewImage, { "Color", "ViewName" } },
 			};
 			return table;
 		}

@@ -13,6 +13,7 @@ CLAUDE.md has the one-paragraph map of every area; read the matching doc here be
 | [scripting.md](scripting.md) | Lua runtime, lifecycle, hot reload, play mode, LuaLS stubs (user API: `docs/scripting.md`) |
 | [physics.md](physics.md) | Jolt integration, physics thread, components, events, queries |
 | [animation.md](animation.md) | Skeletons, clips, the Animator, GPU skinning, the Lua API, the Animation panel |
+| [views.md](views.md) | Offscreen scene views: previews, UI widgets, readback; `ViewHost`, `ViewImage` |
 | [input.md](input.md) | Raw input, actions, rebinding, `.winput`, UI source |
 | [ui.md](ui.md) | Game UI: `.wuipanel`, layout, interaction, rendering, UI editor |
 | [project-settings.md](project-settings.md) | `project.wproject`, the Settings page and its sections |

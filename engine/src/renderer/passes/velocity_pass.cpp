@@ -41,12 +41,11 @@ namespace wiwa
 	{
 		const SceneRenderData& data = *frame.Scene;
 		const u32 shaderGeneration = m_Shaders->get_generation();
-		if (shaderGeneration == m_BuiltShaderGeneration && data.viewport()->generation() == m_BuiltViewportGeneration)
+		if (shaderGeneration == m_BuiltShaderGeneration)
 		{
 			return;
 		}
 		m_BuiltShaderGeneration = shaderGeneration;
-		m_BuiltViewportGeneration = data.viewport()->generation();
 
 		nvrhi::IShader* vertexShader = m_Shaders->get(engine_assets::VELOCITY_BLEND_SHADER, ShaderStage::Vertex);
 		nvrhi::IShader* pixelShader = m_Shaders->get(engine_assets::VELOCITY_BLEND_SHADER, ShaderStage::Pixel);
@@ -58,7 +57,7 @@ namespace wiwa
 		scene_pass::PipelineOptions surfaceOptions;
 		surfaceOptions.DepthTest = true;
 		surfaceOptions.DepthWrite = false;
-		m_Surface.configure(m_Device, data.viewport()->velocity_framebuffer(), { data.frame_layout(), data.cache()->material_layout(), data.ao_layout(), data.cache()->custom_layout(), data.skin_layout() }, surfaceOptions);
+		m_Surface.configure(m_Device, { data.frame_layout(), data.cache()->material_layout(), data.ao_layout(), data.cache()->custom_layout(), data.skin_layout() }, surfaceOptions);
 
 		for (int doubleSided = 0; doubleSided < 2; doubleSided++)
 		{
