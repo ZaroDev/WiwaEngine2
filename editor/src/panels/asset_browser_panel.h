@@ -29,6 +29,8 @@ public:
 
 	// What opening a .wmat (a double click, or "New material") calls; the editor points it at the Material panel.
 	void set_open_material(std::function<void(const std::filesystem::path&)> open) { m_OpenMaterial = std::move(open); }
+	// What "Find references" in the context menu calls with the selected asset.
+	void set_find_references(std::function<void(const wiwa::AssetRef&)> find) { m_FindReferences = std::move(find); }
 	void set_open_ui_panel(std::function<void(const std::filesystem::path&)> open) { m_OpenUiPanel = std::move(open); }
 
 	// What an entity dragged here from the Hierarchy calls (payload "WI_ENTITY"): makes a prefab of it in the folder it was dropped on, and
@@ -57,6 +59,7 @@ private:
 	void draw_file_grid();
 	void draw_file(const std::filesystem::path& file, float thumbnailSize);
 	void draw_context_menu();
+	std::function<void(const wiwa::AssetRef&)> m_FindReferences{};
 	// The popup that asks for the name of a new asset, and makes it.
 	void draw_create_popup();
 	void begin_create(wiwa::CreateKind kind);

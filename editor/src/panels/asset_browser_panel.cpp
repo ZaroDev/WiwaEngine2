@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "asset_browser_panel.h"
+#include "asset_icons.h"
 
 #include <imgui.h>
 
@@ -53,55 +54,6 @@ namespace
 		return e == ".png" || e == ".jpg";
 	}
 
-	const char* get_filetype_icon(const std::filesystem::path& path)
-	{
-		const std::filesystem::path e = path.extension();
-		if (e == ".gltf" || e == ".fbx" || e == ".glb")
-		{
-			return ICON_FK_CUBE;
-		}
-		else if (e == ".lua")
-		{
-			return ICON_FK_CODE;
-		}
-		else if (e == ".wprefab")
-		{
-			return ICON_FK_CUBES;
-		}
-		else if (e == ".wshader")
-		{
-			return ICON_FK_SUN;
-		}
-		else if (e == ".winput")
-		{
-			return ICON_FK_GAMEPAD;
-		}
-		else if (e == ".hdr")
-		{
-			return ICON_FK_SKYATLAS;
-		}
-		else if (e == ".ttf")
-		{
-			return ICON_FK_FONT;
-		}
-		else if (e == ".wmat")
-		{
-			return ICON_FK_LIGHTBULB_O;
-		}
-		else if (e == ".wuipanel")
-		{
-			return ICON_FK_WINDOW_MAXIMIZE;
-		}
-		else if (e == ".wscene")
-		{
-			return ICON_FK_GLOBE;
-		}
-		else if (e == ".wphysmat")
-		{
-			return ICON_FK_HUBZILLA;
-		}
-		return ICON_FK_FILE_O;
-	}
 }
 
 AssetBrowserPanel::AssetBrowserPanel(wiwa::AssetDatabase& database)
@@ -643,6 +595,11 @@ void AssetBrowserPanel::draw_context_menu()
 		// pack it although no packed scene uses it (the Build Settings panel lists these)
 		if (std::optional<wiwa::MetaFile> meta = wiwa::MetaFile::load(wiwa::MetaFile::meta_path_for(m_Selected)))
 		{
+			if (m_FindReferences && ImGui::MenuItem("Find references"))
+			{
+				m_FindReferences(wiwa::AssetRef{ meta->Guid, 0 });
+			}
+
 			std::string loadError;
 			wiwa::BuildSettings settings = wiwa::BuildSettings::load(wiwa::BUILD_SETTINGS_FILE, loadError).value_or(wiwa::BuildSettings{});
 			auto listed = std::find(settings.AlwaysInclude.begin(), settings.AlwaysInclude.end(), meta->Guid);

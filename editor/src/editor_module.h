@@ -9,6 +9,12 @@
 #include <play/play_mode.h>
 #include <scene/scene_editor.h>
 
+#include <asset_pipeline/reference_finder.h>
+
+#include "editor_ui/command_palette.h"
+#include "editor_ui/layout_manager.h"
+#include "editor_ui/shortcuts.h"
+
 class EditorModule : public wiwa::IModule
 {
 public:
@@ -50,7 +56,33 @@ private:
 	// --play-smoke: plays the scene, changes the copy, stops, and checks that the scene being edited came back untouched.
 	std::string run_play_smoke();
 	void set_theme();
+	// The Edit menu: undo and redo, and the entity actions the shortcut table knows.
+	void edit_menu();
+	void register_shortcuts();
+	void layout_menu();
+	void open_palette();
+	// Starts looking for where the asset is used and shows the References window.
+	void find_references(const wiwa::AssetRef& ref);
+	void references_window();
+	void status_bar();
+	// Opens a scene file and remembers it for File > Open recent.
+	void open_scene(const std::string& path);
+	void load_recent_scenes();
+	void save_recent_scenes() const;
+	void layout_popups();
 private:
+	ShortcutRegistry m_Shortcuts{};
+	LayoutManager m_Layout{};
+	CommandPalette m_Palette{};
+	wiwa::ReferenceFinder m_References{};
+	bool m_ShowReferences = false;
+	class AssetBrowserPanel* m_Browser = nullptr; // owned by m_Panels
+	std::vector<std::string> m_RecentScenes{};    // most recent first, as the catalog knows them (source paths)
+	bool m_SaveLayoutRequested = false;
+	char m_LayoutName[64] = "";
+	std::string m_LayoutStatus{};
+	bool m_ShowCheatsheet = false;
+	bool m_EditHeld = false; // an edit scope is open because a widget or the gizmo is held
 	std::vector<Ref<Panel>> m_Panels{};
 	Scope<BuildSettingsPanel> m_BuildSettings{}; // a popup: not listed in the menus, drawn every frame
 	bool m_ExportRequested = false;
@@ -70,6 +102,7 @@ private:
 	Scope<wiwa::DemoSmoke> m_DemoSmoke;
 	bool m_PlaySmoke = false;
 	wiwa::AssetRef m_PendingDefaultMap{}; // input.wsettings' map, applied once the first import scan has cooked it
+	class HierarchyPanel* m_Hierarchy = nullptr; // owned by m_Panels
 	class UiEditorPanel* m_UiEditor = nullptr; // owned by m_Panels
 	bool m_UiEditorSmoke = false;              // --ui-editor-smoke: open a panel in the UI Editor, run for a while, check it is previewing
 	class PhysicsPanel* m_PhysicsPanel = nullptr; // owned by m_Panels

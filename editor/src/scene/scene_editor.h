@@ -12,6 +12,8 @@
 #include <scene/scene_module.h>
 #include <scene/scene_records.h>
 
+#include "undo_stack.h"
+
 namespace wiwa
 {
 	// What the editor keeps of the document besides the scene: where it is saved, whether it changed, and what is selected (by guid, so it
@@ -78,6 +80,22 @@ namespace wiwa
 		// What save() writes: the authored entities, without the ones a prefab instance generates.
 		SceneData to_scene_data();
 
+		// ---- undo and redo ----
+		// Every edit that settles (update() sees it; edits made while a scope is open count as one) becomes one step. The document is restored
+		// from a snapshot, so every kind of edit is covered the same way. Not while playing, opening a scene or expanding a prefab instance.
+		bool can_edit_history() const { return !m_Playing && m_Scene != nullptr && m_Opening == nullptr && (m_IgnorePending || (m_Pending.empty() && m_PendingPrefabs.empty())); }
+		// not while a widget is being dragged: the edits in flight are not a step yet
+		bool can_undo() const { return can_edit_history() && m_Scopes == 0 && m_History.can_undo(); }
+		bool can_redo() const { return can_edit_history() && m_Scopes == 0 && m_History.can_redo(); }
+		bool undo();
+		bool redo();
+		const UndoStack& history() const { return m_History; }
+		// Steps the document to the state with `target` steps applied (0: as it was opened; the undo labels, then the redo labels).
+		bool jump_history(size_t target);
+		// While a scope is open (a widget being dragged or typed in) the edits count as one step, committed when the last scope closes.
+		void begin_edit_scope() { m_Scopes++; }
+		void end_edit_scope() { if (m_Scopes > 0) { m_Scopes--; } }
+
 		// ---- the scene's look ----
 		const SceneSettings& settings() const { return m_Scene->settings(); }
 		// Applies new settings (sanitized by the scene); marks the scene changed when they differ from the current ones.
@@ -98,6 +116,13 @@ namespace wiwa
 		// original, and selected. A copied prefab instance generates its own nodes (they appear in update()). entt::null for anything
 		// else, and while the scene plays.
 		entt::entity duplicate_entity(entt::entity entity);
+		// An editor-wide clipboard of an authored entity and the authored entities below it (it outlives the scene, so it can be pasted into
+		// another one). copy_entity is false for anything else.
+		bool copy_entity(entt::entity entity);
+		bool has_clipboard() const { return !m_Clipboard.empty(); }
+		// A copy of the clipboard with guids of its own under parent (entt::null: top level), selected. entt::null when the clipboard is
+		// empty, parent is not an authored entity, or the scene plays.
+		entt::entity paste_entity(entt::entity parent);
 		// Authored entities only; false for anything else, and while the scene plays.
 		bool rename_entity(entt::entity entity, const std::string& name);
 		// Only between authored entities; false if it would make a loop.
@@ -159,14 +184,23 @@ namespace wiwa
 		void expand_instance(entt::entity root, const PrefabData& prefab);
 		void queue_expansion(entt::entity root);
 		// Every edit ends here, so the WorldTransforms the renderer and the gizmos read never go stale.
-		void mark_dirty()
+		void mark_dirty(const std::string& label = "Edit")
 		{
 			m_Dirty = true;
+			if (!m_Changed)
+			{
+				m_ChangeLabel = label;
+			}
+			m_Changed = true;
 			if (m_Scene != nullptr)
 			{
 				m_Scene->update_world_transforms();
 			}
 		}
+
+		std::string snapshot();
+		bool restore_snapshot(const std::string& state);
+		void settle_history();
 
 		AssetManager& m_Assets;
 		SceneModule& m_Scenes;
@@ -184,5 +218,18 @@ namespace wiwa
 		std::chrono::milliseconds m_PrefabTimeout{ 5000 };
 		std::string m_Message{};
 		std::unordered_map<AssetGuid, Handle<PrefabData>> m_Prefabs{};
+
+		std::vector<EntityRecord> m_Clipboard{}; // parents first; the first one is the top of the copy
+		std::vector<entt::entity> authored_subtree(entt::entity entity) const;
+
+		UndoStack m_History{};
+		std::string m_Baseline{};    // the document as of the last settled edit
+		bool m_HasBaseline = false;
+		bool m_Changed = false;      // an edit happened since the baseline was taken
+		std::string m_ChangeLabel{};
+		int m_Scopes = 0;
+		bool m_IgnorePending = false; // jump_history steps through restores whose prefab instances have not expanded yet
+		const Scene* m_HistoryScene = nullptr; // the scene the history belongs to: play mode shows a copy and gives this one back
+		std::string m_SavedState{};  // the document as it was last saved (empty: never saved), to tell when undo got back to it
 	};
 }

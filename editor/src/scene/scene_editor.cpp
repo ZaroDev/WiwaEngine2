@@ -76,6 +76,16 @@ namespace wiwa
 		m_Selected = entt::null;
 		m_Pending.clear();
 		m_PendingPrefabs.clear();
+		m_Changed = false;
+		if (!m_Playing)
+		{
+			// play mode shows a copy: the history of the scene being edited waits for it
+			m_History.clear();
+			m_HasBaseline = false;
+			m_HistoryScene = nullptr;
+			m_Scopes = 0;
+			m_SavedState.clear();
+		}
 	}
 
 	EditorDocument SceneEditor::capture_document() const
@@ -98,6 +108,15 @@ namespace wiwa
 		m_Pending.clear();
 		m_PendingPrefabs.clear();
 		m_Selected = (m_Scene != nullptr && document.Selected.valid()) ? m_Scene->find(document.Selected) : entt::entity{ entt::null };
+		m_Changed = false;
+		m_Scopes = 0;
+		if (m_Scene.get() != m_HistoryScene || !m_HasBaseline)
+		{
+			m_History.clear();
+			m_HasBaseline = false;
+			m_HistoryScene = nullptr;
+			m_SavedState.clear();
+		}
 	}
 
 	void SceneEditor::select(entt::entity entity)
@@ -196,6 +215,138 @@ namespace wiwa
 		{
 			m_Selected = entt::null;
 		}
+
+		settle_history();
+	}
+
+	// ---- undo and redo ----
+
+	std::string SceneEditor::snapshot()
+	{
+		return scene_to_json(to_scene_data()).dump();
+	}
+
+	// Takes the baseline once the scene is quiet, and turns an edit that has settled into an undo step.
+	void SceneEditor::settle_history()
+	{
+		if (!can_edit_history() || m_Scopes > 0)
+		{
+			return;
+		}
+		if (!m_HasBaseline)
+		{
+			m_Baseline = snapshot();
+			m_HasBaseline = true;
+			m_HistoryScene = m_Scene.get();
+			m_Changed = false;
+			if (m_SavedState.empty() && !m_Dirty)
+			{
+				m_SavedState = m_Baseline;
+			}
+			return;
+		}
+		if (!m_Changed)
+		{
+			return;
+		}
+		std::string current = snapshot();
+		if (current != m_Baseline)
+		{
+			m_History.push(m_ChangeLabel, std::move(m_Baseline));
+			m_Baseline = std::move(current);
+		}
+		m_Changed = false;
+	}
+
+	bool SceneEditor::restore_snapshot(const std::string& state)
+	{
+		SceneJson json = SceneJson::parse(state, nullptr, false);
+		if (json.is_discarded())
+		{
+			return false;
+		}
+		SceneJsonResult parsed = scene_from_json(json);
+		if (!parsed.Scene)
+		{
+			WI_EDITOR_LOG(Error, "Undo could not read the snapshot: {0}", parsed.Error);
+			return false;
+		}
+
+		EntityGuid selected{};
+		if (m_Selected != entt::null && m_Scene->registry().valid(m_Selected))
+		{
+			selected = m_Scene->registry().get<Id>(m_Selected).Guid;
+		}
+
+		const std::vector<entt::entity> roots = m_Scene->roots();
+		for (const entt::entity root : roots)
+		{
+			m_Scene->destroy(root);
+		}
+		apply_scene_data(*m_Scene, *parsed.Scene);
+
+		// the instances made their nodes again from the prefab; they appear in update() once the prefabs are there
+		m_Pending.clear();
+		entt::registry& registry = m_Scene->registry();
+		for (const entt::entity entity : registry.view<PrefabInstance>())
+		{
+			queue_expansion(entity);
+		}
+		m_Scene->update_world_transforms();
+		m_Selected = selected.valid() ? m_Scene->find(selected) : entt::entity{ entt::null };
+		return true;
+	}
+
+	bool SceneEditor::undo()
+	{
+		settle_history(); // an edit made this frame counts first
+		if (!can_undo())
+		{
+			return false;
+		}
+		const std::string current = m_Baseline;
+		const std::optional<std::string> state = m_History.undo(current);
+		if (!state || !restore_snapshot(*state))
+		{
+			return false;
+		}
+		m_Baseline = *state;
+		m_Changed = false;
+		m_Dirty = m_Baseline != m_SavedState;
+		return true;
+	}
+
+	bool SceneEditor::redo()
+	{
+		settle_history();
+		if (!can_redo())
+		{
+			return false;
+		}
+		const std::string current = m_Baseline;
+		const std::optional<std::string> state = m_History.redo(current);
+		if (!state || !restore_snapshot(*state))
+		{
+			return false;
+		}
+		m_Baseline = *state;
+		m_Changed = false;
+		m_Dirty = m_Baseline != m_SavedState;
+		return true;
+	}
+
+	bool SceneEditor::jump_history(size_t target)
+	{
+		if (target > m_History.undo_labels().size() + m_History.redo_labels().size())
+		{
+			return false;
+		}
+		bool moved = false;
+		m_IgnorePending = true; // each restore queues the prefab instances again; the next step does not wait for them
+		while (m_History.undo_labels().size() > target && undo()) { moved = true; }
+		while (m_History.undo_labels().size() < target && redo()) { moved = true; }
+		m_IgnorePending = false;
+		return moved;
 	}
 
 	void SceneEditor::new_scene()
@@ -236,7 +387,7 @@ namespace wiwa
 		m_Scene->set_settings(settings);
 		if (m_Scene->settings_revision() != revision)
 		{
-			mark_dirty();
+			mark_dirty("Edit scene settings");
 		}
 	}
 
@@ -296,6 +447,7 @@ namespace wiwa
 		}
 
 		m_Dirty = false;
+		m_SavedState = snapshot(); // what was written, even if an edit has not settled into a step yet
 		return true;
 	}
 
@@ -345,7 +497,7 @@ namespace wiwa
 		if (parent == entt::null || kind_of(parent) == Kind::Authored)
 		{
 			const entt::entity entity = m_Scene->create("Entity", parent);
-			mark_dirty();
+			mark_dirty("Create entity");
 			return entity;
 		}
 
@@ -365,7 +517,7 @@ namespace wiwa
 		const entt::entity entity = m_Scene->create(added_child_id(rootId, add.Child), "Entity", parent);
 		registry.emplace<PrefabChild>(entity, PrefabChild{ rootId, ADDED_CHILD_NODE });
 		registry.get<PrefabInstance>(generated->Root).Overrides.push_back(std::move(add));
-		mark_dirty();
+		mark_dirty("Create entity");
 		return entity;
 	}
 
@@ -409,7 +561,7 @@ namespace wiwa
 		{
 			m_Selected = entt::null;
 		}
-		mark_dirty();
+		mark_dirty("Delete entity");
 		return true;
 	}
 
@@ -474,9 +626,94 @@ namespace wiwa
 
 		registry.get<Name>(copies.front()).Value += " (copy)";
 		m_Scene->move_after(copies.front(), entity);
-		mark_dirty();
+		mark_dirty("Duplicate entity");
 		select(copies.front());
 		return copies.front();
+	}
+
+	std::vector<entt::entity> SceneEditor::authored_subtree(entt::entity entity) const
+	{
+		const entt::registry& registry = m_Scene->registry();
+		std::vector<entt::entity> subtree;
+		std::vector<entt::entity> stack{ entity };
+		while (!stack.empty())
+		{
+			const entt::entity current = stack.back();
+			stack.pop_back();
+			subtree.push_back(current);
+
+			std::vector<entt::entity> children;
+			for (entt::entity child = registry.get<Hierarchy>(current).FirstChild; child != entt::null; child = registry.get<Hierarchy>(child).NextSibling)
+			{
+				if (!registry.all_of<PrefabChild>(child))
+				{
+					children.push_back(child);
+				}
+			}
+			stack.insert(stack.end(), children.rbegin(), children.rend());
+		}
+		return subtree;
+	}
+
+	bool SceneEditor::copy_entity(entt::entity entity)
+	{
+		if (m_Scene == nullptr || !m_Scene->registry().valid(entity) || kind_of(entity) != Kind::Authored)
+		{
+			return false;
+		}
+
+		m_Clipboard.clear();
+		for (const entt::entity current : authored_subtree(entity))
+		{
+			m_Clipboard.push_back(record_from_entity(*m_Scene, current));
+		}
+		return true;
+	}
+
+	entt::entity SceneEditor::paste_entity(entt::entity parent)
+	{
+		if (m_Playing || m_Scene == nullptr || m_Clipboard.empty())
+		{
+			return entt::null;
+		}
+		if (parent != entt::null && (!m_Scene->registry().valid(parent) || kind_of(parent) != Kind::Authored))
+		{
+			return entt::null;
+		}
+
+		const EntityGuid parentId = parent == entt::null ? EntityGuid{} : m_Scene->registry().get<Id>(parent).Guid;
+		std::unordered_map<EntityGuid, EntityGuid> fresh;
+		entt::entity top = entt::null;
+		for (const EntityRecord& original : m_Clipboard)
+		{
+			EntityRecord record = original;
+			const EntityGuid id = EntityGuid::generate();
+			fresh.emplace(record.Id, id);
+			record.Id = id;
+			record.Parent = top == entt::null ? parentId : fresh.at(original.Parent);
+
+			const entt::entity created = apply_record(*m_Scene, record);
+			if (created == entt::null)
+			{
+				break;
+			}
+			if (top == entt::null)
+			{
+				top = created;
+			}
+			if (m_Scene->registry().all_of<PrefabInstance>(created))
+			{
+				queue_expansion(created);
+			}
+		}
+		if (top == entt::null)
+		{
+			return entt::null;
+		}
+
+		mark_dirty("Paste entity");
+		select(top);
+		return top;
 	}
 
 	bool SceneEditor::rename_entity(entt::entity entity, const std::string& name)
@@ -490,7 +727,7 @@ namespace wiwa
 		if (current.Value != name)
 		{
 			current.Value = name;
-			mark_dirty();
+			mark_dirty("Rename entity");
 		}
 		return true;
 	}
@@ -510,7 +747,7 @@ namespace wiwa
 		{
 			return false;
 		}
-		mark_dirty();
+		mark_dirty("Reparent entity");
 		return true;
 	}
 
@@ -573,7 +810,7 @@ namespace wiwa
 		const entt::entity root = m_Scene->create("Prefab instance", parent);
 		m_Scene->registry().emplace<PrefabInstance>(root, PrefabInstance{ prefab, {} });
 		queue_expansion(root);
-		mark_dirty();
+		mark_dirty("Add prefab");
 		return root;
 	}
 
@@ -712,7 +949,7 @@ namespace wiwa
 		}
 
 		registry.remove<PrefabInstance>(instance);
-		mark_dirty();
+		mark_dirty("Unpack prefab");
 		return true;
 	}
 
@@ -747,7 +984,7 @@ namespace wiwa
 		{
 			m_Selected = entt::null;
 		}
-		mark_dirty();
+		mark_dirty("Revert prefab instance");
 		return true;
 	}
 
@@ -807,7 +1044,7 @@ namespace wiwa
 			}
 		}
 
-		mark_dirty();
+		mark_dirty("Edit " + component + "." + field);
 		return true;
 	}
 
@@ -849,7 +1086,7 @@ namespace wiwa
 			}
 		}
 
-		mark_dirty();
+		mark_dirty("Add component " + component);
 		return true;
 	}
 
@@ -897,7 +1134,7 @@ namespace wiwa
 			}
 		}
 
-		mark_dirty();
+		mark_dirty("Remove component " + component);
 		return true;
 	}
 
@@ -959,7 +1196,7 @@ namespace wiwa
 			}
 		}
 
-		mark_dirty();
+		mark_dirty("Revert " + component + "." + field);
 		return true;
 	}
 }

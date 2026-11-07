@@ -29,6 +29,10 @@ public:
 
 	virtual void on_draw() override;
 
+	// Frames the entity with the editor camera (F, double-click in the Hierarchy): looks at its world position from a distance that
+	// fits its scale, keeping the way the camera looks.
+	void focus_on(entt::entity entity);
+
 private:
 	void apply_manipulation(entt::entity entity, const glm::mat4& world);
 

@@ -24,6 +24,8 @@ namespace wiwa
 
 		void reset();
 		void apply(float deltaSeconds, const EditorCameraInput& input);
+		// Moves back along the view direction so that the point is in the middle of the view, distance away.
+		void focus_on(const glm::vec3& point, float distance) { m_Position = point - forward() * distance; }
 
 		// The camera as the renderer takes it.
 		RenderCamera get(float aspect) const;

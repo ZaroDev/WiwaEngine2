@@ -51,6 +51,11 @@ void ConsolePanel::on_draw()
 		ImGui::LogToClipboard();
 	}
 	ImGui::SameLine();
+	ImGui::Checkbox(("Info " + std::to_string(m_InfoCount) + "##show_info").c_str(), &m_ShowInfo);
+	ImGui::SameLine();
+	ImGui::Checkbox(("Warnings " + std::to_string(m_WarnCount) + "##show_warning").c_str(), &m_ShowWarning);
+	ImGui::SameLine();
+	ImGui::Checkbox(("Errors " + std::to_string(m_ErrorCount) + "##show_error").c_str(), &m_ShowError);
 
 	ImGui::SameLine();
 	m_Filter.Draw("Filter", -100.0f);
@@ -66,7 +71,8 @@ void ConsolePanel::on_draw()
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 		const char* buf = m_Buf.begin();
 		const char* buf_end = m_Buf.end();
-		if (m_Filter.IsActive())
+		const bool levelsFiltered = !(m_ShowInfo && m_ShowWarning && m_ShowError);
+		if (m_Filter.IsActive() || levelsFiltered)
 		{
 			// In this example we don't use the clipper when Filter is enabled.
 			// This is because we don't have random access to the result of our filter.
@@ -76,7 +82,7 @@ void ConsolePanel::on_draw()
 			{
 				const char* line_start = buf + m_LineOffsets[line_no];
 				const char* line_end = (line_no + 1 < m_LineOffsets.Size) ? (buf + m_LineOffsets[line_no + 1] - 1) : buf_end;
-				if (m_Filter.PassFilter(line_start, line_end)) {
+				if (line_no < m_LogLevels.Size && level_visible(m_LogLevels[line_no]) && m_Filter.PassFilter(line_start, line_end)) {
 					ImGui::PushStyleColor(ImGuiCol_Text, m_LevelColors[m_LogLevels[line_no]]);
 					ImGui::TextUnformatted(line_start, line_end);
 					ImGui::PopStyleColor();
@@ -122,6 +128,19 @@ void ConsolePanel::on_draw()
 	ImGui::EndChild();
 
 	ImGui::End();
+}
+
+bool ConsolePanel::level_visible(wiwa::LogLevel level) const
+{
+	if (level == wiwa::LogLevel::Warning)
+	{
+		return m_ShowWarning;
+	}
+	if (level == wiwa::LogLevel::Error || level == wiwa::LogLevel::Critical)
+	{
+		return m_ShowError;
+	}
+	return m_ShowInfo;
 }
 
 void ConsolePanel::clear()

@@ -305,3 +305,20 @@ void ViewportPanel::on_draw()
 		(void)render->take_pick_result(); // a click answered while the panel is hidden must not change the selection when it comes back
 	}
 }
+
+void ViewportPanel::focus_on(entt::entity entity)
+{
+	if (m_Editor.get_scene() == nullptr || !m_Editor.scene().registry().valid(entity))
+	{
+		return;
+	}
+	const wiwa::WorldTransform* world = m_Editor.scene().registry().try_get<wiwa::WorldTransform>(entity);
+	if (world == nullptr)
+	{
+		return;
+	}
+	const glm::vec3 position(world->Matrix[3]);
+	const float radius = std::max({ glm::length(glm::vec3(world->Matrix[0])), glm::length(glm::vec3(world->Matrix[1])), glm::length(glm::vec3(world->Matrix[2])), 0.5f });
+	m_Camera.focus_on(position, std::max(3.0f, radius * 3.0f));
+	m_UseEditorCamera = true;
+}

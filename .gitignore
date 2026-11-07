@@ -97,3 +97,6 @@ game/wiwa_game.exe
 
 # demo hall generator download cache (scripts/gen_demo_scene.py)
 .demo_cache/
+
+editor/recent_scenes.txt
+editor/layouts/
