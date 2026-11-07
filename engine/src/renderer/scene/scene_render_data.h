@@ -48,7 +48,10 @@ namespace wiwa
 	struct DrawItem
 	{
 		u32 Instance = 0;   // slot in the scene's instance array (and the instance buffer)
-		u32 Material = 0;   // slot in the material buffer
+		u32 Material = 0;   // slot in the material buffer (a shadow caster carries its shadow matrix index here)
+		u32 Slot = 0;       // the material's own slot, also for a shadow caster
+		u32 Shader = 0;     // surface shader index (SurfaceShaderCache) the material draws with; 0 is the built-in material
+		bool Masked = false; // alpha-masked (picks the masked variant of a surface shader)
 		u32 Page = 0;       // which shared vertex / index buffer pair
 		u32 FirstIndex = 0;
 		u32 IndexCount = 0;
@@ -183,6 +186,8 @@ namespace wiwa
 
 		nvrhi::IBindingLayout* frame_layout() const { return m_FrameLayout; }
 		nvrhi::IBindingSet* frame_bindings() const { return m_FrameBindings; }
+		// The frame set with stand-ins for the shadow maps, for drawing into them (a surface shader's casters read the whole frame set).
+		nvrhi::IBindingSet* shadow_frame_bindings() const { return m_ShadowFrameBindings; }
 		// The skin set (joint palettes t22, the skin vertices of the page t23): the last set of every pass that draws meshes, so its layout is
 		// the last of each pass layouts. A page without skinned meshes gets stand-ins. The frame layout cannot hold it: its registers span 1..9
 		// and the material layout sits in t10..t13 (see ao_layout()).
@@ -282,6 +287,7 @@ namespace wiwa
 		nvrhi::BufferHandle m_ClusterIndices{};
 		nvrhi::BindingLayoutHandle m_FrameLayout{};
 		nvrhi::BindingSetHandle m_FrameBindings{};
+		nvrhi::BindingSetHandle m_ShadowFrameBindings{};
 		nvrhi::BufferHandle m_ConstantBuffer{};
 		nvrhi::BufferHandle m_InstanceBuffer{};
 		u32 m_InstanceCapacity = 0;

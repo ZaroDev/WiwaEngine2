@@ -1,5 +1,6 @@
 #pragma once
 
+#include <unordered_map>
 #include <vector>
 
 #include <nvrhi/nvrhi.h>
@@ -30,9 +31,45 @@ namespace wiwa::scene_pass
 	nvrhi::GraphicsPipelineHandle make_pipeline(nvrhi::IDevice* device, nvrhi::IInputLayout* inputLayout, nvrhi::IShader* vertexShader,
 		nvrhi::IShader* pixelShader, const std::vector<nvrhi::IBindingLayout*>& layouts, nvrhi::IFramebuffer* framebuffer, const PipelineOptions& options);
 
+	// The pipelines of surface shaders (.wshader) for one kind of draw of a pass: the framebuffer, the layouts and the state are the
+	// pass's, the shaders are the shader's variant. Made on the first draw that needs one and again when the shader is replaced.
+	// A pass owns one per distinct framebuffer / state and calls configure() whenever those change (which drops the pipelines).
+	class SurfacePipelines
+	{
+	public:
+		void configure(nvrhi::IDevice* device, nvrhi::IFramebuffer* framebuffer, std::vector<nvrhi::IBindingLayout*> layouts, const PipelineOptions& options);
+		// Null while the shader is not ready or when the pipeline cannot be made (logged once); the draw then falls back to the built-in one.
+		nvrhi::IGraphicsPipeline* get(GpuResourceCache& cache, u32 shader, SurfaceVariantKind kind, bool doubleSided);
+
+	private:
+		struct Entry
+		{
+			u32 Generation = ~0u;
+			nvrhi::GraphicsPipelineHandle Pipeline{};
+			bool Failed = false;
+		};
+
+		nvrhi::IDevice* m_Device = nullptr;
+		nvrhi::IFramebuffer* m_Framebuffer = nullptr;
+		std::vector<nvrhi::IBindingLayout*> m_Layouts{};
+		PipelineOptions m_Options{};
+		std::unordered_map<u64, Entry> m_Entries{};
+	};
+
+	// How draw_items draws the items whose material has a surface shader (DrawItem::Shader != 0).
+	struct SurfaceDraw
+	{
+		SurfacePipelines* Pipelines = nullptr;
+		SurfaceVariantKind Kind = SurfaceVariantKind::Forward;       // the variant of an unmasked item
+		SurfaceVariantKind MaskedKind = SurfaceVariantKind::Forward; // the variant of an alpha-masked one
+		nvrhi::IBindingSet* FrameBindings = nullptr;                 // null: the pass's own
+		nvrhi::IBindingSet* AoBindings = nullptr;                    // set 2 of the surface layouts (the sets are frame, material, AO, surface, skin)
+		bool Caster = false;                                         // shadow casters: the push constants carry matrix | (material slot << 3)
+	};
+
 	// Draws the items: one indexed draw each, with the state set again only when the pipeline, the mesh page or (with bindMaterial)
 	// the material changes. extraBindings, if given, is the set after the material's; the skin set of the page comes last. singleSided / doubleSided are the pipelines for the two cull modes; frameBindings is set 0.
 	void draw_items(nvrhi::ICommandList* commandList, const SceneRenderData& data, nvrhi::IFramebuffer* framebuffer, const nvrhi::Viewport& viewport,
 		nvrhi::IBindingSet* frameBindings, const std::vector<DrawItem>& items, nvrhi::IGraphicsPipeline* singleSided, nvrhi::IGraphicsPipeline* doubleSided,
-		bool bindMaterial, nvrhi::IBindingSet* extraBindings = nullptr);
+		bool bindMaterial, nvrhi::IBindingSet* extraBindings = nullptr, const SurfaceDraw* surface = nullptr);
 }

@@ -69,6 +69,8 @@ namespace wiwa
 		options.DepthTest = true;
 		options.DepthWrite = true;
 		const std::vector<nvrhi::IBindingLayout*> layouts = { m_Layout, data.skin_layout() };
+		// casters with a surface shader read the whole frame set (with stand-ins for the maps being drawn): frame, material, AO, surface, skin
+		const std::vector<nvrhi::IBindingLayout*> surfaceLayouts = { data.frame_layout(), data.cache()->material_layout(), data.ao_layout(), data.cache()->custom_layout(), data.skin_layout() };
 
 		m_CascadePipeline = nullptr;
 		m_AtlasPipeline = nullptr;
@@ -87,6 +89,7 @@ namespace wiwa
 				m_CascadeFramebuffers[slice] = m_Device->createFramebuffer(description);
 			}
 			m_CascadePipeline = scene_pass::make_pipeline(m_Device, m_InputLayout, vertexShader, nullptr, layouts, m_CascadeFramebuffers[0], options);
+			m_SurfaceCascade.configure(m_Device, m_CascadeFramebuffers[0], surfaceLayouts, options);
 		}
 		if (data.spot_atlas() != nullptr)
 		{
@@ -94,6 +97,7 @@ namespace wiwa
 			description.setDepthAttachment(data.spot_atlas());
 			m_AtlasFramebuffer = m_Device->createFramebuffer(description);
 			m_AtlasPipeline = scene_pass::make_pipeline(m_Device, m_InputLayout, vertexShader, nullptr, layouts, m_AtlasFramebuffer, options);
+			m_SurfaceAtlas.configure(m_Device, m_AtlasFramebuffer, surfaceLayouts, options);
 		}
 	}
 
@@ -128,6 +132,12 @@ namespace wiwa
 		{
 			nvrhi::IFramebuffer* framebuffer = nullptr;
 			nvrhi::IGraphicsPipeline* pipeline = nullptr;
+			scene_pass::SurfaceDraw surface;
+			surface.Kind = SurfaceVariantKind::Shadow;
+			surface.MaskedKind = SurfaceVariantKind::ShadowMasked;
+			surface.FrameBindings = data.shadow_frame_bindings();
+			surface.AoBindings = data.ao_bindings();
+			surface.Caster = true;
 			nvrhi::Viewport viewport;
 			if (view.Atlas)
 			{
@@ -141,6 +151,7 @@ namespace wiwa
 				viewport = nvrhi::Viewport(x, x + SPOT_TILE_SIZE, y, y + SPOT_TILE_SIZE, 0.0f, 1.0f);
 				framebuffer = m_AtlasFramebuffer;
 				pipeline = m_AtlasPipeline;
+				surface.Pipelines = &m_SurfaceAtlas;
 			}
 			else
 			{
@@ -148,9 +159,10 @@ namespace wiwa
 				viewport = nvrhi::Viewport(static_cast<float>(CASCADE_MAP_SIZE), static_cast<float>(CASCADE_MAP_SIZE));
 				framebuffer = m_CascadeFramebuffers[view.Slice];
 				pipeline = m_CascadePipeline;
+				surface.Pipelines = &m_SurfaceCascade;
 			}
 
-			scene_pass::draw_items(commandList, data, framebuffer, viewport, m_BindingSet, view.Items, pipeline, pipeline, false);
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, m_BindingSet, view.Items, pipeline, pipeline, false, nullptr, &surface);
 		}
 	}
 }

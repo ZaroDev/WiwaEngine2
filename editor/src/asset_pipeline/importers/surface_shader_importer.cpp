@@ -136,7 +136,9 @@ namespace wiwa
 		// generated header + user file + generated parameter loader + the entry template
 		std::string compose(const VariantSpec& variant, const ParsedSurface& parsed, const std::string& userSource, const fs::path& userPath, const std::string& loader)
 		{
-			std::string source = "#define SURFACE_COMPOSED 1\n";
+			// The surface sets are frame, material, AO, surface and skin: skin is set 4. The contract includes scene_common.hlsli, which
+			// reads SKIN_SET, so it has to be defined before it (the same value the entry templates state for their own builds).
+			std::string source = "#define SKIN_SET 4\n#define SURFACE_COMPOSED 1\n";
 			if (variant.Masked)
 			{
 				source += "#define SURFACE_MASKED 1\n";
@@ -184,7 +186,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "SurfaceShaderImporter"; }
-			virtual u32 version() const override { return 1; }
+			virtual u32 version() const override { return 2; }
 			virtual std::vector<std::string> extensions() const override { return { ".wshader" }; }
 
 			virtual bool import(ImportContext& ctx) override

@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "scene_pass_utils.h"
 
+#define WI_SCENE_PASS_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
+
 namespace wiwa::scene_pass
 {
 	nvrhi::InputLayoutHandle make_mesh_input_layout(nvrhi::IDevice* device, nvrhi::IShader* vertexShader)
@@ -71,9 +73,53 @@ namespace wiwa::scene_pass
 		return device->createGraphicsPipeline(description, framebuffer);
 	}
 
+	void SurfacePipelines::configure(nvrhi::IDevice* device, nvrhi::IFramebuffer* framebuffer, std::vector<nvrhi::IBindingLayout*> layouts, const PipelineOptions& options)
+	{
+		m_Device = device;
+		m_Framebuffer = framebuffer;
+		m_Layouts = std::move(layouts);
+		m_Options = options;
+		m_Entries.clear();
+	}
+
+	nvrhi::IGraphicsPipeline* SurfacePipelines::get(GpuResourceCache& cache, u32 shader, SurfaceVariantKind kind, bool doubleSided)
+	{
+		const GpuSurfaceShader* gpu = cache.surface_shaders().get(shader);
+		if (gpu == nullptr || !gpu->ready() || m_Device == nullptr || m_Framebuffer == nullptr)
+		{
+			return nullptr;
+		}
+
+		const u64 key = static_cast<u64>(shader) | (static_cast<u64>(kind) << 32) | (static_cast<u64>(doubleSided ? 1 : 0) << 40);
+		Entry& entry = m_Entries[key];
+		if (entry.Generation == gpu->Generation)
+		{
+			return entry.Pipeline.Get();
+		}
+
+		entry = Entry{};
+		entry.Generation = gpu->Generation;
+		nvrhi::IShader* vertexShader = gpu->get(kind, ShaderStage::Vertex);
+		nvrhi::IShader* pixelShader = gpu->get(kind, ShaderStage::Pixel);
+		const bool depthOnly = kind == SurfaceVariantKind::Shadow;
+		if (vertexShader != nullptr && (pixelShader != nullptr || depthOnly))
+		{
+			PipelineOptions options = m_Options;
+			options.DoubleSided = doubleSided;
+			nvrhi::InputLayoutHandle inputLayout = make_mesh_input_layout(m_Device, vertexShader);
+			entry.Pipeline = make_pipeline(m_Device, inputLayout, vertexShader, depthOnly ? nullptr : pixelShader, m_Layouts, m_Framebuffer, options);
+		}
+		if (entry.Pipeline == nullptr)
+		{
+			entry.Failed = true;
+			WI_SCENE_PASS_LOG(Error, "Could not create a pipeline for surface shader {0} (variant {1}); its materials draw built-in", shader, static_cast<u32>(kind));
+		}
+		return entry.Pipeline.Get();
+	}
+
 	void draw_items(nvrhi::ICommandList* commandList, const SceneRenderData& data, nvrhi::IFramebuffer* framebuffer, const nvrhi::Viewport& viewport,
 		nvrhi::IBindingSet* frameBindings, const std::vector<DrawItem>& items, nvrhi::IGraphicsPipeline* singleSided, nvrhi::IGraphicsPipeline* doubleSided,
-		bool bindMaterial, nvrhi::IBindingSet* extraBindings)
+		bool bindMaterial, nvrhi::IBindingSet* extraBindings, const SurfaceDraw* surface)
 	{
 		if (items.empty() || frameBindings == nullptr)
 		{
@@ -95,24 +141,42 @@ namespace wiwa::scene_pass
 
 		for (const DrawItem& item : items)
 		{
-			nvrhi::IGraphicsPipeline* pipeline = item.DoubleSided ? doubleSided : singleSided;
+			// a material with a surface shader draws with the shader's variant, else (or when that cannot be made) as built-in
+			nvrhi::IGraphicsPipeline* pipeline = nullptr;
+			bool custom = false;
+			if (surface != nullptr && surface->Pipelines != nullptr && item.Shader != 0)
+			{
+				pipeline = surface->Pipelines->get(cache, item.Shader, item.Masked ? surface->MaskedKind : surface->Kind, item.DoubleSided);
+				custom = pipeline != nullptr;
+			}
+			if (!custom)
+			{
+				pipeline = item.DoubleSided ? doubleSided : singleSided;
+			}
 			if (pipeline == nullptr)
 			{
 				continue;
 			}
 
-			if (pipeline != currentPipeline || item.Page != currentPage || (bindMaterial && item.Material != currentMaterial))
+			const bool materialSet = custom || bindMaterial;
+			const u32 slot = custom ? item.Slot : item.Material;
+			if (pipeline != currentPipeline || item.Page != currentPage || (materialSet && slot != currentMaterial))
 			{
 				nvrhi::GraphicsState state;
 				state.pipeline = pipeline;
 				state.framebuffer = framebuffer;
 				state.viewport.addViewportAndScissorRect(viewport);
-				state.addBindingSet(frameBindings);
-				if (bindMaterial)
+				state.addBindingSet(custom && surface->FrameBindings != nullptr ? surface->FrameBindings : frameBindings);
+				if (materialSet)
 				{
-					state.addBindingSet(cache.get_material_bindings(item.Material));
+					state.addBindingSet(cache.get_material_bindings(slot));
 				}
-				if (extraBindings != nullptr)
+				if (custom)
+				{
+					state.addBindingSet(surface->AoBindings);
+					state.addBindingSet(cache.get_custom_bindings(slot));
+				}
+				else if (extraBindings != nullptr)
 				{
 					state.addBindingSet(extraBindings);
 				}
@@ -130,10 +194,11 @@ namespace wiwa::scene_pass
 
 				currentPipeline = pipeline;
 				currentPage = item.Page;
-				currentMaterial = item.Material;
+				currentMaterial = slot;
 			}
 
-			const DrawConstants constants{ item.Instance, item.Material, static_cast<u32>(item.BaseVertex) };
+			const u32 materialConstant = custom && surface->Caster ? ((item.Material & 7u) | (item.Slot << 3u)) : item.Material;
+			const DrawConstants constants{ item.Instance, materialConstant, static_cast<u32>(item.BaseVertex) };
 			commandList->setPushConstants(&constants, sizeof(constants));
 
 			nvrhi::DrawArguments arguments;

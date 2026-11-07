@@ -1,29 +1,22 @@
 {
-  "version": 1,
-  "name": "hologram",
   "alpha": "opaque",
   "alphaCutoff": 0.5,
   "baseColor": [
-    1,
-    1,
-    1,
-    1
+    1.0,
+    1.0,
+    1.0,
+    1.0
   ],
   "clearcoat": 0.0,
   "clearcoatRoughness": 0.0,
   "doubleSided": false,
   "emissive": [
-    0,
-    0,
-    0
+    0.0,
+    0.0,
+    0.0
   ],
   "metallic": 0.0,
-  "roughness": 0.5,
-  "sheen": 0.0,
-  "sheenRoughness": 0.0,
-  "transmission": 0.0,
-  "textures": {},
-  "shader": "../shaders/hologram.wshader",
+  "name": "hologram",
   "params": {
     "Color": [
       0.2,
@@ -31,7 +24,14 @@
       1.0,
       1
     ],
-    "Wobble": 0.04,
-    "Scan": 14.0
-  }
+    "Scan": 15.444000244140625,
+    "Wobble": 0.050999999046325684
+  },
+  "roughness": 0.5,
+  "shader": "../shaders/hologram.wshader",
+  "sheen": 0.0,
+  "sheenRoughness": 0.0,
+  "textures": {},
+  "transmission": 0.0,
+  "version": 1
 }

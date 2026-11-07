@@ -28,6 +28,7 @@ namespace wiwa
 
 		nvrhi::InputLayoutHandle m_InputLayout{};
 		nvrhi::GraphicsPipelineHandle m_Pipelines[2]{}; // [double sided]
+		scene_pass::SurfacePipelines m_Surface{}; // materials with a surface shader (the Velocity variant)
 		u32 m_BuiltShaderGeneration = ~0u;
 		u32 m_BuiltViewportGeneration = ~0u;
 	};

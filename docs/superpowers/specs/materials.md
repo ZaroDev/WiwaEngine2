@@ -1,6 +1,6 @@
 # Materials and surface shaders
 
-Code: `editor/src/asset_pipeline/{material_file,surface_shader_parser}.*` and `importers/{material,surface_shader}_importer.cpp`; renderer side `renderer/resources/{gpu_material.h,surface_shader_cache.*}`; contract `editor/engine/shaders/surface_contract.hlsli`. Verified by `--asset-smoke`, `--scene-smoke`, `--render-test`.
+Code: `editor/src/asset_pipeline/{material_file,surface_shader_parser}.*` and `importers/{material,surface_shader}_importer.cpp`; renderer side `renderer/resources/{gpu_material.h,surface_shader_cache.*}`; contract `editor/engine/shaders/surface_contract.hlsli`. Verified by `--asset-smoke`, `--scene-smoke`, `--render-test` (`custom_material_draws_with_its_shader` and `custom_material_casts_shadow_from_its_shader` render `editor/engine/shaders/surface_check.wshader` and read pixels back).
 
 ## Files
 
@@ -38,8 +38,11 @@ float3 VertexOffset(VertexInput v, MaterialParams p);                     // opt
 ## Renderer
 
 - `GpuMaterialRecord` stays 64 bytes; custom materials add a shader id and parameter offset, and their parameter bytes live in one `ByteAddressBuffer` (`t21`, records `t20`).
-- Draw items sort by pipeline (shader, cull mode, blend) then material. Pipelines are cached per (shader generation, variant, cull, blend, viewport generation); hot reload bumps the generation.
-- Every pass that draws materials picks the shader's variant for it. A failed or still-loading shader draws magenta (one magenta frame on first load).
+- A `DrawItem` carries the material's own `Slot`, its surface shader index (`GpuResourceCache::get_material_shader`, 0 = built-in, also while the shader loads or has failed) and `Masked`. Items sort by cull mode, then shader (built-in first), then mesh page, then material.
+- `scene_pass::draw_items` takes a `SurfaceDraw`: for an item with a shader it asks the pass's `SurfacePipelines` for the pipeline of the shader's variant (forward: `Forward`; depth prepass: `Depth` / `DepthMasked`; transparent velocity: `Velocity`; shadows: `Shadow` / `ShadowMasked`), keyed by (shader, variant, cull) and rebuilt when the shader's own `Generation` moves (a hot reload) or the pass's framebuffer changes. If the pipeline cannot be made the item draws built-in, with one logged error.
+- Surface pipelines use the sets frame (0), material (1), AO (2), surface (3: `custom_layout()`, per-material `get_custom_bindings`) and skin (4). The importer defines `SKIN_SET 4` before including the contract, because `scene_common.hlsli` places the skin buffers by it. The AO set is bound in every pass (a stand-in texture when AO is off).
+- Shadow casters read the whole frame set, so they bind `SceneRenderData::shadow_frame_bindings()` (the frame set with stand-ins for the shadow maps being drawn into). Their push-constant material is `matrix | (slot << 3)`, see `surface_shadow.hlsl`.
+- Every pass that draws materials picks the shader's variant. A failed or still-loading shader draws built-in (default or magenta record, see `compose_record`); one frame of default look on first load.
 - Pick and outline use unmodified geometry, so `VertexOffset` motion is neither pickable nor outlined.
 
 ## Editor

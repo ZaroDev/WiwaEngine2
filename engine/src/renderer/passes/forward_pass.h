@@ -41,6 +41,8 @@ namespace wiwa
 		nvrhi::InputLayoutHandle m_InputLayout{};
 		nvrhi::GraphicsPipelineHandle m_Pipelines[2]{}; // [double sided]: opaque and alpha-masked
 		nvrhi::GraphicsPipelineHandle m_BlendPipelines[2]{}; // alpha blended, no depth write
+		scene_pass::SurfacePipelines m_Surface{};      // the same for materials with a surface shader
+		scene_pass::SurfacePipelines m_SurfaceBlend{};
 		u32 m_BuiltShaderGeneration = ~0u;
 		u32 m_BuiltViewportGeneration = ~0u;
 	};

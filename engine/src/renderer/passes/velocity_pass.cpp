@@ -53,6 +53,13 @@ namespace wiwa
 		m_InputLayout = scene_pass::make_mesh_input_layout(m_Device, vertexShader);
 
 		const std::vector<nvrhi::IBindingLayout*> layouts = { data.frame_layout(), data.cache()->material_layout(), data.skin_layout() };
+
+		// materials with a surface shader: frame, material, AO, the surface set and skin (surface_velocity.hlsl)
+		scene_pass::PipelineOptions surfaceOptions;
+		surfaceOptions.DepthTest = true;
+		surfaceOptions.DepthWrite = false;
+		m_Surface.configure(m_Device, data.viewport()->velocity_framebuffer(), { data.frame_layout(), data.cache()->material_layout(), data.ao_layout(), data.cache()->custom_layout(), data.skin_layout() }, surfaceOptions);
+
 		for (int doubleSided = 0; doubleSided < 2; doubleSided++)
 		{
 			scene_pass::PipelineOptions options;
@@ -89,6 +96,11 @@ namespace wiwa
 
 		nvrhi::IFramebuffer* framebuffer = data.viewport()->velocity_framebuffer();
 		const nvrhi::Viewport viewport(static_cast<float>(data.viewport()->width()), static_cast<float>(data.viewport()->height()));
-		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.blended(), m_Pipelines[0], m_Pipelines[1], true);
+		scene_pass::SurfaceDraw surface;
+		surface.Pipelines = &m_Surface;
+		surface.Kind = SurfaceVariantKind::Velocity;
+		surface.MaskedKind = SurfaceVariantKind::Velocity;
+		surface.AoBindings = data.ao_bindings();
+		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.blended(), m_Pipelines[0], m_Pipelines[1], true, nullptr, &surface);
 	}
 }

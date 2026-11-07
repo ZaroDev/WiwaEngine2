@@ -34,6 +34,8 @@ namespace wiwa
 		nvrhi::GraphicsPipelineHandle m_AtlasPipeline{};
 		nvrhi::FramebufferHandle m_CascadeFramebuffers[4]{};
 		nvrhi::FramebufferHandle m_AtlasFramebuffer{};
+		scene_pass::SurfacePipelines m_SurfaceCascade{}; // casters with a surface shader (the Shadow and ShadowMasked variants)
+		scene_pass::SurfacePipelines m_SurfaceAtlas{};
 		u32 m_BuiltShaderGeneration = ~0u;
 		u32 m_BuiltShadowGeneration = ~0u;
 	};

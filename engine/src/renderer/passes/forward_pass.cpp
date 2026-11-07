@@ -51,6 +51,16 @@ namespace wiwa
 		m_InputLayout = scene_pass::make_mesh_input_layout(m_Device, vertexShader);
 
 		const std::vector<nvrhi::IBindingLayout*> layouts = { data.frame_layout(), data.cache()->material_layout(), data.ao_layout(), data.skin_layout() };
+
+		// materials with a surface shader: frame, material, AO, the surface set (t16..t21, s15) and skin (surface_forward.hlsl)
+		const std::vector<nvrhi::IBindingLayout*> surfaceLayouts = { data.frame_layout(), data.cache()->material_layout(), data.ao_layout(), data.cache()->custom_layout(), data.skin_layout() };
+		scene_pass::PipelineOptions surfaceOptions;
+		surfaceOptions.DepthTest = true;
+		surfaceOptions.DepthWrite = false;
+		m_Surface.configure(m_Device, data.viewport()->hdr_framebuffer(), surfaceLayouts, surfaceOptions);
+		surfaceOptions.Blend = true;
+		m_SurfaceBlend.configure(m_Device, data.viewport()->hdr_framebuffer(), surfaceLayouts, surfaceOptions);
+
 		for (int doubleSided = 0; doubleSided < 2; doubleSided++)
 		{
 			scene_pass::PipelineOptions options;
@@ -96,14 +106,18 @@ namespace wiwa
 
 		nvrhi::IFramebuffer* framebuffer = data.viewport()->hdr_framebuffer();
 		const nvrhi::Viewport viewport(static_cast<float>(data.viewport()->width()), static_cast<float>(data.viewport()->height()));
+		scene_pass::SurfaceDraw surface;
+		surface.Pipelines = &m_Surface;
+		surface.AoBindings = data.ao_bindings();
 		if (m_Stage == Stage::Opaque)
 		{
-			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Pipelines[0], m_Pipelines[1], true, data.ao_bindings());
-			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Pipelines[0], m_Pipelines[1], true, data.ao_bindings());
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Pipelines[0], m_Pipelines[1], true, data.ao_bindings(), &surface);
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Pipelines[0], m_Pipelines[1], true, data.ao_bindings(), &surface);
 		}
 		else
 		{
-			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.blended(), m_BlendPipelines[0], m_BlendPipelines[1], true, data.ao_bindings());
+			surface.Pipelines = &m_SurfaceBlend;
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.blended(), m_BlendPipelines[0], m_BlendPipelines[1], true, data.ao_bindings(), &surface);
 		}
 	}
 }

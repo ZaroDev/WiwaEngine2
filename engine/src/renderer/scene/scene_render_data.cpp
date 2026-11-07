@@ -28,12 +28,16 @@ namespace wiwa
 			return offsets;
 		}
 
-		// Sort key: single sided first, then by page, then by material.
+		// Sort key: single sided first, then by surface shader (built-in first), then by page, then by material.
 		bool draw_order(const DrawItem& a, const DrawItem& b)
 		{
 			if (a.DoubleSided != b.DoubleSided)
 			{
 				return !a.DoubleSided;
+			}
+			if (a.Shader != b.Shader)
+			{
+				return a.Shader < b.Shader;
 			}
 			if (a.Page != b.Page)
 			{
@@ -173,6 +177,7 @@ namespace wiwa
 	void SceneRenderData::shutdown()
 	{
 		m_FrameBindings = nullptr;
+		m_ShadowFrameBindings = nullptr;
 		m_CascadeMap = nullptr;
 		m_SpotAtlas = nullptr;
 		m_DummyCascadeMap = nullptr;
@@ -438,6 +443,9 @@ namespace wiwa
 					DrawItem item;
 					item.Instance = slot;
 					item.Material = material;
+					item.Slot = material;
+					item.Shader = cache.get_material_shader(material);
+					item.Masked = (record.Flags & MATERIAL_ALPHA_MASK_BIT) != 0;
 					item.Page = mesh->Page;
 					item.FirstIndex = primitive.FirstIndex;
 					item.IndexCount = primitive.IndexCount;
@@ -562,7 +570,8 @@ namespace wiwa
 
 				const bool overridden = p < instance.Materials.size() && instance.Materials[p].valid();
 				const u32 material = overridden ? m_Cache->get_material_slot(instance.Materials[p]) : primitive.MaterialSlot;
-				if (m_Cache->material_record(material).Flags & MATERIAL_ALPHA_BLEND_BIT)
+				const GpuMaterialRecord& record = m_Cache->material_record(material);
+				if (record.Flags & MATERIAL_ALPHA_BLEND_BIT)
 				{
 					continue;
 				}
@@ -570,6 +579,9 @@ namespace wiwa
 				DrawItem item;
 				item.Instance = slot;
 				item.Material = matrixIndex; // the shadow shader reads this as the matrix index
+				item.Slot = material;
+				item.Shader = m_Cache->get_material_shader(material);
+				item.Masked = (record.Flags & MATERIAL_ALPHA_MASK_BIT) != 0;
 				item.Page = mesh->Page;
 				item.FirstIndex = primitive.FirstIndex;
 				item.IndexCount = primitive.IndexCount;
@@ -578,7 +590,18 @@ namespace wiwa
 				items.push_back(item);
 			}
 		}
-		std::sort(items.begin(), items.end(), [](const DrawItem& a, const DrawItem& b) { return a.Page < b.Page; });
+		std::sort(items.begin(), items.end(), [](const DrawItem& a, const DrawItem& b)
+			{
+				if (a.Shader != b.Shader)
+				{
+					return a.Shader < b.Shader;
+				}
+				if (a.Masked != b.Masked)
+				{
+					return b.Masked;
+				}
+				return a.Page < b.Page;
+			});
 	}
 
 	void SceneRenderData::write(nvrhi::ICommandList* commandList, GpuResourceCache& cache)
@@ -687,21 +710,26 @@ namespace wiwa
 		if (m_FrameBindings == nullptr || m_BoundInstanceBuffer != m_InstanceBuffer.Get() || m_BoundMaterialBuffer != materials
 			|| m_BoundCascades != cascades || m_BoundAtlas != atlas || m_BoundCube != cube || m_BoundBrdf != brdf)
 		{
-			nvrhi::BindingSetDesc set;
-			set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, m_InstanceBuffer));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(2, materials));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(3, m_LightBuffer));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(4, m_ClusterCounts));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(5, m_ClusterIndices));
-			set.addItem(nvrhi::BindingSetItem::Texture_SRV(6, cascades));
-			set.addItem(nvrhi::BindingSetItem::Texture_SRV(7, atlas));
-			set.addItem(nvrhi::BindingSetItem::Sampler(10, m_ShadowSampler));
-			set.addItem(nvrhi::BindingSetItem::Texture_SRV(8, cube));
-			set.addItem(nvrhi::BindingSetItem::Texture_SRV(9, brdf));
-			set.addItem(nvrhi::BindingSetItem::Sampler(11, m_EnvironmentSampler));
-			set.addItem(nvrhi::BindingSetItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
-			m_FrameBindings = m_Device->createBindingSet(set, m_FrameLayout);
+			const auto make_frame_set = [&](nvrhi::ITexture* cascadeMap, nvrhi::ITexture* spotAtlas)
+			{
+				nvrhi::BindingSetDesc set;
+				set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
+				set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, m_InstanceBuffer));
+				set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(2, materials));
+				set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(3, m_LightBuffer));
+				set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(4, m_ClusterCounts));
+				set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(5, m_ClusterIndices));
+				set.addItem(nvrhi::BindingSetItem::Texture_SRV(6, cascadeMap));
+				set.addItem(nvrhi::BindingSetItem::Texture_SRV(7, spotAtlas));
+				set.addItem(nvrhi::BindingSetItem::Sampler(10, m_ShadowSampler));
+				set.addItem(nvrhi::BindingSetItem::Texture_SRV(8, cube));
+				set.addItem(nvrhi::BindingSetItem::Texture_SRV(9, brdf));
+				set.addItem(nvrhi::BindingSetItem::Sampler(11, m_EnvironmentSampler));
+				set.addItem(nvrhi::BindingSetItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
+				return m_Device->createBindingSet(set, m_FrameLayout);
+			};
+			m_FrameBindings = make_frame_set(cascades, atlas);
+			m_ShadowFrameBindings = make_frame_set(m_DummyCascadeMap, m_DummySpotAtlas);
 			m_BoundInstanceBuffer = m_InstanceBuffer;
 			m_BoundMaterialBuffer = materials;
 			m_BoundCascades = cascades;
