@@ -69,6 +69,7 @@ private:
 	bool m_StopPlayRequested = false; // a script called quit()
 	Scope<wiwa::DemoSmoke> m_DemoSmoke;
 	bool m_PlaySmoke = false;
+	wiwa::AssetRef m_PendingDefaultMap{}; // input.wsettings' map, applied once the first import scan has cooked it
 	class UiEditorPanel* m_UiEditor = nullptr; // owned by m_Panels
 	bool m_UiEditorSmoke = false;              // --ui-editor-smoke: open a panel in the UI Editor, run for a while, check it is previewing
 	class PhysicsPanel* m_PhysicsPanel = nullptr; // owned by m_Panels

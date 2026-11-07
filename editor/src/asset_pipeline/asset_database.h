@@ -29,6 +29,13 @@ namespace wiwa
 		// progress object is updated while it runs. If a scan is already running, that one's progress is returned.
 		Ref<JobProgress> scan_async();
 
+		// The latest scan's progress without starting one; null before the first scan.
+		Ref<JobProgress> scan_progress() const
+		{
+			std::lock_guard<std::mutex> lock(m_ScanMutex);
+			return m_ScanProgress;
+		}
+
 		// scan_async() and wait for it. Only for command-line runs and background jobs; never call it from the editor's main thread.
 		void scan();
 
@@ -113,7 +120,7 @@ namespace wiwa
 		std::atomic<u32> m_UpToDate{ 0 };
 		std::atomic<u32> m_Failed{ 0 };
 
-		std::mutex m_ScanMutex{};
+		mutable std::mutex m_ScanMutex{};
 		Ref<JobProgress> m_ScanProgress{};
 		std::thread m_ScanThread{};
 

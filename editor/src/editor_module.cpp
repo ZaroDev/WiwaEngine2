@@ -130,7 +130,8 @@ void EditorModule::init()
 		}
 		else if (inputSettings.DefaultMap.valid())
 		{
-			wiwa::Engine::get().get_module<wiwa::InputModule>()->set_default_map(inputSettings.DefaultMap);
+			// Not yet: on a cold Library the first scan has not cooked it, and the load would fail (see update()).
+			m_PendingDefaultMap = inputSettings.DefaultMap;
 		}
 	}
 
@@ -224,6 +225,15 @@ void EditorModule::pre_update(float deltaTime)
 void EditorModule::update(float deltaTime)
 {
 	m_Frame++;
+	if (m_PendingDefaultMap.valid())
+	{
+		const Ref<wiwa::JobProgress> scan = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().scan_progress();
+		if (scan && scan->finished())
+		{
+			wiwa::Engine::get().get_module<wiwa::InputModule>()->set_default_map(m_PendingDefaultMap);
+			m_PendingDefaultMap = {};
+		}
+	}
 	if (!m_SceneEditor->playing() && !wiwa::Engine::get().get_module<wiwa::InputModule>()->backend_injected())
 	{
 		wiwa::Engine::get().get_module<wiwa::InputModule>()->set_capture(false); // the Viewport turns it on while it draws, in play mode
