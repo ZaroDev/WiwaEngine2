@@ -43,7 +43,7 @@ namespace wiwa
 			model.NodeMesh = { -1, -1, -1, -1, 0 };
 			model.NodeSkin = { -1, -1, -1, -1, 0 };
 
-			SkeletonData skeleton;
+			ImportedSkeleton skeleton;
 			skeleton.Name = "skin";
 			skeleton.Joints = { 3, 2, 1 };
 			skeleton.InverseBind = { glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f) };
@@ -58,7 +58,7 @@ namespace wiwa
 			mesh.Data.SkinVertices[1].Weights[0] = 1.0f;
 			model.Meshes.push_back(mesh);
 
-			AnimationClipData clip;
+			ImportedClip clip;
 			clip.Name = "Walk";
 			clip.Duration = 1.0f;
 			model.Animations.push_back(clip);
@@ -74,7 +74,7 @@ namespace wiwa
 				{"clip":"Walk","time":0.25,"name":"early"},
 				{"clip":"Nope","time":0.5,"name":"lost"}]})"));
 
-			const SkeletonData& skeleton = model.Skeletons[0];
+			const ImportedSkeleton& skeleton = model.Skeletons[0];
 			check(skeleton.Joints == std::vector<u32>({ 1, 2, 3 }), "joints are ordered parent first");
 			check(skeleton.Parents == std::vector<i32>({ -1, 0, 1 }), "parent indices");
 			check(skeleton.JointNames.size() == 3 && skeleton.JointNames[0] == "hip" && skeleton.JointNames[2] == "tip", "joint names");
@@ -89,10 +89,10 @@ namespace wiwa
 			check(events.size() == 2 && events[0].Name == "early" && events[1].Name == "late", "events are merged and sorted by time");
 			check(!model.Warnings.empty(), "an event for an unknown clip is warned about");
 
-			const std::optional<SkeletonData> loadedSkeleton = deserialize<SkeletonData>(serialize(skeleton));
+			const std::optional<SkeletonData> loadedSkeleton = deserialize<SkeletonData>(serialize<SkeletonData>(skeleton));
 			check(loadedSkeleton && loadedSkeleton->Parents == skeleton.Parents && loadedSkeleton->JointNames == skeleton.JointNames
 				&& loadedSkeleton->RestTranslation.size() == 3, "skeleton round trip");
-			const std::optional<AnimationClipData> loadedClip = deserialize<AnimationClipData>(serialize(model.Animations[0]));
+			const std::optional<AnimationClipData> loadedClip = deserialize<AnimationClipData>(serialize<AnimationClipData>(model.Animations[0]));
 			check(loadedClip && loadedClip->Events.size() == 2 && loadedClip->Events[1].Time == 0.75f, "clip events round trip");
 
 			std::vector<std::byte> truncated = serialize(skeleton);
@@ -102,7 +102,7 @@ namespace wiwa
 			ImportedModel big;
 			big.Name = "big";
 			big.Nodes.push_back(make_node("n0", -1, glm::vec3(0.0f)));
-			SkeletonData bigSkeleton;
+			ImportedSkeleton bigSkeleton;
 			for (u32 i = 0; i < 300; i++)
 			{
 				if (i > 0)
@@ -127,7 +127,7 @@ namespace wiwa
 		run_pose_checks(check);
 		run_module_checks(check);
 		run_lua_checks(check);
-		run_edit_checks(check);
+		run_graph_checks(check);
 
 		if (check.Failures == 0)
 		{

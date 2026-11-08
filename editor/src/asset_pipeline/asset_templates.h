@@ -18,6 +18,7 @@ namespace wiwa
 		UiPanel,       // .wuipanel
 		PhysicsMaterial, // .wphysmat
 		InputMap,        // .winput
+		AnimationGraph,  // .wgraph
 	};
 
 	// What the Create menu calls it, the name it starts with, and the extension the file gets ("" for a folder).

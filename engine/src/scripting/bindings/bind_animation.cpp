@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "bindings.h"
 
+#include <limits>
+
 #include <animation/animation_module.h>
 #include <scene/scene_module.h>
 
@@ -222,6 +224,67 @@ namespace wiwa
 						return nil_object(state);
 					}
 					return sol::make_object(state, LuaMat4{ context.Animation->joint_world(entity_of(context, animator.Entity), joint) });
+				},
+				// graph parameters: anim:set("speed", 3.5), anim:set("grounded", true), anim:trigger("jump"), anim:get("speed"), anim:state("Upper")
+				"set", [&context](const LuaAnimator& animator, const std::string& name, sol::object value)
+				{
+					AnimatorInstance* instance = instance_of(context, animator.Entity);
+					if (instance == nullptr)
+					{
+						return;
+					}
+					float number = std::numeric_limits<float>::quiet_NaN(); // a value that is neither a number nor a bool is reported as not a number
+					if (value.is<bool>())
+					{
+						number = value.as<bool>() ? 1.0f : 0.0f;
+					}
+					else if (value.is<double>())
+					{
+						number = static_cast<float>(value.as<double>());
+					}
+					instance->set_param(name, number);
+				},
+				"trigger", [&context](const LuaAnimator& animator, const std::string& name)
+				{
+					if (AnimatorInstance* instance = instance_of(context, animator.Entity))
+					{
+						instance->trigger(name);
+					}
+				},
+				"get", [&context](const LuaAnimator& animator, const std::string& name, sol::this_state state) -> sol::object
+				{
+					AnimatorInstance* instance = instance_of(context, animator.Entity);
+					const std::optional<float> value = instance != nullptr ? instance->param(name) : std::nullopt;
+					if (!value)
+					{
+						return nil_object(state);
+					}
+					const GraphParamType type = *instance->param_type(name);
+					return type == GraphParamType::Bool || type == GraphParamType::Trigger ? sol::make_object(state, *value != 0.0f) : sol::make_object(state, *value);
+				},
+				// the active state of a layer of the graph: a layer name or a 1-based number (the base layer when omitted)
+				"state", [&context](const LuaAnimator& animator, sol::optional<sol::object> layer, sol::this_state state) -> sol::object
+				{
+					AnimatorInstance* instance = instance_of(context, animator.Entity);
+					if (instance == nullptr || !instance->graph_mode())
+					{
+						return nil_object(state);
+					}
+					int index = 0;
+					if (layer && layer->is<std::string>())
+					{
+						index = instance->layer_index(layer->as<std::string>());
+					}
+					else if (layer && layer->is<double>())
+					{
+						index = static_cast<int>(layer->as<double>()) - 1;
+					}
+					if (index < 0)
+					{
+						return nil_object(state);
+					}
+					const std::string name = instance->state_name(static_cast<size_t>(index));
+					return name.empty() ? nil_object(state) : sol::make_object(state, name);
 				},
 				"speed", sol::property(
 					[&context](const LuaAnimator& animator, sol::this_state state) -> sol::object

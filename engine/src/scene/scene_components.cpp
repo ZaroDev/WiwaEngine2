@@ -109,7 +109,8 @@ namespace wiwa
 			WI_FIELD(PlayOnStart),
 			WI_FIELD(Speed),
 			WI_FIELD(Enabled),
-			WI_FIELD_META(BoundsPadding, FieldMeta::range(0.0f, 100.0f))));
+			WI_FIELD_META(BoundsPadding, FieldMeta::range(0.0f, 100.0f)),
+			WI_FIELD_META(Graph, FieldMeta::asset(AssetType::AnimationGraph))));
 
 		registry.register_component(WI_COMPONENT(AnimationSocket,
 			WI_FIELD(Joint),

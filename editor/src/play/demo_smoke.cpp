@@ -88,6 +88,12 @@ namespace wiwa
 		if (const AnimatorInstance* instance = animation->instance_for(fox))
 		{
 			m_Fox.Crossfaded = m_Fox.Crossfaded || instance->node_count() > 1;
+			if (instance->graph_mode())
+			{
+				m_Fox.GraphSeen = true;
+				m_Fox.BaseStates.insert(instance->state_name(0));
+				m_Fox.UpperStates.insert(instance->state_name(1));
+			}
 			for (const JointMatrix& joint : instance->palette())
 			{
 				const glm::vec4 identity[3] = { glm::vec4(1, 0, 0, 0), glm::vec4(0, 1, 0, 0), glm::vec4(0, 0, 1, 0) };
@@ -113,9 +119,17 @@ namespace wiwa
 		{
 			return "the warrior never left its rest pose";
 		}
-		if (!m_Fox.Crossfaded)
+		if (!m_Fox.GraphSeen)
 		{
-			return "the warrior script never crossfaded between its clips";
+			return "the warrior never played its animation graph";
+		}
+		if (!m_Fox.BaseStates.contains("Idle") || !m_Fox.BaseStates.contains("Move"))
+		{
+			return "the warrior graph did not go between Idle and Move as the script changed its speed";
+		}
+		if (!m_Fox.UpperStates.contains("Attack"))
+		{
+			return "the upper body layer of the warrior graph never played Attack when the script fired the trigger";
 		}
 		if (m_Fox.EventsSeen == 0)
 		{

@@ -31,7 +31,9 @@ namespace wiwa
 		// Starts again (a search in progress is given up).
 		// fileName: the source file name of the asset; materials (.wmat) name their textures and shaders by relative path, so they are searched
 		// for the name as well as the guid.
-		void start(AssetGuid guid, std::string fileName, std::vector<std::filesystem::path> roots);
+		// redirectedFrom: the models whose import redirected something to guid (AssetDatabase::redirect_sources): a file that still names such a model
+		// may reach the asset through the redirect, so it counts as a reference too.
+		void start(AssetGuid guid, std::string fileName, std::vector<std::filesystem::path> roots, std::vector<AssetGuid> redirectedFrom = {});
 
 		bool started() const { return m_State != nullptr; }
 		bool finished() const { return m_State != nullptr && m_State->Finished.load(); }

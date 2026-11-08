@@ -25,6 +25,8 @@ namespace wiwa
 
 		// Render thread: creates the font texture from the atlas the main thread built (RGBA8). Called by a render command.
 		void set_font_atlas(u32 width, u32 height, const u8* pixels);
+		// The texture is going away: its binding set (which holds it) is dropped.
+		void forget_texture(nvrhi::ITexture* texture) { m_BindingSets.erase(texture); }
 
 	private:
 		struct PushConstants

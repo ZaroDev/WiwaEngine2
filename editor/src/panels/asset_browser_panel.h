@@ -9,6 +9,7 @@
 
 #include "panel.h"
 
+#include <asset_editor/thumbnail_cache.h>
 #include <asset_pipeline/asset_database.h>
 #include <asset_pipeline/asset_templates.h>
 
@@ -31,7 +32,11 @@ public:
 	void set_open_material(std::function<void(const std::filesystem::path&)> open) { m_OpenMaterial = std::move(open); }
 	// What "Find references" in the context menu calls with the selected asset.
 	void set_find_references(std::function<void(const wiwa::AssetRef&)> find) { m_FindReferences = std::move(find); }
+	// The thumbnails the cells of animation assets show (the editor gives it; without one a cell shows its icon).
+	void set_thumbnails(wiwa::ThumbnailCache* thumbnails) { m_Thumbnails = thumbnails; }
 	void set_open_ui_panel(std::function<void(const std::filesystem::path&)> open) { m_OpenUiPanel = std::move(open); }
+	// What a double click on a .wskel or .wmesh calls (the editor points it at the Asset Editor).
+	void set_open_asset_editor(std::function<void(const std::filesystem::path&)> open) { m_OpenAssetEditor = std::move(open); }
 
 	// What an entity dragged here from the Hierarchy calls (payload "WI_ENTITY"): makes a prefab of it in the folder it was dropped on, and
 	// returns why that cannot be done, or an empty string. The editor points it at SceneEditor::make_prefab.
@@ -72,12 +77,15 @@ private:
 	void collect_matches(const FolderEntry& folder, std::vector<const FileEntry*>& out) const;
 
 	wiwa::AssetDatabase& m_Database;
+	wiwa::ThumbnailCache* m_Thumbnails = nullptr;
+	std::string m_ReextractStatus{};
 
 	std::vector<FolderEntry> m_Roots{}; // one per source root of the database
 	std::filesystem::path m_CurrentDir{};
 	std::filesystem::path m_Selected{};
 	std::function<void(const std::filesystem::path&)> m_OpenMaterial{};
 	std::function<void(const std::filesystem::path&)> m_OpenUiPanel{};
+	std::function<void(const std::filesystem::path&)> m_OpenAssetEditor{};
 	std::function<std::string(entt::entity, const std::filesystem::path&)> m_MakePrefab{};
 	std::string m_Status{};             // why the last dropped entity did not become a prefab
 

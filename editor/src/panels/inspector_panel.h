@@ -24,6 +24,7 @@ public:
 	void set_locate(std::function<void(const wiwa::AssetRef&)> locate) { m_Locate = std::move(locate); }
 	// What "Find references" in the menu of an asset slot calls.
 	void set_find_references(std::function<void(const wiwa::AssetRef&)> find) { m_FindReferences = std::move(find); }
+	void set_open_in_asset_editor(std::function<void(const wiwa::AssetRef&)> open) { m_OpenInAssetEditor = std::move(open); }
 
 private:
 	void draw_component(entt::entity entity, const wiwa::ComponentInfo& info);
@@ -45,6 +46,7 @@ private:
 	wiwa::AssetManager* m_AssetManager = nullptr;
 	wiwa::AssetDatabase& m_Database;
 	std::function<void(const wiwa::AssetRef&)> m_FindReferences{};
+	std::function<void(const wiwa::AssetRef&)> m_OpenInAssetEditor{};
 
 	bool m_ScopeOpen = false;
 	wiwa::EntityGuid m_Pinned{};   // the entity the lock holds (not set: follow the selection)

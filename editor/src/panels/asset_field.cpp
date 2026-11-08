@@ -145,6 +145,11 @@ AssetFieldEvent draw_asset_slot(const char* id, const char* label, const wiwa::A
 		{
 			context.FindReferences(ref);
 		}
+		if (context.OpenInAssetEditor != nullptr && (context.Expected == wiwa::AssetType::Skeleton || context.Expected == wiwa::AssetType::Mesh || context.Expected == wiwa::AssetType::AnimationClip)
+			&& ImGui::MenuItem("Open in Asset Editor", nullptr, false, ref.valid() && !missing))
+		{
+			context.OpenInAssetEditor(ref);
+		}
 		if (ImGui::MenuItem("Copy guid", nullptr, false, ref.valid()))
 		{
 			ImGui::SetClipboardText(ref.Guid.to_string().c_str());

@@ -18,7 +18,7 @@ namespace wiwa
 	AnimationChannel x_channel(u32 node, std::vector<float> times, const std::vector<float>& xs)
 	{
 		AnimationChannel channel;
-		channel.Node = node;
+		channel.Joint = node == 1 ? "hip" : (node == 2 ? "hand" : "node" + std::to_string(node));
 		channel.Path = AnimationPath::Translation;
 		channel.Interpolation = AnimationInterpolation::Linear;
 		channel.Components = 3;
@@ -42,12 +42,13 @@ namespace wiwa
 		AssetRef RunRef = make_ref(3);
 		AssetRef WaveRef = make_ref(4);
 		AssetRef LateRef = make_ref(5);
+		AssetRef GraphRef = make_ref(6);
+		std::map<AssetGuid, AnimationGraphData> Graphs{};
 		bool LateLoaded = false;
 
 		Fixture()
 		{
 			Skeleton.Name = "rig";
-			Skeleton.Joints = { 1, 2 };
 			Skeleton.JointNames = { "hip", "hand" };
 			Skeleton.Parents = { -1, 0 };
 			Skeleton.RestTranslation = { glm::vec3(0.0f), glm::vec3(1.0f, 0.0f, 0.0f) };
@@ -80,6 +81,11 @@ namespace wiwa
 			late.Channels.push_back(x_channel(1, { 0.0f }, { 7.0f }));
 			Clips[LateRef.Guid] = late;
 
+			Sources.Graph = [this](const AssetRef& ref) -> const AnimationGraphData*
+			{
+				auto it = Graphs.find(ref.Guid);
+				return it != Graphs.end() ? &it->second : nullptr;
+			};
 			Sources.Skeleton = [this](const AssetRef& ref) -> const SkeletonData* { return ref == SkeletonRef ? &Skeleton : nullptr; };
 			Sources.Clip = [this](const AssetRef& ref) -> const AnimationClipData*
 			{
@@ -90,6 +96,33 @@ namespace wiwa
 				auto it = Clips.find(ref.Guid);
 				return it != Clips.end() ? &it->second : nullptr;
 			};
+		}
+
+		// A graph of the rig: Idle and Run, Idle -> Run when the trigger "jump" fires; parameters speed (float), go (bool), jump (trigger).
+		void add_graph()
+		{
+			AnimationGraphData graph;
+			graph.Name = "hero";
+			graph.Skeleton = SkeletonRef;
+			graph.Parameters = { { "speed", GraphParamType::Float, 0.0f }, { "go", GraphParamType::Bool, 0.0f }, { "jump", GraphParamType::Trigger, 0.0f } };
+			GraphLayer base;
+			base.Name = "Base";
+			base.DefaultState = "Idle";
+			GraphState idle;
+			idle.Name = "Idle";
+			idle.Clip = IdleRef;
+			GraphState run;
+			run.Name = "Run";
+			run.Clip = RunRef;
+			base.States = { idle, run };
+			GraphTransition toRun;
+			toRun.From = "Idle";
+			toRun.To = "Run";
+			toRun.Duration = 0.0f;
+			toRun.Conditions = { { "jump", GraphCompareOp::Fired, 0.0f } };
+			base.Transitions = { toRun };
+			graph.Layers = { base };
+			Graphs[GraphRef.Guid] = graph;
 		}
 
 		Animator config() const

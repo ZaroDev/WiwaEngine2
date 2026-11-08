@@ -19,9 +19,14 @@
 
 namespace wiwa
 {
-	std::unordered_set<AssetGuid> select_pack_set(const std::vector<PackCandidate>& candidates, const BuildSettings& settings, std::vector<AssetGuid>& missing)
+	std::unordered_set<AssetGuid> select_pack_set(const std::vector<PackCandidate>& candidates, const BuildSettings& settings, std::vector<AssetGuid>& missing, const std::unordered_map<AssetGuid, AssetGuid>& redirects)
 	{
 		missing.clear();
+		auto redirected = [&redirects](AssetGuid guid)
+		{
+			const auto found = redirects.find(guid);
+			return found == redirects.end() ? guid : found->second;
+		};
 
 		std::unordered_map<AssetGuid, const PackCandidate*> byGuid;
 		std::vector<AssetGuid> pending;
@@ -36,8 +41,9 @@ namespace wiwa
 
 		for (const std::vector<AssetGuid>* roots : { &settings.Scenes, &settings.AlwaysInclude })
 		{
-			for (AssetGuid guid : *roots)
+			for (AssetGuid named : *roots)
 			{
+				const AssetGuid guid = redirected(named);
 				if (byGuid.contains(guid))
 				{
 					pending.push_back(guid);
@@ -69,7 +75,10 @@ namespace wiwa
 			{
 				continue;
 			}
-			pending.insert(pending.end(), found->second->Dependencies.begin(), found->second->Dependencies.end());
+			for (AssetGuid dependency : found->second->Dependencies)
+			{
+				pending.push_back(redirected(dependency));
+			}
 		}
 		return selected;
 	}
@@ -161,7 +170,7 @@ namespace wiwa
 					effective.AlwaysInclude.push_back(inputSettings.DefaultMap.Guid);
 				}
 			}
-			const std::unordered_set<AssetGuid> selected = select_pack_set(candidates, effective, missing);
+			const std::unordered_set<AssetGuid> selected = select_pack_set(candidates, effective, missing, database.redirect_map());
 			if (!missing.empty())
 			{
 				for (AssetGuid guid : missing)
@@ -308,6 +317,13 @@ namespace wiwa
 						if (packed.contains(entry.Guid))
 						{
 							kept.Entries.push_back(entry);
+						}
+					}
+					for (const AssetCatalog::Redirect& redirect : whole->Redirects)
+					{
+						if (packed.contains(redirect.To))
+						{
+							kept.Redirects.push_back(redirect);
 						}
 					}
 					catalog = serialize(kept);

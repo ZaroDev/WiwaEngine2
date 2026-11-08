@@ -632,6 +632,21 @@ function AnimatorHandle:off(event) end
 ---@param joint string
 ---@return mat4?
 function AnimatorHandle:joint_world(joint) end
+--- Sets a parameter of the Animator's animation graph (a number, or a boolean for a bool parameter). An unknown name, a trigger or a value of another kind is logged once and ignored. Safe to call every frame.
+---@param name string
+---@param value number|boolean
+function AnimatorHandle:set(name, value) end
+--- The value of a graph parameter (a boolean for a bool or trigger parameter), or nil.
+---@param name string
+---@return number|boolean|nil
+function AnimatorHandle:get(name) end
+--- Raises a trigger parameter of the graph for one frame (the transition that waits for it consumes it).
+---@param name string
+function AnimatorHandle:trigger(name) end
+--- The name of the active state of a graph layer (a layer name or a 1-based number; the base layer when omitted), or nil when the Animator plays no graph.
+---@param layer? string|integer
+---@return string?
+function AnimatorHandle:state(layer) end
 
 Animation = {}
 --- The animator of an entity that has an Animator, or nil.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <unordered_map>
 #include <unordered_set>
 
 #include <core/project_settings.h>
@@ -21,7 +22,9 @@ namespace wiwa
 
 	// The assets a pack holds under these settings: the engine's, the chosen scenes and the always-included assets, and everything
 	// those need, transitively. Guids the settings name that are not among the candidates are added to `missing`.
-	std::unordered_set<AssetGuid> select_pack_set(const std::vector<PackCandidate>& candidates, const BuildSettings& settings, std::vector<AssetGuid>& missing);
+	// redirects (legacy guid -> the guid it now means) are followed on every guid the settings and the dependencies name, so a scene that still names a
+	// sub-asset a model import moved into a file of its own packs that file, and the legacy guid is not reported missing.
+	std::unordered_set<AssetGuid> select_pack_set(const std::vector<PackCandidate>& candidates, const BuildSettings& settings, std::vector<AssetGuid>& missing, const std::unordered_map<AssetGuid, AssetGuid>& redirects = {});
 
 	// Writes assets.wpak: the cooked assets in Library/ (after bringing it up to date) that the build settings choose, each
 	// LZ4-compressed with a content hash. A game reads it through the AssetManager when it sits next to the program.

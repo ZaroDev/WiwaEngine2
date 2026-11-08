@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <set>
 #include <string>
 
 #include <core/common.h>
@@ -93,6 +94,9 @@ namespace wiwa
 			glm::vec3 SocketLow{ 1e9f }, SocketHigh{ -1e9f };
 			bool PaletteMoved = false;
 			bool Crossfaded = false;
+			bool GraphSeen = false;                // the Animator played its animation graph
+			std::set<std::string> BaseStates{};    // the states the base layer of the graph was in
+			std::set<std::string> UpperStates{};   // and the upper body layer
 			bool HasAnimator = false;
 			u64 EventsBefore = 0;
 			u64 EventsSeen = 0;

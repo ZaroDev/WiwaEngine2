@@ -150,6 +150,8 @@ namespace wiwa
 		std::vector<glm::vec4> MorphNormals{};
 		glm::vec3 BoundsMin{ 0.0f };
 		glm::vec3 BoundsMax{ 0.0f };
+		AssetRef Skeleton{};                    // a skinned mesh: the skeleton its SkinVertices index into
+		std::vector<std::string> SkinJointNames{}; // the joint names of that skeleton when the mesh was made (checked when it is cooked)
 	};
 
 	// A parameter of a user surface shader (.wshader). Offset is in bytes inside the parameter block, packed like an HLSL
@@ -252,14 +254,24 @@ namespace wiwa
 		AssetRef ParamTextures[SURFACE_MAX_TEXTURES]{};
 	};
 
-	// One skin of a model: the joints (node indices of the Prefab) and the matrices that bring a vertex into each joint's space.
-	// The importer orders the joints so that a parent always comes before its children; the arrays below are parallel to Joints.
+	// One skeleton: its joints by name (unique within the skeleton) and the matrices that bring a vertex into each joint's space.
+	// The joints are ordered so that a parent always comes before its children; the arrays below are parallel to JointNames. A clip drives a
+	// joint by name, a skinned mesh names joints by their place in this order.
 	// Rest* is the joint's own node. Pre is the product of the nodes between the joint and its parent joint (an Armature node above a root
 	// joint, for one), which clips do not animate: the matrix of a joint is parent * Pre * local, so a pose is in the space of the model's root.
+	// A named attachment point on a joint (a weapon, a effect): an offset from the joint, in the joint's space.
+	struct SkeletonSocket
+	{
+		std::string Name{};
+		std::string Joint{};   // the name of a joint of the skeleton
+		glm::vec3 Position{ 0.0f };
+		glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+		glm::vec3 Scale{ 1.0f };
+	};
+
 	struct SkeletonData
 	{
 		std::string Name{};
-		std::vector<u32> Joints{};
 		std::vector<glm::mat4> InverseBind{};
 		std::vector<std::string> JointNames{};
 		std::vector<i32> Parents{};              // joint index of the parent, -1 for a root joint
@@ -267,6 +279,7 @@ namespace wiwa
 		std::vector<glm::quat> RestRotation{};
 		std::vector<glm::vec3> RestScale{};
 		std::vector<glm::mat4> Pre{};
+		std::vector<SkeletonSocket> Sockets{};   // names unique, each on a joint of this skeleton
 	};
 
 	enum class AnimationPath : u32
@@ -286,7 +299,7 @@ namespace wiwa
 
 	struct AnimationChannel
 	{
-		u32 Node = 0; // node index in the Prefab
+		std::string Joint{}; // the joint of the skeleton this channel drives, by name
 		AnimationPath Path = AnimationPath::Translation;
 		AnimationInterpolation Interpolation = AnimationInterpolation::Linear;
 		u32 Components = 0;
@@ -307,6 +320,88 @@ namespace wiwa
 		float Duration = 0.0f;
 		std::vector<AnimationChannel> Channels{};
 		std::vector<AnimationEvent> Events{}; // sorted by time
+		AssetRef Skeleton{}; // the skeleton the clip was made for (a clip plays on any skeleton that has the joints it names)
+	};
+
+	// An animation graph (.wgraph): parameters, and layers that each hold a state machine over clips and blend spaces (animation.md).
+	enum class GraphParamType : u32 { Float, Int, Bool, Trigger };
+
+	struct GraphParameter
+	{
+		std::string Name{};
+		GraphParamType Type = GraphParamType::Float;
+		float Default = 0.0f;
+	};
+
+	enum class GraphCompareOp : u32 { Greater, Less, GreaterEqual, LessEqual, Equal, NotEqual, IsTrue, IsFalse, Fired };
+
+	struct GraphCondition
+	{
+		std::string Parameter{};
+		GraphCompareOp Op = GraphCompareOp::Greater;
+		float Value = 0.0f;
+	};
+
+	struct GraphTransition
+	{
+		std::string From{}; // empty: from any state
+		std::string To{};
+		std::vector<GraphCondition> Conditions{};
+		float Duration = 0.2f;
+		float ExitTime = -1.0f; // below 0: none, otherwise the fraction (0..1) of the source state's length to wait for
+	};
+
+	struct GraphBlendSample
+	{
+		AssetRef Clip{};
+		float X = 0.0f;
+		float Y = 0.0f;
+	};
+
+	enum class GraphBodyKind : u32 { Clip, Blend };
+
+	struct GraphState
+	{
+		std::string Name{};
+		GraphBodyKind Body = GraphBodyKind::Clip;
+		AssetRef Clip{};
+		std::vector<GraphBlendSample> Samples{};
+		std::string BlendX{}; // float parameters; an empty BlendY is a 1D blend space
+		std::string BlendY{};
+		bool Loop = true;
+		float Speed = 1.0f;
+		std::string SpeedParameter{}; // a float parameter that multiplies Speed
+		glm::vec2 Position{ 0.0f };   // on the editor's canvas
+	};
+
+	enum class GraphLayerMode : u32 { Base, Override, Additive };
+
+	struct GraphMaskJoint
+	{
+		std::string Joint{};
+		float Weight = 1.0f;
+	};
+
+	struct GraphLayer
+	{
+		std::string Name{};
+		GraphLayerMode Mode = GraphLayerMode::Base;
+		float Weight = 1.0f;
+		std::string WeightParameter{}; // a float parameter that replaces Weight
+		std::string MaskRoot{};        // the layer reaches this joint and its subtree; the weight drops by MaskFalloff per joint of depth (0: all 1)
+		float MaskFalloff = 0.0f;
+		std::vector<GraphMaskJoint> MaskJoints{}; // used when MaskRoot is empty and this is not
+		std::string DefaultState{};
+		std::vector<GraphState> States{};
+		std::vector<GraphTransition> Transitions{};
+	};
+
+	struct AnimationGraphData
+	{
+		std::string Name{};
+		AssetRef Skeleton{};
+		std::vector<GraphParameter> Parameters{};
+		std::vector<GraphLayer> Layers{};
 	};
 
 	struct PrefabNode

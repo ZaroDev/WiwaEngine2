@@ -90,6 +90,11 @@ namespace wiwa
 		// The folders of source assets (Assets/, engine/); shader includes are looked up in <root>/shaders.
 		std::vector<std::filesystem::path> get_source_roots() const;
 
+		// The reference with a redirect followed once (a legacy sub-asset of a model becomes the file it was extracted to), else the same.
+		AssetRef redirected(const AssetRef& ref) const;
+		// All the redirects at once (for an importer that follows many references).
+		std::unordered_map<AssetGuid, AssetGuid> redirect_map() const;
+
 		// Whether the database knows the asset's source file (a reference may name an asset that was deleted).
 		bool asset_exists(const AssetRef& ref) const;
 
@@ -106,6 +111,12 @@ namespace wiwa
 
 		void warn(const std::string& message);
 
+		// Says that a reference to a sub-asset this import used to produce (legacy) now means another asset (target): the model importer, once it has
+		// moved a skeleton, clip or skinned mesh into a file of its own. The database keeps the pairs with the import record and writes them into the
+		// catalog, where the asset manager, the packer and the reference finder follow them. The pairs are of resolved guids.
+		void add_redirect(AssetRef legacy, AssetRef target) { m_Redirects.emplace_back(legacy.resolved(), target.resolved()); }
+		const std::vector<std::pair<AssetGuid, AssetGuid>>& redirects() const { return m_Redirects; }
+
 		std::vector<EmittedAsset>& emitted() { return m_Emitted; }
 		const std::vector<std::filesystem::path>& get_source_dependencies() const { return m_SourceDependencies; }
 
@@ -118,6 +129,7 @@ namespace wiwa
 		std::vector<EmittedAsset> m_Emitted{};
 		std::vector<std::filesystem::path> m_SourceDependencies{};
 		std::vector<AssetGuid> m_PendingAssets{};
+		std::vector<std::pair<AssetGuid, AssetGuid>> m_Redirects{};
 		mutable std::vector<AssetGuid> m_Unresolved{};
 	};
 

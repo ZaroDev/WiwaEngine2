@@ -18,7 +18,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "SceneImporter"; }
-			virtual u32 version() const override { return 5; } // 5: the physics settings; 4: scripts: the scene-level list and script components as dependencies
+			virtual u32 version() const override { return 6; } // 6: dependencies follow the redirects of extracted model assets; 5: the physics settings; 4: scripts: the scene-level list and script components as dependencies
 			virtual std::vector<std::string> extensions() const override { return { ".wscene" }; }
 
 			virtual bool import(ImportContext& ctx) override
@@ -57,11 +57,14 @@ namespace wiwa
 				}
 
 				std::vector<AssetRef> dependencies;
+				const std::unordered_map<AssetGuid, AssetGuid> redirects = ctx.redirect_map();
 				for (const AssetRef& ref : collect_references(*result.Scene))
 				{
 					if (ctx.asset_exists(ref))
 					{
-						dependencies.push_back(ref);
+						// the scene keeps its reference (it loads through the redirect); what the pack needs is the file it leads to
+						const auto moved = redirects.find(ref.resolved());
+						dependencies.push_back(moved == redirects.end() ? ref : AssetRef{ moved->second, 0 });
 					}
 				}
 

@@ -4,12 +4,15 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
 #include <assets/asset_guid.h>
 #include <scene/components.h>
 
+#include "graph_compiler.h"
 #include "pose.h"
 #include "pose_nodes.h"
 
@@ -21,6 +24,7 @@ namespace wiwa
 	{
 		std::function<const SkeletonData*(const AssetRef&)> Skeleton{};
 		std::function<const AnimationClipData*(const AssetRef&)> Clip{};
+		std::function<const AnimationGraphData*(const AssetRef&)> Graph{};
 	};
 
 	// A clip by name (one of the Animator's Clips) or by asset.
@@ -78,6 +82,23 @@ namespace wiwa
 		// The names of the clips that have loaded.
 		std::vector<std::string> clip_names() const;
 
+		// Animation graph (Animator::Graph). The graph compiles once the skeleton, the graph and its clips have loaded; until then parameter writes wait
+		// (and are checked when it compiles). A graph that cannot play here (another skeleton, an invalid file) is logged once and the Animator plays its
+		// Clip instead. play, crossfade and stop leave graph mode for good. A write that cannot be applied (unknown name, wrong kind, not a number) is
+		// logged once per name and ignored, and returns false.
+		bool graph_mode() const { return m_GraphMode; }
+		bool set_param(const std::string& name, float value);
+		bool trigger(const std::string& name);
+		std::optional<float> param(const std::string& name) const;
+		std::optional<GraphParamType> param_type(const std::string& name) const;
+		size_t layer_count() const { return m_GraphMode ? m_Graph.Machines.size() : 0; }
+		// The parameters of the graph that plays (null otherwise), for tools that list them.
+		const GraphParams* params() const { return m_GraphMode ? m_Graph.Params.get() : nullptr; }
+		// -1 when there is no layer with this name.
+		int layer_index(const std::string& name) const;
+		// The active state of a layer of the graph; empty when there is none.
+		std::string state_name(size_t layer) const;
+
 		// Moves the clip that plays to a time (a scrub); the pose follows with the next update. Events between are not fired.
 		void seek(float time);
 
@@ -126,6 +147,12 @@ namespace wiwa
 		};
 
 		void submit(Command command);
+		void try_compile_graph();
+		void note_pending();
+		void give_up_graph(const std::string& reason);
+		void leave_graph();
+		bool apply_param(const std::string& name, float value, bool isTrigger);
+		void warn_once(const std::string& key, const std::string& message);
 		void run_commands();
 		bool resolve(const ClipSelector& selector, const AnimationClipData*& out, bool& unknown) const;
 		std::unique_ptr<ClipNode> make_clip(const AnimationClipData& clip, const PlayOptions& options);
@@ -143,6 +170,22 @@ namespace wiwa
 		std::vector<Layer> m_Layers;
 		LayerId m_NextLayer = 1;
 		std::deque<Command> m_Commands;
+
+		AssetRef m_GraphRef{};
+		AssetRef m_FallbackClip{};
+		bool m_FallbackPlay = false;
+		CompiledGraph m_Graph{}; // Root has moved into m_Root once the graph plays
+		bool m_GraphMode = false;
+		bool m_GraphGaveUp = false;
+		struct QueuedParam
+		{
+			std::string Name{};
+			float Value = 0.0f;
+			bool Trigger = false;
+		};
+		std::vector<QueuedParam> m_QueuedParams{};
+		u32 m_PendingFrames = 0;   // frames the graph has waited for the skeleton, the graph or a clip
+		std::set<std::string> m_Warned{};
 		std::map<const AnimationClipData*, std::shared_ptr<const ClipBinding>> m_Bindings;
 
 		Pose m_Pose{};

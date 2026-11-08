@@ -6,7 +6,7 @@ namespace wiwa
 	Pose rest_pose(const SkeletonData& skeleton)
 	{
 		Pose pose;
-		const size_t count = skeleton.Joints.size();
+		const size_t count = skeleton.JointNames.size();
 		pose.T = skeleton.RestTranslation;
 		pose.R = skeleton.RestRotation;
 		pose.S = skeleton.RestScale;

@@ -265,6 +265,7 @@ AssetFieldContext InspectorPanel::asset_context(wiwa::AssetType expected) const
 	context.Database = &m_Database;
 	context.Locate = m_Locate;
 	context.FindReferences = m_FindReferences;
+	context.OpenInAssetEditor = m_OpenInAssetEditor;
 	return context;
 }
 

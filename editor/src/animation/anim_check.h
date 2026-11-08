@@ -23,8 +23,8 @@ namespace wiwa
 	void run_pose_checks(AnimCheck& check);
 	// Checks of the components, the AnimatorInstance and the AnimationModule (anim_module_checks.cpp).
 	void run_module_checks(AnimCheck& check);
-	// Checks of the events editor model (anim_edit_checks.cpp).
-	void run_edit_checks(AnimCheck& check);
+	// Checks of animation graphs: the file, validation, the nodes, the instance, the edit model (anim_graph_checks.cpp).
+	void run_graph_checks(AnimCheck& check);
 	// Checks of the Lua API (anim_lua_checks.cpp).
 	void run_lua_checks(AnimCheck& check);
 }

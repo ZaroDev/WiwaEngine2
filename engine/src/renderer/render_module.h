@@ -146,6 +146,11 @@ namespace wiwa
 		// Asking starts the load; call it every frame the texture is shown. Main thread.
 		u32 get_asset_texture_id(const AssetRef& texture);
 
+		// A small RGBA8 image the UI can draw (the editor's thumbnails): the id for ImGui::Image is valid at once and draws nothing until the render
+		// thread has uploaded the image, a frame or two later. release_ui_image() frees it. 0 for an image with no pixels. Main thread.
+		u32 create_ui_image(const ImageData& image);
+		void release_ui_image(u32 id);
+
 		GraphicsApi get_api() const { return m_Description.Api; }
 		// False if the renderer could not start or has failed since.
 		bool is_ready() const { return m_Started && !m_Failed; }
@@ -207,6 +212,8 @@ namespace wiwa
 		// Texture assets shown by the UI: the id handed out per asset (main thread), and the ids the render thread has put in the
 		// texture registry (under the mutex).
 		static constexpr u32 FIRST_ASSET_TEXTURE_ID = 1u << 20;
+		static constexpr u32 FIRST_UI_IMAGE_ID = 1u << 21;
+		u32 m_NextUiImageId = FIRST_UI_IMAGE_ID;
 		std::unordered_map<AssetGuid, u32> m_AssetTextureIds{};
 		u32 m_NextAssetTextureId = FIRST_ASSET_TEXTURE_ID;
 		std::mutex m_AssetTextureMutex{};

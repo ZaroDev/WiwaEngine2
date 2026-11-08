@@ -39,6 +39,11 @@ namespace wiwa
 		// scan_async() and wait for it. Only for command-line runs and background jobs; never call it from the editor's main thread.
 		void scan();
 
+		// Imports the sources of one root (an index of get_roots()) that are stale or not cooked, and waits. For the editor's start: the engine's own
+		// assets (the shaders) have to be cooked before the renderer asks for them, or a cold Library (the first run, or after the cooked format changed)
+		// would make a pass fail and the editor quit. Not for the main loop.
+		void cook_root(size_t rootIndex);
+
 		// Re-cooks one source file if its content or settings changed (or always, with force).
 		void reimport(const std::filesystem::path& source, bool force = false);
 
@@ -67,6 +72,15 @@ namespace wiwa
 
 		// Called (on a worker thread) with each cooked guid after a file was re-cooked with new content.
 		void add_reimport_listener(std::function<void(AssetGuid)> listener);
+		// Called (on a worker thread) after the catalog was written with other content than before: new assets, or new redirects.
+		void add_catalog_listener(std::function<void()> listener);
+
+		// The redirects of the model imports (legacy resolved guid -> the guid of the file the asset was extracted to), from the import records.
+		std::unordered_map<AssetGuid, AssetGuid> redirect_map() const;
+		// The reference with a redirect followed once (a reference to a legacy sub-asset becomes one to its extracted file), else the same.
+		AssetRef redirected(AssetRef ref) const;
+		// The sources (guid of the model) whose import redirected something to target: where a legacy reference to it may still be written.
+		std::vector<AssetGuid> redirect_sources(AssetGuid target) const;
 
 		struct SourceRoot
 		{
@@ -86,6 +100,9 @@ namespace wiwa
 		};
 
 		void scan_impl(JobProgress& progress);
+		// Tells path_of() which source has which guid from the .meta files, before anything is imported: an importer that names another asset by guid
+		// (a clip or a skinned mesh naming its skeleton) finds its file even on a cold Library, where nothing has been imported yet.
+		void index_meta_guids(const std::vector<std::filesystem::path>& sources);
 		std::vector<std::string> find_dependents(const std::string& sourceKey) const;
 		// A cache entry that dropped references as missing, and one of them is known now.
 		bool has_resolvable(const nlohmann::json& entry) const;
@@ -115,6 +132,7 @@ namespace wiwa
 		std::unordered_map<AssetGuid, u32> m_PendingAssets{};
 		nlohmann::json m_ImportCache = nlohmann::json::object();
 		std::vector<std::function<void(AssetGuid)>> m_Listeners{};
+		std::vector<std::function<void()>> m_CatalogListeners{};
 
 		std::atomic<u32> m_Imported{ 0 };
 		std::atomic<u32> m_UpToDate{ 0 };

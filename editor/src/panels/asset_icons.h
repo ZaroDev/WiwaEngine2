@@ -48,6 +48,22 @@ inline const char* get_filetype_icon(const std::filesystem::path& path)
 	{
 		return ICON_FK_GLOBE;
 	}
+	else if (e == ".wskel")
+	{
+		return ICON_FK_SITEMAP;
+	}
+	else if (e == ".wanim")
+	{
+		return ICON_FK_FILM;
+	}
+	else if (e == ".wgraph")
+	{
+		return ICON_FK_SHARE_ALT;
+	}
+	else if (e == ".wmesh")
+	{
+		return ICON_FK_CUBE;
+	}
 	else if (e == ".wphysmat")
 	{
 		return ICON_FK_HUBZILLA;

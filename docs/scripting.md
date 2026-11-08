@@ -153,6 +153,10 @@ up.weight = 0.5; up:crossfade("Aim", 0.1); up:stop(0.2)
 anim:on("footstep", function(self, event) end)      -- event = { name, clip, time }
 anim:off("footstep")
 anim.speed, anim.time, anim.playing, anim.ready
+anim:set("speed", 3.5); anim:set("grounded", true)   -- parameters of the Animator's animation graph (Animator.Graph)
+anim:trigger("attack")                              -- a trigger parameter: raised for one frame
+local v = anim:get("speed")                         -- number, boolean for bool/trigger parameters, nil if unknown
+local s = anim:state("Upper")                       -- the active state of a graph layer (name or 1-based number; base layer if omitted)
 local m = anim:joint_world("RightHand")             -- mat4, the pose of the last frame
 ```
 
@@ -164,7 +168,11 @@ local m = anim:joint_world("RightHand")             -- mat4, the pose of the las
   two sides of a crossfade do not both fire a footstep. Handlers hear it one frame later, before `on_update`; a handler that raises an
   error is logged and removed; handlers end with the script that registered them.
 - A joint can drive an entity: put an `AnimationSocket` (joint name, offset) on a descendant of the Animator.
-- Scripts cannot write the pose of a joint (that is IK); graph parameters (`anim:set`) come with the animation graph.
+- An Animator with a `Graph` plays that animation graph (states, blends and layers made in the Asset Editor) and is driven by its parameters:
+  `anim:set(name, value)`, `anim:trigger(name)`, `anim:get(name)`, `anim:state(layer)`. A wrong name or kind is logged once and ignored; writes made before the
+  graph has loaded wait and are applied when it starts. `anim:play`, `anim:crossfade` and `anim:stop` take the base pose over from the graph for good
+  (layers made with `anim:layer` stay on top of the graph).
+- Scripts cannot write the pose of a joint (that is IK).
 
 ## Physics
 

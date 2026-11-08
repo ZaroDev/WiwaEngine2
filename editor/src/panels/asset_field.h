@@ -28,6 +28,7 @@ struct AssetFieldContext
 	const wiwa::AssetDatabase* Database = nullptr;    // names the asset by its source file
 	std::function<void(const wiwa::AssetRef&)> Locate{};         // "Show in browser"
 	std::function<void(const wiwa::AssetRef&)> FindReferences{}; // "Find references"
+	std::function<void(const wiwa::AssetRef&)> OpenInAssetEditor{}; // "Open in Asset Editor", for the asset types it edits
 };
 
 // An asset reference: the icon and name of the source file, a tooltip with its path, guid and type, a red "missing" state when the

@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "animator_instance.h"
 
+#include <cmath>
+
 #include "animation_log.h"
 
 namespace wiwa
@@ -8,10 +10,23 @@ namespace wiwa
 	AnimatorInstance::AnimatorInstance(const AnimationSources& sources, const Animator& config)
 		: m_Sources(sources), m_Clips(config.Clips), m_SkeletonRef(config.Skeleton), m_Root(std::make_unique<RestNode>())
 	{
+		m_GraphRef = config.Graph;
+		m_FallbackClip = config.Clip;
+		m_FallbackPlay = config.PlayOnStart;
 	}
 
 	void AnimatorInstance::submit(Command command)
 	{
+		if (command.Kind == CommandKind::Play || command.Kind == CommandKind::Crossfade || command.Kind == CommandKind::Stop)
+		{
+			// the base is the script's now: the graph does not come back
+			if (m_GraphMode)
+			{
+				warn_once("leave", "A script took over the base pose of an Animator that plays a graph (play, crossfade or stop): the graph ends");
+			}
+			leave_graph();
+			m_GraphGaveUp = true;
+		}
 		m_Commands.push_back(std::move(command));
 		run_commands();
 	}
@@ -189,6 +204,10 @@ namespace wiwa
 		if (binding == nullptr)
 		{
 			binding = std::make_shared<const ClipBinding>(bind_clip(clip, *m_Skeleton));
+			if (clip_compatibility(clip, *m_Skeleton).Result == ClipCompatibility::None)
+			{
+				WI_ANIM_LOG(Warning, "The clip {0} has no joint in common with the skeleton {1}: it moves nothing", clip.Name, m_Skeleton->Name);
+			}
 		}
 		auto node = std::make_unique<ClipNode>(clip, *m_Skeleton, binding);
 		node->set_loop(options.Loop);
@@ -383,11 +402,25 @@ namespace wiwa
 		{
 			return;
 		}
+		try_compile_graph();
 
-		m_Root->advance(deltaTime, 1.0f, events);
-		if (std::unique_ptr<PoseNode> replacement = m_Root->collapse())
+		if (m_GraphMode)
 		{
-			m_Root = std::move(replacement);
+			for (const std::function<void()>& update : m_Graph.WeightUpdates)
+			{
+				update();
+			}
+			m_Root->advance(deltaTime, 1.0f, events);
+			m_Graph.Params->end_frame(); // a trigger lives for one frame; the nodes that were to use it did
+			// no collapse: a layer at weight 0 stays, its weight follows a parameter
+		}
+		else
+		{
+			m_Root->advance(deltaTime, 1.0f, events);
+			if (std::unique_ptr<PoseNode> replacement = m_Root->collapse())
+			{
+				m_Root = std::move(replacement);
+			}
 		}
 
 		for (Layer& layer : m_Layers)
@@ -441,5 +474,197 @@ namespace wiwa
 		{
 			m_PreviousPalette = m_Palette; // the first frame has no history
 		}
+	}
+
+	void AnimatorInstance::warn_once(const std::string& key, const std::string& message)
+	{
+		if (m_Warned.insert(key).second)
+		{
+			WI_ANIM_LOG(Warning, "{0}", message);
+		}
+	}
+
+	void AnimatorInstance::give_up_graph(const std::string& reason)
+	{
+		m_GraphGaveUp = true;
+		m_QueuedParams.clear();
+		WI_ANIM_LOG(Warning, "The animation graph cannot play on this Animator: {0}", reason);
+		if (m_FallbackPlay && m_FallbackClip.valid())
+		{
+			play(ClipSelector{ {}, m_FallbackClip });
+		}
+	}
+
+	void AnimatorInstance::leave_graph()
+	{
+		if (!m_GraphMode)
+		{
+			return;
+		}
+		m_Root = std::make_unique<RestNode>(); // the nodes point to the parameters: they go first
+		m_Graph = CompiledGraph{};
+		m_GraphMode = false;
+	}
+
+	// A graph, a clip or a skeleton that never loads (deleted, not what its reference says) leaves the Animator in the rest pose: say so once.
+	void AnimatorInstance::note_pending()
+	{
+		if (++m_PendingFrames == 600)
+		{
+			warn_once("pending", "The Animator has waited for its animation graph (or a skeleton or clip it names) for 600 frames: it may be missing or failed to load; the rest pose plays meanwhile");
+		}
+	}
+
+	void AnimatorInstance::try_compile_graph()
+	{
+		if (!m_GraphRef.valid() || m_GraphMode || m_GraphGaveUp || !m_Sources.Graph || m_Skeleton == nullptr)
+		{
+			return;
+		}
+		const AnimationGraphData* graph = m_Sources.Graph(m_GraphRef);
+		if (graph == nullptr)
+		{
+			note_pending(); // loading
+			return;
+		}
+		if (graph->Skeleton.valid())
+		{
+			// the same joints (not the same reference: a legacy reference and the extracted skeleton are one rig)
+			const SkeletonData* made = m_Sources.Skeleton ? m_Sources.Skeleton(graph->Skeleton) : nullptr;
+			if (made == nullptr)
+			{
+				note_pending();
+				return;
+			}
+			if (made != m_Skeleton && made->JointNames != m_Skeleton->JointNames)
+			{
+				give_up_graph("it was made for another skeleton than the Animator's");
+				return;
+			}
+		}
+
+		CompiledGraph compiled = compile_graph(*graph, *m_Skeleton, m_Sources.Clip, m_Bindings);
+		if (compiled.Status == CompileStatus::Pending)
+		{
+			note_pending();
+			return;
+		}
+		if (compiled.Status == CompileStatus::Failed)
+		{
+			give_up_graph(compiled.Error);
+			return;
+		}
+		m_Graph = std::move(compiled);
+		m_Root = std::move(m_Graph.Root);
+		m_Current = nullptr;
+		m_GraphMode = true;
+		for (const QueuedParam& queued : m_QueuedParams)
+		{
+			apply_param(queued.Name, queued.Value, queued.Trigger);
+		}
+		m_QueuedParams.clear();
+	}
+
+	bool AnimatorInstance::apply_param(const std::string& name, float value, bool isTrigger)
+	{
+		const int index = m_Graph.Params->index_of(name);
+		if (index < 0)
+		{
+			warn_once("p:" + name, "The animation graph has no parameter named '" + name + "'");
+			return false;
+		}
+		const bool isTriggerParam = m_Graph.Params->type_of(index) == GraphParamType::Trigger;
+		if (isTrigger != isTriggerParam)
+		{
+			warn_once("p:" + name, isTriggerParam ? "The parameter '" + name + "' is a trigger: fire it with trigger()" : "The parameter '" + name + "' is not a trigger");
+			return false;
+		}
+		if (isTrigger)
+		{
+			m_Graph.Params->fire(index);
+		}
+		else
+		{
+			m_Graph.Params->set(index, value);
+		}
+		return true;
+	}
+
+	bool AnimatorInstance::set_param(const std::string& name, float value)
+	{
+		if (!std::isfinite(value))
+		{
+			warn_once("n:" + name, "The value for the graph parameter '" + name + "' is not a number");
+			return false;
+		}
+		if (m_GraphMode)
+		{
+			return apply_param(name, value, false);
+		}
+		if (m_GraphRef.valid() && !m_GraphGaveUp)
+		{
+			if (m_QueuedParams.size() < 64)
+			{
+				m_QueuedParams.push_back({ name, value, false });
+			}
+			return true;
+		}
+		warn_once("g:" + name, "The Animator plays no graph: the parameter '" + name + "' is ignored");
+		return false;
+	}
+
+	bool AnimatorInstance::trigger(const std::string& name)
+	{
+		if (m_GraphMode)
+		{
+			return apply_param(name, 0.0f, true);
+		}
+		if (m_GraphRef.valid() && !m_GraphGaveUp)
+		{
+			if (m_QueuedParams.size() < 64)
+			{
+				m_QueuedParams.push_back({ name, 0.0f, true });
+			}
+			return true;
+		}
+		warn_once("g:" + name, "The Animator plays no graph: the trigger '" + name + "' is ignored");
+		return false;
+	}
+
+	std::optional<float> AnimatorInstance::param(const std::string& name) const
+	{
+		if (!m_GraphMode)
+		{
+			return std::nullopt;
+		}
+		const int index = m_Graph.Params->index_of(name);
+		return index >= 0 ? std::optional<float>(m_Graph.Params->get(index)) : std::nullopt;
+	}
+
+	std::optional<GraphParamType> AnimatorInstance::param_type(const std::string& name) const
+	{
+		if (!m_GraphMode)
+		{
+			return std::nullopt;
+		}
+		const int index = m_Graph.Params->index_of(name);
+		return index >= 0 ? std::optional<GraphParamType>(m_Graph.Params->type_of(index)) : std::nullopt;
+	}
+
+	int AnimatorInstance::layer_index(const std::string& name) const
+	{
+		for (size_t i = 0; i < m_Graph.LayerNames.size(); i++)
+		{
+			if (m_Graph.LayerNames[i] == name)
+			{
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	}
+
+	std::string AnimatorInstance::state_name(size_t layer) const
+	{
+		return m_GraphMode && layer < m_Graph.Machines.size() ? m_Graph.Machines[layer]->active_state() : std::string{};
 	}
 }

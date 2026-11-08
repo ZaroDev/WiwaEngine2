@@ -17,6 +17,10 @@ namespace wiwa
 
 	void Log::init()
 	{
+		if (s_Logger != nullptr)
+		{
+			return; // started early (the editor cooks the engine's assets before the engine starts)
+		}
 		std::vector<spdlog::sink_ptr> logSinks;
 		logSinks.emplace_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
 		logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("wiwa.log", true));

@@ -72,6 +72,16 @@ namespace wiwa
 		m_PendingAssets.push_back(guid);
 	}
 
+	AssetRef ImportContext::redirected(const AssetRef& ref) const
+	{
+		return m_Database.redirected(ref);
+	}
+
+	std::unordered_map<AssetGuid, AssetGuid> ImportContext::redirect_map() const
+	{
+		return m_Database.redirect_map();
+	}
+
 	bool ImportContext::asset_exists(const AssetRef& ref) const
 	{
 		if (!ref.valid())

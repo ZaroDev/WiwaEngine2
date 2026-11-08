@@ -19,9 +19,6 @@ namespace wiwa
 		m_Database = CreateScope<AssetDatabase>("assets", "library");
 		m_Database->add_root("engine", "library/engine");
 		register_builtin_importers(*m_Database);
-		// In the background: the editor opens at once and the import reports through the database's progress object.
-		m_Database->scan_async();
-
 		// Re-cooked assets: tell the AssetManager so loaded copies can be refreshed.
 		// (Looked up once here: the listener runs on worker threads, which must not touch the module map.)
 		AssetManager* manager = Engine::get().get_module<AssetManager>();
@@ -29,6 +26,19 @@ namespace wiwa
 		{
 			manager->notify_reimported(guid);
 		});
+
+		// A catalog with new redirects (a model's first extraction): what failed to load under an old name loads again under the new one.
+		m_Database->add_catalog_listener([manager]()
+		{
+			for (AssetGuid from : manager->refresh_catalog())
+			{
+				manager->notify_reimported(from);
+			}
+		});
+
+		// In the background: the editor opens at once and the import reports through the database's progress object. (After the listeners above:
+		// the first scan may write the catalog before this function is done.)
+		m_Database->scan_async();
 
 		// Live re-import while the editor runs.
 		AssetDatabase* database = m_Database.get();

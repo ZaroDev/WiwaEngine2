@@ -19,8 +19,10 @@
 #include <scripting/script_module.h>
 #include <ui/ui_module.h>
 
-#include "animation/animation_edit_model.h"
 #include "animation/animation_panel.h"
+#include "asset_editor/asset_editor_panel.h"
+#include "asset_pipeline/file_utils.h"
+#include <assets/native_anim_files.h>
 #include "editor_ui/history_panel.h"
 #include "ui/ui_editor_panel.h"
 #include "ui/ui_smoke_test.h"
@@ -182,6 +184,16 @@ void EditorModule::init()
 		[this]() { return m_PlayMode->state() == wiwa::PlayState::Edit; });
 	m_AnimationPanel = animationPanel.get();
 	m_Panels.push_back(animationPanel);
+	{
+		wiwa::AssetDatabase& database = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database();
+		m_SkeletonIndex = CreateScope<wiwa::SkeletonIndex>(database);
+		database.add_catalog_listener(m_SkeletonIndex->invalidator());
+		m_EditorState = CreateScope<wiwa::EditorState>(database.get_library_root() / "editor_state.json");
+		Ref<AssetEditorPanel> assetEditor = CreateRef<AssetEditorPanel>(database, *m_EditorState, *m_SkeletonIndex);
+		m_AssetEditor = assetEditor.get();
+		m_Panels.push_back(assetEditor);
+		m_Thumbnails = CreateScope<wiwa::ThumbnailCache>(database, *m_SkeletonIndex, *m_EditorState);
+	}
 	Ref<EditorSection> editorSection = CreateRef<EditorSection>();
 	// every project-wide setting in one place (closed until opened from the Window menu); it shares the sections the Physics and Input panels made
 	m_Panels.push_back(CreateRef<SettingsPanel>(CreateRef<ProjectSection>(), CreateRef<RendererSection>(), physicsPanel->section(), inputPanel->section(), editorSection));
@@ -217,6 +229,9 @@ void EditorModule::init()
 	wiwa::SceneEditor* sceneEditor = m_SceneEditor.get();
 	browser->set_make_prefab([sceneEditor](entt::entity entity, const std::filesystem::path& folder) { return sceneEditor->make_prefab(entity, folder); });
 	inspector->set_locate([browserPanel](const wiwa::AssetRef& ref) { browserPanel->select_asset(ref); });
+	inspector->set_open_in_asset_editor([this](const wiwa::AssetRef& ref) { m_AssetEditor->open_asset(ref); });
+	browserPanel->set_thumbnails(m_Thumbnails.get());
+	browserPanel->set_open_asset_editor([this](const std::filesystem::path& file) { m_AssetEditor->open_file(file); });
 	inspector->set_find_references([this](const wiwa::AssetRef& ref) { find_references(ref); });
 	browserPanel->set_find_references([this](const wiwa::AssetRef& ref) { find_references(ref); });
 	m_BuildSettings = CreateScope<BuildSettingsPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
@@ -236,7 +251,7 @@ static bool focused_window_has_own_undo()
 		return false;
 	}
 	const char* name = window->RootWindow->Name;
-	return std::strncmp(name, "UI Editor", 9) == 0;
+	return std::strncmp(name, "UI Editor", 9) == 0 || std::strncmp(name, "Asset Editor", 12) == 0;
 }
 
 void EditorModule::register_shortcuts()
@@ -250,7 +265,7 @@ void EditorModule::register_shortcuts()
 		[editor]() { return editor->can_redo() && !focused_window_has_own_undo(); } });
 	m_Shortcuts.add({ "edit.redo2", "Redo", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, [editor]() { editor->redo(); },
 		[editor]() { return editor->can_redo() && !focused_window_has_own_undo(); } });
-	m_Shortcuts.add({ "file.save", "Save scene", ImGuiMod_Ctrl | ImGuiKey_S, [this]() { save_scene(); }, {} });
+	m_Shortcuts.add({ "file.save", "Save scene", ImGuiMod_Ctrl | ImGuiKey_S, [this]() { save_scene(); }, [this]() { return m_AssetEditor == nullptr || !m_AssetEditor->focused(); } });
 	m_Shortcuts.add({ "edit.duplicate", "Duplicate", ImGuiMod_Ctrl | ImGuiKey_D,
 		[editor]() { editor->duplicate_entity(editor->selected()); },
 		[editor]() { return !editor->playing() && editor->selected() != entt::null; } });
@@ -443,8 +458,61 @@ void EditorModule::find_references(const wiwa::AssetRef& ref)
 		roots.push_back(root.Source);
 	}
 	const std::optional<std::filesystem::path> source = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().path_of(ref.Guid);
-	m_References.start(ref.Guid, source ? source->filename().generic_string() : std::string(), std::move(roots));
+	m_References.start(ref.Guid, source ? source->filename().generic_string() : std::string(), std::move(roots), wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().redirect_sources(ref.resolved()));
 	m_ShowReferences = true;
+}
+
+// A model import that moved its skeletons, clips and skinned meshes into files of their own redirects the old references, so scenes keep working;
+// this rewrites the files to name the new assets directly. It shows what it would change first and changes nothing until the button is pressed.
+void EditorModule::reference_update_popup()
+{
+	wiwa::AssetDatabase& database = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database();
+	if (m_UpdateReferencesRequested)
+	{
+		m_UpdateReferencesRequested = false;
+		m_UpdateReferencesPlan = wiwa::plan_reference_update(database);
+		m_UpdateReferencesResult.clear();
+		ImGui::OpenPopup("Update references");
+	}
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (!ImGui::BeginPopupModal("Update references", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		return;
+	}
+
+	wiwa::u32 total = 0;
+	for (const wiwa::ReferenceUpdate& item : m_UpdateReferencesPlan)
+	{
+		total += item.Count;
+	}
+	if (!m_UpdateReferencesResult.empty())
+	{
+		ImGui::TextUnformatted(m_UpdateReferencesResult.c_str());
+	}
+	else if (m_UpdateReferencesPlan.empty())
+	{
+		ImGui::TextUnformatted("No scene, prefab or UI panel names an asset that was moved into a file of its own.");
+	}
+	else
+	{
+		ImGui::Text("%u reference(s) in %zu file(s) still name the old sub-assets of a model:", total, m_UpdateReferencesPlan.size());
+		for (const wiwa::ReferenceUpdate& item : m_UpdateReferencesPlan)
+		{
+			ImGui::BulletText("%s (%u)", item.File.generic_string().c_str(), item.Count);
+		}
+		ImGui::TextDisabled("They keep working without this. Under version control the change can be reverted.");
+		if (ImGui::Button("Rewrite them"))
+		{
+			const wiwa::u32 rewritten = wiwa::apply_reference_update(database, m_UpdateReferencesPlan);
+			m_UpdateReferencesResult = "Rewrote " + std::to_string(rewritten) + " reference(s). Reload the scene to see them.";
+		}
+		ImGui::SameLine();
+	}
+	if (ImGui::Button(m_UpdateReferencesResult.empty() && !m_UpdateReferencesPlan.empty() ? "Cancel" : "Close"))
+	{
+		ImGui::CloseCurrentPopup();
+	}
+	ImGui::EndPopup();
 }
 
 void EditorModule::references_window()
@@ -606,6 +674,12 @@ void EditorModule::edit_menu()
 
 void EditorModule::shutdown()
 {
+	// the views and scenes these hold belong to modules that shut down after this one
+	m_Thumbnails.reset();
+	if (m_AssetEditor != nullptr)
+	{
+		m_AssetEditor->close_preview();
+	}
 	// leaving while the scene plays: the scripts end and the scene that was being edited is the one that is left
 	if (m_PlayMode != nullptr)
 	{
@@ -727,54 +801,18 @@ void EditorModule::update(float deltaTime)
 		if (m_Frame == 10)
 		{
 			m_AnimationPanel->request_focus();
-		}
-		if (m_Frame == 100)
-		{
-			// a model with a .meta in a folder of its own: open its clips, add an event through the model and save it
-			m_AnimPanelDir = std::filesystem::temp_directory_path() / "wiwa_anim_panel_smoke";
-			std::error_code ignored;
-			std::filesystem::remove_all(m_AnimPanelDir, ignored);
-			std::filesystem::create_directories(m_AnimPanelDir, ignored);
-			const std::filesystem::path model = m_AnimPanelDir / "rig.glb";
-			{
-				std::ofstream out(model, std::ios::binary | std::ios::trunc);
-				out << "not really a model";
-			}
-			wiwa::MetaFile meta;
-			meta.Guid = wiwa::AssetGuid::generate();
-			meta.Importer = "ModelImporter";
-			meta.Settings = nlohmann::json::parse(R"({"generatePhysicsShapes":true,"animationEvents":[{"clip":"Walk","time":0.5,"name":"left"}]})");
-			meta.save(wiwa::MetaFile::meta_path_for(model));
-			if (m_AnimationPanel->open_events(model, { { "Walk", 2.0f }, { "Run", 1.0f } }) && m_AnimationPanel->model() != nullptr)
-			{
-				wiwa::AnimationEditModel* events = m_AnimationPanel->model();
-				events->add_event(0, 1.5f, "right");
-				events->add_event(1, 0.25f, "turn");
-				m_AnimationPanel->save();
-			}
+			// the Asset Editor opens the demo warrior's animation graph (canvas, tool pane and the preview that plays it)
+			m_AssetEditor->open_file("assets/models/characters/Warrior_animation/warrior.wgraph");
 		}
 		if (m_Frame == 130)
 		{
-			const std::filesystem::path model = m_AnimPanelDir / "rig.glb";
-			const std::optional<wiwa::MetaFile> saved = wiwa::MetaFile::load(wiwa::MetaFile::meta_path_for(model));
-			bool passed = saved.has_value() && m_AnimationPanel->frames_drawn() >= 100 && m_AnimationPanel->last_error().empty()
-				&& m_AnimationPanel->model() != nullptr && !m_AnimationPanel->model()->dirty();
-			std::string names;
-			if (passed)
-			{
-				const wiwa::AnimationEditModel reread = wiwa::AnimationEditModel::from_settings({ { "Walk", 2.0f }, { "Run", 1.0f } }, saved->Settings);
-				for (const wiwa::EditableClip& clip : reread.clips())
-				{
-					for (const wiwa::AnimationEvent& event : clip.Events)
-					{
-						names += clip.Name + "/" + event.Name + " ";
-					}
-				}
-				passed = names == "Walk/left Walk/right Run/turn " && saved->Settings.value("generatePhysicsShapes", false);
-			}
-			WI_INFO("Editor", "Animation panel smoke test {0} (frames {1}, events \"{2}\", error \"{3}\")", passed ? "passed" : "FAILED", m_AnimationPanel->frames_drawn(), names, m_AnimationPanel->last_error());
-			std::error_code ignored;
-			std::filesystem::remove_all(m_AnimPanelDir, ignored);
+			// the panels were drawn for the whole run (the events are edited in the Asset Editor now); the graph plays in the Asset Editor's preview
+			const bool animationPanel = m_AnimationPanel->frames_drawn() >= 100 && m_AnimationPanel->last_error().empty();
+			const bool graphEditor = m_AssetEditor->open_kind() == "Animation graph" && m_AssetEditor->frames_with_editor() >= 100 && m_AssetEditor->last_error().empty()
+				&& !m_AssetEditor->preview_state().empty();
+			const bool passed = animationPanel && graphEditor;
+			WI_INFO("Editor", "Animation panel smoke test {0} (frames {1}, error \"{2}\"; graph editor '{3}' drew {4} frames, error \"{5}\", preview state '{6}')", passed ? "passed" : "FAILED",
+				m_AnimationPanel->frames_drawn(), m_AnimationPanel->last_error(), m_AssetEditor->open_kind(), m_AssetEditor->frames_with_editor(), m_AssetEditor->last_error(), m_AssetEditor->preview_state());
 			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
 			wiwa::Engine::get().request_quit();
 		}
@@ -828,6 +866,7 @@ void EditorModule::update(float deltaTime)
 	status_bar();
 	m_Palette.draw();
 	references_window();
+	reference_update_popup();
 	export_modal();
 	scene_popups();
 	m_BuildSettings->on_draw();
@@ -858,6 +897,14 @@ void EditorModule::update(float deltaTime)
 	for (auto& panel : m_Panels)
 	{
 		panel->on_update();
+	}
+	if (m_SkeletonIndex != nullptr)
+	{
+		m_SkeletonIndex->update();
+	}
+	if (m_Thumbnails != nullptr)
+	{
+		m_Thumbnails->update();
 	}
 
 	m_Layout.update_maximize(!m_SceneEditor->playing() && !m_Palette.is_open());
@@ -975,6 +1022,10 @@ void EditorModule::main_bar()
 				m_BuildSettings->open();
 			}
 			export_button();
+			if (ImGui::MenuItem("Update references to extracted assets..."))
+			{
+				m_UpdateReferencesRequested = true;
+			}
 			ImGui::EndMenu();
 		}
 

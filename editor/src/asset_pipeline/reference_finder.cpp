@@ -66,15 +66,20 @@ namespace wiwa
 		return copy;
 	}
 
-	void ReferenceFinder::start(AssetGuid guid, std::string fileName, std::vector<std::filesystem::path> roots)
+	void ReferenceFinder::start(AssetGuid guid, std::string fileName, std::vector<std::filesystem::path> roots, std::vector<AssetGuid> redirectedFrom)
 	{
 		stop();
 		m_Target = guid;
 		m_State = std::make_shared<State>();
 		const std::shared_ptr<State> state = m_State;
 		const std::string needle = guid.to_string();
+		std::vector<std::string> legacyNeedles;
+		for (AssetGuid source : redirectedFrom)
+		{
+			legacyNeedles.push_back(source.to_string());
+		}
 
-		m_Task = std::async(std::launch::async, [state, needle, fileName = std::move(fileName), roots = std::move(roots)]()
+		m_Task = std::async(std::launch::async, [state, needle, legacyNeedles = std::move(legacyNeedles), fileName = std::move(fileName), roots = std::move(roots)]()
 		{
 			std::vector<std::filesystem::path> files;
 			for (const std::filesystem::path& root : roots)
@@ -100,6 +105,11 @@ namespace wiwa
 				std::stringstream text;
 				text << in.rdbuf();
 				int count = count_of(text.str(), needle);
+				// a reference that still names the model (and the local id the asset had as a sub-asset) reaches the asset through a redirect
+				for (const std::string& legacy : legacyNeedles)
+				{
+					count += count_of(text.str(), legacy);
+				}
 				if (!fileName.empty() && file.extension() == ".wmat")
 				{
 					count += count_of(text.str(), fileName);

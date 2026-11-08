@@ -1,5 +1,7 @@
 #include <editor_common.h>
 #include "asset_browser_panel.h"
+
+#include <asset_editor/asset_summary.h>
 #include "asset_icons.h"
 
 #include <imgui.h>
@@ -325,6 +327,10 @@ void AssetBrowserPanel::draw_top_bar()
 	ImGui::SetNextItemWidth(100.0f);
 	ImGui::SliderFloat("##asset_zoom", &m_ThumbnailScale, 0.5f, 2.0f, "Size %.1f");
 
+	if (!m_ReextractStatus.empty())
+	{
+		ImGui::TextDisabled("%s", m_ReextractStatus.c_str());
+	}
 	if (!m_Status.empty())
 	{
 		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_Status.c_str());
@@ -440,6 +446,11 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 		textureId = render != nullptr ? render->get_asset_texture_id(*found) : 0;
 	}
 
+	if (textureId == 0 && m_Thumbnails != nullptr && wiwa::ThumbnailCache::handles(file))
+	{
+		textureId = m_Thumbnails->request(file);
+	}
+
 	if (textureId != 0)
 	{
 		ImGui::PushID(file.string().c_str());
@@ -473,6 +484,10 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 		{
 			m_OpenUiPanel(file);
 		}
+		else if ((file.extension() == ".wskel" || file.extension() == ".wmesh" || file.extension() == ".wanim" || file.extension() == ".wgraph") && m_OpenAssetEditor)
+		{
+			m_OpenAssetEditor(file);
+		}
 		else if (file.extension() == ".wmat" && m_OpenMaterial)
 		{
 			m_OpenMaterial(file);
@@ -481,6 +496,22 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 		{
 			open_externally(file);
 		}
+	}
+	if ((wiwa::ThumbnailCache::handles(file) || file.extension() == ".wgraph") && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+	{
+		const std::string summary = wiwa::summarize_animation_file(file);
+		const std::string from = wiwa::extracted_from(file);
+		ImGui::BeginTooltip();
+		ImGui::TextUnformatted(file.filename().string().c_str());
+		if (!summary.empty())
+		{
+			ImGui::TextDisabled("%s", summary.c_str());
+		}
+		if (!from.empty())
+		{
+			ImGui::TextDisabled("Extracted from %s", from.c_str());
+		}
+		ImGui::EndTooltip();
 	}
 	ImGui::TextWrapped("%s", file.filename().string().c_str());
 }
@@ -576,7 +607,7 @@ void AssetBrowserPanel::draw_context_menu()
 	if (ImGui::BeginMenu("Create"))
 	{
 		for (const wiwa::CreateKind kind : { wiwa::CreateKind::Folder, wiwa::CreateKind::Material, wiwa::CreateKind::Script, wiwa::CreateKind::Scene,
-			wiwa::CreateKind::SurfaceShader, wiwa::CreateKind::HlslShader, wiwa::CreateKind::HlslInclude, wiwa::CreateKind::UiPanel, wiwa::CreateKind::PhysicsMaterial, wiwa::CreateKind::InputMap })
+			wiwa::CreateKind::SurfaceShader, wiwa::CreateKind::HlslShader, wiwa::CreateKind::HlslInclude, wiwa::CreateKind::UiPanel, wiwa::CreateKind::PhysicsMaterial, wiwa::CreateKind::InputMap, wiwa::CreateKind::AnimationGraph })
 		{
 			if (ImGui::MenuItem(wiwa::display_name(kind)))
 			{
@@ -593,6 +624,21 @@ void AssetBrowserPanel::draw_context_menu()
 		ImGui::TextDisabled("%s", m_Selected.filename().string().c_str());
 
 		// pack it although no packed scene uses it (the Build Settings panel lists these)
+		if (wiwa::ThumbnailCache::handles(m_Selected))
+		{
+			if (m_OpenAssetEditor && ImGui::MenuItem("Open in Asset Editor"))
+			{
+				m_OpenAssetEditor(m_Selected);
+			}
+			if (!wiwa::extracted_from(m_Selected).empty() && ImGui::MenuItem("Re-extract from model..."))
+			{
+				m_ReextractStatus = wiwa::reextract_from_model(m_Database, m_Selected);
+				if (m_ReextractStatus.empty())
+				{
+					m_ReextractStatus = "The model was imported again: a new copy is next to the old file.";
+				}
+			}
+		}
 		if (std::optional<wiwa::MetaFile> meta = wiwa::MetaFile::load(wiwa::MetaFile::meta_path_for(m_Selected)))
 		{
 			if (m_FindReferences && ImGui::MenuItem("Find references"))

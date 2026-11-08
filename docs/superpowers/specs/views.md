@@ -39,6 +39,10 @@ The frame loop builds and writes every view that will draw, then runs the whole 
 
 `ViewHost` (fields in `scene_components.cpp`, so the inspector, files, clone and Lua `entity:get("ViewHost")` work) is the game-side entry. `ViewHostSystem` runs from `RenderModule::render_update` on the **active scene** (the edit scene or the play clone; a different scene object starts over): per host it makes a `RenderView` (made again when the profile, `Transparent` or `Continuous` changes), a preview scene and a `PreviewModel`, follows the fields every frame (camera orbit, size, spin about the vertical axis), names the view in `ViewRegistry` and destroys the views of hosts that are gone. A `ViewImage` widget names the host (`ViewName`); `UiModule` resolves the name to a texture id when the draw list is built (`UiLayoutInput::ViewTexture`, one warning per unknown name) and `UiBatch::ViewTexture` makes the UI pass look the id up in the `TextureRegistry` on the render thread. The UI editor canvas does not draw views (no resolver there).
 
+## Users in the editor (`editor/src/asset_editor`)
+
+The Asset Editor preview is one continuous Preview-profile view that exists while the panel is drawn. The thumbnail cache owns one 128x128 transparent Thumbnail-profile **OneShot** view, reused for every thumbnail (one at a time; each waits about eight frames for the pose, the camera and the GPU mesh, and asks again if the first image is empty). Their scenes are registered with `AnimationModule::register_preview_scene` so their animators advance without a game clock.
+
 ## Traps
 
 - **Views do not animate yet.** The preview scene is extracted without palettes and `AnimationModule` is not ticked for it: skinned meshes show their bind pose. `AnimationModule` keeps its instances per last-seen scene, so ticking two scenes in one frame would reset them every frame; it needs to hold several scenes first.

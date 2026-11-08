@@ -2,6 +2,7 @@
 #include "clip_binding.h"
 
 #include <unordered_map>
+#include <unordered_set>
 
 #include "animation_log.h"
 
@@ -9,10 +10,10 @@ namespace wiwa
 {
 	ClipBinding bind_clip(const AnimationClipData& clip, const SkeletonData& skeleton)
 	{
-		std::unordered_map<u32, i32> jointOfNode;
-		for (size_t j = 0; j < skeleton.Joints.size(); j++)
+		std::unordered_map<std::string, i32> jointOfName;
+		for (size_t j = 0; j < skeleton.JointNames.size(); j++)
 		{
-			jointOfNode.emplace(skeleton.Joints[j], static_cast<i32>(j));
+			jointOfName.emplace(skeleton.JointNames[j], static_cast<i32>(j));
 		}
 
 		ClipBinding binding;
@@ -21,15 +22,15 @@ namespace wiwa
 		for (size_t c = 0; c < clip.Channels.size(); c++)
 		{
 			const AnimationChannel& channel = clip.Channels[c];
-			auto found = jointOfNode.find(channel.Node);
-			if (found != jointOfNode.end() && channel.Path != AnimationPath::Weights)
+			auto found = jointOfName.find(channel.Joint);
+			if (found != jointOfName.end() && channel.Path != AnimationPath::Weights)
 			{
 				binding.JointOfChannel[c] = found->second;
 			}
 			else
 			{
 				binding.Unbound++;
-				if (found == jointOfNode.end())
+				if (found == jointOfName.end() && channel.Path != AnimationPath::Weights)
 				{
 					foreign++;
 				}
@@ -38,8 +39,40 @@ namespace wiwa
 
 		if (foreign > 0)
 		{
-			WI_ANIM_LOG(Warning, "The clip {0} has {1} channel(s) for nodes outside the skeleton {2}; they are ignored", clip.Name, foreign, skeleton.Name);
+			WI_ANIM_LOG(Warning, "The clip {0} has {1} channel(s) for joints the skeleton {2} does not have; they are ignored", clip.Name, foreign, skeleton.Name);
 		}
 		return binding;
+	}
+
+	ClipCompatibilityReport clip_compatibility(const AnimationClipData& clip, const SkeletonData& skeleton)
+	{
+		std::unordered_set<std::string> joints(skeleton.JointNames.begin(), skeleton.JointNames.end());
+		std::unordered_set<std::string> missing;
+		ClipCompatibilityReport report;
+		for (const AnimationChannel& channel : clip.Channels)
+		{
+			if (channel.Path == AnimationPath::Weights)
+			{
+				continue;
+			}
+			report.Channels++;
+			if (joints.contains(channel.Joint))
+			{
+				report.Matched++;
+			}
+			else if (missing.insert(channel.Joint).second)
+			{
+				report.Missing.push_back(channel.Joint);
+			}
+		}
+		if (report.Matched == report.Channels)
+		{
+			report.Result = ClipCompatibility::Full;
+		}
+		else
+		{
+			report.Result = report.Matched == 0 ? ClipCompatibility::None : ClipCompatibility::Partial;
+		}
+		return report;
 	}
 }

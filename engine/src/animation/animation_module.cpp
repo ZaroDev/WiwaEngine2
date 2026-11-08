@@ -42,6 +42,19 @@ namespace wiwa
 			}
 			return it->second.get();
 		};
+		m_Sources.Graph = [this](const AssetRef& ref) -> const AnimationGraphData*
+		{
+			if (!ref.valid())
+			{
+				return nullptr;
+			}
+			auto it = m_GraphHandles.find(ref.resolved());
+			if (it == m_GraphHandles.end())
+			{
+				it = m_GraphHandles.emplace(ref.resolved(), m_Assets->load<AnimationGraphData>(ref)).first;
+			}
+			return it->second.get();
+		};
 
 		// the listener runs on whatever thread cooked the asset: it only notes the guid
 		m_ReloadListener = m_Assets->add_reload_listener([this](AssetGuid guid)
@@ -59,10 +72,12 @@ namespace wiwa
 			m_ReloadListener = 0;
 		}
 		m_Instances.clear();
+		m_PreviewScenes.clear();
 		m_Events.clear();
 		m_Scene.reset();
 		m_SkeletonHandles.clear();
 		m_ClipHandles.clear();
+		m_GraphHandles.clear();
 	}
 
 	// An asset that was cooked again: the instances hold pointers into the old data, so they end (the next tick makes new ones), and then
@@ -78,15 +93,20 @@ namespace wiwa
 		bool used = false;
 		for (AssetGuid guid : guids)
 		{
-			used = used || m_SkeletonHandles.contains(guid) || m_ClipHandles.contains(guid);
+			used = used || m_SkeletonHandles.contains(guid) || m_ClipHandles.contains(guid) || m_GraphHandles.contains(guid);
 		}
 		if (used)
 		{
 			m_Instances.clear();
+			for (auto& [scene, preview] : m_PreviewScenes)
+			{
+				preview.Instances.clear();
+			}
 			for (AssetGuid guid : guids)
 			{
 				m_SkeletonHandles.erase(guid);
 				m_ClipHandles.erase(guid);
+				m_GraphHandles.erase(guid);
 			}
 		}
 	}
@@ -101,6 +121,105 @@ namespace wiwa
 		const Time& time = Engine::get().get_time();
 		const bool playing = time.get_game_clock().IsPlaying;
 		tick(scenes->get_active(), step_seconds(playing, time.get_delta_time_seconds(), time.get_real_delta_time_seconds()), playing);
+
+		for (auto it = m_PreviewScenes.begin(); it != m_PreviewScenes.end();)
+		{
+			if (it->second.Owner.expired())
+			{
+				it = m_PreviewScenes.erase(it);
+				continue;
+			}
+			tick_preview_scene(it->second, time.get_real_delta_time_seconds());
+			++it;
+		}
+	}
+
+	void AnimationModule::register_preview_scene(const Ref<Scene>& scene)
+	{
+		if (scene != nullptr)
+		{
+			PreviewScene& entry = m_PreviewScenes[scene.get()];
+			if (entry.Owner.lock() != scene)
+			{
+				entry = PreviewScene{}; // an address a dead scene had: nothing of it is kept
+				entry.Owner = scene;
+			}
+		}
+	}
+
+	void AnimationModule::unregister_preview_scene(const Ref<Scene>& scene)
+	{
+		if (scene != nullptr)
+		{
+			m_PreviewScenes.erase(scene.get());
+		}
+	}
+
+	const AnimatorInstance* AnimationModule::instance_in(const Scene* scene, entt::entity entity) const
+	{
+		const auto preview = m_PreviewScenes.find(scene);
+		if (preview != m_PreviewScenes.end())
+		{
+			if (preview->second.Owner.lock().get() != scene)
+			{
+				return nullptr; // the scene that was registered at this address is gone
+			}
+			const auto it = preview->second.Instances.find(entity);
+			return it != preview->second.Instances.end() ? it->second.Instance.get() : nullptr;
+		}
+		return m_Scene.get() == scene ? instance_for(entity) : nullptr;
+	}
+
+	AnimatorInstance* AnimationModule::instance_in(const Scene* scene, entt::entity entity)
+	{
+		return const_cast<AnimatorInstance*>(std::as_const(*this).instance_in(scene, entity));
+	}
+
+	void AnimationModule::set_preview_paused_in(const Scene* scene, entt::entity entity, bool paused)
+	{
+		const auto preview = m_PreviewScenes.find(scene);
+		if (preview == m_PreviewScenes.end())
+		{
+			return;
+		}
+		const auto it = preview->second.Instances.find(entity);
+		if (it != preview->second.Instances.end())
+		{
+			it->second.Paused = paused;
+		}
+	}
+
+	// Every enabled Animator of a looked-at scene has an instance that advances with real time; an instance whose Animator is gone ends.
+	void AnimationModule::tick_preview_scene(PreviewScene& preview, float deltaTime)
+	{
+		const Ref<Scene> scene = preview.Owner.lock();
+		if (scene == nullptr)
+		{
+			return;
+		}
+		drain_reloads();
+		entt::registry& registry = scene->registry();
+		std::erase_if(preview.Instances, [&](const auto& item)
+			{
+				const Animator* animator = registry.valid(item.first) ? registry.try_get<Animator>(item.first) : nullptr;
+				return animator == nullptr || !animator->Enabled;
+			});
+		for (const auto [entity, id, animator] : registry.view<Id, Animator>().each())
+		{
+			if (animator.Enabled && !preview.Instances.contains(entity))
+			{
+				if (std::optional<Entry> entry = make_instance(registry, entity, true))
+				{
+					preview.Instances.emplace(entity, std::move(*entry));
+				}
+			}
+		}
+		std::vector<ClipEvent> ignored;
+		for (auto& [entity, entry] : preview.Instances)
+		{
+			ignored.clear();
+			entry.Instance->update(entry.Paused ? 0.0f : deltaTime * registry.get<Animator>(entity).Speed, ignored);
+		}
 	}
 
 	void AnimationModule::adopt(const Ref<Scene>& scene)
@@ -113,24 +232,31 @@ namespace wiwa
 		}
 	}
 
-	// A new instance for an enabled Animator that has none, playing its Clip if PlayOnStart.
-	AnimationModule::Entry* AnimationModule::make_entry(entt::registry& registry, entt::entity entity)
+	// A new instance for an enabled Animator, playing its Clip if PlayOnStart.
+	std::optional<AnimationModule::Entry> AnimationModule::make_instance(entt::registry& registry, entt::entity entity, bool previewOnly)
 	{
 		const Animator* animator = registry.try_get<Animator>(entity);
 		const Id* id = registry.try_get<Id>(entity);
 		if (animator == nullptr || id == nullptr || !animator->Enabled)
 		{
-			return nullptr;
+			return std::nullopt;
 		}
 
 		Entry entry;
 		entry.Instance = std::make_unique<AnimatorInstance>(m_Sources, *animator);
 		entry.Guid = id->Guid;
-		if (animator->PlayOnStart && animator->Clip.valid())
+		entry.Preview = previewOnly;
+		if (animator->PlayOnStart && animator->Clip.valid() && !animator->Graph.valid()) // a graph plays instead; the instance falls back to the clip if it cannot
 		{
 			entry.Instance->play(ClipSelector{ {}, animator->Clip });
 		}
-		return &m_Instances.emplace(entity, std::move(entry)).first->second;
+		return entry;
+	}
+
+	AnimationModule::Entry* AnimationModule::make_entry(entt::registry& registry, entt::entity entity)
+	{
+		std::optional<Entry> entry = make_instance(registry, entity, false);
+		return entry ? &m_Instances.emplace(entity, std::move(*entry)).first->second : nullptr;
 	}
 
 	AnimatorInstance* AnimationModule::acquire(const Ref<Scene>& scene, entt::entity entity, bool playing)

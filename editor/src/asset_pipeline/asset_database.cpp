@@ -95,6 +95,78 @@ namespace wiwa
 		return find_importer(source) != nullptr;
 	}
 
+	void AssetDatabase::add_catalog_listener(std::function<void()> listener)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		m_CatalogListeners.push_back(std::move(listener));
+	}
+
+	std::unordered_map<AssetGuid, AssetGuid> AssetDatabase::redirect_map() const
+	{
+		std::unordered_map<AssetGuid, AssetGuid> result;
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto& [guidText, entry] : m_ImportCache.items())
+		{
+			const auto list = entry.find("redirects");
+			if (list == entry.end() || !list->is_array())
+			{
+				continue;
+			}
+			for (const nlohmann::json& pair : *list)
+			{
+				if (!pair.is_array() || pair.size() != 2 || !pair[0].is_string() || !pair[1].is_string())
+				{
+					continue;
+				}
+				const std::optional<AssetGuid> from = AssetGuid::from_string(pair[0].get<std::string>());
+				const std::optional<AssetGuid> to = AssetGuid::from_string(pair[1].get<std::string>());
+				if (from && to)
+				{
+					result[*from] = *to;
+				}
+			}
+		}
+		return result;
+	}
+
+	AssetRef AssetDatabase::redirected(AssetRef ref) const
+	{
+		if (!ref.valid())
+		{
+			return ref;
+		}
+		const std::unordered_map<AssetGuid, AssetGuid> map = redirect_map();
+		const auto found = map.find(ref.resolved());
+		return found == map.end() ? ref : AssetRef{ found->second, 0 };
+	}
+
+	std::vector<AssetGuid> AssetDatabase::redirect_sources(AssetGuid target) const
+	{
+		std::vector<AssetGuid> sources;
+		const std::string wanted = target.to_string();
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto& [guidText, entry] : m_ImportCache.items())
+		{
+			const auto list = entry.find("redirects");
+			if (list == entry.end() || !list->is_array())
+			{
+				continue;
+			}
+			for (const nlohmann::json& pair : *list)
+			{
+				if (pair.is_array() && pair.size() == 2 && pair[1].is_string() && pair[1].get<std::string>() == wanted)
+				{
+					if (const std::optional<AssetGuid> source = AssetGuid::from_string(guidText))
+					{
+						sources.push_back(*source);
+					}
+					break;
+				}
+			}
+		}
+		return sources;
+	}
+
 	void AssetDatabase::add_reimport_listener(std::function<void(AssetGuid)> listener)
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);
@@ -287,6 +359,61 @@ namespace wiwa
 		scan_async()->wait();
 	}
 
+	void AssetDatabase::index_meta_guids(const std::vector<std::filesystem::path>& sources)
+	{
+		std::vector<std::pair<AssetGuid, std::string>> found;
+		for (const std::filesystem::path& source : sources)
+		{
+			if (const std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source)))
+			{
+				if (meta->Guid.valid())
+				{
+					found.emplace_back(meta->Guid, key_of(source));
+				}
+			}
+		}
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto& [guid, key] : found)
+		{
+			m_PathByGuid.try_emplace(guid, std::move(key));
+		}
+	}
+
+	void AssetDatabase::cook_root(size_t rootIndex)
+	{
+		if (rootIndex >= m_Roots.size())
+		{
+			return;
+		}
+
+		std::vector<std::filesystem::path> sources;
+		std::error_code error;
+		auto it = std::filesystem::recursive_directory_iterator(m_Roots[rootIndex].Source, std::filesystem::directory_options::skip_permission_denied, error);
+		for (; !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error))
+		{
+			if (it->is_directory() && it->path().filename().string().starts_with("."))
+			{
+				it.disable_recursion_pending();
+			}
+			else if (it->is_regular_file() && find_importer(it->path()))
+			{
+				sources.push_back(it->path());
+			}
+		}
+
+		index_meta_guids(sources);
+		std::vector<std::future<void>> jobs;
+		for (const std::filesystem::path& source : sources)
+		{
+			jobs.push_back(m_Jobs.submit([this, source]() { ensure_imported(source); }));
+		}
+		for (std::future<void>& job : jobs)
+		{
+			job.get();
+		}
+		write_catalog();
+	}
+
 	void AssetDatabase::scan_impl(JobProgress& progress)
 	{
 		progress.begin("Finding assets", 0);
@@ -313,6 +440,7 @@ namespace wiwa
 			}
 		}
 
+		index_meta_guids(sources);
 		progress.begin("Importing assets", static_cast<u32>(sources.size()));
 
 		// Models first: they import their textures with the settings they need (a normal map as a normal map).
@@ -381,6 +509,23 @@ namespace wiwa
 					continue;
 				}
 
+				if (const auto list = entry.find("redirects"); list != entry.end() && list->is_array())
+				{
+					for (const nlohmann::json& pair : *list)
+					{
+						if (!pair.is_array() || pair.size() != 2 || !pair[0].is_string() || !pair[1].is_string())
+						{
+							continue;
+						}
+						const std::optional<AssetGuid> from = AssetGuid::from_string(pair[0].get<std::string>());
+						const std::optional<AssetGuid> to = AssetGuid::from_string(pair[1].get<std::string>());
+						if (from && to)
+						{
+							catalog.Redirects.push_back({ *from, *to });
+						}
+					}
+				}
+
 				for (const SourceRoot& root : m_Roots)
 				{
 					const std::string prefix = key_of(root.Source) + "/";
@@ -399,6 +544,7 @@ namespace wiwa
 		}
 
 		std::sort(catalog.Entries.begin(), catalog.Entries.end(), [](const auto& a, const auto& b) { return a.Path < b.Path; });
+		std::sort(catalog.Redirects.begin(), catalog.Redirects.end(), [](const auto& a, const auto& b) { return a.From != b.From ? a.From < b.From : a.To < b.To; });
 		const std::vector<std::byte> bytes = serialize(catalog);
 
 		// Only written when it changed, so nothing downstream sees a new file for nothing.
@@ -418,6 +564,16 @@ namespace wiwa
 			file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
 		}
 		std::filesystem::rename(temp, path, error);
+
+		std::vector<std::function<void()>> listeners;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			listeners = m_CatalogListeners;
+		}
+		for (const std::function<void()>& listener : listeners)
+		{
+			listener();
+		}
 	}
 
 	// The sources whose last import read this file besides their own content.
@@ -850,6 +1006,12 @@ namespace wiwa
 				unresolved.push_back(guid.to_string());
 			}
 			entry["unresolved"] = std::move(unresolved);
+			nlohmann::json redirects = nlohmann::json::array();
+			for (const auto& [from, to] : context.redirects())
+			{
+				redirects.push_back(nlohmann::json::array({ from.to_string(), to.to_string() }));
+			}
+			entry["redirects"] = std::move(redirects);
 			m_ImportCache[guidText] = std::move(entry);
 			save_cache_locked();
 			listeners = m_Listeners;

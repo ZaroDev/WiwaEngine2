@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace wiwa
 {
@@ -27,7 +28,7 @@ namespace wiwa
 
 		void finalize_skeleton(ImportedModel& model, size_t index, std::vector<int>& meshRemappedBy)
 		{
-			SkeletonData& skeleton = model.Skeletons[index];
+			ImportedSkeleton& skeleton = model.Skeletons[index];
 			const size_t count = skeleton.Joints.size();
 			if (skeleton.InverseBind.size() != count)
 			{
@@ -113,7 +114,7 @@ namespace wiwa
 				newIndexOfOld[order[n]] = static_cast<u32>(n);
 			}
 
-			SkeletonData result;
+			ImportedSkeleton result;
 			result.Name = skeleton.Name;
 			for (size_t n = 0; n < count; n++)
 			{
@@ -130,6 +131,24 @@ namespace wiwa
 				result.RestTranslation.push_back(translation);
 				result.RestRotation.push_back(rotation);
 				result.RestScale.push_back(scale);
+			}
+			// joint names are unique inside a skeleton (a clip finds its joints by name): a repeated or empty name gets a number
+			std::unordered_set<std::string> usedNames;
+			for (size_t n = 0; n < result.JointNames.size(); n++)
+			{
+				std::string& name = result.JointNames[n];
+				const std::string base = name.empty() ? "Joint" : name;
+				std::string candidate = name.empty() ? "Joint " + std::to_string(n) : name;
+				for (int number = 2; usedNames.contains(candidate); number++)
+				{
+					candidate = base + "_" + std::to_string(number);
+				}
+				if (candidate != name)
+				{
+					model.Warnings.push_back("The skeleton " + result.Name + " has a joint name used twice (or empty); " + (name.empty() ? std::string("an empty name") : name) + " became " + candidate);
+				}
+				usedNames.insert(candidate);
+				name = candidate;
 			}
 			skeleton = std::move(result);
 
@@ -202,5 +221,60 @@ namespace wiwa
 		{
 			std::stable_sort(clip.Events.begin(), clip.Events.end(), [](const AnimationEvent& a, const AnimationEvent& b) { return a.Time < b.Time; });
 		}
+	}
+
+	AnimationClipData make_named_clip(const ImportedClip& clip, const std::vector<ImportedSkeleton>& skeletons, int& skeletonIndex, std::vector<std::string>& warnings)
+	{
+		// the skeleton that has the most of the nodes the clip animates (the first one on a tie)
+		skeletonIndex = -1;
+		size_t best = 0;
+		for (size_t s = 0; s < skeletons.size(); s++)
+		{
+			const std::unordered_set<u32> nodes(skeletons[s].Joints.begin(), skeletons[s].Joints.end());
+			size_t covered = 0;
+			for (size_t c = 0; c < clip.Channels.size() && c < clip.ChannelNodes.size(); c++)
+			{
+				covered += (clip.Channels[c].Path != AnimationPath::Weights && nodes.contains(clip.ChannelNodes[c])) ? 1 : 0;
+			}
+			if (covered > best)
+			{
+				best = covered;
+				skeletonIndex = static_cast<int>(s);
+			}
+		}
+
+		AnimationClipData result;
+		result.Name = clip.Name;
+		result.Duration = clip.Duration;
+		result.Events = clip.Events;
+
+		std::unordered_map<u32, size_t> jointOfNode;
+		if (skeletonIndex >= 0)
+		{
+			const ImportedSkeleton& skeleton = skeletons[static_cast<size_t>(skeletonIndex)];
+			for (size_t j = 0; j < skeleton.Joints.size(); j++)
+			{
+				jointOfNode.emplace(skeleton.Joints[j], j);
+			}
+		}
+
+		size_t dropped = 0;
+		for (size_t c = 0; c < clip.Channels.size(); c++)
+		{
+			const auto joint = c < clip.ChannelNodes.size() ? jointOfNode.find(clip.ChannelNodes[c]) : jointOfNode.end();
+			if (joint == jointOfNode.end() || clip.Channels[c].Path == AnimationPath::Weights || clip.Channels[c].Times.empty())
+			{
+				dropped++;
+				continue;
+			}
+			AnimationChannel channel = clip.Channels[c];
+			channel.Joint = skeletons[static_cast<size_t>(skeletonIndex)].JointNames[joint->second];
+			result.Channels.push_back(std::move(channel));
+		}
+		if (dropped > 0)
+		{
+			warnings.push_back("The clip " + clip.Name + ": " + std::to_string(dropped) + " channel(s) animate nodes that are no joint of a skeleton (or morph weights) and were left out");
+		}
+		return result;
 	}
 }

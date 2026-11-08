@@ -35,6 +35,19 @@ namespace wiwa
 		std::vector<u32> PrimitiveMaterials{}; // per primitive: index into ImportedModel::Materials
 	};
 
+	// A skeleton as the readers see it: Joints are the nodes of the model that are the joints, in the order of the arrays of SkeletonData.
+	// The importer turns it into a skeleton of joint names (the nodes mean nothing outside the model).
+	struct ImportedSkeleton : SkeletonData
+	{
+		std::vector<u32> Joints{};
+	};
+
+	// A clip as the readers see it: ChannelNodes[i] is the node channel i animates. Turned into a clip of joint names by make_named_clip.
+	struct ImportedClip : AnimationClipData
+	{
+		std::vector<u32> ChannelNodes{};
+	};
+
 	struct ImportedModel
 	{
 		std::string Name{};
@@ -44,8 +57,8 @@ namespace wiwa
 		std::vector<ImportedMesh> Meshes{};
 		std::vector<ImportedMaterial> Materials{}; // the last one is the default, for primitives that name none
 		std::vector<ImportedImage> Images{};
-		std::vector<SkeletonData> Skeletons{};
-		std::vector<AnimationClipData> Animations{};
+		std::vector<ImportedSkeleton> Skeletons{};
+		std::vector<ImportedClip> Animations{};
 		std::vector<std::string> Warnings{};
 	};
 

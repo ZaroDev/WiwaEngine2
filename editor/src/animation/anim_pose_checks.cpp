@@ -19,7 +19,6 @@ namespace wiwa
 		{
 			SkeletonData skeleton;
 			skeleton.Name = "chain";
-			skeleton.Joints = { 10, 11, 12 };
 			skeleton.JointNames = { "hip", "mid", "tip" };
 			skeleton.Parents = { -1, 0, 1 };
 			skeleton.RestTranslation = { glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f) };
@@ -39,7 +38,7 @@ namespace wiwa
 		AnimationChannel make_channel(u32 node, AnimationPath path, AnimationInterpolation interpolation, std::vector<float> times, std::vector<float> values)
 		{
 			AnimationChannel channel;
-			channel.Node = node;
+			channel.Joint = node == 10 ? "hip" : (node == 11 ? "mid" : (node == 12 ? "tip" : "node" + std::to_string(node)));
 			channel.Path = path;
 			channel.Interpolation = interpolation;
 			channel.Components = path == AnimationPath::Rotation ? 4 : 3;

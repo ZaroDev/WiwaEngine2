@@ -42,6 +42,13 @@ namespace wiwa
 				Instances.ui_handlers().set_current(&Owner);
 			}
 
+			// The hero plays the rig's graph (anim_fixture.h add_graph).
+			void use_graph()
+			{
+				Rig.add_graph();
+				Active->registry().get<Animator>(Hero).Graph = Rig.GraphRef;
+			}
+
 			~LuaAnimHarness() { Instances.ui_handlers().set_current(nullptr); }
 
 			// One frame as the engine runs it: the scripts (which hear last frame's events), then the animation module.
@@ -178,6 +185,27 @@ namespace wiwa
 			check(h.run("return gone") == "0", "handlers end with their owner");
 		}
 
+		void graph_parameters(AnimCheck& check)
+		{
+			LuaAnimHarness h;
+			h.use_graph();
+			h.run("a = Animation.animator(find_entity('hero'))");
+			h.frame(0.1f);
+			check(h.run("return a:state()") == "Idle", "lua_graph_set_get_trigger_state: the graph starts in its default state");
+			std::string error;
+			h.run("a:set('speed', 2.5)", &error);
+			check(error.empty() && h.run("return a:get('speed')") == "2.5", "lua_graph_set_get_trigger_state: set and get a float: " + error);
+			h.run("a:set('go', true)", &error);
+			check(error.empty() && h.run("return tostring(a:get('go'))") == "true", "lua_graph_set_get_trigger_state: a bool parameter reads back as a boolean");
+			h.run("a:set('ghost', 1); a:set('speed', 'fast'); a:set('jump', 1); a:trigger('speed'); a:trigger('ghost')", &error);
+			check(error.empty() && h.run("return a:get('speed')") == "2.5", "lua_graph_set_get_trigger_state: unknown names, wrong kinds and strings are ignored without an error: " + error);
+			check(h.run("return tostring(a:get('ghost'))") == "nil", "lua_graph_set_get_trigger_state: an unknown parameter reads nil");
+			h.run("a:trigger('jump')");
+			h.frame(0.1f);
+			check(h.run("return a:state()") == "Run" && h.run("return a:state('Base')") == "Run" && h.run("return a:state(1)") == "Run", "lua_graph_set_get_trigger_state: a trigger takes the transition (by default, by name, by number)");
+			check(h.run("return tostring(a:state('Nope'))") == "nil", "lua_graph_set_get_trigger_state: an unknown layer reads nil");
+		}
+
 		void invalidation(AnimCheck& check)
 		{
 			LuaAnimHarness h;
@@ -195,6 +223,7 @@ namespace wiwa
 
 	void run_lua_checks(AnimCheck& check)
 	{
+		graph_parameters(check);
 		animator_handles(check);
 		playback(check);
 		layers(check);

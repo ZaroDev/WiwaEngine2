@@ -2592,9 +2592,20 @@
             "localId": 0
           }
         },
-        "script:592c8bee4cf57edd70047f126ea16eec": {
-          "period": 0.5,
-          "fade": 0.1
+        "Animator": {
+          "Skeleton": {
+            "guid": "b898dc0290fb5347a780ef8c57719cc0",
+            "localId": 1
+          },
+          "PlayOnStart": false,
+          "Graph": {
+            "guid": "bcba63970f059ed0d34a706f340d48c4",
+            "localId": 0
+          }
+        },
+        "script:68ea71680c291c59f52eb202fa969b38": {
+          "period": 0.4,
+          "attack_every": 0.15
         }
       },
       "parent": "6ba23329d0330f39b465064e43191155"

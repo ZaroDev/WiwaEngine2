@@ -1,5 +1,7 @@
 #pragma once
 
+#include "asset_pipeline/reference_updater.h"
+
 #include <core/module.h>
 
 #include <imgui.h>
@@ -10,6 +12,10 @@
 #include <scene/scene_editor.h>
 
 #include <asset_pipeline/reference_finder.h>
+
+#include <asset_editor/editor_state.h>
+#include <asset_editor/skeleton_index.h>
+#include <asset_editor/thumbnail_cache.h>
 
 #include "editor_ui/command_palette.h"
 #include "editor_ui/layout_manager.h"
@@ -64,6 +70,7 @@ private:
 	// Starts looking for where the asset is used and shows the References window.
 	void find_references(const wiwa::AssetRef& ref);
 	void references_window();
+	void reference_update_popup();
 	void status_bar();
 	// Opens a scene file and remembers it for File > Open recent.
 	void open_scene(const std::string& path);
@@ -76,6 +83,9 @@ private:
 	CommandPalette m_Palette{};
 	wiwa::ReferenceFinder m_References{};
 	bool m_ShowReferences = false;
+	bool m_UpdateReferencesRequested = false;               // File > Update references to extracted assets was chosen
+	std::vector<wiwa::ReferenceUpdate> m_UpdateReferencesPlan{};
+	std::string m_UpdateReferencesResult{};
 	class AssetBrowserPanel* m_Browser = nullptr; // owned by m_Panels
 	std::vector<std::string> m_RecentScenes{};    // most recent first, as the catalog knows them (source paths)
 	bool m_SaveLayoutRequested = false;
@@ -112,7 +122,11 @@ private:
 	bool m_InputPanelSmoke = false;              // --input-panel-smoke: draw the Input panel for a while with ImGui asserts on, edit a map through the panel, check it was saved
 	std::filesystem::path m_InputPanelFile{};
 	class AnimationPanel* m_AnimationPanel = nullptr; // owned by m_Panels
-	bool m_AnimPanelSmoke = false;               // --anim-panel-smoke: draw the Animation panel for a while with ImGui asserts on, edit a clip event through the panel, check it was saved
+	Scope<wiwa::SkeletonIndex> m_SkeletonIndex{};   // which meshes and clips name each skeleton, kept up to date in the background
+	Scope<wiwa::EditorState> m_EditorState{};       // Library/editor_state.json
+	Scope<wiwa::ThumbnailCache> m_Thumbnails{};     // the thumbnails of the Asset Browser
+	class AssetEditorPanel* m_AssetEditor = nullptr; // owned by m_Panels
+	bool m_AnimPanelSmoke = false;               // --anim-panel-smoke: draw the Animation panel and the Graph editor (on the demo warrior's graph, whose preview must play it) for a while with ImGui asserts on
 	std::filesystem::path m_AnimPanelDir{};
 	std::filesystem::path m_UiEditorSmokeFile{};
 	wiwa::u32 m_Frame = 0;

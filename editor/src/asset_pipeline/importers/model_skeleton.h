@@ -17,4 +17,9 @@ namespace wiwa
 	// Adds the events listed in the "animationEvents" array of the model import settings ({clip, time, name}) to the clips of that
 	// name and sorts them by time. An event for a clip the model does not have is warned about.
 	void merge_animation_events(ImportedModel& model, const nlohmann::json& settings);
+
+	// The clip with its channels turned from node indices into joint names, through the skeleton that has the most of the nodes the clip
+	// animates (skeletonIndex, -1 when no skeleton has any). Channels for nodes that are no joint of that skeleton, and morph-weight channels,
+	// are left out with one warning per clip. Call it after finalize_model_skeletons (it orders the joints and names them).
+	AnimationClipData make_named_clip(const ImportedClip& clip, const std::vector<ImportedSkeleton>& skeletons, int& skeletonIndex, std::vector<std::string>& warnings);
 }

@@ -214,6 +214,7 @@ namespace wiwa
 		float Speed = 1.0f;
 		bool Enabled = true;
 		float BoundsPadding = 0.0f;    // the mesh bounds grow by this much in every direction for culling
+		AssetRef Graph{};              // an animation graph (.wgraph) that plays from the scene start instead of Clip
 	};
 
 	// On any descendant of an Animator: follows a joint of its skeleton. After the pose is evaluated the entity's Transform is written.

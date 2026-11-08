@@ -149,7 +149,7 @@ namespace wiwa
 				for (cgltf_size i = 0; i < m_Data->skins_count; i++)
 				{
 					const cgltf_skin& skin = m_Data->skins[i];
-					SkeletonData result;
+					ImportedSkeleton result;
 					result.Name = (skin.name != nullptr) ? skin.name : ("Skin " + std::to_string(i));
 					for (cgltf_size j = 0; j < skin.joints_count; j++)
 					{
@@ -171,7 +171,7 @@ namespace wiwa
 				for (cgltf_size i = 0; i < m_Data->animations_count; i++)
 				{
 					const cgltf_animation& animation = m_Data->animations[i];
-					AnimationClipData result;
+					ImportedClip result;
 					result.Name = (animation.name != nullptr) ? animation.name : ("Animation " + std::to_string(i + 1));
 
 					for (cgltf_size c = 0; c < animation.channels_count; c++)
@@ -183,7 +183,7 @@ namespace wiwa
 						}
 
 						AnimationChannel channel;
-						channel.Node = static_cast<u32>(cgltf_node_index(m_Data, source.target_node));
+						const u32 targetNode = static_cast<u32>(cgltf_node_index(m_Data, source.target_node));
 						switch (source.target_path)
 						{
 						case cgltf_animation_path_type_translation: channel.Path = AnimationPath::Translation; channel.Components = 3; break;
@@ -222,6 +222,7 @@ namespace wiwa
 
 						result.Duration = std::max(result.Duration, channel.Times.back());
 						result.Channels.push_back(std::move(channel));
+						result.ChannelNodes.push_back(targetNode);
 					}
 
 					if (!result.Channels.empty())

@@ -311,6 +311,60 @@ namespace wiwa
 		return 0;
 	}
 
+	u32 RenderModule::create_ui_image(const ImageData& image)
+	{
+		if (image.Width == 0 || image.Height == 0 || image.Rgba.size() < static_cast<size_t>(image.Width) * image.Height * 4)
+		{
+			return 0;
+		}
+		const u32 id = m_NextUiImageId++;
+		auto pixels = std::make_shared<ImageData>(image);
+		submit([pixels, id](RenderWorld& world)
+			{
+				nvrhi::IDevice* device = world.get_renderer().get_device();
+				if (device == nullptr)
+				{
+					return;
+				}
+				nvrhi::TextureDesc description;
+				description.width = pixels->Width;
+				description.height = pixels->Height;
+				description.format = nvrhi::Format::RGBA8_UNORM;
+				description.initialState = nvrhi::ResourceStates::ShaderResource;
+				description.keepInitialState = true;
+				description.debugName = "UI image";
+				nvrhi::TextureHandle texture = device->createTexture(description);
+				if (!texture)
+				{
+					return;
+				}
+				nvrhi::CommandListHandle upload = device->createCommandList();
+				upload->open();
+				upload->writeTexture(texture, 0, 0, pixels->Rgba.data(), static_cast<size_t>(pixels->Width) * 4);
+				upload->close();
+				device->executeCommandList(upload);
+				world.get_renderer().get_textures().set(id, texture);
+			});
+		return id;
+	}
+
+	void RenderModule::release_ui_image(u32 id)
+	{
+		if (id < FIRST_UI_IMAGE_ID || id >= FIRST_VIEW_TEXTURE_ID)
+		{
+			return;
+		}
+		submit([this, id](RenderWorld& world)
+			{
+				nvrhi::ITexture* texture = world.get_renderer().get_textures().get(id);
+				if (texture != nullptr && m_ImGuiPass != nullptr)
+				{
+					m_ImGuiPass->forget_texture(texture);
+				}
+				world.get_renderer().get_textures().set(id, nullptr);
+			});
+	}
+
 	void RenderModule::set_viewport_size(u32 width, u32 height)
 	{
 		if (width == m_RequestedViewportWidth && height == m_RequestedViewportHeight)
@@ -817,7 +871,22 @@ namespace wiwa
 
 			scene->update_world_transforms();
 			const float viewAspect = static_cast<float>(record->Width) / static_cast<float>(std::max(record->Height, 1u));
-			SceneDelta viewDelta = record->Extractor.extract(scene, viewAspect);
+			// the palettes of a looked-at scene come from the animation module's preview instances of that scene
+			PaletteSource viewPalettes;
+			if (const AnimationModule* animation = Engine::get().get_module<AnimationModule>())
+			{
+				const Scene* viewScene = scene.get();
+				viewPalettes = [animation, viewScene](entt::entity animator) -> std::span<const glm::vec4>
+				{
+					const AnimatorInstance* instance = animation->instance_in(viewScene, animator);
+					if (instance == nullptr || instance->palette().empty())
+					{
+						return {};
+					}
+					return { reinterpret_cast<const glm::vec4*>(instance->palette().data()), instance->palette().size() * 3 };
+				};
+			}
+			SceneDelta viewDelta = record->Extractor.extract(scene, viewAspect, viewPalettes);
 			const ViewId viewId = record->Id;
 			if (!viewDelta.empty())
 			{

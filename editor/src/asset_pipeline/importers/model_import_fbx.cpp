@@ -126,7 +126,7 @@ namespace wiwa
 					const double duration = std::max(stack->time_end - stack->time_begin, 1.0 / BAKE_RATE);
 					const size_t keyCount = static_cast<size_t>(std::ceil(duration * BAKE_RATE)) + 1;
 
-					AnimationClipData animation;
+					ImportedClip animation;
 					animation.Name = to_string(stack->name);
 					if (animation.Name.empty())
 					{
@@ -139,7 +139,6 @@ namespace wiwa
 						const ufbx_node* node = m_Scene->nodes.data[nodeIndex];
 
 						AnimationChannel translation;
-						translation.Node = nodeIndex;
 						translation.Path = AnimationPath::Translation;
 						translation.Components = 3;
 						AnimationChannel rotation = translation;
@@ -178,6 +177,7 @@ namespace wiwa
 						animation.Channels.push_back(std::move(translation));
 						animation.Channels.push_back(std::move(rotation));
 						animation.Channels.push_back(std::move(scale));
+						animation.ChannelNodes.insert(animation.ChannelNodes.end(), 3, nodeIndex);
 					}
 
 					if (!animation.Channels.empty())
@@ -329,7 +329,7 @@ namespace wiwa
 					return found->second;
 				}
 
-				SkeletonData skin;
+				ImportedSkeleton skin;
 				skin.Name = "Skin " + std::to_string(m_Model.Skeletons.size());
 				for (size_t i = 0; i < deformer->clusters.count; i++)
 				{

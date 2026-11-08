@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -64,6 +65,15 @@ namespace wiwa
 		void set_preview_paused(entt::entity entity, bool paused);
 		void drop_previews();
 
+		// Scenes that are only looked at (the preview scene of an Asset Editor view, a thumbnail scene): every enabled Animator in them gets a preview
+		// instance that advances with real time, whatever the game clock does, and its palette reaches the view that draws the scene (instance_in).
+		// They hold the scene weakly and are dropped when it is gone. They write no sockets and queue no events.
+		void register_preview_scene(const Ref<Scene>& scene);
+		void unregister_preview_scene(const Ref<Scene>& scene);
+		const AnimatorInstance* instance_in(const Scene* scene, entt::entity entity) const;
+		AnimatorInstance* instance_in(const Scene* scene, entt::entity entity);
+		void set_preview_paused_in(const Scene* scene, entt::entity entity, bool paused);
+
 		// The events that fired since the last call. The scripts hear them at the start of the next frame.
 		std::vector<QueuedAnimationEvent> take_events();
 
@@ -83,6 +93,14 @@ namespace wiwa
 			bool Paused = false;
 		};
 
+		struct PreviewScene
+		{
+			std::weak_ptr<Scene> Owner{};
+			std::unordered_map<entt::entity, Entry> Instances{};
+		};
+
+		void tick_preview_scene(PreviewScene& preview, float deltaTime);
+		std::optional<Entry> make_instance(entt::registry& registry, entt::entity entity, bool previewOnly);
 		void drain_reloads();
 		void adopt(const Ref<Scene>& scene);
 		Entry* make_entry(entt::registry& registry, entt::entity entity);
@@ -92,12 +110,14 @@ namespace wiwa
 		AnimationSources m_Sources{};
 		Ref<Scene> m_Scene{};
 		std::unordered_map<entt::entity, Entry> m_Instances{};
+		std::unordered_map<const Scene*, PreviewScene> m_PreviewScenes{};
 		std::vector<QueuedAnimationEvent> m_Events{};
 		u64 m_EventsTotal = 0;
 
 		// the assets the default sources loaded: kept for as long as an instance may point into them
 		std::unordered_map<AssetGuid, Handle<SkeletonData>> m_SkeletonHandles{};
 		std::unordered_map<AssetGuid, Handle<AnimationClipData>> m_ClipHandles{};
+		std::unordered_map<AssetGuid, Handle<AnimationGraphData>> m_GraphHandles{};
 		u32 m_ReloadListener = 0;
 		std::mutex m_ReloadMutex{};
 		std::vector<AssetGuid> m_ReloadQueue{};
