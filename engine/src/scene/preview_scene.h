@@ -14,6 +14,7 @@ namespace wiwa
 		glm::vec3 Background{ 0.18f };   // the solid background (a view with a transparent background ignores it)
 		bool Ground = false;             // a ground plane under the model (needs the engine's plane mesh: not yet, ignored)
 		float ExposureEv = 0.0f;
+		float AmbientIntensity = 0.6f;   // the hemisphere light that fills what the three directional lights miss
 	};
 
 	// A neutral studio: a key light that casts shadows, a fill and a rim light, a solid background and manual exposure. No camera: the view brings

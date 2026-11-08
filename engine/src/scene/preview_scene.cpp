@@ -42,7 +42,7 @@ namespace wiwa
 		settings.BackgroundColor = options.Background;
 		settings.HemisphereSky = glm::vec3(0.55f, 0.6f, 0.7f);
 		settings.HemisphereGround = glm::vec3(0.25f, 0.23f, 0.2f);
-		settings.AmbientIntensity = 0.6f;
+		settings.AmbientIntensity = options.AmbientIntensity;
 		settings.ExposureEv = options.ExposureEv;
 		settings.Exposure.Auto = false;
 		settings.Bloom.Enabled = false;

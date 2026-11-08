@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <bit>
 
+#include <assets/builtin_assets.h>
+
 #define WI_CACHE_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
 
 namespace wiwa
@@ -130,6 +132,9 @@ namespace wiwa
 		m_Sampler = m_Device->createSampler(samplerDescription);
 
 		create_fallbacks();
+
+		// the meshes the engine makes itself (assets/builtin_assets.h): named by the main thread, held here
+		m_InlineMeshes[builtin_assets::PREVIEW_SPHERE.resolved()] = std::make_shared<const MeshData>(builtin_assets::make_preview_sphere());
 
 		// The custom-material layout: set 3 on Vulkan (its index among a pipeline's layouts), registers of its own on D3D.
 		nvrhi::BindingLayoutDesc custom;

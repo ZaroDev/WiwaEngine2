@@ -497,7 +497,7 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 			open_externally(file);
 		}
 	}
-	if ((wiwa::ThumbnailCache::handles(file) || file.extension() == ".wgraph") && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+	if ((wiwa::ThumbnailCache::is_animation_asset(file) || file.extension() == ".wgraph") && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
 	{
 		const std::string summary = wiwa::summarize_animation_file(file);
 		const std::string from = wiwa::extracted_from(file);
@@ -624,7 +624,7 @@ void AssetBrowserPanel::draw_context_menu()
 		ImGui::TextDisabled("%s", m_Selected.filename().string().c_str());
 
 		// pack it although no packed scene uses it (the Build Settings panel lists these)
-		if (wiwa::ThumbnailCache::handles(m_Selected))
+		if (wiwa::ThumbnailCache::is_animation_asset(m_Selected))
 		{
 			if (m_OpenAssetEditor && ImGui::MenuItem("Open in Asset Editor"))
 			{
