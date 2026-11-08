@@ -3,6 +3,7 @@
 
 #include <algorithm>
 
+#include <animation/animation_module.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 
@@ -86,6 +87,11 @@ namespace wiwa
 				{
 					host.Preview = make_preview_scene();
 					host.Model = CreateScope<PreviewModel>(*assets, host.Preview);
+					// the model's Animator plays in its small scene too (a portrait that waves)
+					if (AnimationModule* animation = Engine::get().get_module<AnimationModule>())
+					{
+						animation->register_preview_scene(host.Preview);
+					}
 				}
 				host.View.set_scene(host.Preview);
 				host.HasApplied = false;
