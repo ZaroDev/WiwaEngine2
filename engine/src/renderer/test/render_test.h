@@ -46,6 +46,7 @@ namespace wiwa
 	// The clustered light checks (light_checks.cpp).
 	void register_light_checks();
 	void register_decal_checks();
+	void register_particle_checks();
 	// The shadow checks (shadow_checks.cpp).
 	void register_shadow_checks();
 	// The alpha mode, blending, resolve and blit checks (blend_checks.cpp).

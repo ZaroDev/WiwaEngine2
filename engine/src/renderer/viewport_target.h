@@ -49,6 +49,7 @@ namespace wiwa
 		u32 bloom_width(u32 level) const { return std::max(1u, m_Width >> (level + 1)); }
 		u32 bloom_height(u32 level) const { return std::max(1u, m_Height >> (level + 1)); }
 		nvrhi::IFramebuffer* hdr_framebuffer() const { return m_HdrFramebuffer; }     // HDR + depth
+		nvrhi::IFramebuffer* hdr_color_framebuffer() const { return m_HdrColorFramebuffer; } // HDR only (particles read the depth through a shader view)
 		nvrhi::IFramebuffer* depth_framebuffer() const { return m_DepthFramebuffer; } // depth only
 		// The world normal of the nearest surface, facing the viewer, octahedral encoded (RG16F), written by the depth prepass.
 		nvrhi::ITexture* normal() const { return m_Normal; }
@@ -108,6 +109,7 @@ namespace wiwa
 		nvrhi::BufferHandle m_Histogram{};
 		nvrhi::FramebufferHandle m_HdrFramebuffer{};
 		nvrhi::FramebufferHandle m_DepthFramebuffer{};
+		nvrhi::FramebufferHandle m_HdrColorFramebuffer{};
 		nvrhi::FramebufferHandle m_LdrFramebuffer{};
 		nvrhi::FramebufferHandle m_LdrDepthFramebuffer{};
 		nvrhi::TextureHandle m_Normal{};

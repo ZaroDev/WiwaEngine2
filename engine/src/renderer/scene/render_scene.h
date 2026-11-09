@@ -88,6 +88,7 @@ namespace wiwa
 	struct RenderParticleSystem
 	{
 		bool Alive = false;
+		EntityGuid Guid{};           // set when the system is added
 		glm::mat4 World{ 1.0f };
 		glm::mat4 PrevWorld{ 1.0f }; // World as the last simulated frame had it (emitters inherit the motion)
 		AssetRef Effect{};

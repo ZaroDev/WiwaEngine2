@@ -1219,6 +1219,12 @@ namespace wiwa
 	{
 		m_SurfaceShaders->invalidate(resolved);
 
+		if (const auto effect = m_Effects.find(resolved); effect != m_Effects.end())
+		{
+			effect->second.Data = acquire<ParticleEffectData>(AssetRef{ resolved, 0 }, m_InlineEffects);
+			effect->second.Revision++;
+		}
+
 		if (const auto mesh = m_Meshes.find(resolved); mesh != m_Meshes.end())
 		{
 			MeshEntry& entry = *mesh->second;
@@ -1285,6 +1291,41 @@ namespace wiwa
 		ref.Guid = AssetGuid::generate();
 		m_InlineMaterials[ref.resolved()] = std::make_shared<const MaterialData>(std::move(material));
 		return ref;
+	}
+
+	AssetRef GpuResourceCache::add_inline_particle_effect(ParticleEffectData effect)
+	{
+		AssetRef ref;
+		ref.Guid = AssetGuid::generate();
+		m_InlineEffects[ref.resolved()] = std::make_shared<const ParticleEffectData>(std::move(effect));
+		return ref;
+	}
+
+	void GpuResourceCache::set_inline_particle_effect(const AssetRef& effect, ParticleEffectData data)
+	{
+		m_InlineEffects[effect.resolved()] = std::make_shared<const ParticleEffectData>(std::move(data));
+		invalidate(effect.resolved());
+	}
+
+	const ParticleEffectData* GpuResourceCache::get_particle_effect(const AssetRef& effect)
+	{
+		if (!effect.valid())
+		{
+			return nullptr;
+		}
+		auto found = m_Effects.find(effect.resolved());
+		if (found == m_Effects.end())
+		{
+			found = m_Effects.emplace(effect.resolved(), EffectEntry{}).first;
+			found->second.Data = acquire<ParticleEffectData>(effect, m_InlineEffects);
+		}
+		return found->second.Data.state() == LoadState::Ready ? found->second.Data.get() : nullptr;
+	}
+
+	u32 GpuResourceCache::effect_revision(const AssetRef& effect) const
+	{
+		const auto found = m_Effects.find(effect.resolved());
+		return found == m_Effects.end() ? 0u : found->second.Revision;
 	}
 
 	AssetRef GpuResourceCache::add_inline_texture(TextureData texture)

@@ -132,6 +132,7 @@ namespace wiwa
 		m_MainView.Target.destroy();
 		m_Environments.reset();
 		m_Jobs.reset();
+		m_ParticlePool.shutdown();
 		m_Cache.reset();
 		m_Uploads.shutdown();
 		m_Shaders.reset();
@@ -357,6 +358,7 @@ namespace wiwa
 		description.Shaders = m_Shaders.get();
 		description.Textures = &m_Textures;
 		description.Cache = m_Cache.get();
+		description.Particles = &m_ParticlePool;
 		return description;
 	}
 

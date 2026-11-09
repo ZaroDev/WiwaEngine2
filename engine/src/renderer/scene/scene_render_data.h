@@ -197,6 +197,8 @@ namespace wiwa
 		ViewportTarget* viewport() const { return m_Viewport; }
 		GpuResourceCache* cache() const { return m_Cache; }
 		const RenderScene* scene() const { return m_Scene; }
+		// The scene of this view, to take what the particle simulation consumes (RenderScene::take_pending_spawns). Render thread, simulation pass only.
+		RenderScene* scene_mutable() const { return m_Scene; }
 		const SceneSettings& settings() const { return m_Settings; }
 		// Where the environments of the settings come from; without one the scene is lit by the hemisphere ambient.
 		void set_environments(EnvironmentCache* environments) { m_Environments = environments; }
@@ -252,7 +254,7 @@ namespace wiwa
 		bool m_AoActive = false;
 		ViewportTarget* m_Viewport = nullptr;
 		GpuResourceCache* m_Cache = nullptr;
-		const RenderScene* m_Scene = nullptr;
+		RenderScene* m_Scene = nullptr;
 		SceneSettings m_Settings{};
 		RenderQuality m_Quality{};
 		ViewFlags m_Flags{};

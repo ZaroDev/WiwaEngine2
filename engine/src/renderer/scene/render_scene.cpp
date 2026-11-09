@@ -135,6 +135,7 @@ namespace wiwa
 		{
 			// the spawns still waiting for the simulation and the matrix of the last simulated frame belong to the render scene, not to the delta
 			const auto existing = m_ParticleIndex.find(guid);
+			system.Guid = guid;
 			system.PendingSpawns = existing != m_ParticleIndex.end() ? m_Particles[existing->second].PendingSpawns : std::array<u32, PARTICLE_MAX_EMITTERS>{};
 			system.PrevWorld = existing != m_ParticleIndex.end() ? m_Particles[existing->second].PrevWorld : system.World;
 			upsert(particles, guid, std::move(system));

@@ -183,6 +183,10 @@ namespace wiwa
 		hdrFramebuffer.setDepthAttachment(m_Depth);
 		m_HdrFramebuffer = device->createFramebuffer(hdrFramebuffer);
 
+		nvrhi::FramebufferDesc hdrColorFramebuffer;
+		hdrColorFramebuffer.addColorAttachment(m_Hdr);
+		m_HdrColorFramebuffer = device->createFramebuffer(hdrColorFramebuffer);
+
 		nvrhi::FramebufferDesc depthFramebuffer;
 		depthFramebuffer.setDepthAttachment(m_Depth);
 		m_DepthFramebuffer = device->createFramebuffer(depthFramebuffer);
@@ -211,7 +215,7 @@ namespace wiwa
 		preFxaaFramebuffer.addColorAttachment(m_PreFxaa);
 		m_PreFxaaFramebuffer = device->createFramebuffer(preFxaaFramebuffer);
 
-		if (!m_HdrFramebuffer || !m_DepthFramebuffer || !m_LdrFramebuffer || !m_LdrDepthFramebuffer || !m_PreFxaaFramebuffer || !m_PrepassFramebuffer || !m_VelocityFramebuffer)
+		if (!m_HdrFramebuffer || !m_HdrColorFramebuffer || !m_DepthFramebuffer || !m_LdrFramebuffer || !m_LdrDepthFramebuffer || !m_PreFxaaFramebuffer || !m_PrepassFramebuffer || !m_VelocityFramebuffer)
 		{
 			WI_LOG(Error, "Renderer", "could not create the viewport framebuffers");
 			destroy();
@@ -294,6 +298,7 @@ namespace wiwa
 	{
 		release_decal_targets();
 		m_HdrFramebuffer = nullptr;
+		m_HdrColorFramebuffer = nullptr;
 		m_DepthFramebuffer = nullptr;
 		m_LdrFramebuffer = nullptr;
 		m_LdrDepthFramebuffer = nullptr;

@@ -14,6 +14,7 @@
 #include "render_pick.h"
 #include "render_queue.h"
 #include "environment/environment_cache.h"
+#include "particles/particle_pool.h"
 #include "resources/gpu_resource_cache.h"
 #include "scene/render_scene.h"
 #include "scene/scene_render_data.h"
@@ -52,6 +53,7 @@ namespace wiwa
 		UploadQueue& get_upload_queue() { return m_Uploads; }
 		RenderScene& get_scene() { return m_MainView.Scene; }
 		GpuResourceCache& get_cache() { return *m_Cache; }
+		ParticlePool& get_particle_pool() { return m_ParticlePool; }
 		EnvironmentCache& get_environments() { return *m_Environments; }
 		SceneRenderData& get_scene_data() { return m_MainView.Data; }
 		AssetManager* get_assets() const { return m_Description.Assets; }
@@ -161,6 +163,7 @@ namespace wiwa
 		UploadQueue m_Uploads{};
 		Scope<JobSystem> m_Jobs{};                 // background work of the renderer (the BRDF table, atmosphere builds)
 		Scope<GpuResourceCache> m_Cache{};
+		ParticlePool m_ParticlePool{};
 		Scope<EnvironmentCache> m_Environments{};
 		ViewState m_MainView{};                      // view 0: its scene, frame data and target (what get_scene() and friends return)
 		std::vector<Scope<ViewState>> m_ExtraViews{}; // the views made for RenderViews, by creation order

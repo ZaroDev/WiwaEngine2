@@ -13,6 +13,7 @@ namespace wiwa
 	class ShaderLibrary;
 	class TextureRegistry;
 	class GpuResourceCache;
+	class ParticlePool;
 	class SceneRenderData;
 	struct ViewState;
 	struct ViewFlags;
@@ -45,6 +46,7 @@ namespace wiwa
 		ShaderLibrary* Shaders = nullptr;          // cooked shaders, loaded through the asset system
 		TextureRegistry* Textures = nullptr;       // the textures the UI can draw by id
 		GpuResourceCache* Cache = nullptr;           // the meshes, textures and fonts on the GPU
+		ParticlePool* Particles = nullptr;           // the particles of every system (vfx.md)
 	};
 
 	// A render pass records its commands into the command list that the renderer
