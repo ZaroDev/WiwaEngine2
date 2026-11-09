@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "decal_bullet",
+  "alpha": "opaque",
+  "alphaCutoff": 0.5,
+  "baseColor": [
+    1,
+    1,
+    1,
+    1
+  ],
+  "clearcoat": 0.0,
+  "clearcoatRoughness": 0.0,
+  "doubleSided": false,
+  "emissive": [
+    0,
+    0,
+    0
+  ],
+  "metallic": 0.0,
+  "roughness": 0.6,
+  "sheen": 0.0,
+  "sheenRoughness": 0.0,
+  "transmission": 0.0,
+  "textures": {
+    "baseColor": "../textures/decals/bullet_color.png",
+    "normal": "../textures/decals/bullet_normal.png"
+  }
+}

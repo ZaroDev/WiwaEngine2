@@ -28,7 +28,8 @@ import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "editor" / "assets"
-CACHE = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / ".demo_cache"
+ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+CACHE = pathlib.Path(ARGS[0]) if ARGS else ROOT / ".demo_cache"
 
 SCENE_GUID = "2a6ca957fed3526d8d53224e96ff22f1"  # editor/build_settings.json names it
 
@@ -1103,6 +1104,47 @@ return ClipPlayer
 """
 
 
+SCRIPTS["decal_footprints.lua"] = """-- Decals from a script: every "footstep" event of the entity's animator leaves a footprint (Decal.spawn) that fades out on its own, and the
+-- mesh of the character does not receive decals itself (MeshRenderer.ReceivesDecals).
+local DecalFootprints = Script:extend{
+  properties = {
+    lifetime = { type = "float", default = 4, min = 0.5, max = 30 },
+  },
+}
+
+local function stop_receiving(entity)
+  for _, child in ipairs(entity.children) do
+    if child:has("MeshRenderer") then
+      child:get("MeshRenderer").receivesdecals = false
+    end
+    stop_receiving(child)
+  end
+end
+
+function DecalFootprints:on_init()
+  self.left = true
+  self.material = load_asset("assets/materials/decal_footprint.wmat")
+  stop_receiving(self.entity)
+  local anim = Animation.animator(self.entity)
+  if anim ~= nil then
+    anim:on("footstep", function(me, event)
+      me:step()
+    end)
+  end
+end
+
+function DecalFootprints:step()
+  local p = self.entity.transform.position
+  local side = self.left and -0.18 or 0.18
+  self.left = not self.left
+  Decal.spawn{ material = self.material, position = vec3(p.x + side, 0.02, p.z), normal = vec3(0, 1, 0), size = vec3(0.3, 0.5, 0.4),
+    lifetime = self.lifetime, fade_in = 0.1, fade_out = 1.5, roll = 180, sort_order = 5, name = "Footprint" }
+end
+
+return DecalFootprints
+"""
+
+
 def build_scripts():
 	ids = {}
 	for rel, text in SCRIPTS.items():
@@ -1110,6 +1152,130 @@ def build_scripts():
 		write(path, text)
 		ids[rel.split("/")[-1][:-4]] = write_meta(path, "ScriptImporter", 1)
 	return ids
+
+
+# ---------------------------------------------------------------------------------------------------------------- decals
+
+def decal_textures():
+	"""Procedural textures of the decals (no downloads, no third-party art): a rune circle (color and glow), a bullet hole with a normal map, a
+	scorch mark and a footprint. RGBA PNGs: the alpha is where the decal is."""
+	import numpy as np
+	from PIL import Image, ImageDraw, ImageFilter
+
+	def png(rel, array, kind):
+		buf = io.BytesIO()
+		Image.fromarray(array).save(buf, "PNG")
+		write(rel, buf.getvalue(), binary=True)
+		write_texture_meta(rel, kind)
+
+	def smoothstep(a, b, x):
+		t = np.clip((x - a) / (b - a), 0.0, 1.0)
+		return t * t * (3 - 2 * t)
+
+	def disc(n):
+		y, x = np.mgrid[0:n, 0:n].astype(np.float64)
+		c = (n - 1) / 2
+		return (x - c) / c, (y - c) / c
+
+	rng = np.random.default_rng(7)
+
+	# the rune circle: three rings, twelve spokes between the inner two, and six ticks outside
+	n = 256
+	dx, dy = disc(n)
+	r, a = np.hypot(dx, dy), np.arctan2(dy, dx)
+	ring = lambda r0, w: np.exp(-((r - r0) / w) ** 2)
+	spokes = ((np.abs(((a * 12 / (2 * math.pi)) % 1) - 0.5) > 0.46) & (r > 0.35) & (r < 0.72)).astype(np.float64)
+	ticks = ((np.abs(((a * 6 / (2 * math.pi)) % 1) - 0.5) > 0.44) & (r > 0.76) & (r < 0.9)).astype(np.float64)
+	strokes = np.clip(ring(0.95, 0.018) + ring(0.72, 0.014) + ring(0.35, 0.014) + spokes * 0.9 + ticks * 0.9, 0, 1) * (r < 0.99)
+	color = np.zeros((n, n, 4), np.uint8)
+	color[..., 0], color[..., 1], color[..., 2], color[..., 3] = 255, 150, 40, (strokes * 255).astype(np.uint8)
+	png("textures/decals/rune_color.png", color, "color")
+	glow = np.zeros((n, n, 3), np.uint8)
+	glow[..., 0], glow[..., 1], glow[..., 2] = (strokes * 255).astype(np.uint8), (strokes * 170).astype(np.uint8), (strokes * 60).astype(np.uint8)
+	png("textures/decals/rune_emissive.png", glow, "color")
+
+	# the bullet hole: a dark dent with a raised rim, and its normal map (OpenGL convention, +Y up)
+	n = 128
+	dx, dy = disc(n)
+	r = np.hypot(dx, dy)
+	height = -1.0 * (1 - smoothstep(0.0, 0.5, r)) + 0.35 * np.exp(-((r - 0.55) / 0.12) ** 2)
+	height *= (r < 0.95)
+	gy, gx = np.gradient(height)
+	normal = np.dstack((-gx * 14, gy * 14, np.ones_like(height)))
+	normal /= np.linalg.norm(normal, axis=2, keepdims=True)
+	normal_png = np.zeros((n, n, 4), np.uint8)
+	normal_png[..., :3] = ((normal * 0.5 + 0.5) * 255).astype(np.uint8)
+	normal_png[..., 3] = 255
+	png("textures/decals/bullet_normal.png", normal_png, "normal")
+	alpha = smoothstep(0.95, 0.55, r) * (0.55 + 0.45 * smoothstep(0.6, 0.0, r))
+	hole = np.zeros((n, n, 4), np.uint8)
+	hole[..., 0], hole[..., 1], hole[..., 2] = 22, 20, 18
+	hole[..., 3] = (np.clip(alpha, 0, 1) * 255).astype(np.uint8)
+	png("textures/decals/bullet_color.png", hole, "color")
+
+	# the scorch mark: a soft blot with an uneven edge
+	n = 256
+	dx, dy = disc(n)
+	r = np.hypot(dx, dy)
+	noise = Image.fromarray((rng.random((n // 8, n // 8)) * 255).astype(np.uint8)).resize((n, n), Image.BICUBIC).filter(ImageFilter.GaussianBlur(4))
+	r = r + (np.asarray(noise, np.float64) / 255 - 0.5) * 0.5
+	scorch = np.zeros((n, n, 4), np.uint8)
+	scorch[..., 0], scorch[..., 1], scorch[..., 2] = 12, 10, 9
+	scorch[..., 3] = (np.clip(smoothstep(0.95, 0.2, r) * 0.92, 0, 1) * 255).astype(np.uint8)
+	png("textures/decals/scorch_color.png", scorch, "color")
+
+	# a footprint, pointing up: a sole and a heel
+	img = Image.new("L", (128, 256), 0)
+	draw = ImageDraw.Draw(img)
+	draw.ellipse((26, 20, 102, 150), fill=255)
+	draw.ellipse((38, 160, 90, 236), fill=255)
+	mask = np.asarray(img.filter(ImageFilter.GaussianBlur(2.5)), np.uint8)
+	foot = np.zeros((256, 128, 4), np.uint8)
+	foot[..., 0], foot[..., 1], foot[..., 2] = 30, 26, 22
+	foot[..., 3] = (mask * 0.85).astype(np.uint8)
+	png("textures/decals/footprint_color.png", foot, "color")
+	write("textures/decals/LICENSE.txt", "Generated by scripts/gen_demo_scene.py (no third-party art); CC0 1.0.\n")
+
+
+def decal_materials():
+	"""The materials of the decals: only the textures, the factors and the base color alpha matter (a decal ignores the alpha mode)."""
+	decal_textures()
+	m = {}
+	m["decal_rune"] = wmat("decal_rune", roughness=0.4, emissive=(3.0, 1.6, 0.5), textures={"baseColor": "../textures/decals/rune_color.png", "emissive": "../textures/decals/rune_emissive.png"})
+	m["decal_bullet"] = wmat("decal_bullet", roughness=0.6, textures={"baseColor": "../textures/decals/bullet_color.png", "normal": "../textures/decals/bullet_normal.png"})
+	m["decal_scorch"] = wmat("decal_scorch", roughness=1.0, textures={"baseColor": "../textures/decals/scorch_color.png"})
+	m["decal_footprint"] = wmat("decal_footprint", roughness=0.9, textures={"baseColor": "../textures/decals/footprint_color.png"})
+	return m
+
+
+def add_decals(s, g):
+	"""The decals of the demo (see docs/superpowers/specs/decals.md): a rune circle that glows on the ground, bullet holes with a normal map on a
+	column, a scorch mark across the ground and a crate, and (scripts/decal_footprints.lua on the warrior) footprints at its footsteps."""
+	def decal(material, size, sort_order=0, **extra):
+		return {"Decal": dict({"Material": ref(g["decals"][material]), "Size": list(size), "SortOrder": sort_order}, **extra)}
+
+	up = qaxis((1, 0, 0), -90)  # turns the box's +Z to +Y: the decal projects straight down
+	s.add("Decals station", "World")
+	s.add("Decal rune circle", "Decals station", pos=(-3, 0.3, 6.5), rot=qmul(up, qaxis((0, 0, 1), 20)), **decal("decal_rune", (4.2, 4.2, 1.0), 1))
+	for i, (x, y) in enumerate(((-6.2, 1.4), (-5.85, 2.1), (-6.1, 3.0), (-5.7, 3.7))):
+		s.add("Decal bullet hole %d" % (i + 1), "Decals station", pos=(x, y, -3.5), rot=qaxis((0, 0, 1), 37 * i), **decal("decal_bullet", (0.4, 0.4, 0.5), 2 + i))
+	s.add("Decal scorch mark", "Decals station", pos=(3.5, 0.2, -3.2), rot=up, **decal("decal_scorch", (3.4, 3.4, 2.0), 0))
+
+
+def patch_scene_with_decals(g):
+	"""--decals-only: adds the decals to the scene that is already written (no downloads): the decals station, and the footprint script on the warrior."""
+	path = ASSETS / "scenes/demo.wscene"
+	scene = json.loads(path.read_text(encoding="utf-8"))
+	fresh = Scene()
+	fresh.ids["World"] = guid("entity:World")
+	add_decals(fresh, g)
+	ours = set(e["id"] for e in fresh.entities)
+	entities = [e for e in scene["entities"] if e["id"] not in ours]
+	entities.extend(fresh.entities)
+	warrior = next(e for e in entities if e["id"] == guid("entity:Warrior (animated)"))
+	warrior["components"]["script:" + g["scripts"]["decal_footprints"]] = {}
+	scene["entities"] = entities
+	write_json("scenes/demo.wscene", scene)
 
 
 # ------------------------------------------------------------------------------------------------------- UI and input
@@ -1309,7 +1475,7 @@ def build_scene(g):
 	# with the same skeleton reference the prefab's skinned node holds (the legacy local id 1 of the model, which the catalog redirects)
 	s.add("Warrior (animated)", "Animation station", pos=(0, 0, 9), PrefabInstance={"Prefab": ref(g["models"]["Warrior"][0])},
 		Animator={"Skeleton": ref(g["models"]["Warrior"][0], 1), "Graph": ref(guid("asset:models/characters/Warrior_animation/warrior.wgraph")), "PlayOnStart": False},
-		**script("animation_graph_demo", period=0.4, attack_every=0.15))
+		**merge(script("animation_graph_demo", period=0.4, attack_every=0.15), script("decal_footprints")))
 	s.add("Warrior head socket", "Warrior (animated)", AnimationSocket={"Joint": "Head", "OffsetPosition": [0, 0.3, 0], "OffsetRotation": IDENTITY})
 	s.add("Warrior head ornament", "Warrior head socket", scale=(0.18, 0.18, 0.18), **mesh("sphere", "gold"))
 	lineup = (("Wizard", -2.5, 11), ("Ranger", 2.5, 11), ("Cleric", -5, 12), ("Yeti", 5, 12), ("Panda", -7.5, 12.5), ("YellowDragon", 7.5, 12.5))
@@ -1372,6 +1538,9 @@ def build_scene(g):
 	s.add("Steep ramp", "Character demo", pos=(25.0866, 1.682, -1.2), rot=qaxis((0, 0, 1), 60), scale=(4, 0.2, 2), **merge(mesh("cube", "plastic_red"), {"Collider": BOX}))
 	s.add("Sliding platform", "Character demo", pos=(28, 0.15, -4.5), scale=(2.4, 0.3, 2.4), **merge(mesh("cube", "gold"), {"Collider": BOX}, body("Kinematic"), script("slide_platform", amplitude=2.5, speed=0.6)))
 
+	# --- station 7: decals -----------------------------------------------------------------------------------
+	add_decals(s, g)
+
 	# --- station labels (world-anchored text in the HUD) -----------------------------------------------------
 	labels = []
 	for text, position in (("1  Lighting and post", (0, 6.5, 0)), ("2  Materials and shaders", (0, 4.5, -16)), ("3  Models and animation", (0, 3.6, 9)),
@@ -1409,6 +1578,14 @@ def build_lamp(g):
 
 
 def main():
+	if "--decals-only" in sys.argv:
+		# adds only the decals to the scene that is already written, without downloading anything
+		g = {"decals": decal_materials()}
+		g["scripts"] = build_scripts()
+		patch_scene_with_decals(g)
+		print("added the decals to the demo scene")
+		return
+
 	g = {}
 	write("models/shapes/shapes.glb", build_glb(), binary=True)
 	g["shapes"] = write_meta("models/shapes/shapes.glb", "ModelImporter", 7, {"generatePhysicsShapes": False},
@@ -1417,6 +1594,7 @@ def main():
 	g["models"] = import_models()
 	import_textures()
 	g["mat"] = build_materials()
+	g["decals"] = decal_materials()
 	g["scripts"] = build_scripts()
 
 	write("environments/sky.hdr", download(HDRI_URL, "sky.hdr").read_bytes(), binary=True)

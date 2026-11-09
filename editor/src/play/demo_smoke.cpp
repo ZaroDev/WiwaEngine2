@@ -81,6 +81,31 @@ namespace wiwa
 		m_Fox.HasAnimator = m_Fox.HasAnimator || play.registry().all_of<Animator>(fox);
 		m_Fox.EventsSeen = animation->events_total() - m_Fox.EventsBefore;
 
+		// the decals of the demo: those the scene places ("Decal ..."), and the footprints the script of the warrior spawns on its footsteps
+		u32 placed = 0;
+		u32 footprints = 0;
+		for (const auto [entity, decal, name] : play.registry().view<Decal, Name>().each())
+		{
+			(name.Value.rfind("Footprint", 0) == 0 ? footprints : placed)++;
+		}
+		m_Fox.PlacedDecals = std::max(m_Fox.PlacedDecals, placed);
+		m_Fox.MostFootprints = std::max(m_Fox.MostFootprints, footprints);
+
+		m_Fox.WarriorMeshes = 0;
+		m_Fox.WarriorMeshesReceiving = 0;
+		for (const auto [entity, renderer, hierarchy] : play.registry().view<MeshRenderer, Hierarchy>().each())
+		{
+			for (entt::entity up = hierarchy.Parent; up != entt::null; up = play.registry().get<Hierarchy>(up).Parent)
+			{
+				if (up == fox)
+				{
+					m_Fox.WarriorMeshes++;
+					m_Fox.WarriorMeshesReceiving += renderer.ReceivesDecals ? 1 : 0;
+					break;
+				}
+			}
+		}
+
 		const glm::vec3 position = play.registry().get<Transform>(socket).Position;
 		m_Fox.SocketLow = glm::min(m_Fox.SocketLow, position);
 		m_Fox.SocketHigh = glm::max(m_Fox.SocketHigh, position);
@@ -134,6 +159,18 @@ namespace wiwa
 		if (m_Fox.EventsSeen == 0)
 		{
 			return "no footstep of the warrior was fired";
+		}
+		if (m_Fox.PlacedDecals < 6)
+		{
+			return "the demo scene's decals are missing (a rune circle, four bullet holes and a scorch mark; found " + std::to_string(m_Fox.PlacedDecals) + ")";
+		}
+		if (m_Fox.MostFootprints == 0)
+		{
+			return "the footsteps of the warrior spawned no footprint decals (decal_footprints.lua, Decal.spawn)";
+		}
+		if (m_Fox.WarriorMeshes == 0 || m_Fox.WarriorMeshesReceiving != 0)
+		{
+			return "decal_footprints.lua did not turn off ReceivesDecals on the meshes of the warrior (" + std::to_string(m_Fox.WarriorMeshesReceiving) + " of " + std::to_string(m_Fox.WarriorMeshes) + " still receive)";
 		}
 		return {};
 	}

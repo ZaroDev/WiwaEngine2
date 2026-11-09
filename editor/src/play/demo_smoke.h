@@ -100,6 +100,11 @@ namespace wiwa
 			bool HasAnimator = false;
 			u64 EventsBefore = 0;
 			u64 EventsSeen = 0;
+			// decals (decals.md): the ones the scene places, the most footprints the warrior's footsteps made at once, and whether the meshes of the warrior opted out
+			u32 PlacedDecals = 0;
+			u32 MostFootprints = 0;
+			u32 WarriorMeshes = 0;
+			u32 WarriorMeshesReceiving = 0;
 		};
 		FoxWatch m_Fox{};
 
