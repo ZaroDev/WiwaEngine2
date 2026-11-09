@@ -254,6 +254,26 @@ function camera.primary() end
 ---@param entity Entity
 function camera.set_primary(entity) end
 
+---@class DecalOptions
+---@field material Asset the material (.wmat) to project: its base color, normal, ORM and emissive
+---@field position? vec3 where on the surface (default the origin)
+---@field normal? vec3 the surface's normal: the decal projects along its opposite (default +Z)
+---@field size? vec3 the box: width, height and the depth the decal reaches through the surface (default 1, 1, 1)
+---@field opacity? number 0 to 1 (default 1)
+---@field lifetime? number seconds at full opacity between the fades; 0 or none is permanent
+---@field fade_in? number seconds
+---@field fade_out? number seconds
+---@field sort_order? integer the higher draws later and wins overlaps
+---@field roll? number degrees about the normal
+---@field parent? Entity
+---@field name? string
+
+Decal = {}
+--- Makes an entity with a Decal that projects a material onto the surface at `position`; with a lifetime it fades and removes itself.
+---@param options DecalOptions
+---@return Entity
+function Decal.spawn(options) end
+
 --------------------------------------------------------------------------------------------------------------------------------
 -- Physics
 --------------------------------------------------------------------------------------------------------------------------------

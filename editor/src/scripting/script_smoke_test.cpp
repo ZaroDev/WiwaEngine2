@@ -929,6 +929,42 @@ namespace wiwa
 			}
 		}
 
+		// Decal.spawn makes a Decal entity facing along the normal, with the options in it; bad input is a Lua error, not a crash.
+		void check_decal_spawn(Check& check)
+		{
+			Harness h;
+			h.Runtime.sandbox().set_function("a_material", []() { return LuaAsset{ AssetRef{ AssetGuid{ 7, 9 }, 0 } }; });
+			const AssetRef ref = h.add_script("decals", R"(return Script:extend{ on_init = function(self)
+				local d = Decal.spawn{ material = a_material(), position = vec3(1, 2, 3), normal = vec3(0, 1, 0), size = vec3(2, 3, 4), lifetime = 5, fade_in = 1, fade_out = 2, sort_order = 3, opacity = 0.5, name = 'hole' }
+				record(tostring(d:is_valid()))
+				record(d.name)
+				local c = d:get('Decal')
+				record(string.format('%g,%g,%g,%g,%g,%d,%g', c.lifetime, c.fadeintime, c.fadeouttime, c.opacity, c.size.z, c.sortorder, c.size.x))
+				local forward = d.transform.rotation * vec3(0, 0, 1)
+				record(string.format('%.3f,%.3f,%.3f', forward.x, forward.y, forward.z))
+				local ok1, e1 = pcall(Decal.spawn, {})
+				record(tostring(ok1) .. ':' .. tostring(e1))
+				local ok2, e2 = pcall(Decal.spawn, { material = a_material(), normal = vec3(0, 0, 0) })
+				record(tostring(ok2))
+				local ok3, e3 = pcall(Decal.spawn, { material = a_material(), size = vec3(1, 0, 1) })
+				record(tostring(ok3))
+				local down = Decal.spawn{ material = a_material(), normal = vec3(0, 0, -1) }
+				local f2 = down.transform.rotation * vec3(0, 0, 1)
+				record(string.format('%.3f', f2.z))
+			end })");
+			h.spawn("spawner", { ref });
+			h.Instances.start(h.TheScene);
+			h.Instances.update(0.016f);
+
+			check(h.Events.size() == 8 && h.Events[0] == "true" && h.Events[1] == "hole", "decal_spawn_makes_the_entity");
+			check(h.Events.size() == 8 && h.Events[2] == "5,1,2,0.5,4,3,2", "decal_spawn_sets_the_fields");
+			check(h.Events.size() == 8 && h.Events[3] == "0.000,1.000,0.000", "decal_spawn_turns_the_box_along_the_normal");
+			check(h.Events.size() == 8 && h.Events[4].starts_with("false:") && contains(h.Events[4], "material"), "decal_spawn_without_a_material_is_an_error");
+			check(h.Events.size() == 8 && h.Events[5] == "false" && h.Events[6] == "false", "decal_spawn_refuses_a_zero_normal_and_a_flat_size");
+			check(h.Events.size() == 8 && h.Events[7] == "-1.000", "decal_spawn_handles_the_normal_opposite_to_the_default");
+			check(h.TheScene->registry().view<Decal>().size() == 2, "decal_spawn_made_exactly_the_two_decals_that_succeeded");
+		}
+
 		void check_engine_bindings(Check& check, AssetPipelineModule& pipeline)
 		{
 			{
@@ -2857,6 +2893,7 @@ namespace wiwa
 		check_scene_scripts(check);
 		check_lifecycle(check);
 		check_api(check);
+		check_decal_spawn(check);
 		check_engine_bindings(check, pipeline);
 		check_scene_changes_and_reload(check);
 		check_pak(check);

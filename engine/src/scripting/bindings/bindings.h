@@ -39,6 +39,9 @@ namespace wiwa
 	// Animation.animator(entity), the animator handle (play, crossfade, stop, layer, on, off, joint_world, ...) and layer handles.
 	void bind_animation(ScriptRuntime& runtime, ScriptContext& context);
 
+	// Decal.spawn{ material, position, normal, size, opacity, lifetime, fade_in, fade_out, sort_order, roll, parent, name }.
+	void bind_decal(ScriptRuntime& runtime, ScriptContext& context);
+
 	// settings.graphics.get / set (the renderer's quality settings, saved), settings.scene.get / set (the active scene's look), and
 	// prefs.get / set / save (the player's options of a game, user_prefs.json).
 	void bind_settings(ScriptRuntime& runtime, ScriptContext& context);
