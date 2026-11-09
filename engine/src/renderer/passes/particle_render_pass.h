@@ -29,6 +29,7 @@ namespace wiwa
 		{
 			nvrhi::BindingSetHandle BindingSet{};
 			u32 PoolGeneration = ~0u;
+			u32 SortGeneration = ~0u;
 		};
 
 		nvrhi::IDevice* m_Device = nullptr;

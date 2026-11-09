@@ -8,6 +8,7 @@
 
 #include "../engine_assets.h"
 #include "../scene/scene_render_data.h"
+#include "../view/view_state.h"
 
 #define WI_PARTICLE_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
 
@@ -15,9 +16,15 @@ namespace wiwa
 {
 	namespace
 	{
-		constexpr u32 GROUP_SIZE = 64; // [numthreads] of particle_spawn.hlsl and particle_sim.hlsl
+		constexpr u32 GROUP_SIZE = 64; // [numthreads] of the particle compute shaders
 		constexpr float MAX_STEP = 0.1f;
 		constexpr float ALIVE_MARGIN = 0.1f; // seconds an emitter is still drawn after its last particle should be dead
+
+		// The push constants of the sort shaders (SortConstantsData of particle_sort_fill.hlsl, SortStepData of particle_sort_step.hlsl).
+		struct SortPush
+		{
+			u32 A, B, C, D;
+		};
 
 		glm::vec4 encode(const ParticleValue& value)
 		{
@@ -52,15 +59,32 @@ namespace wiwa
 			commandList->writeBuffer(tables, rows.data(), sizeof(rows), static_cast<u64>(id) * sizeof(rows));
 		}
 
-		EmitterGpu make_record(const ParticleEmitterData& e, const RenderParticleSystem& system, const ParticleAllocation& ring, u32 head, u32 spawn, u32 spawnStart, u32 emitterIndex)
+		// Alpha blended emitters that ask for it are sorted; additive and multiply blending do not depend on the order.
+		bool sorts(const ParticleEmitterData& e)
+		{
+			return e.Sorted && e.Blend == ParticleBlend::Alpha;
+		}
+
+		u32 padded(u32 count)
+		{
+			u32 result = 2;
+			while (result < count)
+			{
+				result <<= 1;
+			}
+			return result;
+		}
+
+		EmitterGpu make_record(const ParticleEmitterData& e, const RenderParticleSystem& system, const ParticleAllocation& ring, u32 head, u32 spawn, u32 spawnStart, u32 emitterIndex, u32 sortStart)
 		{
 			EmitterGpu record;
 			for (int column = 0; column < 4; column++)
 			{
 				record.World[column] = system.World[column];
 			}
+			const u32 flags = (e.WorldSpace ? 1u : 0u) | (e.Collision == ParticleCollision::Depth ? 2u : 0u) | (static_cast<u32>(e.Response) << 2);
 			record.Ring = glm::uvec4(ring.Base, ring.Capacity, head, spawn);
-			record.Spawn = glm::uvec4(spawnStart, (system.Seed ^ (emitterIndex * 2654435761u)) | 1u, e.WorldSpace ? 1u : 0u, static_cast<u32>(e.Shape));
+			record.Spawn = glm::uvec4(spawnStart, (system.Seed ^ (emitterIndex * 2654435761u)) | 1u, flags, static_cast<u32>(e.Shape));
 			record.Shape = glm::vec4(e.ShapeSize, glm::radians(e.ConeAngle));
 			record.Force = glm::vec4(e.Gravity, e.Drag);
 			record.Noise = glm::vec4(e.NoiseStrength, e.NoiseFrequency, system.SizeScale, e.Intensity);
@@ -71,7 +95,7 @@ namespace wiwa
 				record.Values[i] = encode(*values[i]);
 			}
 			record.Render = glm::vec4(e.SoftDistance, static_cast<float>(e.SheetColumns), static_cast<float>(e.SheetRows), static_cast<float>(e.Align));
-			record.Render2 = glm::uvec4(static_cast<u32>(e.Blend), 0u, 0u, 0u);
+			record.Render2 = glm::uvec4(static_cast<u32>(e.Blend), sortStart, 0u, glm::floatBitsToUint(e.Restitution));
 			return record;
 		}
 	}
@@ -89,6 +113,8 @@ namespace wiwa
 
 		m_Shaders->request(engine_assets::PARTICLE_SPAWN_SHADER, ShaderStage::Compute);
 		m_Shaders->request(engine_assets::PARTICLE_SIM_SHADER, ShaderStage::Compute);
+		m_Shaders->request(engine_assets::PARTICLE_SORT_FILL_SHADER, ShaderStage::Compute);
+		m_Shaders->request(engine_assets::PARTICLE_SORT_STEP_SHADER, ShaderStage::Compute);
 
 		nvrhi::BufferDesc constants;
 		constants.byteSize = sizeof(SimConstants);
@@ -98,12 +124,14 @@ namespace wiwa
 		constants.debugName = "Particle constants";
 		m_Constants = m_Device->createBuffer(constants);
 
-		// Slots match particle_spawn.hlsl and particle_sim.hlsl: b0 constants, SRV 1 the emitters, SRV 2 the tables, UAV 3 the particles.
 		nvrhi::VulkanBindingOffsets offsets;
 		offsets.shaderResource = 0;
 		offsets.sampler = 0;
 		offsets.constantBuffer = 0;
 		offsets.unorderedAccess = 0;
+
+		// Slots match particle_spawn.hlsl and particle_sim.hlsl: b0 constants, SRV 1 the emitters, SRV 2 the tables, UAV 3 the particles, SRV 4 the depth,
+		// SRV 5 the normals.
 		nvrhi::BindingLayoutDesc layout;
 		layout.visibility = nvrhi::ShaderType::Compute;
 		layout.bindingOffsets = offsets;
@@ -111,29 +139,57 @@ namespace wiwa
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(1));
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(2));
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_UAV(3));
+		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(4));
+		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(5));
 		m_Layout = m_Device->createBindingLayout(layout);
-		return m_Constants && m_Layout;
+
+		// particle_sort_fill.hlsl: b0 constants, push constants b1, SRV 1 the emitters, SRV 2 the particles, UAV 3 the sort entries.
+		nvrhi::BindingLayoutDesc fill;
+		fill.visibility = nvrhi::ShaderType::Compute;
+		fill.bindingOffsets = offsets;
+		fill.addItem(nvrhi::BindingLayoutItem::VolatileConstantBuffer(0));
+		fill.addItem(nvrhi::BindingLayoutItem::PushConstants(1, sizeof(SortPush)));
+		fill.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(1));
+		fill.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(2));
+		fill.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_UAV(3));
+		m_SortFillLayout = m_Device->createBindingLayout(fill);
+
+		// particle_sort_step.hlsl: push constants b1, UAV 3 the sort entries.
+		nvrhi::BindingLayoutDesc step;
+		step.visibility = nvrhi::ShaderType::Compute;
+		step.bindingOffsets = offsets;
+		step.addItem(nvrhi::BindingLayoutItem::PushConstants(1, sizeof(SortPush)));
+		step.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_UAV(3));
+		m_SortStepLayout = m_Device->createBindingLayout(step);
+		return m_Constants && m_Layout && m_SortFillLayout && m_SortStepLayout;
 	}
 
 	bool ParticleSimPass::is_ready() const
 	{
-		return m_Shaders->get(engine_assets::PARTICLE_SPAWN_SHADER, ShaderStage::Compute) != nullptr && m_Shaders->get(engine_assets::PARTICLE_SIM_SHADER, ShaderStage::Compute) != nullptr;
+		return m_Shaders->get(engine_assets::PARTICLE_SPAWN_SHADER, ShaderStage::Compute) != nullptr && m_Shaders->get(engine_assets::PARTICLE_SIM_SHADER, ShaderStage::Compute) != nullptr
+			&& m_Shaders->get(engine_assets::PARTICLE_SORT_FILL_SHADER, ShaderStage::Compute) != nullptr && m_Shaders->get(engine_assets::PARTICLE_SORT_STEP_SHADER, ShaderStage::Compute) != nullptr;
 	}
 
 	void ParticleSimPass::update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer)
 	{
-		if (m_Shaders->has_failed(engine_assets::PARTICLE_SPAWN_SHADER, ShaderStage::Compute) || m_Shaders->has_failed(engine_assets::PARTICLE_SIM_SHADER, ShaderStage::Compute))
+		for (const char* path : { engine_assets::PARTICLE_SPAWN_SHADER, engine_assets::PARTICLE_SIM_SHADER, engine_assets::PARTICLE_SORT_FILL_SHADER, engine_assets::PARTICLE_SORT_STEP_SHADER })
 		{
-			m_Failed = true;
+			if (m_Shaders->has_failed(path, ShaderStage::Compute))
+			{
+				m_Failed = true;
+			}
 		}
 	}
 
-	void ParticleSimPass::release(SystemState& state)
+	void ParticleSimPass::release(SystemState& state, nvrhi::ICommandList* commandList)
 	{
 		for (ParticleAllocation& ring : state.Rings)
 		{
 			if (ring.Capacity != 0)
 			{
+				// its particles die with it: the slots stay in the range the simulation covers while other rings are there
+				const std::vector<u8> zeros(static_cast<size_t>(ring.Capacity) * sizeof(ParticleGpu), 0);
+				commandList->writeBuffer(m_Pool->particles(), zeros.data(), zeros.size(), static_cast<u64>(ring.Base) * sizeof(ParticleGpu));
 				m_Pool->release(ring);
 				ring = ParticleAllocation{};
 			}
@@ -143,7 +199,43 @@ namespace wiwa
 	void ParticleSimPass::reset_state()
 	{
 		m_Systems.clear(); // the pool they point into is gone
-		m_BindingSet = nullptr;
+		m_SortFillSet = nullptr;
+		m_SortStepSet = nullptr;
+		m_SortSetPoolGeneration = ~0u;
+		m_SortSetSortGeneration = ~0u;
+	}
+
+	// Sorts the entries of one emitter: fills them with the depth of every slot, then runs the bitonic network (log2(n) (log2(n) + 1) / 2 steps).
+	void ParticleSimPass::sort_emitter(nvrhi::ICommandList* commandList, const ParticleDraw& draw)
+	{
+		const u32 offset = draw.SortStart - 1;
+		const u32 count = draw.SortCount;
+
+		nvrhi::ComputeState fill;
+		fill.pipeline = m_SortFillPipeline;
+		fill.addBindingSet(m_SortFillSet);
+		commandList->setComputeState(fill);
+		const SortPush fillPush{ offset, draw.Capacity, count, draw.Id };
+		commandList->setPushConstants(&fillPush, sizeof(fillPush));
+		commandList->dispatch((count + GROUP_SIZE - 1) / GROUP_SIZE, 1, 1);
+			commandList->setBufferState(m_Pool->sort_buffer(), nvrhi::ResourceStates::UnorderedAccess); // the next step reads what this one wrote
+			commandList->commitBarriers();
+
+		for (u32 k = 2; k <= count; k <<= 1)
+		{
+			for (u32 j = k >> 1; j > 0; j >>= 1)
+			{
+				nvrhi::ComputeState step;
+				step.pipeline = m_SortStepPipeline;
+				step.addBindingSet(m_SortStepSet);
+				commandList->setComputeState(step);
+				const SortPush stepPush{ offset, k, j, count };
+				commandList->setPushConstants(&stepPush, sizeof(stepPush));
+				commandList->dispatch((count + GROUP_SIZE - 1) / GROUP_SIZE, 1, 1);
+			commandList->setBufferState(m_Pool->sort_buffer(), nvrhi::ResourceStates::UnorderedAccess); // the next step reads what this one wrote
+			commandList->commitBarriers();
+			}
+		}
 	}
 
 	void ParticleSimPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
@@ -179,30 +271,39 @@ namespace wiwa
 		if (m_SpawnPipeline == nullptr || shaderGeneration != m_BuiltShaderGeneration)
 		{
 			m_BuiltShaderGeneration = shaderGeneration;
-			nvrhi::ComputePipelineDesc spawn;
-			spawn.CS = m_Shaders->get(engine_assets::PARTICLE_SPAWN_SHADER, ShaderStage::Compute);
-			spawn.addBindingLayout(m_Layout);
-			m_SpawnPipeline = m_Device->createComputePipeline(spawn);
-			nvrhi::ComputePipelineDesc sim;
-			sim.CS = m_Shaders->get(engine_assets::PARTICLE_SIM_SHADER, ShaderStage::Compute);
-			sim.addBindingLayout(m_Layout);
-			m_SimPipeline = m_Device->createComputePipeline(sim);
-			if (m_SpawnPipeline == nullptr || m_SimPipeline == nullptr)
+			const auto make = [&](const char* path, nvrhi::IBindingLayout* layout)
+			{
+				nvrhi::ComputePipelineDesc description;
+				description.CS = m_Shaders->get(path, ShaderStage::Compute);
+				description.addBindingLayout(layout);
+				return m_Device->createComputePipeline(description);
+			};
+			m_SpawnPipeline = make(engine_assets::PARTICLE_SPAWN_SHADER, m_Layout);
+			m_SimPipeline = make(engine_assets::PARTICLE_SIM_SHADER, m_Layout);
+			m_SortFillPipeline = make(engine_assets::PARTICLE_SORT_FILL_SHADER, m_SortFillLayout);
+			m_SortStepPipeline = make(engine_assets::PARTICLE_SORT_STEP_SHADER, m_SortStepLayout);
+			if (!m_SpawnPipeline || !m_SimPipeline || !m_SortFillPipeline || !m_SortStepPipeline)
 			{
 				WI_PARTICLE_LOG(Error, "Could not create the particle pipelines");
 				m_Failed = true;
 				return;
 			}
 		}
-		if (m_BindingSet == nullptr)
+
+		ViewportTarget& viewport = *frame.Scene->viewport();
+		ViewCache& view = m_PerView.get(frame.View->Target);
+		if (view.BindingSet == nullptr || view.PoolGeneration != m_Pool->generation())
 		{
 			nvrhi::BindingSetDesc set;
 			set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_Constants));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, m_Pool->emitters()));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(2, m_Pool->tables()));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(3, m_Pool->particles()));
-			m_BindingSet = m_Device->createBindingSet(set, m_Layout);
-			if (m_BindingSet == nullptr)
+			set.addItem(nvrhi::BindingSetItem::Texture_SRV(4, viewport.depth()));
+			set.addItem(nvrhi::BindingSetItem::Texture_SRV(5, viewport.normal()));
+			view.BindingSet = m_Device->createBindingSet(set, m_Layout);
+			view.PoolGeneration = m_Pool->generation();
+			if (view.BindingSet == nullptr)
 			{
 				WI_PARTICLE_LOG(Error, "Could not create the particle bindings");
 				m_Failed = true;
@@ -243,7 +344,7 @@ namespace wiwa
 			const u32 revision = cache.effect_revision(system.Effect);
 			if (state.Effect != system.Effect || state.Revision != revision)
 			{
-				release(state);
+				release(state, commandList);
 				state = SystemState{};
 			}
 			state.Effect = system.Effect;
@@ -310,7 +411,7 @@ namespace wiwa
 		{
 			if (it->second.Seen != m_Pass)
 			{
-				release(it->second);
+				release(it->second, commandList);
 				it = m_Systems.erase(it);
 			}
 			else
@@ -325,9 +426,46 @@ namespace wiwa
 			return;
 		}
 
+		// the room the sorts need in the sort buffer
+		u32 sortEntries = 0;
+		for (const Work& item : work)
+		{
+			if (item.Draw && sorts(*item.Emitter))
+			{
+				sortEntries += padded(item.Ring.Capacity);
+			}
+		}
+		if (!m_Pool->ensure_sort(m_Device, sortEntries))
+		{
+			return;
+		}
+		if (m_SortFillSet == nullptr || m_SortSetPoolGeneration != m_Pool->generation() || m_SortSetSortGeneration != m_Pool->sort_generation())
+		{
+			nvrhi::BindingSetDesc fill;
+			fill.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_Constants));
+			fill.addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(SortPush)));
+			fill.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, m_Pool->emitters()));
+			fill.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(2, m_Pool->particles()));
+			fill.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(3, m_Pool->sort_buffer()));
+			m_SortFillSet = m_Device->createBindingSet(fill, m_SortFillLayout);
+			nvrhi::BindingSetDesc step;
+			step.addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(SortPush)));
+			step.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(3, m_Pool->sort_buffer()));
+			m_SortStepSet = m_Device->createBindingSet(step, m_SortStepLayout);
+			m_SortSetPoolGeneration = m_Pool->generation();
+			m_SortSetSortGeneration = m_Pool->sort_generation();
+			if (m_SortFillSet == nullptr || m_SortStepSet == nullptr)
+			{
+				WI_PARTICLE_LOG(Error, "Could not create the particle sort bindings");
+				m_Failed = true;
+				return;
+			}
+		}
+
 		// the emitter records, and the order the spawn threads belong to them
 		std::vector<EmitterGpu> records(idEnd);
 		u32 totalSpawn = 0;
+		u32 sortNext = 0;
 		const glm::vec3 camera = glm::vec3(frame.Scene->constants().CameraPosition);
 		struct Sorted
 		{
@@ -338,12 +476,21 @@ namespace wiwa
 		std::vector<Sorted> draws;
 		for (const Work& item : work)
 		{
-			records[item.Ring.Id] = make_record(*item.Emitter, *item.System, item.Ring, item.Head, item.Spawn, totalSpawn, item.Index);
+			u32 sortStart = 0;
+			u32 sortCount = 0;
+			if (item.Draw && sorts(*item.Emitter))
+			{
+				sortCount = padded(item.Ring.Capacity);
+				sortStart = sortNext + 1;
+				sortNext += sortCount;
+			}
+			records[item.Ring.Id] = make_record(*item.Emitter, *item.System, item.Ring, item.Head, item.Spawn, totalSpawn, item.Index, sortStart);
 			totalSpawn += item.Spawn;
 			if (item.Draw)
 			{
 				const glm::vec3 offset = glm::vec3(item.System->World[3]) - camera;
-				draws.push_back(Sorted{ ParticleDraw{ item.Ring.Id, item.Ring.Base, item.Ring.Capacity, item.Emitter->Material, item.Emitter->Blend }, item.System->SortBias, glm::dot(offset, offset) });
+				ParticleDraw draw{ item.Ring.Id, item.Ring.Base, item.Ring.Capacity, item.Emitter->Material, item.Emitter->Blend, sortStart, sortCount };
+				draws.push_back(Sorted{ draw, item.System->SortBias, glm::dot(offset, offset) });
 			}
 		}
 		std::sort(draws.begin(), draws.end(), [](const Sorted& a, const Sorted& b)
@@ -357,6 +504,7 @@ namespace wiwa
 
 		commandList->writeBuffer(m_Pool->emitters(), records.data(), records.size() * sizeof(EmitterGpu));
 
+		const FrameConstants& frameConstants = frame.Scene->constants();
 		SimConstants constants;
 		constants.EmitterCount = idEnd;
 		constants.TotalSpawn = totalSpawn;
@@ -364,13 +512,17 @@ namespace wiwa
 		constants.FrameIndex = static_cast<u32>(frame.FrameIndex);
 		constants.DeltaTime = step;
 		constants.Time = frame.Time;
+		constants.Collide = frame.Scene->has_camera() ? 1u : 0u;
+		constants.ViewProjection = frameConstants.ViewProjection;
+		constants.InverseViewProjection = frameConstants.InverseViewProjection;
+		constants.Viewport = glm::vec4(static_cast<float>(viewport.width()), static_cast<float>(viewport.height()), 1.0f / static_cast<float>(viewport.width()), 1.0f / static_cast<float>(viewport.height()));
 		commandList->writeBuffer(m_Constants, &constants, sizeof(constants));
 
 		if (totalSpawn > 0)
 		{
 			nvrhi::ComputeState state;
 			state.pipeline = m_SpawnPipeline;
-			state.addBindingSet(m_BindingSet);
+			state.addBindingSet(view.BindingSet);
 			commandList->setComputeState(state);
 			commandList->dispatch((totalSpawn + GROUP_SIZE - 1) / GROUP_SIZE, 1, 1);
 		}
@@ -379,9 +531,17 @@ namespace wiwa
 		{
 			nvrhi::ComputeState state;
 			state.pipeline = m_SimPipeline;
-			state.addBindingSet(m_BindingSet);
+			state.addBindingSet(view.BindingSet);
 			commandList->setComputeState(state);
 			commandList->dispatch((constants.SlotEnd + GROUP_SIZE - 1) / GROUP_SIZE, 1, 1);
+		}
+
+		for (const ParticleDraw& draw : m_Pool->Draws)
+		{
+			if (draw.SortStart != 0)
+			{
+				sort_emitter(commandList, draw);
+			}
 		}
 	}
 }

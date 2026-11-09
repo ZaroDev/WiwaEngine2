@@ -19,6 +19,9 @@ namespace wiwa
 		m_Particles = nullptr;
 		m_Emitters = nullptr;
 		m_Tables = nullptr;
+		m_Sort = nullptr;
+		m_SortEntries = 0;
+		m_SortGeneration++;
 		m_Ranges = RangeAllocator{};
 		m_Live.clear();
 		std::fill(m_IdUsed.begin(), m_IdUsed.end(), false);
@@ -54,6 +57,33 @@ namespace wiwa
 		}
 
 		m_Ranges = RangeAllocator(m_Capacity);
+		return ensure_sort(device, 2);
+	}
+
+	bool ParticlePool::ensure_sort(nvrhi::IDevice* device, u32 entries)
+	{
+		entries = std::max(entries, 2u);
+		if (m_Sort != nullptr && m_SortEntries >= entries)
+		{
+			return true;
+		}
+
+		nvrhi::BufferDesc description;
+		description.byteSize = static_cast<u64>(entries) * 8; // (key, slot)
+		description.structStride = 8;
+		description.canHaveUAVs = true;
+		description.initialState = nvrhi::ResourceStates::ShaderResource;
+		description.keepInitialState = true;
+		description.debugName = "Particle sort";
+		m_Sort = device->createBuffer(description);
+		if (m_Sort == nullptr)
+		{
+			WI_PARTICLE_LOG(Error, "Could not create the particle sort buffer of {0} entries", entries);
+			m_SortEntries = 0;
+			return false;
+		}
+		m_SortEntries = entries;
+		m_SortGeneration++;
 		return true;
 	}
 

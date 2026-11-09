@@ -9,6 +9,7 @@ VK_BINDING(36, 2) StructuredBuffer<Particle> uParticles : register(t36);
 VK_BINDING(37, 2) StructuredBuffer<Emitter> uEmitters : register(t37);
 VK_BINDING(38, 2) StructuredBuffer<float4> uTables : register(t38);
 VK_BINDING(39, 2) Texture2D<float> uSceneDepth : register(t39);
+VK_BINDING(40, 2) StructuredBuffer<uint2> uSort : register(t40); // (view depth, slot) of a sorted emitter, farthest first: Render2.y - 1 is where its part starts
 
 struct SpriteVertexOutput
 {
@@ -24,10 +25,18 @@ SpriteVertexOutput VSMain(uint vertex : SV_VertexID, uint instance : SV_Instance
 {
 	const uint id = DrawConstants.InstanceIndex;
 	const Emitter emitter = uEmitters[id];
-	const Particle particle = uParticles[emitter.Ring.x + instance];
+	uint slot = instance;
+	bool valid = true;
+	if (emitter.Render2.y != 0u)
+	{
+		// sorted: the entry says which slot is drawn at this place (the padding of the sort has slots past the ring)
+		slot = uSort[emitter.Render2.y - 1u + instance].y;
+		valid = slot < emitter.Ring.y;
+	}
+	const Particle particle = uParticles[emitter.Ring.x + (valid ? slot : 0u)];
 
 	SpriteVertexOutput output = (SpriteVertexOutput)0;
-	if (particle.Lifetime <= 0.0 || particle.Age >= particle.Lifetime)
+	if (!valid || particle.Lifetime <= 0.0 || particle.Age >= particle.Lifetime)
 	{
 		output.Position = float4(0.0, 0.0, 2.0, 1.0); // outside the clip volume: nothing is drawn
 		return output;

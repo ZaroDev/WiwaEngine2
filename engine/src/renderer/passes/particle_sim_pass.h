@@ -7,12 +7,14 @@
 #include "../render_pass.h"
 #include "../scene/render_scene.h"
 #include "../shader_library.h"
+#include "../view/per_view.h"
 
 namespace wiwa
 {
-	// The particle simulation (vfx.md), once per frame in the main view: gives every sprite emitter of every system a ring in the pool, writes the emitter
-	// records, spawns what the main thread asked for (RenderScene::take_pending_spawns) and ages and moves every live particle, in two compute
-	// dispatches. It also lists what the render pass draws (ParticlePool::Draws). Does nothing while there is no particle system.
+	// The particle simulation (vfx.md), once per frame in the main view, after the depth prepass: gives every sprite emitter of every system a ring in the
+	// pool, writes the emitter records, spawns what the main thread asked for (RenderScene::take_pending_spawns), ages and moves every live particle
+	// (colliding with the depth where an emitter asks for it), and sorts the particles of the emitters that blend back to front. It also lists what the
+	// render pass draws (ParticlePool::Draws). Does nothing while there is no particle system.
 	class ParticleSimPass : public IRenderPass
 	{
 	public:
@@ -23,10 +25,14 @@ namespace wiwa
 		virtual bool is_ready() const override;
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
+		virtual void on_view_removed(u32 targetUid) override { m_PerView.forget(targetUid); }
 		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return isMain; }
 
+		// How far behind a surface (in view depth, meters) a particle still counts as touching it. A particle further behind passes through.
+		static constexpr float COLLISION_THICKNESS = 1.0f;
+
 	private:
-		// Mirrors SimConstants of particle_spawn.hlsl and particle_sim.hlsl.
+		// Mirrors SimConstants of particle_sim_common.hlsli.
 		struct SimConstants
 		{
 			u32 EmitterCount = 0;
@@ -35,7 +41,11 @@ namespace wiwa
 			u32 FrameIndex = 0;
 			float DeltaTime = 0.0f;
 			float Time = 0.0f;
-			float Padding[2]{};
+			float Thickness = COLLISION_THICKNESS;
+			u32 Collide = 0;
+			glm::mat4 ViewProjection{ 1.0f };
+			glm::mat4 InverseViewProjection{ 1.0f };
+			glm::vec4 Viewport{ 1.0f };
 		};
 
 		// What the pass keeps of one system: its rings (by the emitter's place in the effect), where each ring's head is, how long each emitter still has
@@ -51,8 +61,16 @@ namespace wiwa
 			std::array<bool, PARTICLE_MAX_EMITTERS> Failed{};
 		};
 
-		void release(SystemState& state);
+		// What belongs to one view (PerView): the set that reads its depth and normals. Made again with the viewport's targets and the pool's buffers.
+		struct ViewCache
+		{
+			nvrhi::BindingSetHandle BindingSet{};
+			u32 PoolGeneration = ~0u;
+		};
+
+		void release(SystemState& state, nvrhi::ICommandList* commandList);
 		void reset_state();
+		void sort_emitter(nvrhi::ICommandList* commandList, const ParticleDraw& draw);
 
 		nvrhi::IDevice* m_Device = nullptr;
 		ShaderLibrary* m_Shaders = nullptr;
@@ -60,10 +78,18 @@ namespace wiwa
 		bool m_Failed = false;
 
 		nvrhi::BufferHandle m_Constants{};
-		nvrhi::BindingLayoutHandle m_Layout{};
-		nvrhi::BindingSetHandle m_BindingSet{};
+		nvrhi::BindingLayoutHandle m_Layout{};     // b0, the emitters, the tables, the particles, the depth and the normals
+		nvrhi::BindingLayoutHandle m_SortFillLayout{};
+		nvrhi::BindingLayoutHandle m_SortStepLayout{};
+		PerView<ViewCache> m_PerView{};
+		nvrhi::BindingSetHandle m_SortFillSet{};
+		nvrhi::BindingSetHandle m_SortStepSet{};
+		u32 m_SortSetPoolGeneration = ~0u;
+		u32 m_SortSetSortGeneration = ~0u;
 		nvrhi::ComputePipelineHandle m_SpawnPipeline{};
 		nvrhi::ComputePipelineHandle m_SimPipeline{};
+		nvrhi::ComputePipelineHandle m_SortFillPipeline{};
+		nvrhi::ComputePipelineHandle m_SortStepPipeline{};
 		u32 m_BuiltShaderGeneration = ~0u;
 		u32 m_PoolGeneration = ~0u;
 

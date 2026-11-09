@@ -14,6 +14,8 @@ namespace wiwa::engine_assets
 	inline constexpr const char* DECAL_SHADER = "engine/shaders/decal.hlsl";
 	inline constexpr const char* PARTICLE_SPAWN_SHADER = "engine/shaders/particle_spawn.hlsl";
 	inline constexpr const char* PARTICLE_SIM_SHADER = "engine/shaders/particle_sim.hlsl";
+	inline constexpr const char* PARTICLE_SORT_FILL_SHADER = "engine/shaders/particle_sort_fill.hlsl";
+	inline constexpr const char* PARTICLE_SORT_STEP_SHADER = "engine/shaders/particle_sort_step.hlsl";
 	inline constexpr const char* PARTICLE_SPRITE_SHADER = "engine/shaders/particle_sprite.hlsl";
 	inline constexpr const char* VELOCITY_BLEND_SHADER = "engine/shaders/velocity_blend.hlsl";
 	inline constexpr const char* BLIT_SHADER = "engine/shaders/blit.hlsl";

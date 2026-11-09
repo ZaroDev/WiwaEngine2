@@ -83,6 +83,53 @@ namespace wiwa
 			return result;
 		}
 
+		// Renders until the oldest particle is at least `seconds` old (the frames' own time passes; their length is not known) and returns what is alive.
+		std::vector<ParticleGpu> age_until(RenderCheckContext& context, SceneTester& test, float seconds)
+		{
+			std::vector<ParticleGpu> particles;
+			for (int round = 0; round < 60; round++)
+			{
+				test.render(10);
+				particles = alive(read_pool(context, test));
+				float oldest = 0.0f;
+				for (const ParticleGpu& p : particles)
+				{
+					oldest = std::max(oldest, p.Age);
+				}
+				if (oldest >= seconds)
+				{
+					break;
+				}
+			}
+			return particles;
+		}
+
+		// A floor in front of a camera that looks down at it from a little above and behind.
+		void floor_scene(SceneTester& test)
+		{
+			test.set_camera(glm::vec3(0.0f, 2.0f, 6.0f), glm::vec3(0.0f, 0.3f, 0.0f));
+			const AssetRef grey = test.add_material(test.color_material(glm::vec3(0.4f)));
+			test.add_instance(test.add_mesh(make_test_box(glm::vec3(6.0f, 0.1f, 6.0f), grey)), glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.1f, 0.0f)));
+		}
+
+		// Particles thrown straight down at 20 m/s from 1.5 m, under gravity, that collide with the depth as asked.
+		AssetRef falling_effect(SceneTester& test, ParticleCollision collision, ParticleCollisionResponse response, float restitution)
+		{
+			ParticleEffectData effect;
+			ParticleEmitterData emitter = still_emitter(64);
+			emitter.Shape = ParticleShape::Cone;
+			emitter.ConeAngle = 0.0f;
+			emitter.ShapeSize = glm::vec3(0.0f);
+			emitter.StartSpeed = ParticleValue::constant(-20.0f);
+			emitter.Gravity = glm::vec3(0.0f, -10.0f, 0.0f);
+			emitter.Collision = collision;
+			emitter.Response = response;
+			emitter.Restitution = restitution;
+			emitter.bake();
+			effect.Emitters = { emitter };
+			return test.cache().add_inline_particle_effect(effect);
+		}
+
 		// The test's scene: the camera at (0, 0, 5) looking at the origin, and a white material.
 		struct SpriteScene
 		{
@@ -233,6 +280,178 @@ namespace wiwa
 				context.check(test.render(3), "render after the effect changed");
 				context.check(pool.used() == 128, "the ring has the new size and the old one is gone");
 				context.check(alive(read_pool(context, test)).empty(), "its particles started over (none alive until they are asked for)");
+			});
+
+		register_render_check("particle_collision_responses", [](RenderCheckContext& context)
+			{
+				SceneTester test(context, 64);
+				test.renderer().get_particle_pool().set_capacity(4096);
+				floor_scene(test);
+				const glm::mat4 above = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
+
+				// without collision the particles fall through the floor
+				add_system(test, falling_effect(test, ParticleCollision::None, ParticleCollisionResponse::Bounce, 0.0f), above, 20);
+				std::vector<ParticleGpu> particles = age_until(context, test, 0.3f);
+				bool through = !particles.empty();
+				for (const ParticleGpu& p : particles)
+				{
+					through = through && p.Position.y < -1.0f;
+				}
+				context.check(through, "without collision (the control) particles fall through the floor (" + std::to_string(particles.size()) + " alive)");
+
+				// bounce with no restitution: they stay on the floor
+				SceneDelta reset;
+				reset.Reset = true;
+				test.scene().apply(std::move(reset));
+				floor_scene(test);
+				add_system(test, falling_effect(test, ParticleCollision::Depth, ParticleCollisionResponse::Bounce, 0.0f), above, 20);
+				particles = age_until(context, test, 0.3f);
+				bool onFloor = !particles.empty();
+				for (const ParticleGpu& p : particles)
+				{
+					onFloor = onFloor && p.Position.y > -0.2f && p.Position.y < 0.3f;
+				}
+				context.check(onFloor, "with depth collision they stay on the floor (" + std::to_string(particles.size()) + " alive)");
+
+				// bounce with restitution: they are thrown back up
+				reset = SceneDelta{};
+				reset.Reset = true;
+				test.scene().apply(std::move(reset));
+				floor_scene(test);
+				add_system(test, falling_effect(test, ParticleCollision::Depth, ParticleCollisionResponse::Bounce, 0.8f), above, 20);
+				particles = age_until(context, test, 0.3f);
+				bool bounced = !particles.empty();
+				for (const ParticleGpu& p : particles)
+				{
+					bounced = bounced && p.Velocity.y > 0.0f && p.Position.y > 0.3f;
+				}
+				context.check(bounced, "with a restitution they bounce back up");
+
+				// stick: they stop on the floor and stay
+				reset = SceneDelta{};
+				reset.Reset = true;
+				test.scene().apply(std::move(reset));
+				floor_scene(test);
+				add_system(test, falling_effect(test, ParticleCollision::Depth, ParticleCollisionResponse::Stick, 0.0f), above, 20);
+				particles = age_until(context, test, 0.3f);
+				bool stuck = !particles.empty();
+				for (const ParticleGpu& p : particles)
+				{
+					stuck = stuck && (p.Emitter & 0x80000000u) != 0 && p.Velocity == glm::vec3(0.0f) && p.Position.y > -0.2f && p.Position.y < 0.3f;
+				}
+				context.check(stuck, "sticky particles stop on the floor");
+
+				// kill: they die on touching it
+				reset = SceneDelta{};
+				reset.Reset = true;
+				test.scene().apply(std::move(reset));
+				floor_scene(test);
+				add_system(test, falling_effect(test, ParticleCollision::Depth, ParticleCollisionResponse::Kill, 0.0f), above, 20);
+				test.render(10);
+				std::vector<ParticleGpu> dying = alive(read_pool(context, test));
+				for (int round = 0; round < 60 && !dying.empty(); round++)
+				{
+					test.render(10);
+					dying = alive(read_pool(context, test));
+				}
+				context.check(dying.empty(), "particles that die on touching are gone (" + std::to_string(dying.size()) + " left)");
+
+				// a particle that is not on the screen has no depth to touch: it falls through
+				reset = SceneDelta{};
+				reset.Reset = true;
+				test.scene().apply(std::move(reset));
+				floor_scene(test);
+				add_system(test, falling_effect(test, ParticleCollision::Depth, ParticleCollisionResponse::Bounce, 0.0f), glm::translate(glm::mat4(1.0f), glm::vec3(100.0f, 1.5f, 0.0f)), 10);
+				particles = age_until(context, test, 0.3f);
+				bool offscreen = !particles.empty();
+				for (const ParticleGpu& p : particles)
+				{
+					offscreen = offscreen && p.Position.y < -1.0f;
+				}
+				context.check(offscreen, "a particle off the screen passes through (there is nothing to collide with)");
+			});
+
+		register_render_check("particle_sorting", [](RenderCheckContext& context)
+			{
+				SceneTester test(context, 64);
+				ParticlePool& pool = test.renderer().get_particle_pool();
+				pool.set_capacity(4096);
+				SpriteScene scene(test);
+				test.set_camera(glm::vec3(0.0f, 0.0f, 6.0f), glm::vec3(0.0f));
+
+				const auto make_effect = [&](u32 capacity, bool sorted, ParticleBlend blend)
+				{
+					ParticleEffectData effect;
+					ParticleEmitterData emitter = still_emitter(capacity);
+					emitter.Material = scene.Material;
+					emitter.Blend = blend;
+					emitter.Sorted = sorted;
+					emitter.Shape = ParticleShape::Box;
+					emitter.ShapeSize = glm::vec3(0.0f, 0.0f, 4.0f); // along the line of sight: depths differ
+					emitter.StartSize = ParticleValue::constant(1.0f);
+					emitter.StartColor = glm::vec4(1.0f, 0.2f, 0.2f, 0.5f);
+					emitter.bake();
+					effect.Emitters = { emitter };
+					return test.cache().add_inline_particle_effect(effect);
+				};
+
+				// 70 particles in a ring of 100 (padded to 128): sorted farthest first, the dead and the padding last
+				const EntityGuid system = add_system(test, make_effect(100, true, ParticleBlend::Alpha), glm::mat4(1.0f), 70);
+				context.check(test.render(3), "render a sorted emitter");
+				context.check(pool.Draws.size() == 1 && pool.Draws[0].SortStart != 0 && pool.Draws[0].SortCount == 128, "the emitter is sorted, over 128 entries");
+				if (pool.Draws.size() == 1 && pool.Draws[0].SortStart != 0)
+				{
+					const ParticleDraw draw = pool.Draws[0];
+					std::vector<u8> bytes;
+					context.check(read_buffer_bytes(context.Device, pool.sort_buffer(), static_cast<u64>(draw.SortStart - 1 + draw.SortCount) * 8, bytes), "read the sort entries back");
+					const std::vector<ParticleGpu> particles = read_pool(context, test);
+					if (bytes.size() >= static_cast<size_t>(draw.SortStart - 1 + draw.SortCount) * 8 && particles.size() >= 100)
+					{
+						std::vector<std::pair<float, u32>> entries(draw.SortCount);
+						std::memcpy(entries.data(), bytes.data() + static_cast<size_t>(draw.SortStart - 1) * 8, static_cast<size_t>(draw.SortCount) * 8);
+						bool descending = true;
+						bool depthsMatch = true;
+						std::vector<bool> seen(draw.SortCount, false);
+						bool permutation = true;
+						u32 live = 0;
+						for (u32 i = 0; i < draw.SortCount; i++)
+						{
+							descending = descending && (i == 0 || entries[i].first <= entries[i - 1].first);
+							permutation = permutation && entries[i].second < draw.SortCount && !seen[entries[i].second];
+							if (entries[i].second < draw.SortCount)
+							{
+								seen[entries[i].second] = true;
+							}
+							if (entries[i].first > 0.0f)
+							{
+								live++;
+								const ParticleGpu& p = particles[draw.Base + entries[i].second];
+								depthsMatch = depthsMatch && entries[i].second < 100 && std::abs(entries[i].first - (6.0f - p.Position.z)) < 0.01f;
+							}
+						}
+						context.check(descending, "the entries are in order, the farthest first");
+						context.check(permutation, "every entry is a different slot (a permutation)");
+						context.check(live == 70, "the 70 live particles come first (" + std::to_string(live) + ")");
+						context.check(depthsMatch, "and each key is the view depth of its particle");
+						context.check(entries[0].first > entries[69].first + 1.0f, "the depths spread over the box (a real sort)");
+					}
+				}
+
+				// a sorted draw shows the same as an unsorted one for particles of one color (the order does not matter), so every slot is reached
+				context.check(test.render(2), "render the sorted emitter");
+				const std::vector<u8> sortedImage = test.pixels();
+				SceneDelta removal;
+				removal.ParticleRemovals.push_back(system);
+				test.scene().apply(std::move(removal));
+				context.check(test.render(2), "render without it");
+				const std::vector<u8> without = test.pixels();
+				context.check(SceneTester::max_difference(sortedImage, without) > 10, "the sorted particles are in the image");
+
+				// additive blending does not sort, whatever the emitter says
+				add_system(test, make_effect(64, true, ParticleBlend::Additive), glm::mat4(1.0f), 10);
+				context.check(test.render(2), "render an additive emitter that asks to be sorted");
+				context.check(pool.Draws.size() == 1 && pool.Draws[0].SortStart == 0, "it is not sorted: the order does not matter for additive blending");
+				compare_across_apis(context, "particle_sorting_additive", test.pixels());
 			});
 
 		register_render_check("particle_sprites_draw", [](RenderCheckContext& context)

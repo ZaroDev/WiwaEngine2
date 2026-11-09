@@ -66,6 +66,8 @@ namespace wiwa
 		u32 Capacity = 0;
 		AssetRef Material{};
 		ParticleBlend Blend = ParticleBlend::Alpha;
+		u32 SortStart = 0; // 0: drawn in slot order; else 1 + the first entry of this emitter's part of the sort buffer (farthest particle first)
+		u32 SortCount = 0; // entries of that part (the ring's capacity up to a power of two)
 	};
 
 	class ParticlePool
@@ -98,6 +100,12 @@ namespace wiwa
 		nvrhi::IBuffer* emitters() const { return m_Emitters; }
 		nvrhi::IBuffer* tables() const { return m_Tables; }
 
+		// The entries (view depth as float bits, slot) the sort writes and the sprite shader reads. It grows when emitters that sort need more room (at least
+		// 2 entries, so that it can always be bound); the sort_generation counts up when it is made again.
+		bool ensure_sort(nvrhi::IDevice* device, u32 entries);
+		nvrhi::IBuffer* sort_buffer() const { return m_Sort; }
+		u32 sort_generation() const { return m_SortGeneration; }
+
 		// For the render pass; cleared and filled every frame by the simulation pass.
 		std::vector<ParticleDraw> Draws{};
 
@@ -110,5 +118,8 @@ namespace wiwa
 		nvrhi::BufferHandle m_Particles{};
 		nvrhi::BufferHandle m_Emitters{};
 		nvrhi::BufferHandle m_Tables{};
+		nvrhi::BufferHandle m_Sort{};
+		u32 m_SortEntries = 0;
+		u32 m_SortGeneration = 0;
 	};
 }

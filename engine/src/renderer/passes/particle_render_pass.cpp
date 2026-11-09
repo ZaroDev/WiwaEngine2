@@ -68,7 +68,7 @@ namespace wiwa
 		m_Shaders->request(engine_assets::PARTICLE_SPRITE_SHADER, ShaderStage::Pixel);
 
 		// Slots match particle_sprite.hlsl (set 2 on Vulkan; registers are unique across the layouts of the pass): SRV 36 the particles, 37 the emitters,
-		// 38 the tables, 39 the scene depth.
+		// 38 the tables, 39 the scene depth, 40 the sort entries.
 		nvrhi::VulkanBindingOffsets offsets;
 		offsets.shaderResource = 0;
 		offsets.sampler = 0;
@@ -81,6 +81,7 @@ namespace wiwa
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(37));
 		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(38));
 		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(39));
+		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(40));
 		m_Layout = m_Device->createBindingLayout(layout);
 		return m_Layout != nullptr;
 	}
@@ -143,15 +144,17 @@ namespace wiwa
 		}
 
 		ViewCache& cache = m_PerView.get(frame.View->Target);
-		if (cache.BindingSet == nullptr || cache.PoolGeneration != m_Pool->generation())
+		if (cache.BindingSet == nullptr || cache.PoolGeneration != m_Pool->generation() || cache.SortGeneration != m_Pool->sort_generation())
 		{
 			nvrhi::BindingSetDesc set;
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(36, m_Pool->particles()));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(37, m_Pool->emitters()));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(38, m_Pool->tables()));
 			set.addItem(nvrhi::BindingSetItem::Texture_SRV(39, viewport.depth()));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(40, m_Pool->sort_buffer()));
 			cache.BindingSet = m_Device->createBindingSet(set, m_Layout);
 			cache.PoolGeneration = m_Pool->generation();
+			cache.SortGeneration = m_Pool->sort_generation();
 			if (cache.BindingSet == nullptr)
 			{
 				WI_PARTICLE_LOG(Error, "Could not create the particle bindings");

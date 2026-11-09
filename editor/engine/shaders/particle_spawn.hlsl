@@ -1,19 +1,9 @@
 #include "Common.hlsli"
-#include "particle_common.hlsli"
+#include "particle_sim_common.hlsli"
 
 // The spawn step (vfx.md): one thread per particle to spawn this frame, across every emitter. The thread finds its emitter by the range of spawn
 // threads the emitter owns, takes the next slot of the emitter's ring (the oldest particle is overwritten when the ring is full) and writes the
 // particle from the emitter's start modules.
-cbuffer SimConstants : register(b0)
-{
-	uint EmitterCount; // emitter records to look through (the highest live id + 1)
-	uint TotalSpawn;
-	uint SlotEnd;      // particles slots to age (one past the last live ring)
-	uint FrameIndex;
-	float DeltaTime;
-	float Time;
-	float2 Padding;
-};
 
 StructuredBuffer<Emitter> uEmitters : register(t1);
 StructuredBuffer<float4> uTables : register(t2);
