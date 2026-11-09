@@ -10,6 +10,7 @@
 
 #include "clip_editor.h"
 #include "graph_editor.h"
+#include "vfx_editor.h"
 #include "mesh_editor.h"
 #include "preview_mesh_resolver.h"
 #include "skeleton_editor.h"
@@ -36,7 +37,7 @@ AssetEditorPanel::~AssetEditorPanel()
 bool AssetEditorPanel::can_open(const std::filesystem::path& file)
 {
 	const std::filesystem::path extension = file.extension();
-	return extension == ".wskel" || extension == ".wmesh" || extension == ".wanim" || extension == ".wgraph";
+	return extension == ".wskel" || extension == ".wmesh" || extension == ".wanim" || extension == ".wgraph" || extension == ".wfx";
 }
 
 bool AssetEditorPanel::open_asset(const wiwa::AssetRef& ref)
@@ -82,6 +83,10 @@ bool AssetEditorPanel::load_now(const std::filesystem::path& file)
 	else if (file.extension() == ".wgraph")
 	{
 		editor = std::make_unique<wiwa::GraphEditor>(host);
+	}
+	else if (file.extension() == ".wfx")
+	{
+		editor = std::make_unique<wiwa::VfxEditor>(host);
 	}
 	else
 	{
@@ -352,6 +357,13 @@ void AssetEditorPanel::draw_preview_controls()
 
 void AssetEditorPanel::draw_preview_column()
 {
+	if (m_Editor->draws_own_preview())
+	{
+		m_Preview.hide(); // the skeleton preview is not drawn: it gives its view back
+		const ImVec2 room = ImGui::GetContentRegionAvail();
+		m_Editor->draw_preview(ImVec2(room.x, std::max(room.y, 64.0f)));
+		return;
+	}
 	update_preview_choice();
 	draw_preview_controls();
 	const ImVec2 available = ImGui::GetContentRegionAvail();

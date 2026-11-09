@@ -47,6 +47,9 @@ public:
 	unsigned frames_with_editor() const { return m_FramesWithEditor; }
 	std::string open_kind() const { return m_Editor != nullptr ? m_Editor->kind() : std::string{}; }
 	const std::string& last_error() const { return m_Error; }
+	wiwa::IAssetEditor* editor() const { return m_Editor.get(); }
+	// Writes the open asset (the toolbar's Save and Ctrl+S): the panel then knows the change on disk is its own.
+	void save();
 	// The state the base layer of a graph plays in the preview (empty when no graph plays there).
 	std::string preview_state() const { const wiwa::AnimatorInstance* instance = m_Preview.animator(); return instance != nullptr && instance->graph_mode() ? instance->state_name(0) : std::string{}; }
 	bool focused() const { return m_Open && m_Focused; } // a closed panel is not drawn, so its last value would be stale
@@ -60,7 +63,6 @@ private:
 	void draw_preview_controls();
 	void draw_prompt();
 	void handle_keys();
-	void save();
 	void update_preview_choice();
 	void poll_file();
 	std::string title() const;

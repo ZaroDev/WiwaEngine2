@@ -154,6 +154,7 @@ void EditorModule::init()
 		m_PhysicsPanelSmoke = m_PhysicsPanelSmoke || argument == "--physics-panel-smoke";
 		m_InputPanelSmoke = m_InputPanelSmoke || argument == "--input-panel-smoke";
 		m_AnimPanelSmoke = m_AnimPanelSmoke || argument == "--anim-panel-smoke";
+		m_VfxEditorSmokeRequested = m_VfxEditorSmokeRequested || argument == "--vfx-editor-smoke";
 		if (argument == "--demo-smoke")
 		{
 			m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
@@ -818,6 +819,23 @@ void EditorModule::update(float deltaTime)
 		}
 	}
 
+	if (m_VfxEditorSmokeRequested && m_AssetEditor != nullptr)
+	{
+		if (m_VfxEditorSmoke == nullptr)
+		{
+			m_VfxEditorSmoke = CreateScope<wiwa::VfxEditorSmoke>(*m_AssetEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
+		}
+		std::string failure;
+		if (m_VfxEditorSmoke->update(static_cast<wiwa::u32>(m_Frame), failure))
+		{
+			WI_INFO("Editor", "{0}", failure.empty() ? std::string("VFX editor smoke test passed") : "VFX editor smoke test FAILED: " + failure);
+			wiwa::Engine::get().set_exit_code(failure.empty() ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+			m_AssetEditor->close_preview();
+			m_VfxEditorSmoke.reset();
+			m_VfxEditorSmokeRequested = false;
+		}
+	}
 	if (m_PlaySmoke && m_Frame == 30)
 	{
 		const std::string failure = run_play_smoke();
