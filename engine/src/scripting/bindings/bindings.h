@@ -42,6 +42,9 @@ namespace wiwa
 	// Decal.spawn{ material, position, normal, size, opacity, lifetime, fade_in, fade_out, sort_order, roll, parent, name }.
 	void bind_decal(ScriptRuntime& runtime, ScriptContext& context);
 
+	// Vfx.spawn{ effect, position, rotation, scale, parent, name, looping, time_scale, params, animator, joint }, Vfx.play / stop / restart / is_playing / set_param.
+	void bind_vfx(ScriptRuntime& runtime, ScriptContext& context);
+
 	// settings.graphics.get / set (the renderer's quality settings, saved), settings.scene.get / set (the active scene's look), and
 	// prefs.get / set / save (the player's options of a game, user_prefs.json).
 	void bind_settings(ScriptRuntime& runtime, ScriptContext& context);

@@ -231,6 +231,37 @@ namespace wiwa
 				context.check(pool.used() == 0, "its ring is released");
 			});
 
+		register_render_check("particle_clear_request", [](RenderCheckContext& context)
+			{
+				SceneTester test(context, 32);
+				test.renderer().get_particle_pool().set_capacity(4096);
+				ParticleEffectData effect;
+				effect.Emitters = { still_emitter(32) };
+				const EntityGuid system = add_system(test, test.cache().add_inline_particle_effect(effect), glm::mat4(1.0f), 20);
+				context.check(test.render(3), "render");
+				context.check(alive(read_pool(context, test)).size() == 20, "20 alive");
+
+				// the main thread discards the particles (Vfx.stop with clear, Vfx.restart): the counter goes up
+				const std::optional<size_t> slot = test.scene().find_particle_system(system);
+				context.check(slot.has_value(), "the system is in the scene");
+				if (!slot)
+				{
+					return;
+				}
+				RenderParticleSystem changed = test.scene().particle_systems()[*slot];
+				changed.ClearCount = 1;
+				SceneDelta delta;
+				delta.ParticleUpserts.emplace_back(system, std::move(changed));
+				test.scene().apply(std::move(delta));
+				context.check(test.render(3), "render after the clear request");
+				context.check(alive(read_pool(context, test)).empty(), "none of its particles is alive");
+
+				// and the system plays on: what is asked for now appears
+				spawn_more(test, system, 5);
+				context.check(test.render(3), "render with 5 more");
+				context.check(alive(read_pool(context, test)).size() == 5, "the system spawns again (5 alive)");
+			});
+
 		register_render_check("particle_cone_shape", [](RenderCheckContext& context)
 			{
 				SceneTester test(context, 32);

@@ -20,6 +20,7 @@ namespace wiwa
 		bool SelfDestruct = false;  // Vfx.spawn: the entity goes away when Finished
 		float Time = 0.0f;          // seconds the system has played (TimeScale applied)
 		u32 Seed = 0;               // the random numbers of the system on the GPU
+		u32 ClearCount = 0;         // counts up when the particles of the system are to be discarded (Vfx.stop with clear, restart): the render thread starts its rings over
 		std::array<float, PARTICLE_MAX_EMITTERS> Remainder{};     // the fraction of a particle carried to the next frame
 		std::array<float, PARTICLE_MAX_EMITTERS> PreviousLocal{ -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f }; // each emitter's time at the last step
 		std::array<u32, PARTICLE_MAX_EMITTERS> SpawnCount{};      // spawned this frame, per emitter: what the extractor sends
@@ -27,6 +28,7 @@ namespace wiwa
 		// Starts over (the effect plays from its beginning).
 		void restart()
 		{
+			ClearCount++;
 			Playing = true;
 			Finished = false;
 			Time = 0.0f;
@@ -35,6 +37,9 @@ namespace wiwa
 			SpawnCount.fill(0);
 		}
 	};
+
+	// The runtime of a ParticleSystem; made, and started as PlayOnStart says (Playing, the seed), when the entity has none yet. The entity has a ParticleSystem.
+	ParticleRuntime& particle_runtime_of(entt::registry& registry, entt::entity entity);
 
 	// The effect a reference names, once it is loaded; null while it is not (the system waits).
 	using ParticleEffectLookup = std::function<const ParticleEffectData*(const AssetRef&)>;

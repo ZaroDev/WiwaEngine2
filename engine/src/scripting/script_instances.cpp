@@ -24,6 +24,7 @@ namespace wiwa
 		bind_assets(m_Runtime, m_Context);
 		bind_render(m_Runtime, m_Context);
 		bind_decal(m_Runtime, m_Context);
+		bind_vfx(m_Runtime, m_Context);
 		m_Context.UiHandlers = &m_UiHandlers;
 		m_Context.AnimHandlers = &m_AnimHandlers;
 		bind_engine(m_Runtime, m_Context);

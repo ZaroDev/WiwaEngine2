@@ -274,6 +274,43 @@ Decal = {}
 ---@return Entity
 function Decal.spawn(options) end
 
+---@class VfxOptions
+---@field effect Asset the particle effect (.wfx), from load_asset
+---@field position? vec3 where (default the origin); an offset from the joint when animator and joint are given
+---@field rotation? quat
+---@field scale? number|vec3
+---@field parent? Entity
+---@field name? string
+---@field looping? boolean true: plays until stopped or destroyed (default false: plays once and removes itself)
+---@field time_scale? number
+---@field params? table "color" (vec4), "size", "rate", "time_scale"
+---@field animator? Entity an entity with an Animator: place the effect at one of its joints
+---@field joint? string the joint of the animator
+
+Vfx = {}
+--- Plays a particle effect in a new entity that removes itself when the effect is over (an animation event of a footstep or a sword swing: pass animator and joint).
+---@param options VfxOptions
+---@return Entity
+function Vfx.spawn(options) end
+--- Starts the ParticleSystem of the entity (one that has finished starts over).
+---@param entity Entity
+function Vfx.play(entity) end
+--- Stops it spawning; the particles in the air live out their lives, or are discarded at once with clear.
+---@param entity Entity
+---@param clear? boolean
+function Vfx.stop(entity, clear) end
+--- Plays it from its beginning with none of the last play's particles left.
+---@param entity Entity
+function Vfx.restart(entity) end
+---@param entity Entity
+---@return boolean
+function Vfx.is_playing(entity) end
+--- "color" (vec4 or vec3), "size", "rate" (numbers of zero or more) or "time_scale".
+---@param entity Entity
+---@param name string
+---@param value number|vec3|vec4
+function Vfx.set_param(entity, name, value) end
+
 --------------------------------------------------------------------------------------------------------------------------------
 -- Physics
 --------------------------------------------------------------------------------------------------------------------------------

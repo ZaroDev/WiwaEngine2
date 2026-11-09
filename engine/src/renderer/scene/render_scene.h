@@ -97,6 +97,7 @@ namespace wiwa
 		float SizeScale = 1.0f;
 		float RateScale = 1.0f;
 		u32 Seed = 0;
+		u32 ClearCount = 0; // counts up when the main thread discards the system's particles: the simulation starts its rings over
 		std::array<u32, PARTICLE_MAX_EMITTERS> PendingSpawns{};
 	};
 

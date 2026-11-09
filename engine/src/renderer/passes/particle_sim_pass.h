@@ -54,6 +54,7 @@ namespace wiwa
 		{
 			AssetRef Effect{};
 			u32 Revision = 0;
+			u32 ClearCount = 0;
 			u64 Seen = 0;
 			std::array<ParticleAllocation, PARTICLE_MAX_EMITTERS> Rings{};
 			std::array<u32, PARTICLE_MAX_EMITTERS> Heads{};

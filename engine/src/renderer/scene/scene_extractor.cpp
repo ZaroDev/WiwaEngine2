@@ -81,13 +81,14 @@ namespace wiwa
 			result.SizeScale = std::max(system.SizeScale, 0.0f);
 			result.RateScale = std::max(system.RateScale, 0.0f);
 			result.Seed = runtime != nullptr ? runtime->Seed : 0u;
+			result.ClearCount = runtime != nullptr ? runtime->ClearCount : 0u;
 			return result;
 		}
 
 		bool same_particle_system(const RenderParticleSystem& a, const RenderParticleSystem& b)
 		{
 			return same_matrix(a.World, b.World) && a.Effect == b.Effect && a.SortBias == b.SortBias && a.ColorTint == b.ColorTint && a.SizeScale == b.SizeScale
-				&& a.RateScale == b.RateScale && a.Seed == b.Seed;
+				&& a.RateScale == b.RateScale && a.Seed == b.Seed && a.ClearCount == b.ClearCount;
 		}
 
 		bool same_decal(const RenderDecal& a, const RenderDecal& b)

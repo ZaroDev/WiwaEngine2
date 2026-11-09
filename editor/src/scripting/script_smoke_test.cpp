@@ -27,6 +27,7 @@
 #include <scene/scene_module.h>
 #include <scripting/script_context.h>
 #include <scripting/bindings/script_types.h>
+#include <scene/particle_runtime.h>
 #include <scripting/script_instances.h>
 #include <scripting/script_reload.h>
 #include <scripting/script_requires.h>
@@ -965,6 +966,83 @@ namespace wiwa
 			check(h.TheScene->registry().view<Decal>().size() == 2, "decal_spawn_made_exactly_the_two_decals_that_succeeded");
 		}
 
+		// The Vfx API: Vfx.spawn makes a system that removes itself, the controls change its runtime and parameters, and bad input is a Lua error.
+		void check_vfx_api(Check& check)
+		{
+			Harness h;
+			h.Runtime.sandbox().set_function("an_effect", []() { return LuaAsset{ AssetRef{ AssetGuid{ 11, 13 }, 0 } }; });
+			const AssetRef ref = h.add_script("vfx", R"(return Script:extend{ on_init = function(self)
+				local e = Vfx.spawn{ effect = an_effect(), position = vec3(1, 2, 3), scale = 2, name = 'boom', time_scale = 3, params = { size = 4, rate = 0.5, color = vec4(1, 0, 0, 1) } }
+				record(tostring(e:is_valid()) .. ',' .. e.name)
+				local ps = e:get('ParticleSystem')
+				record(string.format('%g,%g,%g,%g,%g', ps.sizescale, ps.ratescale, ps.timescale, ps.looping and 1 or 0, ps.colortint.x))
+				record(tostring(Vfx.is_playing(e)))
+				Vfx.stop(e)
+				record(tostring(Vfx.is_playing(e)))
+				Vfx.play(e)
+				record(tostring(Vfx.is_playing(e)))
+				Vfx.set_param(e, 'size', 6)
+				Vfx.set_param(e, 'color', vec3(0, 1, 0))
+				record(string.format('%g,%g', ps.sizescale, ps.colortint.y))
+				Vfx.stop(e, true)
+				Vfx.restart(e)
+				local loop = Vfx.spawn{ effect = an_effect(), looping = true }
+				record(tostring(loop:get('ParticleSystem').looping))
+				local ok1, e1 = pcall(Vfx.spawn, {})
+				record(tostring(ok1) .. ':' .. tostring(e1))
+				local ok2 = pcall(Vfx.set_param, e, 'nonsense', 1)
+				local ok3 = pcall(Vfx.set_param, e, 'size', -1)
+				local ok4 = pcall(Vfx.play, self.entity)
+				local ok5, e5 = pcall(Vfx.spawn, { effect = an_effect(), animator = self.entity })
+				local ok6 = pcall(Vfx.spawn, { effect = an_effect(), position = vec3(0 / 0, 0, 0) })
+				record(tostring(ok2) .. tostring(ok3) .. tostring(ok4) .. tostring(ok5) .. tostring(ok6))
+				record(tostring(e5))
+			end })");
+			h.spawn("spawner", { ref });
+			h.Instances.start(h.TheScene);
+			h.Instances.update(0.016f);
+
+			check(h.Events.size() == 10 && h.Events[0] == "true,boom", "vfx_spawn_makes_the_entity");
+			check(h.Events.size() == 10 && h.Events[1] == "4,0.5,3,0,1", "vfx_spawn_sets_the_parameters");
+			check(h.Events.size() == 10 && h.Events[2] == "true" && h.Events[3] == "false" && h.Events[4] == "true", "vfx_play_stop_and_is_playing");
+			check(h.Events.size() == 10 && h.Events[5] == "6,1", "vfx_set_param_changes_the_component");
+			check(h.Events.size() == 10 && h.Events[6] == "true", "vfx_looping_option");
+			check(h.Events.size() == 10 && h.Events[7].starts_with("false:") && contains(h.Events[7], "effect"), "vfx_spawn_without_an_effect_is_an_error");
+			check(h.Events.size() == 10 && h.Events[8] == "falsefalsefalsefalsefalse" && contains(h.Events[9], "together"), "vfx_bad_input_is_an_error");
+
+			// what happened to the entities: the transform, the runtime, the clear request
+			entt::registry& registry = h.TheScene->registry();
+			entt::entity boom = entt::null;
+			for (const auto [entity, name] : registry.view<Name>().each())
+			{
+				if (name.Value == "boom")
+				{
+					boom = entity;
+				}
+			}
+			check(boom != entt::null && registry.get<Transform>(boom).Position == glm::vec3(1, 2, 3) && registry.get<Transform>(boom).Scale == glm::vec3(2.0f), "vfx_spawn_places_the_entity");
+			const ParticleRuntime* runtime = boom != entt::null ? registry.try_get<ParticleRuntime>(boom) : nullptr;
+			check(runtime != nullptr && runtime->SelfDestruct && runtime->Playing && runtime->ClearCount == 2, "vfx_runtime_removes_itself_and_clear_and_restart_ask_for_a_clear (" + std::string(runtime ? std::to_string(runtime->ClearCount) : "none") + ")");
+			check(registry.view<ParticleSystem>().size() == 2, "vfx_spawn_made_exactly_the_two_systems_that_succeeded");
+
+			// a spawned effect that has played out removes itself
+			ParticleEffectData data;
+			ParticleEmitterData emitter;
+			emitter.Name = "E";
+			emitter.Looping = true; // the emitter loops; a system with Looping off plays it once
+			emitter.Duration = 0.2f;
+			emitter.Rate = ParticleValue::constant(10.0f);
+			emitter.Lifetime = ParticleValue::constant(0.1f);
+			emitter.bake();
+			data.Emitters = { emitter };
+			const ParticleEffectLookup lookup = [&](const AssetRef&) -> const ParticleEffectData* { return &data; };
+			for (int frame = 0; frame < 60; frame++)
+			{
+				tick_particle_systems(*h.TheScene, 1.0f / 60.0f, lookup);
+			}
+			check(boom != entt::null && !registry.valid(boom), "vfx_a_finished_one_shot_removes_its_entity");
+			check(registry.view<ParticleSystem>().size() == 1, "vfx_and_the_looping_one_stays");
+		}
 		void check_engine_bindings(Check& check, AssetPipelineModule& pipeline)
 		{
 			{
@@ -2894,6 +2972,7 @@ namespace wiwa
 		check_lifecycle(check);
 		check_api(check);
 		check_decal_spawn(check);
+		check_vfx_api(check);
 		check_engine_bindings(check, pipeline);
 		check_scene_changes_and_reload(check);
 		check_pak(check);

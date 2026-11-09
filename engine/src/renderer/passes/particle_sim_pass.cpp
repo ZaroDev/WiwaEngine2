@@ -342,13 +342,14 @@ namespace wiwa
 
 			SystemState& state = m_Systems[system.Guid];
 			const u32 revision = cache.effect_revision(system.Effect);
-			if (state.Effect != system.Effect || state.Revision != revision)
+			if (state.Effect != system.Effect || state.Revision != revision || state.ClearCount != system.ClearCount)
 			{
-				release(state, commandList);
+				release(state, commandList); // new effect, re-cooked, or the particles were discarded (Vfx.stop with clear, restart): start the rings over
 				state = SystemState{};
 			}
 			state.Effect = system.Effect;
 			state.Revision = revision;
+			state.ClearCount = system.ClearCount;
 			state.Seen = m_Pass;
 
 			const std::array<u32, PARTICLE_MAX_EMITTERS> spawns = scene.take_pending_spawns(slot);

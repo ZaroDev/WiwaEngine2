@@ -58,6 +58,19 @@ namespace wiwa
 		}
 	}
 
+	ParticleRuntime& particle_runtime_of(entt::registry& registry, entt::entity entity)
+	{
+		ParticleRuntime& runtime = registry.get_or_emplace<ParticleRuntime>(entity);
+		if (!runtime.Started)
+		{
+			runtime.Started = true;
+			runtime.Playing = registry.get<ParticleSystem>(entity).PlayOnStart;
+			const EntityGuid guid = registry.all_of<Id>(entity) ? registry.get<Id>(entity).Guid : EntityGuid{};
+			runtime.Seed = static_cast<u32>(guid.Hi ^ (guid.Hi >> 32) ^ guid.Lo ^ (guid.Lo >> 32)) | 1u;
+		}
+		return runtime;
+	}
+
 	void tick_particle_systems(Scene& scene, float deltaTime, const ParticleEffectLookup& effects)
 	{
 		entt::registry& registry = scene.registry();
@@ -66,14 +79,7 @@ namespace wiwa
 
 		for (const auto [entity, system] : registry.view<ParticleSystem>().each())
 		{
-			ParticleRuntime& runtime = registry.get_or_emplace<ParticleRuntime>(entity);
-			if (!runtime.Started)
-			{
-				runtime.Started = true;
-				runtime.Playing = system.PlayOnStart;
-				const EntityGuid guid = registry.all_of<Id>(entity) ? registry.get<Id>(entity).Guid : EntityGuid{};
-				runtime.Seed = static_cast<u32>(guid.Hi ^ (guid.Hi >> 32) ^ guid.Lo ^ (guid.Lo >> 32)) | 1u;
-			}
+			ParticleRuntime& runtime = particle_runtime_of(registry, entity);
 			runtime.SpawnCount.fill(0);
 
 			if (!runtime.Playing || runtime.Finished)
