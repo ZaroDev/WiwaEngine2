@@ -53,6 +53,16 @@ namespace wiwa
 			WI_FIELD(Lifetime),
 			WI_FIELD(FadeOutTime)));
 
+		registry.register_component(WI_COMPONENT(ParticleSystem,
+			WI_FIELD_META(Effect, FieldMeta::asset(AssetType::ParticleEffect)),
+			WI_FIELD(PlayOnStart),
+			WI_FIELD(Looping),
+			WI_FIELD_META(TimeScale, FieldMeta::range(0.0f, 10.0f)),
+			WI_FIELD(SortBias),
+			WI_FIELD_META(ColorTint, FieldMeta::color()),
+			WI_FIELD_META(SizeScale, FieldMeta::range(0.0f, 100.0f)),
+			WI_FIELD_META(RateScale, FieldMeta::range(0.0f, 100.0f))));
+
 		// The overrides are not a field: the record layer saves and applies them.
 		registry.register_component(WI_COMPONENT(PrefabInstance,
 			WI_FIELD_META(Prefab, FieldMeta::asset(AssetType::Prefab))));

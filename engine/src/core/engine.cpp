@@ -10,6 +10,7 @@
 #include <renderer/render_module.h>
 #include <renderer/window.h>
 #include <scene/decal_module.h>
+#include <scene/particle_module.h>
 #include <scene/scene_module.h>
 #include <scripting/script_module.h>
 #include <ui/ui_module.h>
@@ -59,6 +60,7 @@ namespace wiwa
 		m_ModuleManager.add_module<UiModule>(); // before the scripts: the clicks of a frame reach them in that frame
 		m_ModuleManager.add_module<AnimationModule>(); // runs after the scripts (priority 10) but must exist when they start: they ask for it
 		m_ModuleManager.add_module<ScriptingModule>();
+		m_ModuleManager.add_module<ParticleModule>(); // after the scripts (priority 12): an effect they spawn gets its first spawn counts in the frame it appears
 		m_ModuleManager.add_module<DecalModule>(); // after the scripts (priority 11): a decal they spawn is aged in the frame it appears
 
 		on_init();

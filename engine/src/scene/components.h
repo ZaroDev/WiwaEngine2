@@ -123,6 +123,20 @@ namespace wiwa
 		float FadeOutTime = 0.0f;
 	};
 
+	// Plays a particle effect (.wfx, vfx.md). The particles are simulated on the GPU; this component says which effect, whether it plays, and a few
+	// parameters scripts and prefabs can change. It plays only while the game clock plays (the editor previews the selected one).
+	struct ParticleSystem
+	{
+		AssetRef Effect{};
+		bool PlayOnStart = true;
+		bool Looping = true;        // false: every emitter plays once, whatever its own Looping says
+		float TimeScale = 1.0f;     // 0 pauses, 2 is twice as fast
+		i32 SortBias = 0;           // orders the effect among the others that blend: the higher draws later
+		glm::vec4 ColorTint{ 1.0f };// multiplies every particle's color
+		float SizeScale = 1.0f;     // multiplies every particle's size
+		float RateScale = 1.0f;     // multiplies the emission rate (bursts are not scaled)
+	};
+
 	// The root of a linked prefab instance: the entities below it are generated from the Prefab, and the overrides change them.
 	struct PrefabInstance
 	{

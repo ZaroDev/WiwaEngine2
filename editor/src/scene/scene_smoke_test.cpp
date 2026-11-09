@@ -12,6 +12,7 @@
 #include <scene/reflection/value_bag.h>
 #include <scene/scene.h>
 #include <scene/decal_lifetime.h>
+#include <scene/particle_runtime.h>
 #include <scene/scene_clone.h>
 #include <scene/scene_components.h>
 #include <scene/scene_loader.h>
@@ -1971,6 +1972,184 @@ namespace wiwa
 			check(scene.registry().valid(staying) && scene.registry().valid(rising), "decal_lifetime: the others stay");
 		}
 
+		// ParticleSystem survives save, cook, load (binary and text), a scene clone and a prefab override, and its runtime is never saved.
+		void check_particle_system_data(Check& check)
+		{
+			register_scene_components();
+			check(ComponentRegistry::get().find("ParticleSystem") != nullptr, "particles: ParticleSystem is registered");
+
+			Scene source;
+			const EntityGuid ownerId = EntityGuid::generate();
+			const entt::entity owner = source.create(ownerId, "Fire");
+			ParticleSystem system;
+			system.Effect = AssetRef{ AssetGuid::generate(), 4 };
+			system.PlayOnStart = false;
+			system.Looping = false;
+			system.TimeScale = 2.0f;
+			system.SortBias = 3;
+			system.ColorTint = glm::vec4(0.5f, 0.25f, 0.75f, 1.0f);
+			system.SizeScale = 2.0f;
+			system.RateScale = 0.5f;
+			source.registry().emplace<ParticleSystem>(owner, system);
+			source.registry().emplace<ParticleRuntime>(owner, ParticleRuntime{ true, true });
+
+			const auto same = [](const ParticleSystem& a, const ParticleSystem& b)
+			{
+				return a.Effect == b.Effect && a.PlayOnStart == b.PlayOnStart && a.Looping == b.Looping && a.TimeScale == b.TimeScale && a.SortBias == b.SortBias
+					&& a.ColorTint == b.ColorTint && a.SizeScale == b.SizeScale && a.RateScale == b.RateScale;
+			};
+
+			const SceneData first = data_from_scene(source, "particles");
+			const std::vector<std::byte> bytes = serialize(first);
+			std::optional<SceneData> back = deserialize<SceneData>(bytes);
+			check(back.has_value(), "particles: the scene survives the cooked format");
+			if (!back)
+			{
+				return;
+			}
+			Scene copy;
+			const ApplyReport report = apply_scene_data(copy, *back);
+			check(report.UnknownComponents == 0 && report.UnknownFields == 0, "particles: nothing in the saved scene is unknown");
+			const entt::entity loaded = copy.find(ownerId);
+			check(loaded != entt::null && copy.registry().all_of<ParticleSystem>(loaded) && same(copy.registry().get<ParticleSystem>(loaded), system), "particles: every field survives save and load");
+			check(loaded != entt::null && !copy.registry().all_of<ParticleRuntime>(loaded), "particles: the runtime state is not saved");
+			check(serialize(data_from_scene(copy, "particles")) == bytes, "particles: save, load, save gives the same bytes");
+
+			const SceneJsonResult viaJson = scene_from_json(SceneJson::parse(scene_to_json(first).dump(2)));
+			check(viaJson.Scene.has_value() && serialize(*viaJson.Scene) == bytes, "particles: the text of the file gives the same binary scene (" + viaJson.Error + ")");
+
+			Ref<Scene> cloned = clone_scene(source);
+			const entt::entity clonedSystem = cloned->find(ownerId);
+			check(clonedSystem != entt::null && cloned->registry().all_of<ParticleSystem>(clonedSystem) && same(cloned->registry().get<ParticleSystem>(clonedSystem), system), "particles: a scene clone keeps every field");
+			check(clonedSystem != entt::null && !cloned->registry().all_of<ParticleRuntime>(clonedSystem), "particles: a clone starts without runtime state");
+
+			PrefabData prefab;
+			prefab.Name = "fire";
+			PrefabNode node = make_node("Fire", -1);
+			node.Components.push_back(ComponentRecord{ "ParticleSystem", { FieldRecord{ "TimeScale", FieldValue(1.0f) } } });
+			prefab.Nodes = { node };
+			assign_stable_ids(prefab.Nodes);
+			const u64 nodeId = prefab.Nodes[0].StableId;
+			EntityRecord instance = make_instance(EntityGuid::generate(), AssetRef{ AssetGuid::generate(), 0 });
+			instance.Overrides = { set_field_override(nodeId, "ParticleSystem", "TimeScale", FieldValue(0.25f)) };
+			const ExpandResult expanded = expand_prefab(instance, prefab);
+			const FieldValue* scale = expanded.Entities.size() == 2 ? find_field(expanded.Entities[1].Components, "ParticleSystem", "TimeScale") : nullptr;
+			check(scale != nullptr && std::get_if<float>(scale) != nullptr && *std::get_if<float>(scale) == 0.25f, "particles: a prefab override of ParticleSystem.TimeScale applies");
+		}
+
+		// What the tick makes of an effect: how many particles each emitter spawns, from the rate, the bursts, the loop, the time scale and the step.
+		void check_particle_ticks(Check& check)
+		{
+			register_scene_components();
+
+			ParticleEffectData effect;
+			ParticleEmitterData emitter;
+			emitter.Name = "E";
+			emitter.Looping = false;
+			emitter.Duration = 5.0f;
+			emitter.Rate = ParticleValue::constant(10.0f);
+			emitter.Lifetime = ParticleValue::constant(1.0f);
+			emitter.bake();
+			effect.Emitters = { emitter };
+			const ParticleEffectLookup lookup = [&](const AssetRef&) -> const ParticleEffectData* { return &effect; };
+			const AssetRef reference{ AssetGuid::generate(), 0 };
+
+			// Runs a scene with one system for `seconds` at `hz` and returns what its first emitter spawned.
+			const auto spawned = [&](const ParticleSystem& system, float seconds, float hz, const ParticleEffectLookup& effects) -> u32
+			{
+				Scene scene;
+				const entt::entity entity = scene.create("fx");
+				ParticleSystem copy = system;
+				copy.Effect = reference;
+				scene.registry().emplace<ParticleSystem>(entity, copy);
+				u32 total = 0;
+				for (int frame = 0; frame < static_cast<int>(seconds * hz); frame++)
+				{
+					tick_particle_systems(scene, 1.0f / hz, effects);
+					if (const ParticleRuntime* runtime = scene.registry().try_get<ParticleRuntime>(entity))
+					{
+						total += runtime->SpawnCount[0];
+					}
+				}
+				return total;
+			};
+			const auto within = [](u32 value, u32 expected, u32 slack) { return value + slack >= expected && value <= expected + slack; };
+
+			ParticleSystem plain;
+			check(within(spawned(plain, 7.0f, 60.0f, lookup), 50, 1), "particle_ticks: a rate of 10 for the 5 s duration spawns 50 and then stops");
+			check(within(spawned(plain, 7.0f, 30.0f, lookup), 50, 1), "particle_ticks: the count does not depend on the frame rate (the fraction is carried)");
+
+			ParticleSystem scaled;
+			scaled.RateScale = 0.5f;
+			check(within(spawned(scaled, 7.0f, 60.0f, lookup), 25, 1), "particle_ticks: RateScale scales the rate");
+			ParticleSystem fast;
+			fast.TimeScale = 2.0f;
+			check(within(spawned(fast, 7.0f, 60.0f, lookup), 50, 1), "particle_ticks: TimeScale 2 plays the same emission in half the time");
+			ParticleSystem paused;
+			paused.TimeScale = 0.0f;
+			check(spawned(paused, 3.0f, 60.0f, lookup) == 0, "particle_ticks: TimeScale 0 pauses");
+			ParticleSystem idle;
+			idle.PlayOnStart = false;
+			check(spawned(idle, 3.0f, 60.0f, lookup) == 0, "particle_ticks: without PlayOnStart nothing plays");
+
+			// bursts: once in a non-looping emission, once per cycle in a looping one
+			effect.Emitters[0].Bursts = { ParticleBurst{ 1.0f, 20 }, ParticleBurst{ 0.0f, 3 } };
+			check(within(spawned(plain, 7.0f, 60.0f, lookup), 50 + 23, 1), "particle_ticks: bursts fire once, also the one at time 0");
+			effect.Emitters[0].Looping = true;
+			effect.Emitters[0].Duration = 2.0f;
+			effect.Emitters[0].Rate = ParticleValue::constant(0.0f);
+			check(within(spawned(plain, 6.5f, 60.0f, lookup), 3 * 23 + 3, 0), "particle_ticks: a looping emitter fires its bursts again every cycle");
+			ParticleSystem once;
+			once.Looping = false;
+			check(within(spawned(once, 6.5f, 60.0f, lookup), 23, 0), "particle_ticks: Looping off on the system plays one pass of a looping emitter");
+
+			effect.Emitters[0] = emitter;
+			effect.Emitters[0].MaxParticles = 5;
+			effect.Emitters[0].Rate = ParticleValue::constant(1000.0f);
+			check(spawned(plain, 0.5f, 60.0f, lookup) <= 5 * 30, "particle_ticks: no frame spawns more than the emitter's cap");
+			effect.Emitters[0] = emitter;
+
+			// steps that are not times
+			{
+				Scene scene;
+				const entt::entity entity = scene.create("fx");
+				ParticleSystem system;
+				system.Effect = reference;
+				scene.registry().emplace<ParticleSystem>(entity, system);
+				tick_particle_systems(scene, 0.0f, lookup);
+				tick_particle_systems(scene, -1.0f, lookup);
+				tick_particle_systems(scene, std::numeric_limits<float>::quiet_NaN(), lookup);
+				const ParticleRuntime& runtime = scene.registry().get<ParticleRuntime>(entity);
+				check(runtime.Time == 0.0f && runtime.SpawnCount[0] == 0, "particle_ticks: a step of 0, a negative one or NaN advances nothing");
+				tick_particle_systems(scene, 100.0f, lookup);
+				check(std::abs(scene.registry().get<ParticleRuntime>(entity).Time - 0.1f) < 1e-5f && scene.registry().get<ParticleRuntime>(entity).SpawnCount[0] <= 2, "particle_ticks: a stall is cut to a 0.1 s step (no flood)");
+			}
+
+			// a missing effect waits; an unset one too
+			check(spawned(plain, 2.0f, 60.0f, [](const AssetRef&) -> const ParticleEffectData* { return nullptr; }) == 0, "particle_ticks: an effect that is not loaded spawns nothing and does not crash");
+
+			// a system that is done and asked to remove itself goes away
+			{
+				Scene scene;
+				const entt::entity entity = scene.create("fx");
+				ParticleSystem system;
+				system.Effect = reference;
+				scene.registry().emplace<ParticleSystem>(entity, system);
+				tick_particle_systems(scene, 0.016f, lookup);
+				scene.registry().get<ParticleRuntime>(entity).SelfDestruct = true;
+				for (int frame = 0; frame < 60 * 6; frame++)
+				{
+					tick_particle_systems(scene, 1.0f / 60.0f, lookup);
+				}
+				check(scene.registry().valid(entity), "particle_ticks: a system that still emits stays");
+				for (int frame = 0; frame < 60 * 3; frame++)
+				{
+					tick_particle_systems(scene, 1.0f / 60.0f, lookup);
+				}
+				check(!scene.registry().valid(entity), "particle_ticks: a finished system with SelfDestruct is destroyed after its last particle");
+			}
+		}
+
 		// CharacterController survives save, cook, load (binary and the text of the file) and a prefab override of StepHeight applies.
 		void check_character_data(Check& check)
 		{
@@ -2044,6 +2223,8 @@ namespace wiwa
 		check_joint_data(check);
 		check_decal_data(check);
 		check_decal_lifetime(check);
+		check_particle_system_data(check);
+		check_particle_ticks(check);
 		check_character_data(check);
 		check_node_ids(check, pipeline);
 		check_node_components(check);
