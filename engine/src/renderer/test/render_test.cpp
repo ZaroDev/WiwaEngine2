@@ -104,6 +104,7 @@ namespace wiwa
 			register_camera_checks();
 			register_forward_checks();
 			register_light_checks();
+			register_decal_checks();
 			register_shadow_checks();
 			register_blend_checks();
 			register_scale_checks();
