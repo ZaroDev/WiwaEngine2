@@ -209,6 +209,7 @@ void ViewportPanel::on_draw()
 				changed |= ImGui::Checkbox("World axes", &settings.Axes);
 				changed |= ImGui::Checkbox("Lights", &settings.Lights);
 				changed |= ImGui::Checkbox("Cameras", &settings.Cameras);
+				changed |= ImGui::Checkbox("Decals", &settings.Decals);
 				changed |= ImGui::Checkbox("Bounds of the selection", &settings.Bounds);
 				ImGui::Separator();
 				changed |= ImGui::Checkbox("Outline the selection", &settings.Outline.Enabled);

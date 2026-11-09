@@ -574,6 +574,7 @@ void HierarchyPanel::draw_node(entt::entity entity)
 			{ ICON_FK_CUBE, registry.all_of<wiwa::MeshRenderer>(entity), "MeshRenderer" },
 			{ ICON_FK_LIGHTBULB_O, registry.all_of<wiwa::Light>(entity), "Light" },
 			{ ICON_FK_VIDEO_CAMERA, registry.all_of<wiwa::Camera>(entity), "Camera" },
+			{ ICON_FK_PAINT_BRUSH, registry.all_of<wiwa::Decal>(entity), "Decal" },
 			{ ICON_FK_CIRCLE_O, registry.all_of<wiwa::Collider>(entity), "Collider" },
 			{ ICON_FK_HUBZILLA, registry.all_of<wiwa::RigidBody>(entity), "RigidBody" },
 			{ ICON_FK_MALE, registry.all_of<wiwa::Animator>(entity), "Animator" },

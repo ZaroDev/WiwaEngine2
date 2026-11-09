@@ -20,6 +20,7 @@ namespace wiwa
 		constexpr float MAX_CONE_DEGREES = 89.0f;
 		const glm::vec4 LIGHT_COLOR(1.0f, 0.85f, 0.3f, 1.0f);
 		const glm::vec4 CAMERA_COLOR(0.6f, 0.85f, 1.0f, 1.0f);
+		const glm::vec4 DECAL_COLOR(1.0f, 0.5f, 0.45f, 1.0f);
 		const glm::vec4 BOUNDS_COLOR(0.5f, 1.0f, 0.5f, 1.0f);
 		const glm::vec4 GRID_COLOR(0.6f, 0.6f, 0.6f, 0.6f);
 		constexpr i32 GRID_HALF_COUNT = 50;     // lines on each side of the camera, per level
@@ -142,6 +143,29 @@ namespace wiwa
 				else if (entity == selected && light.Kind == LightKind::Spot)
 				{
 					draw.cone(position, forward, light.Range, glm::radians(std::min(light.OuterAngle, MAX_CONE_DEGREES)), LIGHT_COLOR, DebugDepth::Tested, 1.0f);
+				}
+			}
+		}
+
+		if (settings.Decals)
+		{
+			for (auto [entity, decal, world, id] : registry.view<Decal, WorldTransform, Id>().each())
+			{
+				const glm::vec3 position(world.Matrix[3]);
+				if (!finite(position))
+				{
+					continue;
+				}
+
+				marker(position, DECAL_COLOR);
+				draw.pick_icon(id.Guid, position, ICON_PIXELS);
+				if (entity == selected)
+				{
+					// the box the decal projects into, and the way it projects (local -Z): the arrow starts on the box's back face and points through it
+					draw.box(world.Matrix, glm::max(decal.Size, glm::vec3(0.0f)) * 0.5f, DECAL_COLOR, DebugDepth::Tested, 1.0f);
+					const glm::vec3 projection = forward_of(world.Matrix);
+					const float depth = decal.Size.z * glm::length(glm::vec3(world.Matrix[2]));
+					draw.arrow(position - projection * depth * 0.5f, position + projection * depth * 0.5f, DECAL_COLOR, DebugDepth::AlwaysOnTop, 2.0f);
 				}
 			}
 		}

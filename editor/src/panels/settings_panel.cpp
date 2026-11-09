@@ -525,6 +525,7 @@ void SettingsPanel::editor_rows()
 	toggle("World axes", g.Axes, defaults.Axes);
 	toggle("Lights", g.Lights, defaults.Lights);
 	toggle("Cameras", g.Cameras, defaults.Cameras);
+	toggle("Decals", g.Decals, defaults.Decals);
 	toggle("Bounds of the selection", g.Bounds, defaults.Bounds);
 	toggle("Outline the selection", g.Outline.Enabled, defaults.Outline.Enabled);
 	field("Outline color", [&]()
