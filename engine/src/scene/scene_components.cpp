@@ -115,7 +115,8 @@ namespace wiwa
 		registry.register_component(WI_COMPONENT(AnimationSocket,
 			WI_FIELD(Joint),
 			WI_FIELD(OffsetPosition),
-			WI_FIELD(OffsetRotation)));
+			WI_FIELD(OffsetRotation),
+			WI_FIELD(OffsetScale)));
 
 		registry.register_component(WI_COMPONENT(ViewHost,
 			WI_FIELD(Name),

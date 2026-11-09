@@ -190,6 +190,78 @@ namespace wiwa
 		}
 	}
 
+	void add_attachment_sockets(const ImportedModel& model, std::vector<PrefabNode>& nodes)
+	{
+		// the skeleton the Animator of the instance gets: that of the first skinned node
+		int skin = -1;
+		for (size_t i = 0; i < model.NodeSkin.size(); i++)
+		{
+			if (model.NodeSkin[i] >= 0 && static_cast<size_t>(model.NodeSkin[i]) < model.Skeletons.size())
+			{
+				skin = model.NodeSkin[i];
+				break;
+			}
+		}
+		if (skin < 0)
+		{
+			return;
+		}
+		const ImportedSkeleton& skeleton = model.Skeletons[static_cast<size_t>(skin)];
+		std::unordered_map<u32, size_t> jointOfNode;
+		for (size_t j = 0; j < skeleton.Joints.size() && j < skeleton.JointNames.size(); j++)
+		{
+			jointOfNode.emplace(skeleton.Joints[j], j);
+		}
+
+		const auto is_rigid_mesh = [&](size_t node)
+		{
+			return node < model.NodeMesh.size() && node < model.NodeSkin.size() && model.NodeMesh[node] >= 0 && model.NodeSkin[node] < 0;
+		};
+
+		for (size_t i = 0; i < nodes.size() && i < model.Nodes.size(); i++)
+		{
+			if (!is_rigid_mesh(i) || jointOfNode.contains(static_cast<u32>(i)))
+			{
+				continue;
+			}
+
+			// up to the nearest joint, through nodes that stay where the rest pose puts them; a mesh on the way gets the socket instead
+			glm::mat4 offset = local_matrix(model.Nodes[i]);
+			i32 up = model.Nodes[i].Parent;
+			i32 joint = -1;
+			bool carried = false;
+			for (size_t steps = 0; up >= 0 && static_cast<size_t>(up) < model.Nodes.size() && steps < model.Nodes.size(); steps++)
+			{
+				const auto found = jointOfNode.find(static_cast<u32>(up));
+				if (found != jointOfNode.end())
+				{
+					joint = static_cast<i32>(found->second);
+					break;
+				}
+				if (is_rigid_mesh(static_cast<size_t>(up)))
+				{
+					carried = true;
+					break;
+				}
+				offset = local_matrix(model.Nodes[static_cast<size_t>(up)]) * offset;
+				up = model.Nodes[static_cast<size_t>(up)].Parent;
+			}
+			if (joint < 0 || carried)
+			{
+				continue;
+			}
+
+			glm::vec3 translation, scale;
+			glm::quat rotation;
+			decompose(offset, translation, rotation, scale);
+			nodes[i].Components.push_back(ComponentRecord{ "AnimationSocket", {
+				FieldRecord{ "Joint", FieldValue(skeleton.JointNames[static_cast<size_t>(joint)]) },
+				FieldRecord{ "OffsetPosition", FieldValue(translation) },
+				FieldRecord{ "OffsetRotation", FieldValue(rotation) },
+				FieldRecord{ "OffsetScale", FieldValue(scale) } } });
+		}
+	}
+
 	void merge_animation_events(ImportedModel& model, const nlohmann::json& settings)
 	{
 		const auto list = settings.find("animationEvents");

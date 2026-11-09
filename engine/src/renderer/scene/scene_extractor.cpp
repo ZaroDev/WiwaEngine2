@@ -5,6 +5,9 @@
 #include <cmath>
 #include <cstring>
 
+#include <assets/asset_manager.h>
+#include <core/engine.h>
+
 namespace wiwa
 {
 	namespace
@@ -129,13 +132,25 @@ namespace wiwa
 
 	namespace
 	{
+		// The same skeleton, whichever way it is named: a scene older than the extraction still names the model's skeleton by its legacy
+		// sub-asset id, the prefab names the extracted .wskel, and the catalog redirects one to the other.
+		bool same_skeleton(const AssetRef& a, const AssetRef& b)
+		{
+			if (a == b)
+			{
+				return true;
+			}
+			const AssetManager* assets = Engine::get().get_module<AssetManager>();
+			return assets != nullptr && a.valid() && b.valid() && assets->resolve(a) == assets->resolve(b);
+		}
+
 		// The Animator that drives a skinned mesh: this entity or the nearest ancestor that has one for the same skeleton.
 		entt::entity find_animator(const entt::registry& registry, entt::entity mesh, const AssetRef& skeleton)
 		{
 			for (entt::entity entity = mesh; entity != entt::null; entity = registry.get<Hierarchy>(entity).Parent)
 			{
 				const Animator* animator = registry.try_get<Animator>(entity);
-				if (animator != nullptr && animator->Skeleton == skeleton)
+				if (animator != nullptr && same_skeleton(animator->Skeleton, skeleton))
 				{
 					return entity;
 				}

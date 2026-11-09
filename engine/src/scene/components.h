@@ -223,6 +223,7 @@ namespace wiwa
 		std::string Joint{};
 		glm::vec3 OffsetPosition{ 0.0f };
 		glm::quat OffsetRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+		glm::vec3 OffsetScale{ 1.0f };
 	};
 
 	// What a ViewHost's preview is drawn with (the profiles of renderer/view/view_types.h; the values match).
