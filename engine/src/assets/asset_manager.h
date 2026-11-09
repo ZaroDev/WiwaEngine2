@@ -69,6 +69,10 @@ namespace wiwa
 		// the listeners they changed (notify_reimported), so what failed to load under the old name loads again under the new one. Thread-safe.
 		std::vector<AssetGuid> refresh_catalog();
 
+		// The guid an asset reference is really stored under (a sub-asset id folded in, then a catalog redirect followed once). Two references
+		// with the same result are the same asset: a legacy reference to a model's skeleton and the extracted .wskel it was moved to. Thread-safe.
+		AssetGuid resolve(AssetRef ref) const { return redirected(ref.resolved()); }
+
 		// Drops every cached asset that no handle refers to.
 		void unload_unused();
 

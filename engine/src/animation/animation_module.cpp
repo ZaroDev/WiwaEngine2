@@ -373,7 +373,7 @@ namespace wiwa
 
 			const glm::mat4 animatorWorld = registry.get<WorldTransform>(owner).Matrix;
 			const glm::mat4 parentWorld = hierarchy.Parent != entt::null ? registry.get<WorldTransform>(hierarchy.Parent).Matrix : glm::mat4(1.0f);
-			const glm::mat4 offset = glm::translate(glm::mat4(1.0f), socket.OffsetPosition) * glm::mat4_cast(socket.OffsetRotation);
+			const glm::mat4 offset = glm::translate(glm::mat4(1.0f), socket.OffsetPosition) * glm::mat4_cast(socket.OffsetRotation) * glm::scale(glm::mat4(1.0f), socket.OffsetScale);
 			const glm::mat4 local = glm::inverse(parentWorld) * animatorWorld * instance.model()[static_cast<size_t>(joint)] * offset;
 			decompose_matrix(local, transform.Position, transform.Rotation, transform.Scale);
 		}

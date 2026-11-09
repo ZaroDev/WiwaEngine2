@@ -133,7 +133,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "ModelImporter"; }
-			virtual u32 version() const override { return 8; } // 8: skeletons, clips and skinned meshes are extracted to .wskel/.wanim/.wmesh files next to the model, once; 7: skeleton joints keep the nodes folded above them in Pre; 6: skeletons have names, parents and a rest pose, clips have events; 5: optional cooked physics shapes; 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
+			virtual u32 version() const override { return 9; } // 9: FBX skinned vertices are in model space (bind pose) and rigid meshes below a joint get an AnimationSocket; 8: skeletons, clips and skinned meshes are extracted to .wskel/.wanim/.wmesh files next to the model, once; 7: skeleton joints keep the nodes folded above them in Pre; 6: skeletons have names, parents and a rest pose, clips have events; 5: optional cooked physics shapes; 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
 			virtual bool imports_dependencies() const override { return true; }
 			// generatePhysicsShapes: also cook a convex hull and a triangle mesh shape of every mesh, for ConvexHull and Mesh colliders
 			virtual nlohmann::json default_settings() const override { return { { "generatePhysicsShapes", false } }; }
@@ -399,6 +399,7 @@ namespace wiwa
 						prefab.Nodes[i].Skeleton = extracted.Skeletons[model.NodeSkin[i]];
 					}
 				}
+				add_attachment_sockets(model, prefab.Nodes);
 				assign_stable_ids(prefab.Nodes);
 				for (const AssetRef& clip : extracted.Clips)
 				{

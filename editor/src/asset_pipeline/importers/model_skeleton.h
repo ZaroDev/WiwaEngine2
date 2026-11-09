@@ -14,6 +14,11 @@ namespace wiwa
 	// model root); the rest pose is the joint's own node. Warns (model.Warnings) above SKELETON_MAX_JOINTS.
 	void finalize_model_skeletons(ImportedModel& model);
 
+	// Gives every rigid (not skinned) mesh node that hangs below a joint of the skeleton an AnimationSocket on that joint, with the rest
+	// pose between them as the offset, so a sword, a pad or a face follows the animation. A mesh below another such mesh follows its
+	// parent. Call it with the prefab nodes after finalize_model_skeletons (the socket names the final joint names).
+	void add_attachment_sockets(const ImportedModel& model, std::vector<PrefabNode>& nodes);
+
 	// Adds the events listed in the "animationEvents" array of the model import settings ({clip, time, name}) to the clips of that
 	// name and sorts them by time. An event for a clip the model does not have is warned about.
 	void merge_animation_events(ImportedModel& model, const nlohmann::json& settings);
