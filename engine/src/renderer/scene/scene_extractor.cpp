@@ -7,6 +7,7 @@
 
 #include <assets/asset_manager.h>
 #include <core/engine.h>
+#include <scene/decal_lifetime.h>
 
 namespace wiwa
 {
@@ -51,13 +52,14 @@ namespace wiwa
 				&& a.Range == b.Range && a.InnerAngle == b.InnerAngle && a.OuterAngle == b.OuterAngle && a.CastsShadows == b.CastsShadows;
 		}
 
-		RenderDecal make_decal(const Decal& decal, const glm::mat4& world)
+		// age: the DecalAge of a decal that is fading or expiring while the game plays; none shows it at its full opacity (edit mode).
+		RenderDecal make_decal(const Decal& decal, const glm::mat4& world, const DecalAge* age)
 		{
 			RenderDecal result;
 			result.World = world;
 			result.Material = decal.Material;
 			result.Size = glm::max(decal.Size, glm::vec3(0.0f));
-			result.Opacity = std::clamp(decal.Opacity, 0.0f, 1.0f);
+			result.Opacity = std::clamp(decal.Opacity, 0.0f, 1.0f) * (age != nullptr ? decal_fade(decal, age->Seconds) : 1.0f);
 			result.Channels = (decal.AffectColor ? DECAL_CHANNEL_COLOR : 0u) | (decal.AffectNormal ? DECAL_CHANNEL_NORMAL : 0u)
 				| (decal.AffectOrm ? DECAL_CHANNEL_ORM : 0u) | (decal.AffectEmissive ? DECAL_CHANNEL_EMISSIVE : 0u);
 			result.AngleFadeStart = decal.NormalAngleFadeStart;
@@ -324,7 +326,7 @@ namespace wiwa
 		for (const auto [entity, id, decal, world] : registry.view<Id, Decal, WorldTransform>().each())
 		{
 			decalsSeen++;
-			RenderDecal current = make_decal(decal, world.Matrix);
+			RenderDecal current = make_decal(decal, world.Matrix, registry.try_get<DecalAge>(entity));
 			auto found = m_Decals.find(id.Guid);
 			if (found != m_Decals.end() && same_decal(found->second.Decal, current))
 			{

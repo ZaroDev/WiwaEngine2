@@ -11,6 +11,7 @@
 #include <scene/reflection/component_registry.h>
 #include <scene/reflection/value_bag.h>
 #include <scene/scene.h>
+#include <scene/decal_lifetime.h>
 #include <scene/scene_clone.h>
 #include <scene/scene_components.h>
 #include <scene/scene_loader.h>
@@ -1922,6 +1923,54 @@ namespace wiwa
 			check(opacity != nullptr && std::get_if<float>(opacity) != nullptr && *std::get_if<float>(opacity) == 0.5f, "decal: a prefab override of Decal.Opacity applies");
 		}
 
+		// The fades and the expiry of a decal (decal_lifetime.h): in, hold for Lifetime, out, then gone; permanent without a Lifetime.
+		void check_decal_lifetime(Check& check)
+		{
+			register_scene_components();
+
+			Decal timed;
+			timed.FadeInTime = 0.2f;
+			timed.Lifetime = 1.0f;
+			timed.FadeOutTime = 0.2f;
+			const auto approx = [](float a, float b) { return std::abs(a - b) < 1e-4f; };
+			check(approx(decal_fade(timed, 0.0f), 0.0f) && approx(decal_fade(timed, 0.1f), 0.5f) && approx(decal_fade(timed, 0.2f), 1.0f), "decal_lifetime: it fades in over FadeInTime");
+			check(approx(decal_fade(timed, 0.7f), 1.0f) && approx(decal_fade(timed, 1.2f), 1.0f), "decal_lifetime: it holds full opacity for Lifetime");
+			check(approx(decal_fade(timed, 1.3f), 0.5f) && approx(decal_fade(timed, 1.4f), 0.0f), "decal_lifetime: it fades out over FadeOutTime");
+			check(!decal_expired(timed, 1.39f) && decal_expired(timed, 1.4f), "decal_lifetime: it expires after FadeInTime + Lifetime + FadeOutTime");
+
+			Decal cut;
+			cut.Lifetime = 1.0f; // no fades: gone at once when the time is up
+			check(approx(decal_fade(cut, 0.99f), 1.0f) && approx(decal_fade(cut, 1.0f), 0.0f) && decal_expired(cut, 1.0f), "decal_lifetime: without fades it just ends");
+
+			Decal permanent;
+			check(approx(decal_fade(permanent, 1e6f), 1.0f) && !decal_expired(permanent, 1e6f), "decal_lifetime: a decal without a Lifetime never expires");
+
+			Scene scene;
+			const entt::entity doomed = scene.create("doomed");
+			scene.registry().emplace<Decal>(doomed, timed);
+			const entt::entity staying = scene.create("staying");
+			scene.registry().emplace<Decal>(staying, permanent);
+			Decal fadingIn = permanent;
+			fadingIn.FadeInTime = 0.5f;
+			const entt::entity rising = scene.create("rising");
+			scene.registry().emplace<Decal>(rising, fadingIn);
+
+			for (int step = 0; step < 13; step++)
+			{
+				tick_decals(scene, 0.1f);
+			}
+			check(scene.registry().valid(doomed) && scene.registry().all_of<DecalAge>(doomed), "decal_lifetime: a decal is still there before its time is up");
+			check(approx(scene.registry().get<DecalAge>(doomed).Seconds, 1.3f), "decal_lifetime: its age is the game time that passed");
+			check(!scene.registry().all_of<DecalAge>(staying), "decal_lifetime: a permanent decal that shows at once is not aged");
+			tick_decals(scene, 0.0f);
+			tick_decals(scene, -1.0f);
+			tick_decals(scene, std::numeric_limits<float>::quiet_NaN());
+			check(approx(scene.registry().get<DecalAge>(doomed).Seconds, 1.3f), "decal_lifetime: a step of 0, a negative one or NaN ages nothing");
+			tick_decals(scene, 0.1f);
+			check(!scene.registry().valid(doomed), "decal_lifetime: the expired decal is destroyed");
+			check(scene.registry().valid(staying) && scene.registry().valid(rising), "decal_lifetime: the others stay");
+		}
+
 		// CharacterController survives save, cook, load (binary and the text of the file) and a prefab override of StepHeight applies.
 		void check_character_data(Check& check)
 		{
@@ -1994,6 +2043,7 @@ namespace wiwa
 		check_physics_data(check);
 		check_joint_data(check);
 		check_decal_data(check);
+		check_decal_lifetime(check);
 		check_character_data(check);
 		check_node_ids(check, pipeline);
 		check_node_components(check);
