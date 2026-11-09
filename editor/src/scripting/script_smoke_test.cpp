@@ -940,7 +940,7 @@ namespace wiwa
 				record(d.name)
 				local c = d:get('Decal')
 				record(string.format('%g,%g,%g,%g,%g,%d,%g', c.lifetime, c.fadeintime, c.fadeouttime, c.opacity, c.size.z, c.sortorder, c.size.x))
-				local forward = d.transform.rotation * vec3(0, 0, 1)
+				local forward = d:get('Transform').rotation * vec3(0, 0, 1)
 				record(string.format('%.3f,%.3f,%.3f', forward.x, forward.y, forward.z))
 				local ok1, e1 = pcall(Decal.spawn, {})
 				record(tostring(ok1) .. ':' .. tostring(e1))
@@ -949,7 +949,7 @@ namespace wiwa
 				local ok3, e3 = pcall(Decal.spawn, { material = a_material(), size = vec3(1, 0, 1) })
 				record(tostring(ok3))
 				local down = Decal.spawn{ material = a_material(), normal = vec3(0, 0, -1) }
-				local f2 = down.transform.rotation * vec3(0, 0, 1)
+				local f2 = down:get('Transform').rotation * vec3(0, 0, 1)
 				record(string.format('%.3f', f2.z))
 			end })");
 			h.spawn("spawner", { ref });
