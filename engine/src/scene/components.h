@@ -100,6 +100,27 @@ namespace wiwa
 	{
 		AssetRef Mesh{};
 		std::vector<AssetRef> Materials{}; // overrides, per primitive; empty means the mesh's own materials
+		bool ReceivesDecals = true;        // false: decals never draw on this mesh
+	};
+
+	// Projects a Material (base color, normal, ORM, emissive, alpha) onto the opaque geometry inside its box. The box is Size in local
+	// space, projecting along local -Z; the transform's rotation and scale apply. Fades run only while the game clock plays.
+	struct Decal
+	{
+		AssetRef Material{};
+		glm::vec3 Size{ 1.0f };
+		float Opacity = 1.0f;
+		bool AffectColor = true;
+		bool AffectNormal = true;
+		bool AffectOrm = true;
+		bool AffectEmissive = true;
+		float NormalAngleFadeStart = 60.0f; // degrees between the surface normal and the projection axis
+		float NormalAngleFadeEnd = 80.0f;
+		float EdgeFade = 0.1f; // fraction of the box faded at its sides
+		i32 SortOrder = 0;     // higher draws later and wins overlaps
+		float FadeInTime = 0.0f;
+		float Lifetime = 0.0f; // seconds; 0 is permanent
+		float FadeOutTime = 0.0f;
 	};
 
 	// The root of a linked prefab instance: the entities below it are generated from the Prefab, and the overrides change them.

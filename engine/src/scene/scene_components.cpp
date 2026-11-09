@@ -34,7 +34,24 @@ namespace wiwa
 
 		registry.register_component(WI_COMPONENT(MeshRenderer,
 			WI_FIELD_META(Mesh, FieldMeta::asset(AssetType::Mesh)),
-			WI_FIELD_META(Materials, FieldMeta::asset(AssetType::Material))));
+			WI_FIELD_META(Materials, FieldMeta::asset(AssetType::Material)),
+			WI_FIELD(ReceivesDecals)));
+
+		registry.register_component(WI_COMPONENT(Decal,
+			WI_FIELD_META(Material, FieldMeta::asset(AssetType::Material)),
+			WI_FIELD(Size),
+			WI_FIELD_META(Opacity, FieldMeta::range(0.0f, 1.0f)),
+			WI_FIELD(AffectColor),
+			WI_FIELD(AffectNormal),
+			WI_FIELD(AffectOrm),
+			WI_FIELD(AffectEmissive),
+			WI_FIELD_META(NormalAngleFadeStart, FieldMeta::range(0.0f, 90.0f)),
+			WI_FIELD_META(NormalAngleFadeEnd, FieldMeta::range(0.0f, 90.0f)),
+			WI_FIELD_META(EdgeFade, FieldMeta::range(0.0f, 0.5f)),
+			WI_FIELD(SortOrder),
+			WI_FIELD(FadeInTime),
+			WI_FIELD(Lifetime),
+			WI_FIELD(FadeOutTime)));
 
 		// The overrides are not a field: the record layer saves and applies them.
 		registry.register_component(WI_COMPONENT(PrefabInstance,

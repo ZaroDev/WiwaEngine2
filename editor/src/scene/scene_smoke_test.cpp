@@ -11,6 +11,7 @@
 #include <scene/reflection/component_registry.h>
 #include <scene/reflection/value_bag.h>
 #include <scene/scene.h>
+#include <scene/scene_clone.h>
 #include <scene/scene_components.h>
 #include <scene/scene_loader.h>
 #include <scene/scene_module.h>
@@ -212,8 +213,8 @@ namespace wiwa
 			}
 
 			const ComponentInfo* mesh = components.find("MeshRenderer");
-			check(mesh != nullptr && field_names(*mesh) == std::vector<std::string>{ "Mesh", "Materials" }, "MeshRenderer lists its fields");
-			if (mesh != nullptr && mesh->Fields.size() == 2)
+			check(mesh != nullptr && field_names(*mesh) == std::vector<std::string>{ "Mesh", "Materials", "ReceivesDecals" }, "MeshRenderer lists its fields");
+			if (mesh != nullptr && mesh->Fields.size() == 3)
 			{
 				check(mesh->Fields[0].Type == FieldType::Asset && mesh->Fields[0].Meta.Asset == AssetType::Mesh, "MeshRenderer.Mesh accepts a Mesh asset");
 				check(mesh->Fields[1].Type == FieldType::AssetList && mesh->Fields[1].Meta.Asset == AssetType::Material, "MeshRenderer.Materials is a list of Material assets");
@@ -1827,6 +1828,100 @@ namespace wiwa
 			check(limit != nullptr && std::get_if<float>(limit) != nullptr && *std::get_if<float>(limit) == 45.0f, "joint: a prefab override of Joint.LimitMax applies");
 		}
 
+		// Decal survives save, cook, load (binary and the text of the file), a scene clone and a prefab override of Opacity; a scene file
+		// from before ReceivesDecals loads with it true.
+		void check_decal_data(Check& check)
+		{
+			register_scene_components();
+			check(ComponentRegistry::get().find("Decal") != nullptr, "decal: Decal is registered");
+
+			Scene source;
+			const EntityGuid ownerId = EntityGuid::generate();
+			const entt::entity owner = source.create(ownerId, "Decal");
+			Decal decal;
+			decal.Material = AssetRef{ AssetGuid::generate(), 2 };
+			decal.Size = glm::vec3(2, 3, 0.5f);
+			decal.Opacity = 0.75f;
+			decal.AffectColor = false;
+			decal.AffectNormal = false;
+			decal.AffectOrm = false;
+			decal.AffectEmissive = false;
+			decal.NormalAngleFadeStart = 30.0f;
+			decal.NormalAngleFadeEnd = 45.0f;
+			decal.EdgeFade = 0.25f;
+			decal.SortOrder = 7;
+			decal.FadeInTime = 0.5f;
+			decal.Lifetime = 4.0f;
+			decal.FadeOutTime = 1.5f;
+			source.registry().emplace<Decal>(owner, decal);
+			const EntityGuid meshId = EntityGuid::generate();
+			const entt::entity meshEntity = source.create(meshId, "Wall");
+			source.registry().emplace<MeshRenderer>(meshEntity, MeshRenderer{ AssetRef{}, {}, false });
+
+			const auto same = [](const Decal& a, const Decal& b)
+			{
+				return a.Material == b.Material && a.Size == b.Size && a.Opacity == b.Opacity && a.AffectColor == b.AffectColor
+					&& a.AffectNormal == b.AffectNormal && a.AffectOrm == b.AffectOrm && a.AffectEmissive == b.AffectEmissive
+					&& a.NormalAngleFadeStart == b.NormalAngleFadeStart && a.NormalAngleFadeEnd == b.NormalAngleFadeEnd
+					&& a.EdgeFade == b.EdgeFade && a.SortOrder == b.SortOrder && a.FadeInTime == b.FadeInTime
+					&& a.Lifetime == b.Lifetime && a.FadeOutTime == b.FadeOutTime;
+			};
+
+			const SceneData first = data_from_scene(source, "decal");
+			const std::vector<std::byte> bytes = serialize(first);
+			std::optional<SceneData> back = deserialize<SceneData>(bytes);
+			check(back.has_value(), "decal: the scene survives the cooked format");
+			if (!back)
+			{
+				return;
+			}
+			Scene copy;
+			const ApplyReport report = apply_scene_data(copy, *back);
+			check(report.UnknownComponents == 0 && report.UnknownFields == 0, "decal: nothing in the saved scene is unknown");
+			const entt::entity loaded = copy.find(ownerId);
+			check(loaded != entt::null && copy.registry().all_of<Decal>(loaded) && same(copy.registry().get<Decal>(loaded), decal), "decal: every field survives save and load");
+			const entt::entity loadedMesh = copy.find(meshId);
+			check(loadedMesh != entt::null && copy.registry().all_of<MeshRenderer>(loadedMesh) && !copy.registry().get<MeshRenderer>(loadedMesh).ReceivesDecals, "decal: MeshRenderer.ReceivesDecals false survives");
+			check(serialize(data_from_scene(copy, "decal")) == bytes, "decal: save, load, save gives the same bytes");
+
+			const SceneJsonResult viaJson = scene_from_json(SceneJson::parse(scene_to_json(first).dump(2)));
+			check(viaJson.Scene.has_value() && serialize(*viaJson.Scene) == bytes, "decal: the text of the file gives the same binary scene (" + viaJson.Error + ")");
+
+			Ref<Scene> cloned = clone_scene(source);
+			const entt::entity clonedDecal = cloned->find(ownerId);
+			check(clonedDecal != entt::null && cloned->registry().all_of<Decal>(clonedDecal) && same(cloned->registry().get<Decal>(clonedDecal), decal), "decal: a scene clone keeps every field");
+
+			// A file written before ReceivesDecals existed has no such field: the mesh must receive decals.
+			SceneData old = first;
+			for (EntityRecord& entity : old.Entities)
+			{
+				for (ComponentRecord& component : entity.Components)
+				{
+					if (component.Name == "MeshRenderer")
+					{
+						component.Fields.erase(std::remove_if(component.Fields.begin(), component.Fields.end(), [](const FieldRecord& f) { return f.Name == "ReceivesDecals"; }), component.Fields.end());
+					}
+				}
+			}
+			Scene oldScene;
+			apply_scene_data(oldScene, old);
+			const entt::entity oldMesh = oldScene.find(meshId);
+			check(oldMesh != entt::null && oldScene.registry().all_of<MeshRenderer>(oldMesh) && oldScene.registry().get<MeshRenderer>(oldMesh).ReceivesDecals, "decal: a scene without ReceivesDecals loads with it true");
+
+			PrefabData prefab;
+			prefab.Name = "stain";
+			PrefabNode node = make_node("Stain", -1);
+			node.Components.push_back(ComponentRecord{ "Decal", { FieldRecord{ "Opacity", FieldValue(1.0f) } } });
+			prefab.Nodes = { node };
+			assign_stable_ids(prefab.Nodes);
+			const u64 nodeId = prefab.Nodes[0].StableId;
+			EntityRecord instance = make_instance(EntityGuid::generate(), AssetRef{ AssetGuid::generate(), 0 });
+			instance.Overrides = { set_field_override(nodeId, "Decal", "Opacity", FieldValue(0.5f)) };
+			const ExpandResult expanded = expand_prefab(instance, prefab);
+			const FieldValue* opacity = expanded.Entities.size() == 2 ? find_field(expanded.Entities[1].Components, "Decal", "Opacity") : nullptr;
+			check(opacity != nullptr && std::get_if<float>(opacity) != nullptr && *std::get_if<float>(opacity) == 0.5f, "decal: a prefab override of Decal.Opacity applies");
+		}
+
 		// CharacterController survives save, cook, load (binary and the text of the file) and a prefab override of StepHeight applies.
 		void check_character_data(Check& check)
 		{
@@ -1898,6 +1993,7 @@ namespace wiwa
 		check_scene_data(check);
 		check_physics_data(check);
 		check_joint_data(check);
+		check_decal_data(check);
 		check_character_data(check);
 		check_node_ids(check, pipeline);
 		check_node_components(check);
