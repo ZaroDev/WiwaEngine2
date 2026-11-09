@@ -135,8 +135,15 @@ namespace wiwa
 			virtual const char* name() const override { return "ModelImporter"; }
 			virtual u32 version() const override { return 9; } // 9: FBX skinned vertices are in model space (bind pose) and rigid meshes below a joint get an AnimationSocket; 8: skeletons, clips and skinned meshes are extracted to .wskel/.wanim/.wmesh files next to the model, once; 7: skeleton joints keep the nodes folded above them in Pre; 6: skeletons have names, parents and a rest pose, clips have events; 5: optional cooked physics shapes; 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
 			virtual bool imports_dependencies() const override { return true; }
-			// generatePhysicsShapes: also cook a convex hull and a triangle mesh shape of every mesh, for ConvexHull and Mesh colliders
-			virtual nlohmann::json default_settings() const override { return { { "generatePhysicsShapes", false } }; }
+			virtual bool editable() const override { return true; }
+			virtual std::vector<ImportOption> option_schema() const override
+			{
+				return {
+					ImportOption::make_float("scale", "Scale", 1.0, 0.001, 1000.0, "Scales the whole prefab (applied to its root nodes and its bounds). Use 0.01 for a model made in centimeters."),
+					ImportOption::make_bool("importAnimations", "Import animations", true, "Off ignores the animation clips of the file (none are extracted)."),
+					ImportOption::make_bool("generatePhysicsShapes", "Generate physics shapes", false, "Also cook a convex hull and a triangle mesh shape of every mesh, for ConvexHull and Mesh colliders."),
+				};
+			}
 			virtual std::vector<std::string> extensions() const override { return { ".gltf", ".glb", ".fbx" }; }
 
 			virtual bool import(ImportContext& ctx) override
@@ -150,6 +157,10 @@ namespace wiwa
 					return false;
 				}
 
+				if (!ctx.settings().value("importAnimations", true))
+				{
+					model.Animations.clear();
+				}
 				finalize_model_skeletons(model);
 				merge_animation_events(model, ctx.settings());
 
@@ -409,6 +420,19 @@ namespace wiwa
 					}
 				}
 				compute_bounds(model, prefab.BoundsMin, prefab.BoundsMax);
+				if (const float modelScale = ctx.settings().value("scale", 1.0f); modelScale != 1.0f && modelScale > 0.0f)
+				{
+					for (PrefabNode& node : prefab.Nodes)
+					{
+						if (node.Parent < 0)
+						{
+							node.Scale *= modelScale;
+							node.Translation *= modelScale;
+						}
+					}
+					prefab.BoundsMin *= modelScale;
+					prefab.BoundsMax *= modelScale;
+				}
 
 				std::vector<AssetRef> prefabDependencies;
 				prefabDependencies.insert(prefabDependencies.end(), meshRefs.begin(), meshRefs.end());

@@ -868,8 +868,13 @@ void EditorModule::update(float deltaTime)
 	references_window();
 	reference_update_popup();
 	export_modal();
+	reimport_modal();
 	scene_popups();
 	m_BuildSettings->on_draw();
+	if (m_Browser != nullptr)
+	{
+		m_Browser->draw_import_dialog();
+	}
 	dock_space();
 
 	// Adopts the scene the SceneModule loaded (or opened), and expands prefab instances once their prefab is there.
@@ -897,6 +902,16 @@ void EditorModule::update(float deltaTime)
 	for (auto& panel : m_Panels)
 	{
 		panel->on_update();
+	}
+	if (m_Browser != nullptr)
+	{
+		if (wiwa::Window* window = wiwa::Engine::get().get_module<wiwa::Window>())
+		{
+			if (std::vector<std::filesystem::path> dropped = window->take_dropped_files(); !dropped.empty())
+			{
+				m_Browser->import_dropped(dropped);
+			}
+		}
 	}
 	if (m_SkeletonIndex != nullptr)
 	{
@@ -1372,6 +1387,68 @@ void EditorModule::export_modal()
 		}
 		ImGui::EndPopup();
 	}
+}
+
+// The bar of "Reimport", "Reimport folder", Apply in the import dialog and dropped files: the work runs on the asset database's worker pool.
+void EditorModule::reimport_modal()
+{
+	constexpr const char* popup = "Reimporting";
+	wiwa::AssetDatabase& database = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database();
+	const Ref<wiwa::JobProgress> progress = database.reimport_progress();
+	const bool running = progress && !progress->finished();
+
+	// a job that has not been shown yet opens the popup; Escape closes a modal, so while it runs it comes back
+	if (progress && (progress != m_ReimportShownJob || (running && m_ReimportShown && !ImGui::IsPopupOpen(popup))))
+	{
+		m_ReimportShownJob = progress;
+		m_ReimportShown = true;
+		m_ReimportErrors.clear();
+		ImGui::OpenPopup(popup);
+	}
+
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	if (!ImGui::BeginPopupModal(popup, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+	{
+		return;
+	}
+
+	if (running)
+	{
+		ImGui::Text("Reimporting assets...");
+		const std::string item = progress->current_item();
+		const std::string label = std::to_string(progress->done()) + " / " + std::to_string(progress->total()) + (item.empty() ? "" : "  " + item);
+		ImGui::ProgressBar(progress->fraction(), ImVec2(360.0f, 0.0f), label.c_str());
+		if (ImGui::Button("Cancel"))
+		{
+			progress->request_cancel();
+		}
+	}
+	else
+	{
+		if (m_ReimportShown)
+		{
+			m_ReimportShown = false;
+			m_ReimportErrors = database.take_reimport_errors();
+		}
+		if (m_ReimportErrors.empty())
+		{
+			ImGui::CloseCurrentPopup(); // nothing to say: it went well
+		}
+		else
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Some imports failed:");
+			for (const std::string& line : m_ReimportErrors)
+			{
+				ImGui::BulletText("%s", line.c_str());
+			}
+			if (ImGui::Button("Close"))
+			{
+				m_ReimportErrors.clear();
+				ImGui::CloseCurrentPopup();
+			}
+		}
+	}
+	ImGui::EndPopup();
 }
 
 std::string EditorModule::run_play_smoke()

@@ -1,5 +1,9 @@
 #pragma once
 
+#include <filesystem>
+#include <mutex>
+#include <vector>
+
 #include <core/module.h>
 
 struct GLFWwindow;
@@ -26,7 +30,12 @@ namespace wiwa
 		GLFWwindow* get_window() const { return m_Window; }
 
 		void get_size(int& width, int& height);
+
+		// The files dragged onto the window from the OS since the last call (the editor imports them; the game ignores them).
+		std::vector<std::filesystem::path> take_dropped_files();
 	private:
+		std::mutex m_DropMutex{};
+		std::vector<std::filesystem::path> m_DroppedFiles{};
 		GLFWwindow* m_Window = nullptr;
 	};
 }

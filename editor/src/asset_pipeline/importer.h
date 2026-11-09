@@ -8,6 +8,7 @@
 
 #include "assets/asset_types.h"
 #include "assets/wasset_io.h"
+#include "import_option.h"
 #include "meta_file.h"
 
 namespace wiwa
@@ -146,7 +147,16 @@ namespace wiwa
 		// True for importers that import other source files as dependencies (a model's textures): the scan runs them first,
 		// so that the textures are created with the settings the model asks for.
 		virtual bool imports_dependencies() const { return false; }
-		virtual nlohmann::json default_settings() const { return nlohmann::json::object(); }
+		// The settings this importer understands, with defaults; the import dialog is drawn from it. Settings the importer keeps for itself
+		// in the .meta (a model's "extracted") are not part of it, and the editor never writes them.
+		virtual std::vector<ImportOption> option_schema() const { return {}; }
+		// Whether the editor lets the user change the options (import dialog). Every importer still has its defaults.
+		virtual bool editable() const { return false; }
+		virtual nlohmann::json default_settings() const
+		{
+			const std::vector<ImportOption> schema = option_schema();
+			return schema.empty() ? nlohmann::json::object() : schema_defaults(schema);
+		}
 
 		// Cooks ctx.source(); returns false (after logging why) if it cannot.
 		virtual bool import(ImportContext& ctx) = 0;

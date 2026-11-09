@@ -69,6 +69,18 @@ namespace wiwa
 		{
 			m_ScanThread.join();
 		}
+
+		{
+			std::lock_guard<std::mutex> lock(m_ReimportMutex);
+			if (m_ReimportProgress)
+			{
+				m_ReimportProgress->request_cancel();
+			}
+		}
+		if (m_ReimportThread.joinable())
+		{
+			m_ReimportThread.join();
+		}
 	}
 
 	void AssetDatabase::register_importer(Scope<IImporter> importer)
@@ -93,6 +105,151 @@ namespace wiwa
 	bool AssetDatabase::has_importer_for(const std::filesystem::path& source) const
 	{
 		return find_importer(source) != nullptr;
+	}
+
+	const IImporter* AssetDatabase::importer_for(const std::filesystem::path& source) const
+	{
+		return find_importer(source);
+	}
+
+	bool AssetDatabase::import_failed(const std::filesystem::path& source) const
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		auto found = m_Sources.find(key_of(source));
+		return found != m_Sources.end() && found->second.State == SourceState::Failed;
+	}
+
+	bool AssetDatabase::store_import_settings(const std::filesystem::path& source, const nlohmann::json& values, std::string& error)
+	{
+		const IImporter* importer = find_importer(source);
+		if (!importer)
+		{
+			error = "there is no importer for this file";
+			return false;
+		}
+		if (!importer->editable())
+		{
+			error = std::string(importer->name()) + " has no options to change";
+			return false;
+		}
+		{
+			// the importer writes the .meta too (a model keeps its extracted files in it), so not while it runs
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			auto found = m_Sources.find(key_of(source));
+			if (found != m_Sources.end() && found->second.State == SourceState::InFlight)
+			{
+				error = "the file is being imported right now; try again when it is done";
+				return false;
+			}
+		}
+
+		const std::filesystem::path metaPath = MetaFile::meta_path_for(source);
+		std::optional<MetaFile> meta = MetaFile::load(metaPath);
+		if (!meta)
+		{
+			error = "the file has no readable .meta (it was not imported yet)";
+			return false;
+		}
+
+		// only the schema's keys: whatever else the importer keeps in its settings stays as it is
+		const nlohmann::json clean = sanitize_settings(importer->option_schema(), values);
+		if (!meta->Settings.is_object())
+		{
+			meta->Settings = nlohmann::json::object();
+		}
+		for (auto it = clean.begin(); it != clean.end(); ++it)
+		{
+			meta->Settings[it.key()] = it.value();
+		}
+		if (!meta->save(metaPath))
+		{
+			error = "cannot write the .meta";
+			return false;
+		}
+		return true;
+	}
+
+	bool AssetDatabase::store_default_import_settings(const std::filesystem::path& source, std::string& error)
+	{
+		const IImporter* importer = find_importer(source);
+		if (!importer)
+		{
+			error = "there is no importer for this file";
+			return false;
+		}
+		return store_import_settings(source, schema_defaults(importer->option_schema()), error);
+	}
+
+	Ref<JobProgress> AssetDatabase::reimport_async(std::vector<std::filesystem::path> sources)
+	{
+		std::lock_guard<std::mutex> lock(m_ReimportMutex);
+		if (m_ReimportProgress && !m_ReimportProgress->finished())
+		{
+			// the running job picks these up when it has done its batch; the bar grows
+			m_ReimportProgress->add_total(static_cast<u32>(sources.size()));
+			m_ReimportPending.insert(m_ReimportPending.end(), std::make_move_iterator(sources.begin()), std::make_move_iterator(sources.end()));
+			return m_ReimportProgress;
+		}
+
+		if (m_ReimportThread.joinable())
+		{
+			m_ReimportThread.join(); // the previous job has finished
+		}
+
+		Ref<JobProgress> progress = CreateRef<JobProgress>();
+		progress->begin("Reimporting assets", static_cast<u32>(sources.size()));
+		m_ReimportProgress = progress;
+		m_ReimportPending = std::move(sources);
+		m_ReimportErrors.clear();
+
+		// Its own thread: it waits for the pool's jobs, so it must not be one of the pool's workers.
+		m_ReimportThread = std::thread([this, progress]()
+		{
+			for (;;)
+			{
+				std::vector<std::filesystem::path> batch;
+				{
+					std::lock_guard<std::mutex> guard(m_ReimportMutex);
+					batch.swap(m_ReimportPending);
+					if (batch.empty())
+					{
+						progress->finish(true); // decided under the lock, so that a request cannot slip in between
+						return;
+					}
+				}
+
+				std::vector<std::future<void>> jobs;
+				for (const std::filesystem::path& source : batch)
+				{
+					jobs.push_back(m_Jobs.submit([this, source, progress]()
+					{
+						if (!progress->cancel_requested())
+						{
+							reimport(source, true);
+							if (import_failed(source))
+							{
+								std::lock_guard<std::mutex> guard(m_ReimportMutex);
+								m_ReimportErrors.push_back(source.filename().string() + ": the import failed (see the console); the previous asset is kept");
+							}
+						}
+						progress->advance(source.filename().string());
+					}));
+				}
+				for (std::future<void>& job : jobs)
+				{
+					job.get();
+				}
+			}
+		});
+		return progress;
+	}
+
+	std::vector<std::string> AssetDatabase::take_reimport_errors()
+	{
+		std::lock_guard<std::mutex> lock(m_ReimportMutex);
+		std::vector<std::string> errors;
+		errors.swap(m_ReimportErrors);
+		return errors;
 	}
 
 	void AssetDatabase::add_catalog_listener(std::function<void()> listener)

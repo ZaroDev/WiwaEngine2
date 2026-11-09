@@ -58,6 +58,28 @@ namespace wiwa
 		// or is not of the given type.
 		std::optional<std::vector<std::byte>> read_cooked_payload(AssetGuid guid, AssetType type) const;
 		bool has_importer_for(const std::filesystem::path& source) const;
+		// The importer that cooks this file (extension), or null.
+		const IImporter* importer_for(const std::filesystem::path& source) const;
+
+		// Stores the values of the importer's options in the .meta (only the schema's keys, sanitized; whatever else the .meta holds stays). Does not
+		// cook: follow it with reimport_async. False with error if the importer is not editable, the file has no .meta, or it is being imported now.
+		bool store_import_settings(const std::filesystem::path& source, const nlohmann::json& values, std::string& error);
+		// The schema's defaults, stored the same way.
+		bool store_default_import_settings(const std::filesystem::path& source, std::string& error);
+		// Whether the last import of this source failed.
+		bool import_failed(const std::filesystem::path& source) const;
+
+		// Cooks these files again (forced) on the worker pool and returns at once; follow it with the progress. Requests made while a reimport runs are
+		// added to it (the same progress comes back, its total grows). Not for the scan: a scan has its own progress.
+		Ref<JobProgress> reimport_async(std::vector<std::filesystem::path> sources);
+		// The latest reimport_async's progress; null before the first.
+		Ref<JobProgress> reimport_progress() const
+		{
+			std::lock_guard<std::mutex> lock(m_ReimportMutex);
+			return m_ReimportProgress;
+		}
+		// The files whose import failed in the latest reimport_async (one line each), emptied by the call. Call it after the progress finished.
+		std::vector<std::string> take_reimport_errors();
 
 		// Cooked assets an import in progress is about to write (see ImportContext::declare_pending_asset).
 		void add_pending_asset(AssetGuid guid);
@@ -141,6 +163,12 @@ namespace wiwa
 		mutable std::mutex m_ScanMutex{};
 		Ref<JobProgress> m_ScanProgress{};
 		std::thread m_ScanThread{};
+
+		mutable std::mutex m_ReimportMutex{};
+		Ref<JobProgress> m_ReimportProgress{};
+		std::thread m_ReimportThread{};
+		std::vector<std::filesystem::path> m_ReimportPending{};
+		std::vector<std::string> m_ReimportErrors{};
 
 		JobSystem m_Jobs{ 4 };
 	};

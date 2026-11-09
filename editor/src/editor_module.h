@@ -53,6 +53,10 @@ private:
 	// Packs with the saved build settings into the game's folder, and blocks the editor with a progress popup until it is done.
 	void export_button();
 	void export_modal();
+	void reimport_modal();
+	Ref<wiwa::JobProgress> m_ReimportShownJob{}; // the reimport job the modal was opened for
+	bool m_ReimportShown = false;
+	std::vector<std::string> m_ReimportErrors{};
 	// The scene's file actions: the items of the File menu, and the popups that Open and Save As need.
 	void scene_menu_items();
 	void scene_popups();

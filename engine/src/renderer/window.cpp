@@ -64,6 +64,27 @@ namespace wiwa
 			{
 				Engine::get().request_quit();
 			});
+
+		// files dragged onto the window from the OS (called inside glfwPollEvents, on the main thread)
+		glfwSetDropCallback(m_Window, [](GLFWwindow*, int count, const char** paths)
+			{
+				if (Window* self = Engine::get().get_module<Window>())
+				{
+					std::lock_guard<std::mutex> lock(self->m_DropMutex);
+					for (int i = 0; i < count; i++)
+					{
+						self->m_DroppedFiles.push_back(std::filesystem::u8path(paths[i]));
+					}
+				}
+			});
+	}
+
+	std::vector<std::filesystem::path> Window::take_dropped_files()
+	{
+		std::lock_guard<std::mutex> lock(m_DropMutex);
+		std::vector<std::filesystem::path> files;
+		files.swap(m_DroppedFiles);
+		return files;
 	}
 
 	void Window::shutdown()
