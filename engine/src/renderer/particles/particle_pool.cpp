@@ -13,8 +13,24 @@ namespace wiwa
 		m_Capacity = std::max(capacity, 1u);
 	}
 
+	ParticlePool& ParticlePool::for_view(u32 viewUid, bool main)
+	{
+		if (main)
+		{
+			return *this;
+		}
+		std::unique_ptr<ParticlePool>& pool = m_Views[viewUid];
+		if (pool == nullptr)
+		{
+			pool = std::make_unique<ParticlePool>();
+			pool->set_capacity(DEFAULT_VIEW_CAPACITY);
+		}
+		return *pool;
+	}
+
 	void ParticlePool::shutdown()
 	{
+		m_Views.clear();
 		m_Generation++;
 		m_Particles = nullptr;
 		m_Emitters = nullptr;

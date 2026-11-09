@@ -1,7 +1,11 @@
 #include <pch.h>
 #include "particle_module.h"
 
+#include <algorithm>
+
 #include <core/engine.h>
+#include <renderer/render_module.h>
+#include <renderer/render_world.h>
 
 #include "particle_runtime.h"
 #include "scene_module.h"
@@ -40,6 +44,10 @@ namespace wiwa
 		{
 			return nullptr;
 		}
+		if (const auto override = m_Overrides.find(ref.resolved()); override != m_Overrides.end())
+		{
+			return override->second.get();
+		}
 		auto it = m_Effects.find(ref.resolved());
 		if (it == m_Effects.end())
 		{
@@ -62,9 +70,20 @@ namespace wiwa
 		}
 
 		const Time& time = Engine::get().get_time();
-		if (!time.get_game_clock().IsPlaying)
+		const ParticleEffectLookup lookup = [this](const AssetRef& ref) { return effect(ref); };
+
+		// scenes that are only looked at play with real time
+		for (auto it = m_PreviewScenes.begin(); it != m_PreviewScenes.end();)
 		{
-			return;
+			if (const Ref<Scene> preview = it->lock())
+			{
+				tick_particle_systems(*preview, time.get_real_delta_time_seconds(), lookup);
+				++it;
+			}
+			else
+			{
+				it = m_PreviewScenes.erase(it);
+			}
 		}
 
 		SceneModule* scenes = Engine::get().get_module<SceneModule>();
@@ -72,9 +91,63 @@ namespace wiwa
 		{
 			return;
 		}
-		if (const Ref<Scene> scene = scenes->get_active())
+		const Ref<Scene> scene = scenes->get_active();
+		if (scene == nullptr)
 		{
-			tick_particle_systems(*scene, time.get_delta_time_seconds(), [this](const AssetRef& ref) { return effect(ref); });
+			return;
 		}
+		if (time.get_game_clock().IsPlaying)
+		{
+			tick_particle_systems(*scene, time.get_delta_time_seconds(), lookup);
+		}
+		else
+		{
+			// edit mode: only what the user asked to preview (the inspector's Play, the VFX editor)
+			tick_particle_systems(*scene, time.get_real_delta_time_seconds(), lookup, true);
+		}
+	}
+
+	void ParticleModule::set_preview_effect(const AssetRef& ref, ParticleEffectData data)
+	{
+		if (!ref.valid())
+		{
+			return;
+		}
+		m_Overrides[ref.resolved()] = std::make_shared<const ParticleEffectData>(data);
+		if (RenderModule* render = Engine::get().get_module<RenderModule>())
+		{
+			render->submit([ref, data = std::move(data)](RenderWorld& world)
+				{
+					world.get_cache().set_inline_particle_effect(ref, data);
+				});
+		}
+	}
+
+	void ParticleModule::clear_preview_effect(const AssetRef& ref)
+	{
+		if (!ref.valid() || m_Overrides.erase(ref.resolved()) == 0)
+		{
+			return;
+		}
+		if (RenderModule* render = Engine::get().get_module<RenderModule>())
+		{
+			render->submit([ref](RenderWorld& world)
+				{
+					world.get_cache().clear_inline_particle_effect(ref);
+				});
+		}
+	}
+
+	void ParticleModule::register_preview_scene(const Ref<Scene>& scene)
+	{
+		if (scene != nullptr && std::none_of(m_PreviewScenes.begin(), m_PreviewScenes.end(), [&](const std::weak_ptr<Scene>& held) { return held.lock() == scene; }))
+		{
+			m_PreviewScenes.push_back(scene);
+		}
+	}
+
+	void ParticleModule::unregister_preview_scene(const Ref<Scene>& scene)
+	{
+		m_PreviewScenes.erase(std::remove_if(m_PreviewScenes.begin(), m_PreviewScenes.end(), [&](const std::weak_ptr<Scene>& held) { const Ref<Scene> alive = held.lock(); return alive == nullptr || alive == scene; }), m_PreviewScenes.end());
 	}
 }

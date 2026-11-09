@@ -25,8 +25,8 @@ namespace wiwa
 		virtual bool is_ready() const override;
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
-		virtual void on_view_removed(u32 targetUid) override { m_PerView.forget(targetUid); }
-		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return isMain; }
+		virtual void on_view_removed(u32 targetUid) override { m_PerView.forget(targetUid); m_Views.erase(targetUid); m_Pool->forget_view(targetUid); }
+		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return flags.Particles; }
 
 		// How far behind a surface (in view depth, meters) a particle still counts as touching it. A particle further behind passes through.
 		static constexpr float COLLISION_THICKNESS = 1.0f;
@@ -69,9 +69,19 @@ namespace wiwa
 			u32 PoolGeneration = ~0u;
 		};
 
-		void release(SystemState& state, nvrhi::ICommandList* commandList);
-		void reset_state();
-		void sort_emitter(nvrhi::ICommandList* commandList, const ParticleDraw& draw);
+		void release(SystemState& state, ParticlePool& pool, nvrhi::ICommandList* commandList);
+		// What the pass keeps of one view: the pool it uses (a view that is not the main one has its own), the systems with rings in it, and the sort bindings.
+		struct ViewSim
+		{
+			const ParticlePool* Pool = nullptr;
+			u32 PoolGeneration = ~0u;
+			std::unordered_map<EntityGuid, SystemState> Systems{};
+			nvrhi::BindingSetHandle SortFillSet{};
+			nvrhi::BindingSetHandle SortStepSet{};
+			u32 SortSetPoolGeneration = ~0u;
+			u32 SortSetSortGeneration = ~0u;
+		};
+		void sort_emitter(nvrhi::ICommandList* commandList, ParticlePool& pool, ViewSim& sim, const ParticleDraw& draw);
 
 		nvrhi::IDevice* m_Device = nullptr;
 		ShaderLibrary* m_Shaders = nullptr;
@@ -83,18 +93,13 @@ namespace wiwa
 		nvrhi::BindingLayoutHandle m_SortFillLayout{};
 		nvrhi::BindingLayoutHandle m_SortStepLayout{};
 		PerView<ViewCache> m_PerView{};
-		nvrhi::BindingSetHandle m_SortFillSet{};
-		nvrhi::BindingSetHandle m_SortStepSet{};
-		u32 m_SortSetPoolGeneration = ~0u;
-		u32 m_SortSetSortGeneration = ~0u;
 		nvrhi::ComputePipelineHandle m_SpawnPipeline{};
 		nvrhi::ComputePipelineHandle m_SimPipeline{};
 		nvrhi::ComputePipelineHandle m_SortFillPipeline{};
 		nvrhi::ComputePipelineHandle m_SortStepPipeline{};
 		u32 m_BuiltShaderGeneration = ~0u;
-		u32 m_PoolGeneration = ~0u;
 
-		std::unordered_map<EntityGuid, SystemState> m_Systems{};
+		std::unordered_map<u32, ViewSim> m_Views{};
 		u64 m_Pass = 0;
 		bool m_WarnedRenderer = false;
 		bool m_WarnedFull = false;

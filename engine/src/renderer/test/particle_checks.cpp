@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "scene_tester.h"
 
+#include <renderer/view/view_state.h>
+
 #include "cross_backend.h"
 
 // Checks of the particles (vfx.md): the pool's rings, the spawn and simulation on the GPU (read back from the pool), and the sprites that are drawn.
@@ -53,9 +55,8 @@ namespace wiwa
 			test.scene().apply(std::move(delta));
 		}
 
-		std::vector<ParticleGpu> read_pool(RenderCheckContext& context, SceneTester& test)
+		std::vector<ParticleGpu> read_pool(RenderCheckContext& context, ParticlePool& pool)
 		{
-			ParticlePool& pool = test.renderer().get_particle_pool();
 			std::vector<ParticleGpu> particles;
 			if (!pool.ready() || pool.slot_end() == 0)
 			{
@@ -68,6 +69,11 @@ namespace wiwa
 				std::memcpy(particles.data(), bytes.data(), bytes.size());
 			}
 			return particles;
+		}
+
+		std::vector<ParticleGpu> read_pool(RenderCheckContext& context, SceneTester& test)
+		{
+			return read_pool(context, test.renderer().get_particle_pool());
 		}
 
 		std::vector<ParticleGpu> alive(const std::vector<ParticleGpu>& all)
@@ -485,6 +491,81 @@ namespace wiwa
 				compare_across_apis(context, "particle_sorting_additive", test.pixels());
 			});
 
+		register_render_check("particle_offscreen_view", [](RenderCheckContext& context)
+			{
+				SceneTester test(context, 64);
+				ParticlePool& main = test.renderer().get_particle_pool();
+				main.set_capacity(4096);
+				SpriteScene scene(test);
+
+				ViewDesc description;
+				description.Width = 64;
+				description.Height = 64;
+				description.Profile = ViewProfile::Preview;
+				description.Mode = ViewMode::Continuous;
+				const ViewId id = test.renderer().add_view(100, description);
+				context.check(id != INVALID_VIEW, "an offscreen view is made");
+				ViewState* view = id != INVALID_VIEW ? test.renderer().find_view(id) : nullptr;
+				if (view == nullptr)
+				{
+					return;
+				}
+				RenderCamera camera;
+				camera.Position = glm::vec3(0.0f, 0.0f, 5.0f);
+				camera.View = glm::lookAt(camera.Position, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+				camera.Projection = glm::perspectiveRH_ZO(glm::radians(60.0f), 1.0f, 0.1f, 100.0f);
+				view->Scene.set_camera_override(camera);
+
+				ParticleEffectData effect;
+				ParticleEmitterData emitter = still_emitter(64);
+				emitter.Material = scene.Material;
+				emitter.Blend = ParticleBlend::Additive;
+				emitter.StartSize = ParticleValue::constant(1.5f);
+				emitter.StartColor = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+				emitter.Intensity = 2.0f;
+				emitter.bake();
+				effect.Emitters = { emitter };
+				const AssetRef ref = test.cache().add_inline_particle_effect(effect);
+
+				// a system of the view only: the view has a pool, the main one is untouched
+				RenderParticleSystem system;
+				system.Effect = ref;
+				system.Seed = 99;
+				SceneDelta delta;
+				const EntityGuid guid{ 0x7000, 0x7001 };
+				delta.ParticleUpserts.emplace_back(guid, std::move(system));
+				std::array<u32, PARTICLE_MAX_EMITTERS> spawns{};
+				spawns[0] = 40;
+				delta.ParticleSpawns.emplace_back(guid, spawns);
+				view->Scene.apply(std::move(delta));
+				context.check(test.render(6), "render with a system in the view");
+				ParticlePool& own = main.for_view(view->Target.uid(), false);
+				context.check(own.ready() && alive(read_pool(context, own)).size() == 40, "the view's own pool holds its 40 particles");
+				context.check(main.used() == 0, "and the main pool holds none");
+
+				std::vector<u8> pixels;
+				u32 width = 0;
+				u32 height = 0;
+				context.check(read_texture_rgba8(context.Device, view->Target.ldr(), pixels, width, height) && width == 64, "read the view's image");
+				if (pixels.size() == static_cast<size_t>(64) * 64 * 4)
+				{
+					const size_t center = (32 * 64 + 32) * 4;
+					const size_t corner = (2 * 64 + 2) * 4;
+					context.check(pixels[center + 1] > pixels[corner + 1] + 30 && pixels[center + 1] > pixels[center] + 20, "the particles are drawn in the view (a green sprite in the middle)");
+				}
+
+				// a system in the main view does not age or disturb the particles of the view, and is not in its image
+				const EntityGuid mainSystem = add_system(test, ref, glm::mat4(1.0f), 10);
+				context.check(test.render(4), "render with a system in each view");
+				context.check(alive(read_pool(context, own)).size() == 40, "the view's particles are as they were (the main simulation does not touch them)");
+				context.check(alive(read_pool(context, main)).size() == 10 && main.used() == 64, "the main pool has its own ring");
+				(void)mainSystem;
+
+				// the view goes away with its pool
+				test.renderer().remove_view(id);
+				context.check(test.render(2), "render after the view is removed");
+				context.check(alive(read_pool(context, main)).size() == 10, "the main view is unaffected");
+			});
 		register_render_check("particle_sprites_draw", [](RenderCheckContext& context)
 			{
 				SceneTester test(context, 64);

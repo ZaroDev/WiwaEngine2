@@ -181,7 +181,7 @@ namespace wiwa
 		}
 	}
 
-	void ParticleSimPass::release(SystemState& state, nvrhi::ICommandList* commandList)
+	void ParticleSimPass::release(SystemState& state, ParticlePool& pool, nvrhi::ICommandList* commandList)
 	{
 		for (ParticleAllocation& ring : state.Rings)
 		{
@@ -189,36 +189,27 @@ namespace wiwa
 			{
 				// its particles die with it: the slots stay in the range the simulation covers while other rings are there
 				const std::vector<u8> zeros(static_cast<size_t>(ring.Capacity) * sizeof(ParticleGpu), 0);
-				commandList->writeBuffer(m_Pool->particles(), zeros.data(), zeros.size(), static_cast<u64>(ring.Base) * sizeof(ParticleGpu));
-				m_Pool->release(ring);
+				commandList->writeBuffer(pool.particles(), zeros.data(), zeros.size(), static_cast<u64>(ring.Base) * sizeof(ParticleGpu));
+				pool.release(ring);
 				ring = ParticleAllocation{};
 			}
 		}
 	}
 
-	void ParticleSimPass::reset_state()
-	{
-		m_Systems.clear(); // the pool they point into is gone
-		m_SortFillSet = nullptr;
-		m_SortStepSet = nullptr;
-		m_SortSetPoolGeneration = ~0u;
-		m_SortSetSortGeneration = ~0u;
-	}
-
 	// Sorts the entries of one emitter: fills them with the depth of every slot, then runs the bitonic network (log2(n) (log2(n) + 1) / 2 steps).
-	void ParticleSimPass::sort_emitter(nvrhi::ICommandList* commandList, const ParticleDraw& draw)
+	void ParticleSimPass::sort_emitter(nvrhi::ICommandList* commandList, ParticlePool& pool, ViewSim& sim, const ParticleDraw& draw)
 	{
 		const u32 offset = draw.SortStart - 1;
 		const u32 count = draw.SortCount;
 
 		nvrhi::ComputeState fill;
 		fill.pipeline = m_SortFillPipeline;
-		fill.addBindingSet(m_SortFillSet);
+		fill.addBindingSet(sim.SortFillSet);
 		commandList->setComputeState(fill);
 		const SortPush fillPush{ offset, draw.Capacity, count, draw.Id };
 		commandList->setPushConstants(&fillPush, sizeof(fillPush));
 		commandList->dispatch((count + GROUP_SIZE - 1) / GROUP_SIZE, 1, 1);
-			commandList->setBufferState(m_Pool->sort_buffer(), nvrhi::ResourceStates::UnorderedAccess); // the next step reads what this one wrote
+			commandList->setBufferState(pool.sort_buffer(), nvrhi::ResourceStates::UnorderedAccess); // the next step reads what this one wrote
 			commandList->commitBarriers();
 
 		for (u32 k = 2; k <= count; k <<= 1)
@@ -227,12 +218,12 @@ namespace wiwa
 			{
 				nvrhi::ComputeState step;
 				step.pipeline = m_SortStepPipeline;
-				step.addBindingSet(m_SortStepSet);
+				step.addBindingSet(sim.SortStepSet);
 				commandList->setComputeState(step);
 				const SortPush stepPush{ offset, k, j, count };
 				commandList->setPushConstants(&stepPush, sizeof(stepPush));
 				commandList->dispatch((count + GROUP_SIZE - 1) / GROUP_SIZE, 1, 1);
-			commandList->setBufferState(m_Pool->sort_buffer(), nvrhi::ResourceStates::UnorderedAccess); // the next step reads what this one wrote
+			commandList->setBufferState(pool.sort_buffer(), nvrhi::ResourceStates::UnorderedAccess); // the next step reads what this one wrote
 			commandList->commitBarriers();
 			}
 		}
@@ -240,7 +231,9 @@ namespace wiwa
 
 	void ParticleSimPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
 	{
-		m_Pool->Draws.clear();
+		const u32 viewUid = frame.View->Target.uid();
+		ParticlePool& pool = m_Pool->for_view(viewUid, frame.IsMainView);
+		pool.Draws.clear();
 		if (frame.Scene == nullptr || !frame.Scene->active() || m_Failed || frame.Scene->scene_mutable() == nullptr)
 		{
 			return;
@@ -248,25 +241,32 @@ namespace wiwa
 
 		RenderScene& scene = *frame.Scene->scene_mutable();
 		GpuResourceCache& cache = *frame.Scene->cache();
-		if (m_PoolGeneration != m_Pool->generation())
+		ViewSim& sim = m_Views[viewUid];
+		// a pool that is another object or was dropped: the systems of this view start over (their rings are gone with it)
+		const auto adopt = [&]()
 		{
-			reset_state();
-			m_PoolGeneration = m_Pool->generation();
-		}
-		if (scene.particle_system_count() == 0 && m_Systems.empty())
+			if (sim.Pool != &pool || sim.PoolGeneration != pool.generation())
+			{
+				sim.Pool = &pool;
+				m_PerView.forget(viewUid);
+				sim.PoolGeneration = pool.generation();
+				sim.Systems.clear();
+				sim.SortFillSet = nullptr;
+				sim.SortStepSet = nullptr;
+				sim.SortSetPoolGeneration = ~0u;
+				sim.SortSetSortGeneration = ~0u;
+			}
+		};
+		adopt();
+		if (scene.particle_system_count() == 0 && sim.Systems.empty())
 		{
 			return;
 		}
-		if (!m_Pool->ensure(m_Device))
+		if (!pool.ensure(m_Device))
 		{
 			return;
 		}
-		if (m_PoolGeneration != m_Pool->generation())
-		{
-			reset_state(); // ensure() made the buffers: nothing was allocated before
-			m_PoolGeneration = m_Pool->generation();
-		}
-
+		adopt(); // ensure() made the buffers: nothing was allocated before
 		const u32 shaderGeneration = m_Shaders->get_generation();
 		if (m_SpawnPipeline == nullptr || shaderGeneration != m_BuiltShaderGeneration)
 		{
@@ -292,17 +292,17 @@ namespace wiwa
 
 		ViewportTarget& viewport = *frame.Scene->viewport();
 		ViewCache& view = m_PerView.get(frame.View->Target);
-		if (view.BindingSet == nullptr || view.PoolGeneration != m_Pool->generation())
+		if (view.BindingSet == nullptr || view.PoolGeneration != pool.generation())
 		{
 			nvrhi::BindingSetDesc set;
 			set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_Constants));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, m_Pool->emitters()));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(2, m_Pool->tables()));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(3, m_Pool->particles()));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, pool.emitters()));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(2, pool.tables()));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(3, pool.particles()));
 			set.addItem(nvrhi::BindingSetItem::Texture_SRV(4, viewport.depth()));
 			set.addItem(nvrhi::BindingSetItem::Texture_SRV(5, viewport.normal()));
 			view.BindingSet = m_Device->createBindingSet(set, m_Layout);
-			view.PoolGeneration = m_Pool->generation();
+			view.PoolGeneration = pool.generation();
 			if (view.BindingSet == nullptr)
 			{
 				WI_PARTICLE_LOG(Error, "Could not create the particle bindings");
@@ -340,11 +340,11 @@ namespace wiwa
 				continue; // still loading, or it failed: nothing happens, and the spawns wait
 			}
 
-			SystemState& state = m_Systems[system.Guid];
+			SystemState& state = sim.Systems[system.Guid];
 			const u32 revision = cache.effect_revision(system.Effect);
 			if (state.Effect != system.Effect || state.Revision != revision || state.ClearCount != system.ClearCount)
 			{
-				release(state, commandList); // new effect, re-cooked, or the particles were discarded (Vfx.stop with clear, restart): start the rings over
+				release(state, pool, commandList); // new effect, re-cooked, or the particles were discarded (Vfx.stop with clear, restart): start the rings over
 				state = SystemState{};
 			}
 			state.Effect = system.Effect;
@@ -369,15 +369,15 @@ namespace wiwa
 
 				if (state.Rings[i].Capacity == 0 && !state.Failed[i])
 				{
-					if (const std::optional<ParticleAllocation> ring = m_Pool->allocate(emitter.MaxParticles))
+					if (const std::optional<ParticleAllocation> ring = pool.allocate(emitter.MaxParticles))
 					{
 						state.Rings[i] = *ring;
 						state.Heads[i] = 0;
 						state.AliveFor[i] = 0.0f;
 						// the slots hold what an earlier ring left there: all dead, and the curves of this emitter
 						const std::vector<u8> zeros(static_cast<size_t>(ring->Capacity) * sizeof(ParticleGpu), 0);
-						commandList->writeBuffer(m_Pool->particles(), zeros.data(), zeros.size(), static_cast<u64>(ring->Base) * sizeof(ParticleGpu));
-						write_tables(commandList, m_Pool->tables(), ring->Id, emitter);
+						commandList->writeBuffer(pool.particles(), zeros.data(), zeros.size(), static_cast<u64>(ring->Base) * sizeof(ParticleGpu));
+						write_tables(commandList, pool.tables(), ring->Id, emitter);
 					}
 					else
 					{
@@ -385,7 +385,7 @@ namespace wiwa
 						if (!m_WarnedFull)
 						{
 							m_WarnedFull = true;
-							WI_PARTICLE_LOG(Warning, "The particle pool ({0} particles) is full: an emitter is not played", m_Pool->capacity());
+							WI_PARTICLE_LOG(Warning, "The particle pool ({0} particles) is full: an emitter is not played", pool.capacity());
 						}
 					}
 				}
@@ -408,12 +408,12 @@ namespace wiwa
 			}
 		}
 
-		for (auto it = m_Systems.begin(); it != m_Systems.end();)
+		for (auto it = sim.Systems.begin(); it != sim.Systems.end();)
 		{
 			if (it->second.Seen != m_Pass)
 			{
-				release(it->second, commandList);
-				it = m_Systems.erase(it);
+				release(it->second, pool, commandList);
+				it = sim.Systems.erase(it);
 			}
 			else
 			{
@@ -421,7 +421,7 @@ namespace wiwa
 			}
 		}
 
-		const u32 idEnd = m_Pool->id_end();
+		const u32 idEnd = pool.id_end();
 		if (idEnd == 0)
 		{
 			return;
@@ -436,26 +436,26 @@ namespace wiwa
 				sortEntries += padded(item.Ring.Capacity);
 			}
 		}
-		if (!m_Pool->ensure_sort(m_Device, sortEntries))
+		if (!pool.ensure_sort(m_Device, sortEntries))
 		{
 			return;
 		}
-		if (m_SortFillSet == nullptr || m_SortSetPoolGeneration != m_Pool->generation() || m_SortSetSortGeneration != m_Pool->sort_generation())
+		if (sim.SortFillSet == nullptr || sim.SortSetPoolGeneration != pool.generation() || sim.SortSetSortGeneration != pool.sort_generation())
 		{
 			nvrhi::BindingSetDesc fill;
 			fill.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_Constants));
 			fill.addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(SortPush)));
-			fill.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, m_Pool->emitters()));
-			fill.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(2, m_Pool->particles()));
-			fill.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(3, m_Pool->sort_buffer()));
-			m_SortFillSet = m_Device->createBindingSet(fill, m_SortFillLayout);
+			fill.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, pool.emitters()));
+			fill.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(2, pool.particles()));
+			fill.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(3, pool.sort_buffer()));
+			sim.SortFillSet = m_Device->createBindingSet(fill, m_SortFillLayout);
 			nvrhi::BindingSetDesc step;
 			step.addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(SortPush)));
-			step.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(3, m_Pool->sort_buffer()));
-			m_SortStepSet = m_Device->createBindingSet(step, m_SortStepLayout);
-			m_SortSetPoolGeneration = m_Pool->generation();
-			m_SortSetSortGeneration = m_Pool->sort_generation();
-			if (m_SortFillSet == nullptr || m_SortStepSet == nullptr)
+			step.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(3, pool.sort_buffer()));
+			sim.SortStepSet = m_Device->createBindingSet(step, m_SortStepLayout);
+			sim.SortSetPoolGeneration = pool.generation();
+			sim.SortSetSortGeneration = pool.sort_generation();
+			if (sim.SortFillSet == nullptr || sim.SortStepSet == nullptr)
 			{
 				WI_PARTICLE_LOG(Error, "Could not create the particle sort bindings");
 				m_Failed = true;
@@ -500,16 +500,16 @@ namespace wiwa
 			});
 		for (const Sorted& sorted : draws)
 		{
-			m_Pool->Draws.push_back(sorted.Draw);
+			pool.Draws.push_back(sorted.Draw);
 		}
 
-		commandList->writeBuffer(m_Pool->emitters(), records.data(), records.size() * sizeof(EmitterGpu));
+		commandList->writeBuffer(pool.emitters(), records.data(), records.size() * sizeof(EmitterGpu));
 
 		const FrameConstants& frameConstants = frame.Scene->constants();
 		SimConstants constants;
 		constants.EmitterCount = idEnd;
 		constants.TotalSpawn = totalSpawn;
-		constants.SlotEnd = m_Pool->slot_end();
+		constants.SlotEnd = pool.slot_end();
 		constants.FrameIndex = static_cast<u32>(frame.FrameIndex);
 		constants.DeltaTime = step;
 		constants.Time = frame.Time;
@@ -537,11 +537,11 @@ namespace wiwa
 			commandList->dispatch((constants.SlotEnd + GROUP_SIZE - 1) / GROUP_SIZE, 1, 1);
 		}
 
-		for (const ParticleDraw& draw : m_Pool->Draws)
+		for (const ParticleDraw& draw : pool.Draws)
 		{
 			if (draw.SortStart != 0)
 			{
-				sort_emitter(commandList, draw);
+				sort_emitter(commandList, pool, sim, draw);
 			}
 		}
 	}

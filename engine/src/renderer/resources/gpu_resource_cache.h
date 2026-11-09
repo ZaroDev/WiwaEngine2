@@ -105,6 +105,8 @@ namespace wiwa
 		AssetRef add_inline_font(FontData font);
 		AssetRef add_inline_particle_effect(ParticleEffectData effect);
 		void set_inline_particle_effect(const AssetRef& effect, ParticleEffectData data);
+		// Takes the inline data of an effect away again (a preview of unsaved edits): the effect is the asset on disk once more.
+		void clear_inline_particle_effect(const AssetRef& effect);
 		// Replaces the data of an inline asset; invalidate() the reference's guid for the change to show.
 		void set_inline_texture(const AssetRef& texture, TextureData data);
 		void set_inline_mesh(const AssetRef& mesh, MeshData data);

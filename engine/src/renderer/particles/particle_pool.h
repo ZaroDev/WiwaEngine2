@@ -1,6 +1,8 @@
 #pragma once
 
+#include <memory>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 #include <nvrhi/nvrhi.h>
@@ -106,6 +108,12 @@ namespace wiwa
 		nvrhi::IBuffer* sort_buffer() const { return m_Sort; }
 		u32 sort_generation() const { return m_SortGeneration; }
 
+		// The pool of a view: this one for the main view; a pool of its own (DEFAULT_VIEW_CAPACITY particles) for an offscreen view, so that the simulation
+		// of one view never ages or moves the particles of another. forget_view() drops it with the view.
+		static constexpr u32 DEFAULT_VIEW_CAPACITY = 16384;
+		ParticlePool& for_view(u32 viewUid, bool main);
+		void forget_view(u32 viewUid) { m_Views.erase(viewUid); }
+
 		// For the render pass; cleared and filled every frame by the simulation pass.
 		std::vector<ParticleDraw> Draws{};
 
@@ -118,6 +126,7 @@ namespace wiwa
 		nvrhi::BufferHandle m_Particles{};
 		nvrhi::BufferHandle m_Emitters{};
 		nvrhi::BufferHandle m_Tables{};
+		std::unordered_map<u32, std::unique_ptr<ParticlePool>> m_Views{};
 		nvrhi::BufferHandle m_Sort{};
 		u32 m_SortEntries = 0;
 		u32 m_SortGeneration = 0;

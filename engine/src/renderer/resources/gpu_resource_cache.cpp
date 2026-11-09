@@ -1307,6 +1307,12 @@ namespace wiwa
 		invalidate(effect.resolved());
 	}
 
+	void GpuResourceCache::clear_inline_particle_effect(const AssetRef& effect)
+	{
+		m_InlineEffects.erase(effect.resolved());
+		invalidate(effect.resolved());
+	}
+
 	const ParticleEffectData* GpuResourceCache::get_particle_effect(const AssetRef& effect)
 	{
 		if (!effect.valid())

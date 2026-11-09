@@ -71,7 +71,7 @@ namespace wiwa
 		return runtime;
 	}
 
-	void tick_particle_systems(Scene& scene, float deltaTime, const ParticleEffectLookup& effects)
+	void tick_particle_systems(Scene& scene, float deltaTime, const ParticleEffectLookup& effects, bool previewOnly)
 	{
 		entt::registry& registry = scene.registry();
 		const float step = deltaTime > 0.0f ? std::min(deltaTime, MAX_STEP) : 0.0f; // NaN is not above 0
@@ -79,6 +79,14 @@ namespace wiwa
 
 		for (const auto [entity, system] : registry.view<ParticleSystem>().each())
 		{
+			if (previewOnly)
+			{
+				const ParticleRuntime* existing = registry.try_get<ParticleRuntime>(entity);
+				if (existing == nullptr || !existing->Preview)
+				{
+					continue;
+				}
+			}
 			ParticleRuntime& runtime = particle_runtime_of(registry, entity);
 			runtime.SpawnCount.fill(0);
 

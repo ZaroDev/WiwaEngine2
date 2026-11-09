@@ -18,6 +18,7 @@ namespace wiwa
 		bool Playing = false;
 		bool Finished = false;      // no emitter will spawn again and the last particle is gone (or its time is up)
 		bool SelfDestruct = false;  // Vfx.spawn: the entity goes away when Finished
+		bool Preview = false;      // plays in edit mode (the inspector's Play button, the VFX editor); the game clock is not needed
 		float Time = 0.0f;          // seconds the system has played (TimeScale applied)
 		u32 Seed = 0;               // the random numbers of the system on the GPU
 		u32 ClearCount = 0;         // counts up when the particles of the system are to be discarded (Vfx.stop with clear, restart): the render thread starts its rings over
@@ -49,5 +50,6 @@ namespace wiwa
 
 	// Advances every ParticleSystem of the scene by deltaTime seconds and fills ParticleRuntime::SpawnCount. A step is at most 0.1 s (a stall does not
 	// spawn a flood), and 0 or NaN does nothing. A finished system with SelfDestruct is destroyed. The caller runs it only while the game plays.
-	void tick_particle_systems(Scene& scene, float deltaTime, const ParticleEffectLookup& effects);
+	// previewOnly: only the systems that have ParticleRuntime::Preview are advanced (edit mode); the others do nothing.
+	void tick_particle_systems(Scene& scene, float deltaTime, const ParticleEffectLookup& effects, bool previewOnly = false);
 }

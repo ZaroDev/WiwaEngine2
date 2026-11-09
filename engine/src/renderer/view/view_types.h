@@ -31,6 +31,7 @@ namespace wiwa
 		bool LightCulling = true;     // false: the forward shader tests every light
 		bool Ao = true;
 		bool Decals = true;           // false: the view draws no decals
+		bool Particles = true;        // false: the view draws no particles (it has a pool of its own when it does)
 		bool Taa = true;
 		bool MotionBlur = true;
 		bool Bloom = true;
@@ -61,6 +62,7 @@ namespace wiwa
 			flags.VelocityPrepass = false;
 			flags.LightCulling = false;
 			flags.Ao = false;
+			flags.Particles = false;
 			flags.Decals = false;
 			flags.Taa = false;
 			flags.MotionBlur = false;

@@ -20,14 +20,15 @@ namespace wiwa
 		virtual bool is_ready() const override;
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
-		virtual void on_view_removed(u32 targetUid) override { m_PerView.forget(targetUid); }
-		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return isMain; }
+		virtual void on_view_removed(u32 targetUid) override { m_PerView.forget(targetUid); m_Pool->forget_view(targetUid); }
+		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return flags.Particles; }
 
 	private:
 		// What belongs to one view (PerView): the set that reads the pool and the view's depth. Made again when the pool is.
 		struct ViewCache
 		{
 			nvrhi::BindingSetHandle BindingSet{};
+			const ParticlePool* Pool = nullptr;
 			u32 PoolGeneration = ~0u;
 			u32 SortGeneration = ~0u;
 		};

@@ -101,7 +101,8 @@ namespace wiwa
 
 	void ParticleRenderPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
 	{
-		if (frame.Scene == nullptr || !frame.Scene->active() || m_Failed || m_Pool->Draws.empty() || !m_Pool->ready() || !frame.Scene->has_camera())
+		ParticlePool& pool = m_Pool->for_view(frame.View->Target.uid(), frame.IsMainView);
+		if (frame.Scene == nullptr || !frame.Scene->active() || m_Failed || pool.Draws.empty() || !pool.ready() || !frame.Scene->has_camera())
 		{
 			return;
 		}
@@ -144,17 +145,18 @@ namespace wiwa
 		}
 
 		ViewCache& cache = m_PerView.get(frame.View->Target);
-		if (cache.BindingSet == nullptr || cache.PoolGeneration != m_Pool->generation() || cache.SortGeneration != m_Pool->sort_generation())
+		if (cache.BindingSet == nullptr || cache.Pool != &pool || cache.PoolGeneration != pool.generation() || cache.SortGeneration != pool.sort_generation())
 		{
 			nvrhi::BindingSetDesc set;
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(36, m_Pool->particles()));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(37, m_Pool->emitters()));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(38, m_Pool->tables()));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(36, pool.particles()));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(37, pool.emitters()));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(38, pool.tables()));
 			set.addItem(nvrhi::BindingSetItem::Texture_SRV(39, viewport.depth()));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(40, m_Pool->sort_buffer()));
+			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(40, pool.sort_buffer()));
 			cache.BindingSet = m_Device->createBindingSet(set, m_Layout);
-			cache.PoolGeneration = m_Pool->generation();
-			cache.SortGeneration = m_Pool->sort_generation();
+			cache.Pool = &pool;
+			cache.PoolGeneration = pool.generation();
+			cache.SortGeneration = pool.sort_generation();
 			if (cache.BindingSet == nullptr)
 			{
 				WI_PARTICLE_LOG(Error, "Could not create the particle bindings");
@@ -165,7 +167,7 @@ namespace wiwa
 
 		GpuResourceCache& resources = *data.cache();
 		const nvrhi::Viewport area(static_cast<float>(viewport.width()), static_cast<float>(viewport.height()));
-		for (const ParticleDraw& draw : m_Pool->Draws)
+		for (const ParticleDraw& draw : pool.Draws)
 		{
 			const u32 material = resources.get_material_slot(draw.Material);
 
