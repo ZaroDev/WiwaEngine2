@@ -73,6 +73,19 @@ namespace wiwa
 		nvrhi::ITexture* pre_fxaa() const { return m_PreFxaa; }
 		nvrhi::IFramebuffer* pre_fxaa_framebuffer() const { return m_PreFxaaFramebuffer; }
 
+		// Decals: four screen-sized targets the decal pass draws the decals' contributions into and the forward shaders read (decals.md). They
+		// exist only while the view has visible decals (16 bytes a pixel): ensure_decal_targets() makes them, release_decal_targets() drops them.
+		// decal_generation() counts up on every make and drop, so what was bound to them is rebuilt.
+		bool ensure_decal_targets(nvrhi::IDevice* device);
+		void release_decal_targets();
+		bool has_decal_targets() const { return m_DecalAlbedo != nullptr; }
+		u32 decal_generation() const { return m_DecalGeneration; }
+		nvrhi::ITexture* decal_albedo() const { return m_DecalAlbedo; }     // RGBA8_SRGB: premultiplied color, alpha = coverage
+		nvrhi::ITexture* decal_normal() const { return m_DecalNormal; }     // RGBA8: octahedral world normal (rg), alpha = weight
+		nvrhi::ITexture* decal_orm() const { return m_DecalOrm; }           // RGBA8: occlusion, roughness, metallic (rgb), alpha = weight
+		nvrhi::ITexture* decal_emissive() const { return m_DecalEmissive; } // R11G11B10F: light added by the decals
+		nvrhi::IFramebuffer* decal_framebuffer() const { return m_DecalFramebuffer; } // the four, no depth
+
 		// Where the pixels are: counts up on every create, so a pass that cached a framebuffer notices.
 		u32 generation() const { return m_Generation; }
 		// Names this target for good: unique among every target made in the process, and unchanged by create(). A pass keys what it caches
@@ -106,6 +119,12 @@ namespace wiwa
 		nvrhi::FramebufferHandle m_VelocityFramebuffer{};
 		nvrhi::TextureHandle m_PreFxaa{};
 		nvrhi::FramebufferHandle m_PreFxaaFramebuffer{};
+		nvrhi::TextureHandle m_DecalAlbedo{};
+		nvrhi::TextureHandle m_DecalNormal{};
+		nvrhi::TextureHandle m_DecalOrm{};
+		nvrhi::TextureHandle m_DecalEmissive{};
+		nvrhi::FramebufferHandle m_DecalFramebuffer{};
+		u32 m_DecalGeneration = 0;
 		u32 m_Width = 0;
 		u32 m_Height = 0;
 		u32 m_Generation = 0;

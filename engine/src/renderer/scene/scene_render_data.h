@@ -172,8 +172,22 @@ namespace wiwa
 		bool ao_active() const { return m_AoActive; }
 		// The forward pass reads the occlusion through a layout of its own (one SRV, t15): the frame layout's registers already span
 		// 1..9, and NVRHI rejects layouts whose register ranges overlap those of the material layout (t10..t13).
+		// The set also carries the four decal targets (t24..t27, stand-ins that change nothing when the view has no decals).
 		nvrhi::IBindingLayout* ao_layout() const { return m_AoLayout; }
 		nvrhi::IBindingSet* ao_bindings() const { return m_AoBindings; }
+
+		// The decals this view draws, culled against the camera and sorted by SortOrder then slot (at most MAX_VISIBLE_DECALS; the rest are
+		// counted in dropped_decals()). Slot indexes RenderScene::decals(); Material is the material slot of the decal's material.
+		struct VisibleDecal
+		{
+			u32 Slot = 0;
+			u32 Material = 0;
+		};
+		static constexpr u32 MAX_VISIBLE_DECALS = 512;
+		const std::vector<VisibleDecal>& visible_decals() const { return m_VisibleDecals; }
+		u32 dropped_decals() const { return m_DroppedDecals; }
+		// The decal targets of the viewport exist and are the ones bound in ao_bindings() (decals are visible this frame).
+		bool decals_active() const { return m_DecalsActive; }
 		// An environment (a file's, ready) lights the scene this frame.
 		bool has_environment() const { return m_FrameEnvironment != nullptr; }
 		// What the sky pass draws behind the scene this frame.
@@ -281,6 +295,17 @@ namespace wiwa
 		nvrhi::TextureHandle m_DummyCube{};
 		nvrhi::TextureHandle m_DummyBrdf{};
 		nvrhi::TextureHandle m_DummyAo{};    // 1x1, white: no occlusion
+		// 1x1, zero: no decals (albedo, normal, ORM, emissive). Read with the coordinates clamped, so one texel serves every pixel.
+		nvrhi::TextureHandle m_DummyDecal[4]{};
+		bool m_DummyDecalWritten = false;
+		std::vector<VisibleDecal> m_VisibleDecals{};
+		u32 m_DroppedDecals = 0;
+		bool m_DecalsActive = false;
+		u32 m_FramesWithoutDecals = 0;
+		const nvrhi::ITexture* m_BoundDecalAlbedo = nullptr;
+		u32 m_BoundDecalGeneration = 0;
+		static constexpr u32 DECAL_TARGET_LINGER_FRAMES = 120;
+		std::chrono::steady_clock::time_point m_LastDecalWarning{};
 		nvrhi::BindingLayoutHandle m_AoLayout{};
 		nvrhi::BindingSetHandle m_AoBindings{};
 		EnvironmentCache* m_Environments = nullptr;

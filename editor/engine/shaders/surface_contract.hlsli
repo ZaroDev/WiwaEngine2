@@ -128,11 +128,21 @@ VertexInput MakeVertexInput(MeshVertexInput input, uint instanceIndex)
 	return vertex;
 }
 
-// What the lighting takes from the shader's output: the tangent-space normal brought into world space.
-SurfaceData SurfaceShadingData(SurfaceInput input, SurfaceOutput output)
+// What the lighting takes from the shader's output: the tangent-space normal brought into world space, and the decals of the pixel
+// (pixel = SV_Position.xy) laid over it unless the material is blended.
+SurfaceData SurfaceShadingData(SurfaceInput input, SurfaceOutput output, float2 pixel, bool receivesDecals)
 {
 	float3 normal = normalize(mul(output.NormalTS, float3x3(input.WorldTangent, input.WorldBitangent, input.WorldNormal)));
-	return MakeSurfaceData(input.WorldPosition, normal, output.Albedo, output.Metallic, output.Roughness, output.Occlusion, output.Emissive, output.Alpha);
+	float3 albedo = output.Albedo;
+	float metallic = output.Metallic;
+	float roughness = output.Roughness;
+	float occlusion = output.Occlusion;
+	float3 emissive = output.Emissive;
+	if (receivesDecals)
+	{
+		ApplyDecals(pixel, albedo, normal, metallic, roughness, occlusion, emissive);
+	}
+	return MakeSurfaceData(input.WorldPosition, normal, albedo, metallic, roughness, occlusion, emissive, output.Alpha);
 }
 
 #ifndef SURFACE_COMPOSED

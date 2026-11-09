@@ -224,8 +224,75 @@ namespace wiwa
 		return true;
 	}
 
+	bool ViewportTarget::ensure_decal_targets(nvrhi::IDevice* device)
+	{
+		if (has_decal_targets())
+		{
+			return true;
+		}
+		if (!valid())
+		{
+			return false;
+		}
+
+		nvrhi::TextureDesc description;
+		description.width = m_Width;
+		description.height = m_Height;
+		description.isRenderTarget = true;
+		description.isShaderResource = true;
+		description.initialState = nvrhi::ResourceStates::ShaderResource;
+		description.keepInitialState = true;
+		description.useClearValue = true;
+		description.clearValue = nvrhi::Color(0.0f, 0.0f, 0.0f, 0.0f);
+
+		description.format = nvrhi::Format::SRGBA8_UNORM;
+		description.debugName = "Decal albedo";
+		m_DecalAlbedo = device->createTexture(description);
+		description.format = nvrhi::Format::RGBA8_UNORM;
+		description.debugName = "Decal normal";
+		m_DecalNormal = device->createTexture(description);
+		description.debugName = "Decal ORM";
+		m_DecalOrm = device->createTexture(description);
+		description.format = nvrhi::Format::R11G11B10_FLOAT;
+		description.debugName = "Decal emissive";
+		m_DecalEmissive = device->createTexture(description);
+
+		nvrhi::FramebufferDesc framebuffer;
+		if (m_DecalAlbedo && m_DecalNormal && m_DecalOrm && m_DecalEmissive)
+		{
+			framebuffer.addColorAttachment(m_DecalAlbedo);
+			framebuffer.addColorAttachment(m_DecalNormal);
+			framebuffer.addColorAttachment(m_DecalOrm);
+			framebuffer.addColorAttachment(m_DecalEmissive);
+			m_DecalFramebuffer = device->createFramebuffer(framebuffer);
+		}
+		if (!m_DecalFramebuffer)
+		{
+			WI_LOG(Error, "Renderer", "could not create the {0}x{1} decal targets", m_Width, m_Height);
+			release_decal_targets();
+			return false;
+		}
+		m_DecalGeneration++;
+		return true;
+	}
+
+	void ViewportTarget::release_decal_targets()
+	{
+		const bool had = m_DecalAlbedo != nullptr || m_DecalFramebuffer != nullptr;
+		m_DecalFramebuffer = nullptr;
+		m_DecalAlbedo = nullptr;
+		m_DecalNormal = nullptr;
+		m_DecalOrm = nullptr;
+		m_DecalEmissive = nullptr;
+		if (had)
+		{
+			m_DecalGeneration++;
+		}
+	}
+
 	void ViewportTarget::destroy()
 	{
+		release_decal_targets();
 		m_HdrFramebuffer = nullptr;
 		m_DepthFramebuffer = nullptr;
 		m_LdrFramebuffer = nullptr;

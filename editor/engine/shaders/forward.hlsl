@@ -27,7 +27,7 @@ ForwardVertexOutput VSMain(MeshVertexInput input)
 
 float4 PSMain(ForwardVertexOutput input, bool frontFace : SV_IsFrontFace) : SV_Target0
 {
-	SurfaceData surface = LoadSurface(input.WorldPosition, input.WorldNormal, input.Uv, frontFace);
+	SurfaceData surface = LoadSurface(input.WorldPosition, input.WorldNormal, input.Uv, frontFace, input.Position.xy);
 
 	// The depth prepass left no depth where a masked material is cut out, so these pixels must not be shaded here either.
 	MaterialRecord material = uMaterials[DrawConstants.MaterialSlot];

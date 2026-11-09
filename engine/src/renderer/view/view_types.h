@@ -30,6 +30,7 @@ namespace wiwa
 		bool VelocityPrepass = true;  // false: the prepass writes depth only
 		bool LightCulling = true;     // false: the forward shader tests every light
 		bool Ao = true;
+		bool Decals = true;           // false: the view draws no decals
 		bool Taa = true;
 		bool MotionBlur = true;
 		bool Bloom = true;
@@ -49,6 +50,7 @@ namespace wiwa
 			flags.ShadowCascades = 2;
 			flags.SpotShadows = false;
 			flags.Ao = false;
+			flags.Decals = false;
 			flags.Taa = false;
 			flags.MotionBlur = false;
 			flags.AutoExposure = false;
@@ -59,6 +61,7 @@ namespace wiwa
 			flags.VelocityPrepass = false;
 			flags.LightCulling = false;
 			flags.Ao = false;
+			flags.Decals = false;
 			flags.Taa = false;
 			flags.MotionBlur = false;
 			flags.Bloom = false;
