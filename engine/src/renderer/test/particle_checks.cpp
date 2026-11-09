@@ -1,6 +1,9 @@
 #include <pch.h>
 #include "scene_tester.h"
 
+#include <limits>
+
+#include <renderer/render_quality.h>
 #include <renderer/view/view_state.h>
 
 #include "cross_backend.h"
@@ -408,6 +411,79 @@ namespace wiwa
 				context.check(offscreen, "a particle off the screen passes through (there is nothing to collide with)");
 			});
 
+		register_render_check("particle_quality_settings", [](RenderCheckContext& context)
+			{
+				SceneTester test(context, 64);
+				ParticlePool& pool = test.renderer().get_particle_pool();
+				pool.set_capacity(4096);
+				const auto reset_scene = [&]()
+				{
+					SceneDelta reset;
+					reset.Reset = true;
+					test.scene().apply(std::move(reset));
+					test.render(2);
+				};
+
+				// the project turns collision off: particles that ask for it pass through the floor (the control: with it on they stay on it)
+				floor_scene(test);
+				const glm::mat4 above = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
+				add_system(test, falling_effect(test, ParticleCollision::Depth, ParticleCollisionResponse::Bounce, 0.0f), above, 20);
+				std::vector<ParticleGpu> particles = age_until(context, test, 0.3f);
+				bool onFloor = !particles.empty();
+				for (const ParticleGpu& p : particles)
+				{
+					onFloor = onFloor && p.Position.y > -0.2f;
+				}
+				context.check(onFloor, "the control: with the quality's collision on, the particles stay on the floor");
+
+				reset_scene();
+				RenderQuality quality = test.renderer().get_quality();
+				quality.ParticleCollision = false;
+				test.renderer().set_quality(quality);
+				floor_scene(test);
+				add_system(test, falling_effect(test, ParticleCollision::Depth, ParticleCollisionResponse::Bounce, 0.0f), above, 20);
+				particles = age_until(context, test, 0.3f);
+				bool through = !particles.empty();
+				for (const ParticleGpu& p : particles)
+				{
+					through = through && p.Position.y < -1.0f;
+				}
+				context.check(through, "with the quality's collision off they fall through (" + std::to_string(particles.size()) + " alive)");
+
+				// the most a ring holds: an effect that asks for 500 gets the cap (the control: without a cap it gets its 500)
+				reset_scene();
+				quality.ParticleCollision = true;
+				test.renderer().set_quality(quality);
+				ParticleEffectData big;
+				big.Emitters = { still_emitter(500) };
+				const AssetRef bigRef = test.cache().add_inline_particle_effect(big);
+				add_system(test, bigRef, glm::mat4(1.0f), 10);
+				test.render(3);
+				context.check(pool.used() == 500, "the control: an emitter without a cap gets its 500 slots (" + std::to_string(pool.used()) + ")");
+
+				reset_scene();
+				quality.ParticleMaxPerEmitter = 100;
+				test.renderer().set_quality(quality);
+				add_system(test, bigRef, glm::mat4(1.0f), 10);
+				test.render(3);
+				context.check(pool.used() == 100, "with a cap of 100 the ring has 100 slots (" + std::to_string(pool.used()) + ")");
+
+				// the pool size is taken from the quality when the project changes it, and left alone when it does not
+				reset_scene();
+				quality.ParticleMaxPerEmitter = 65536;
+				test.renderer().set_quality(quality);
+				context.check(pool.capacity() == 4096, "a quality change that leaves the pool size alone keeps a pool made by hand");
+				quality.ParticlePoolSize = 8192;
+				test.renderer().set_quality(quality);
+				context.check(pool.capacity() == 8192, "a new pool size is applied");
+				RenderQuality absurd = quality;
+				absurd.ParticlePoolSize = 5;
+				absurd.ParticleMaxPerEmitter = 1;
+				absurd.ParticleRateScale = std::numeric_limits<float>::quiet_NaN();
+				const RenderQuality fixed = sanitized(absurd);
+				context.check(fixed.ParticlePoolSize == 4096 && fixed.ParticleMaxPerEmitter == 64 && fixed.ParticleRateScale == 1.0f, "the particle settings are sanitized");
+			});
+
 		register_render_check("particle_sorting", [](RenderCheckContext& context)
 			{
 				SceneTester test(context, 64);
@@ -566,6 +642,76 @@ namespace wiwa
 				context.check(test.render(2), "render after the view is removed");
 				context.check(alive(read_pool(context, main)).size() == 10, "the main view is unaffected");
 			});
+		// the profile of the Asset Browser's thumbnails (no shadows, no bloom, no prepass velocity) on a transparent background: an additive glow shows, with coverage
+		register_render_check("particle_thumbnail_view", [](RenderCheckContext& context)
+			{
+				SceneTester test(context, 64);
+				test.renderer().get_particle_pool().set_capacity(4096);
+				SpriteScene scene(test);
+
+				for (const bool transparent : { false, true })
+				{
+					ViewDesc description;
+					description.Width = 64;
+					description.Height = 64;
+					description.Profile = ViewProfile::Thumbnail;
+					description.TransparentBackground = transparent;
+					description.Mode = ViewMode::Continuous;
+					const ViewId id = test.renderer().add_view(transparent ? 102 : 101, description);
+					ViewState* view = id != INVALID_VIEW ? test.renderer().find_view(id) : nullptr;
+					context.check(view != nullptr, "a thumbnail view is made");
+					if (view == nullptr)
+					{
+						return;
+					}
+					RenderCamera camera;
+					camera.Position = glm::vec3(0.0f, 0.0f, 5.0f);
+					camera.View = glm::lookAt(camera.Position, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+					camera.Projection = glm::perspectiveRH_ZO(glm::radians(60.0f), 1.0f, 0.1f, 100.0f);
+					view->Scene.set_camera_override(camera);
+
+					ParticleEffectData effect;
+					ParticleEmitterData emitter = still_emitter(64);
+					emitter.Material = scene.Material;
+					emitter.Blend = ParticleBlend::Additive;
+					emitter.StartSize = ParticleValue::constant(1.5f);
+					emitter.StartColor = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+					emitter.Intensity = 2.0f;
+					emitter.SoftDistance = 0.0f;
+					emitter.bake();
+					effect.Emitters = { emitter };
+					RenderParticleSystem system;
+					system.Effect = test.cache().add_inline_particle_effect(effect);
+					system.Seed = 7;
+					SceneDelta delta;
+					const EntityGuid guid{ 0x7100 + static_cast<u64>(transparent), 0x7200 };
+					delta.ParticleUpserts.emplace_back(guid, std::move(system));
+					std::array<u32, PARTICLE_MAX_EMITTERS> spawns{};
+					spawns[0] = 40;
+					delta.ParticleSpawns.emplace_back(guid, spawns);
+					view->Scene.apply(std::move(delta));
+					context.check(test.render(6), "render a thumbnail view with a system");
+
+					std::vector<u8> pixels;
+					u32 width = 0;
+					u32 height = 0;
+					const std::string name = transparent ? " (transparent background)" : " (opaque background)";
+					const bool read = read_texture_rgba8(context.Device, view->Target.ldr(), pixels, width, height) && pixels.size() == static_cast<size_t>(64) * 64 * 4;
+					context.check(read, "read the thumbnail view" + name);
+					if (read)
+					{
+						const size_t center = (32 * 64 + 32) * 4;
+						context.check(pixels[center + 1] > 100 && pixels[center + 1] > pixels[center] + 40, "the glow is drawn in the thumbnail view" + name + " (green " + std::to_string(pixels[center + 1]) + ", red " + std::to_string(pixels[center]) + ")");
+						if (transparent)
+						{
+							context.check(pixels[center + 3] > 8, "and it has coverage (alpha " + std::to_string(pixels[center + 3]) + ")");
+							context.check(pixels[3] == 0, "where nothing is drawn the alpha is 0");
+						}
+					}
+					test.renderer().remove_view(id);
+				}
+			});
+
 		register_render_check("particle_sprites_draw", [](RenderCheckContext& context)
 			{
 				SceneTester test(context, 64);

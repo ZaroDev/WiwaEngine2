@@ -62,7 +62,6 @@ namespace wiwa
 			flags.VelocityPrepass = false;
 			flags.LightCulling = false;
 			flags.Ao = false;
-			flags.Particles = false;
 			flags.Decals = false;
 			flags.Taa = false;
 			flags.MotionBlur = false;

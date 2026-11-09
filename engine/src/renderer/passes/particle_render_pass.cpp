@@ -32,7 +32,7 @@ namespace wiwa
 			case ParticleBlend::Additive:
 				target.srcBlend = nvrhi::BlendFactor::One;
 				target.destBlend = nvrhi::BlendFactor::One;
-				target.srcBlendAlpha = nvrhi::BlendFactor::Zero; // the coverage of the image is left alone
+				target.srcBlendAlpha = nvrhi::BlendFactor::One; // a glow adds to the coverage too: on a transparent background (a thumbnail) it is seen
 				target.destBlendAlpha = nvrhi::BlendFactor::One;
 				break;
 			case ParticleBlend::Multiply:

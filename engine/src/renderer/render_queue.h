@@ -28,6 +28,7 @@ namespace wiwa
 	{
 		u64 FrameIndex = 0;
 		float DeltaTime = 0.0f;
+		float DeltaSeconds = 0.0f; // the same time in seconds (the engine loop gives DeltaTime in milliseconds): what the simulation of the particles steps by
 		u32 Width = 0;
 		u32 Height = 0;
 		bool Minimized = false; // nothing to show: the render thread does not draw this frame

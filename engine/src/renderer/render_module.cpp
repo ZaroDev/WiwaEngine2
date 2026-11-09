@@ -789,6 +789,7 @@ namespace wiwa
 		RenderBatch batch;
 		batch.FrameIndex = m_FrameIndex++;
 		batch.DeltaTime = deltaTime;
+		batch.DeltaSeconds = deltaTime * 0.001f; // update() gets milliseconds (Time::get_engine_delta_time)
 		batch.Width = static_cast<u32>(std::max(width, 0));
 		batch.Height = static_cast<u32>(std::max(height, 0));
 		batch.Minimized = width == 0 || height == 0 || glfwGetWindowAttrib(window->get_window(), GLFW_ICONIFIED) != 0;

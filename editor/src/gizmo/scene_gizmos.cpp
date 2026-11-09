@@ -5,7 +5,10 @@
 
 #include <math/gizmo_math.h>
 #include <renderer/scene/scene_extractor.h>
+#include <core/engine.h>
 #include <scene/components.h>
+#include <scene/particle_module.h>
+#include <scene/particle_runtime.h>
 
 namespace wiwa
 {
@@ -21,6 +24,7 @@ namespace wiwa
 		const glm::vec4 LIGHT_COLOR(1.0f, 0.85f, 0.3f, 1.0f);
 		const glm::vec4 CAMERA_COLOR(0.6f, 0.85f, 1.0f, 1.0f);
 		const glm::vec4 DECAL_COLOR(1.0f, 0.5f, 0.45f, 1.0f);
+		const glm::vec4 PARTICLE_COLOR(1.0f, 0.75f, 0.3f, 1.0f);
 		const glm::vec4 BOUNDS_COLOR(0.5f, 1.0f, 0.5f, 1.0f);
 		const glm::vec4 GRID_COLOR(0.6f, 0.6f, 0.6f, 0.6f);
 		constexpr i32 GRID_HALF_COUNT = 50;     // lines on each side of the camera, per level
@@ -166,6 +170,61 @@ namespace wiwa
 					const glm::vec3 projection = forward_of(world.Matrix);
 					const float depth = decal.Size.z * glm::length(glm::vec3(world.Matrix[2]));
 					draw.arrow(position - projection * depth * 0.5f, position + projection * depth * 0.5f, DECAL_COLOR, DebugDepth::AlwaysOnTop, 2.0f);
+				}
+			}
+		}
+
+		if (settings.Particles)
+		{
+			ParticleModule* particles = Engine::get().get_module<ParticleModule>();
+			for (auto [entity, system, world, id] : registry.view<ParticleSystem, WorldTransform, Id>().each())
+			{
+				const glm::vec3 position(world.Matrix[3]);
+				if (!finite(position))
+				{
+					continue;
+				}
+
+				marker(position, PARTICLE_COLOR);
+				draw.pick_icon(id.Guid, position, ICON_PIXELS);
+				const ParticleEffectData* effect = entity == selected && particles != nullptr ? particles->effect(system.Effect) : nullptr;
+				if (effect == nullptr)
+				{
+					continue;
+				}
+
+				// the shape every emitter spawns from (in the system's space), and a faint sphere for how far the fastest particles get in their longest life
+				const glm::vec3 axisY(world.Matrix[1]);
+				const float scaleY = glm::length(axisY);
+				const float scale = std::max({ glm::length(glm::vec3(world.Matrix[0])), scaleY, glm::length(glm::vec3(world.Matrix[2])) });
+				float reach = 0.0f;
+				for (const ParticleEmitterData& emitter : effect->Emitters)
+				{
+					switch (emitter.Shape)
+					{
+					case ParticleShape::Point:
+						break;
+					case ParticleShape::Sphere:
+						draw.sphere(position, std::max(emitter.ShapeSize.x, 0.0f) * scale, PARTICLE_COLOR, DebugDepth::Tested, 1.0f);
+						break;
+					case ParticleShape::Cone:
+					{
+						const glm::vec3 up = scaleY > 1e-6f ? axisY / scaleY : glm::vec3(0.0f, 1.0f, 0.0f);
+						draw.circle(position, up, std::max(emitter.ShapeSize.x, 0.0f) * scale, PARTICLE_COLOR, DebugDepth::Tested, 1.0f);
+						draw.cone(position, up, std::max(scaleY, 0.1f), glm::radians(std::clamp(emitter.ConeAngle, 0.0f, MAX_CONE_DEGREES)), PARTICLE_COLOR, DebugDepth::Tested, 1.0f);
+						break;
+					}
+					case ParticleShape::Box:
+						draw.box(world.Matrix, glm::max(emitter.ShapeSize, glm::vec3(0.0f)) * 0.5f, PARTICLE_COLOR, DebugDepth::Tested, 1.0f);
+						break;
+					}
+					const float life = particle_value_max(emitter.Lifetime);
+					const float travel = std::max(particle_value_max(emitter.StartSpeed), 0.0f) * life + 0.5f * glm::length(emitter.Gravity) * life * life;
+					reach = std::max(reach, (travel + std::max(emitter.ShapeSize.x, 0.0f)) * scale);
+				}
+				if (reach > 0.0f && std::isfinite(reach))
+				{
+					draw.sphere(position, reach, glm::vec4(PARTICLE_COLOR.x, PARTICLE_COLOR.y, PARTICLE_COLOR.z, 0.25f), DebugDepth::Faded, 1.0f);
 				}
 			}
 		}

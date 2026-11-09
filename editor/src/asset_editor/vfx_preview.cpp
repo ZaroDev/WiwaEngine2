@@ -27,15 +27,16 @@ namespace wiwa
 		close();
 	}
 
-	bool VfxPreview::open(const AssetRef& effect)
+	bool VfxPreview::open()
 	{
 		close();
 		ParticleModule* module = particle_module();
-		if (module == nullptr || !effect.valid())
+		if (module == nullptr)
 		{
 			return false;
 		}
-		m_Effect = effect;
+		m_Effect = AssetRef{ AssetGuid::generate(), 0 };
+		const AssetRef effect = m_Effect;
 		m_Scene = make_preview_scene();
 		module->register_preview_scene(m_Scene);
 

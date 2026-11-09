@@ -30,6 +30,9 @@ namespace wiwa
 		quality.AoSlices = std::clamp(quality.AoSlices, 1u, 4u);
 		quality.AoSteps = std::clamp(quality.AoSteps, 4u, 16u);
 		quality.Fxaa = quality.Fxaa && !quality.Taa; // FXAA after a TAA resolve only blurs it
+		quality.ParticlePoolSize = std::clamp(quality.ParticlePoolSize, 4096u, 4194304u);
+		quality.ParticleMaxPerEmitter = std::clamp(quality.ParticleMaxPerEmitter, 64u, 65536u);
+		quality.ParticleRateScale = clamp_finite(quality.ParticleRateScale, defaults.ParticleRateScale, 0.0f, 4.0f);
 		return quality;
 	}
 
@@ -84,6 +87,19 @@ namespace wiwa
 		count("bloomMips", quality.BloomMips);
 		count("aoSlices", quality.AoSlices);
 		count("aoSteps", quality.AoSteps);
+		number("particleRateScale", quality.ParticleRateScale);
+		if (json.contains("particlePoolSize") && json["particlePoolSize"].is_number_integer())
+		{
+			quality.ParticlePoolSize = static_cast<u32>(std::clamp<i64>(json["particlePoolSize"].get<i64>(), 0, 100000000));
+		}
+		if (json.contains("particleMaxPerEmitter") && json["particleMaxPerEmitter"].is_number_integer())
+		{
+			quality.ParticleMaxPerEmitter = static_cast<u32>(std::clamp<i64>(json["particleMaxPerEmitter"].get<i64>(), 0, 100000000));
+		}
+		if (json.contains("particleCollision") && json["particleCollision"].is_boolean())
+		{
+			quality.ParticleCollision = json["particleCollision"].get<bool>();
+		}
 		if (json.contains("fxaa") && json["fxaa"].is_boolean())
 		{
 			quality.Fxaa = json["fxaa"].get<bool>();
@@ -111,6 +127,10 @@ namespace wiwa
 		json["aoSteps"] = quality.AoSteps;
 		json["fxaa"] = quality.Fxaa;
 		json["taa"] = quality.Taa;
+		json["particlePoolSize"] = quality.ParticlePoolSize;
+		json["particleMaxPerEmitter"] = quality.ParticleMaxPerEmitter;
+		json["particleRateScale"] = quality.ParticleRateScale;
+		json["particleCollision"] = quality.ParticleCollision;
 
 		std::ofstream file(path, std::ios::binary | std::ios::trunc);
 		if (!file)

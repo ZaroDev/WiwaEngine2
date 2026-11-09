@@ -71,7 +71,7 @@ namespace wiwa
 		return runtime;
 	}
 
-	void tick_particle_systems(Scene& scene, float deltaTime, const ParticleEffectLookup& effects, bool previewOnly)
+	void tick_particle_systems(Scene& scene, float deltaTime, const ParticleEffectLookup& effects, bool previewOnly, float qualityRateScale)
 	{
 		entt::registry& registry = scene.registry();
 		const float step = deltaTime > 0.0f ? std::min(deltaTime, MAX_STEP) : 0.0f; // NaN is not above 0
@@ -131,7 +131,7 @@ namespace wiwa
 				{
 					const float cycle = loop ? std::fmod(std::max(local, 0.0f), emitter.Duration) : std::min(local, emitter.Duration);
 					const float rate = std::max(emitter.Rate.evaluate(emitter.Rate.Kind == ParticleValue::Mode::Curve ? cycle / emitter.Duration : 0.5f), 0.0f);
-					runtime.Remainder[i] += rate * std::max(system.RateScale, 0.0f) * emitting;
+					runtime.Remainder[i] += rate * std::max(system.RateScale, 0.0f) * std::max(qualityRateScale, 0.0f) * emitting;
 					const float whole = std::floor(runtime.Remainder[i]);
 					runtime.Remainder[i] -= whole;
 					spawn = static_cast<u32>(std::min(whole, static_cast<float>(emitter.MaxParticles)));

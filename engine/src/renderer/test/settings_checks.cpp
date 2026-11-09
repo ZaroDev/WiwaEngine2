@@ -159,6 +159,36 @@ namespace wiwa
 				std::filesystem::remove(path);
 			});
 
+		register_render_check("quality_particles", [](RenderCheckContext& context)
+			{
+				RenderQuality quality;
+				quality.ParticlePoolSize = 65536;
+				quality.ParticleMaxPerEmitter = 2048;
+				quality.ParticleRateScale = 0.5f;
+				quality.ParticleCollision = false;
+				const std::filesystem::path path = "Library/quality_particles.json";
+				std::filesystem::create_directories("Library");
+				context.check(save_render_quality(path, quality), "save");
+				std::string error;
+				const std::optional<RenderQuality> back = load_render_quality(path, error);
+				context.check(back && *back == quality, "the particle settings survive the file");
+				{
+					std::ofstream file(path, std::ios::trunc);
+					file << "{\"vsync\": false}";
+				}
+				const std::optional<RenderQuality> legacy = load_render_quality(path, error);
+				const RenderQuality defaults;
+				context.check(legacy && legacy->ParticlePoolSize == defaults.ParticlePoolSize && legacy->ParticleMaxPerEmitter == defaults.ParticleMaxPerEmitter &&
+					legacy->ParticleRateScale == 1.0f && legacy->ParticleCollision, "an old file keeps the particle defaults");
+				{
+					std::ofstream file(path, std::ios::trunc);
+					file << "{\"particlePoolSize\": 3, \"particleMaxPerEmitter\": 999999999, \"particleRateScale\": 99}";
+				}
+				const std::optional<RenderQuality> wild = load_render_quality(path, error);
+				context.check(wild && wild->ParticlePoolSize == 4096 && wild->ParticleMaxPerEmitter == 65536 && wild->ParticleRateScale == 4.0f, "wild values are clamped");
+				std::filesystem::remove(path);
+			});
+
 		register_render_check("quality_missing_file", [](RenderCheckContext& context)
 			{
 				std::string error = "stale";

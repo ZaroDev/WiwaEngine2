@@ -28,8 +28,9 @@ namespace wiwa
 		VfxPreview(const VfxPreview&) = delete;
 		VfxPreview& operator=(const VfxPreview&) = delete;
 
-		// Starts previewing the effect `effect` names. False when the engine cannot (no particle module).
-		bool open(const AssetRef& effect);
+		// Starts the preview. The effect plays under a guid of its own (push_effect gives it the data), so the asset on disk, the Scene view and the thumbnails
+		// keep showing what is saved. False when the engine cannot (no particle module).
+		bool open();
 		void close();
 		bool is_open() const { return m_Scene != nullptr; }
 

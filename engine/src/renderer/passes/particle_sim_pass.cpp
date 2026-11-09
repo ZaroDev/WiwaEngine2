@@ -75,14 +75,14 @@ namespace wiwa
 			return result;
 		}
 
-		EmitterGpu make_record(const ParticleEmitterData& e, const RenderParticleSystem& system, const ParticleAllocation& ring, u32 head, u32 spawn, u32 spawnStart, u32 emitterIndex, u32 sortStart)
+		EmitterGpu make_record(const ParticleEmitterData& e, const RenderParticleSystem& system, const ParticleAllocation& ring, u32 head, u32 spawn, u32 spawnStart, u32 emitterIndex, u32 sortStart, bool collisions)
 		{
 			EmitterGpu record;
 			for (int column = 0; column < 4; column++)
 			{
 				record.World[column] = system.World[column];
 			}
-			const u32 flags = (e.WorldSpace ? 1u : 0u) | (e.Collision == ParticleCollision::Depth ? 2u : 0u) | (static_cast<u32>(e.Response) << 2);
+			const u32 flags = (e.WorldSpace ? 1u : 0u) | (collisions && e.Collision == ParticleCollision::Depth ? 2u : 0u) | (static_cast<u32>(e.Response) << 2);
 			record.Ring = glm::uvec4(ring.Base, ring.Capacity, head, spawn);
 			record.Spawn = glm::uvec4(spawnStart, (system.Seed ^ (emitterIndex * 2654435761u)) | 1u, flags, static_cast<u32>(e.Shape));
 			record.Shape = glm::vec4(e.ShapeSize, glm::radians(e.ConeAngle));
@@ -120,7 +120,7 @@ namespace wiwa
 		constants.byteSize = sizeof(SimConstants);
 		constants.isConstantBuffer = true;
 		constants.isVolatile = true;
-		constants.maxVersions = 4;
+		constants.maxVersions = 64; // one write per view per frame (up to MAX_VIEWS), for the frames the render thread is behind
 		constants.debugName = "Particle constants";
 		m_Constants = m_Device->createBuffer(constants);
 
@@ -240,6 +240,7 @@ namespace wiwa
 		}
 
 		RenderScene& scene = *frame.Scene->scene_mutable();
+		const RenderQuality& quality = frame.Scene->quality();
 		GpuResourceCache& cache = *frame.Scene->cache();
 		ViewSim& sim = m_Views[viewUid];
 		// a pool that is another object or was dropped: the systems of this view start over (their rings are gone with it)
@@ -311,7 +312,7 @@ namespace wiwa
 			}
 		}
 
-		const float step = std::clamp(frame.DeltaTime, 0.0f, MAX_STEP);
+		const float step = std::clamp(frame.DeltaSeconds, 0.0f, MAX_STEP);
 		m_Pass++;
 
 		struct Work
@@ -369,7 +370,7 @@ namespace wiwa
 
 				if (state.Rings[i].Capacity == 0 && !state.Failed[i])
 				{
-					if (const std::optional<ParticleAllocation> ring = pool.allocate(emitter.MaxParticles))
+					if (const std::optional<ParticleAllocation> ring = pool.allocate(std::min(emitter.MaxParticles, quality.ParticleMaxPerEmitter)))
 					{
 						state.Rings[i] = *ring;
 						state.Heads[i] = 0;
@@ -485,7 +486,7 @@ namespace wiwa
 				sortStart = sortNext + 1;
 				sortNext += sortCount;
 			}
-			records[item.Ring.Id] = make_record(*item.Emitter, *item.System, item.Ring, item.Head, item.Spawn, totalSpawn, item.Index, sortStart);
+			records[item.Ring.Id] = make_record(*item.Emitter, *item.System, item.Ring, item.Head, item.Spawn, totalSpawn, item.Index, sortStart, quality.ParticleCollision);
 			totalSpawn += item.Spawn;
 			if (item.Draw)
 			{

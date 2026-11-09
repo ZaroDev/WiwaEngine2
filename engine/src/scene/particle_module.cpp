@@ -71,13 +71,15 @@ namespace wiwa
 
 		const Time& time = Engine::get().get_time();
 		const ParticleEffectLookup lookup = [this](const AssetRef& ref) { return effect(ref); };
+		const RenderModule* render = Engine::get().get_module<RenderModule>();
+		const float rate_scale = render != nullptr ? render->get_quality().ParticleRateScale : 1.0f;
 
 		// scenes that are only looked at play with real time
 		for (auto it = m_PreviewScenes.begin(); it != m_PreviewScenes.end();)
 		{
 			if (const Ref<Scene> preview = it->lock())
 			{
-				tick_particle_systems(*preview, time.get_real_delta_time_seconds(), lookup);
+				tick_particle_systems(*preview, time.get_real_delta_time_seconds(), lookup, false, rate_scale);
 				++it;
 			}
 			else
@@ -98,12 +100,12 @@ namespace wiwa
 		}
 		if (time.get_game_clock().IsPlaying)
 		{
-			tick_particle_systems(*scene, time.get_delta_time_seconds(), lookup);
+			tick_particle_systems(*scene, time.get_delta_time_seconds(), lookup, false, rate_scale);
 		}
 		else
 		{
 			// edit mode: only what the user asked to preview (the inspector's Play, the VFX editor)
-			tick_particle_systems(*scene, time.get_real_delta_time_seconds(), lookup, true);
+			tick_particle_systems(*scene, time.get_real_delta_time_seconds(), lookup, true, rate_scale);
 		}
 	}
 

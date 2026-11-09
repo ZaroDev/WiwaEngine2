@@ -2085,6 +2085,46 @@ namespace wiwa
 			ParticleSystem fast;
 			fast.TimeScale = 2.0f;
 			check(within(spawned(fast, 7.0f, 60.0f, lookup), 50, 1), "particle_ticks: TimeScale 2 plays the same emission in half the time");
+
+			// the project's spawn rate scale (quality), on top of the system's own
+			const auto spawned_with_quality = [&](float qualityScale) -> u32
+			{
+				Scene scene;
+				const entt::entity entity = scene.create("fx");
+				ParticleSystem system;
+				system.Effect = reference;
+				scene.registry().emplace<ParticleSystem>(entity, system);
+				u32 total = 0;
+				for (int frame = 0; frame < 7 * 60; frame++)
+				{
+					tick_particle_systems(scene, 1.0f / 60.0f, lookup, false, qualityScale);
+					total += scene.registry().get<ParticleRuntime>(entity).SpawnCount[0];
+				}
+				return total;
+			};
+			check(within(spawned_with_quality(0.5f), 25, 1), "particle_ticks: the project's spawn rate scale multiplies the rate");
+			check(spawned_with_quality(0.0f) == 0, "particle_ticks: a spawn rate scale of 0 spawns nothing");
+			check(within(spawned_with_quality(2.0f), 100, 2), "particle_ticks: a spawn rate scale of 2 doubles it");
+
+			// edit mode: only the systems that are being previewed advance
+			{
+				Scene scene;
+				const entt::entity idle = scene.create("idle");
+				const entt::entity previewed = scene.create("previewed");
+				ParticleSystem system;
+				system.Effect = reference;
+				scene.registry().emplace<ParticleSystem>(idle, system);
+				scene.registry().emplace<ParticleSystem>(previewed, system);
+				particle_runtime_of(scene.registry(), previewed).Preview = true;
+				for (int frame = 0; frame < 30; frame++)
+				{
+					tick_particle_systems(scene, 1.0f / 60.0f, lookup, true);
+				}
+				check(scene.registry().get<ParticleRuntime>(previewed).Time > 0.45f, "particle_ticks: a previewed system advances in edit mode");
+				const ParticleRuntime* untouched = scene.registry().try_get<ParticleRuntime>(idle);
+				check(untouched == nullptr || untouched->Time == 0.0f, "particle_ticks: a system that is not previewed does not (the control)");
+			}
+
 			ParticleSystem paused;
 			paused.TimeScale = 0.0f;
 			check(spawned(paused, 3.0f, 60.0f, lookup) == 0, "particle_ticks: TimeScale 0 pauses");

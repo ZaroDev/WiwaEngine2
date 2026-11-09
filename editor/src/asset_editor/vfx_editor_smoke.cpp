@@ -8,6 +8,7 @@
 #include <renderer/view/view_types.h>
 
 #include "asset_editor_panel.h"
+#include "thumbnail_cache.h"
 #include "vfx_editor.h"
 
 namespace wiwa
@@ -19,9 +20,11 @@ namespace wiwa
 		constexpr u32 FRAME_EDIT = 70;
 		constexpr u32 FRAME_RESTART = 80; // after the silenced effect reached the render thread: a particle born before it would light thousands of pixels
 		constexpr u32 FRAME_SILENT = 105;
+		constexpr u32 FRAME_THUMBNAILS = 90;   // from here the Asset Browser's thumbnail cache is asked for the two effects
 		constexpr u32 FRAME_END = 125;
+		constexpr u32 THUMBNAIL_PATIENCE = 2500; // frames to wait for them: a thumbnail plays the effect in real time
 
-		ParticleEffectData smoke_effect()
+		ParticleEffectData smoke_effect(bool quiet = false)
 		{
 			ParticleEffectData effect;
 			effect.Name = "VfxEditorSmoke";
@@ -37,6 +40,11 @@ namespace wiwa
 			glow.StartColor = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
 			glow.Intensity = 4.0f;
 			glow.SoftDistance = 0.0f;
+			if (quiet)
+			{
+				glow.Name = "Quiet";
+				glow.Rate = ParticleValue::constant(0.0f);
+			}
 			glow.bake();
 			effect.Emitters.push_back(std::move(glow));
 			return effect;
@@ -264,9 +272,14 @@ namespace wiwa
 				std::ofstream out(m_File, std::ios::binary | std::ios::trunc);
 				out << write_particle_file(smoke_effect());
 			}
-			if (!m_Database.ensure_imported(m_File).has_value())
+			m_Quiet = m_Dir / "quiet.wfx";
 			{
-				failure = "the effect did not import";
+				std::ofstream out(m_Quiet, std::ios::binary | std::ios::trunc);
+				out << write_particle_file(smoke_effect(true));
+			}
+			if (!m_Database.ensure_imported(m_File).has_value() || !m_Database.ensure_imported(m_Quiet).has_value())
+			{
+				failure = "the effects did not import";
 				return true;
 			}
 			m_Panel.open_file(m_File);
@@ -288,8 +301,7 @@ namespace wiwa
 			if (editor == nullptr || !editor->preview().is_open())
 			{
 				failure = "the editor or its preview is not open at frame " + std::to_string(frame) + " (editor " + (editor != nullptr ? "open" : "missing") + ", kind '" + m_Panel.open_kind() +
-					"', frames drawn " + std::to_string(m_Panel.frames_with_editor()) + ", error \"" + m_Panel.last_error() + "\", ref " +
-					(editor != nullptr && editor->ref().valid() ? "valid" : "invalid") + ", message \"" + (editor != nullptr ? editor->message() : std::string{}) + "\", file " + m_File.generic_string() + ")";
+					"', frames drawn " + std::to_string(m_Panel.frames_with_editor()) + ", error \"" + m_Panel.last_error() + "\")";
 				return true;
 			}
 			read_back_lit(m_Lit, m_LitDone);
@@ -315,7 +327,19 @@ namespace wiwa
 		{
 			read_back_lit(m_LitSilent, m_LitSilentDone);
 		}
-		if (frame < FRAME_END)
+		// the thumbnails of the Asset Browser: the glow effect gets a picture, the quiet one draws nothing and gets none
+		if (m_Thumbnails != nullptr && frame >= FRAME_THUMBNAILS)
+		{
+			m_GlowTexture = m_Thumbnails->request(m_File);
+			m_QuietTexture = m_Thumbnails->request(m_Quiet);
+			if (m_GlowTexture != 0 && m_ThumbDoneFrame == 0)
+			{
+				m_ThumbDoneFrame = frame;
+			}
+		}
+		const bool thumbsPending = m_Thumbnails != nullptr && m_GlowTexture == 0 && frame < THUMBNAIL_PATIENCE;
+		const bool quietPending = m_Thumbnails != nullptr && m_ThumbDoneFrame != 0 && frame < m_ThumbDoneFrame + 400; // the quiet one is tried after the glow one
+		if (frame < FRAME_END || thumbsPending || quietPending)
 		{
 			return false;
 		}
@@ -342,6 +366,14 @@ namespace wiwa
 		else if (m_LitSilent * 10 > m_Lit)
 		{
 			failure = "the silenced preview still shows green pixels (" + std::to_string(m_LitSilent) + " of " + std::to_string(m_Lit) + ")";
+		}
+		else if (m_Thumbnails != nullptr && m_GlowTexture == 0)
+		{
+			failure = "the effect got no thumbnail";
+		}
+		else if (m_Thumbnails != nullptr && m_QuietTexture != 0)
+		{
+			failure = "an effect that spawns nothing got a thumbnail (the control)";
 		}
 		else if (m_Panel.frames_with_editor() < 100 || !m_Panel.last_error().empty())
 		{

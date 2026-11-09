@@ -823,7 +823,7 @@ void EditorModule::update(float deltaTime)
 	{
 		if (m_VfxEditorSmoke == nullptr)
 		{
-			m_VfxEditorSmoke = CreateScope<wiwa::VfxEditorSmoke>(*m_AssetEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
+			m_VfxEditorSmoke = CreateScope<wiwa::VfxEditorSmoke>(*m_AssetEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database(), m_Thumbnails.get());
 		}
 		std::string failure;
 		if (m_VfxEditorSmoke->update(static_cast<wiwa::u32>(m_Frame), failure))

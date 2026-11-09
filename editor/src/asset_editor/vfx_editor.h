@@ -39,17 +39,14 @@ namespace wiwa
 		// For the smoke test
 		VfxEditModel* model() { return m_Model.get(); }
 		VfxPreview& preview() { return m_Preview; }
-		const AssetRef& ref() const { return m_Ref; }
 		const std::string& message() const { return m_Message; }
 		void select_curve(int slot) { m_CurveSlot = slot; m_CurveView.fit(); }
 
 	private:
 		void sync_preview();
-		AssetRef find_ref(const std::filesystem::path& file);
 
 		AssetEditorHost m_Host;
 		std::filesystem::path m_File{};
-		AssetRef m_Ref{};
 		std::unique_ptr<VfxEditModel> m_Model{};
 		VfxPreview m_Preview{};
 		VfxCurveView m_CurveView{};

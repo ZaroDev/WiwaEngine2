@@ -52,9 +52,9 @@ namespace wiwa
 		void update();
 
 	private:
-		// Skeleton, Clip, Mesh: posed by the animation module. Material (a sphere) and Prefab: drawn by the view. Environment, Lut, Font: made on the
+		// Skeleton, Clip, Mesh: posed by the animation module. Material (a sphere) and Prefab: drawn by the view. Effect (.wfx): played for a moment in the view,
 		// CPU from the cooked data, no view.
-		enum class Kind { Skeleton, Clip, Mesh, Material, Prefab, Environment, Lut, Font };
+		enum class Kind { Skeleton, Clip, Mesh, Material, Prefab, Environment, Lut, Font, Effect };
 		enum class State { New, Queued, Working, Ready, Failed };
 
 		struct Entry
@@ -99,6 +99,9 @@ namespace wiwa
 			int Attempts = 0;
 			bool Posed = false;
 			bool ReadBack = false;
+			float EffectTime = 0.0f;           // Effect: the second of its play the picture shows
+			float EffectRadius = 1.0f;         // and the size the camera frames
+			bool EffectStopped = false;       // emission is over: only what is in the air is drawn
 		};
 
 		Entry& entry_for(const std::filesystem::path& source);
@@ -107,6 +110,7 @@ namespace wiwa
 		void step_job();
 		void step_static_job();   // Material and Prefab
 		void step_cpu_job();      // Environment, Lut, Font
+		void step_effect_job();   // Effect
 		void render_job(const RenderCamera& camera, int settleFrames);
 		void end_job();
 		bool load_from_disk(Entry& entry);
@@ -126,6 +130,7 @@ namespace wiwa
 		std::optional<Job> m_Job{};
 		Ref<Scene> m_Scene{};
 		RenderView m_View{};
+		ViewMode m_ViewMode = ViewMode::OneShot; // an effect is played in a continuous view (its simulation needs every frame), the rest in a one-shot one
 		int m_Frame = 0;
 		int m_KeysThisFrame = 0;
 	};

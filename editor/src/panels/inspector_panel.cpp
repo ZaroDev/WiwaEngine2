@@ -8,6 +8,7 @@
 #include <scene/reflection/component_registry.h>
 #include <core/engine.h>
 #include <assets/asset_manager.h>
+#include <scene/particle_runtime.h>
 
 namespace
 {
@@ -232,9 +233,68 @@ void InspectorPanel::draw_component(entt::entity entity, const wiwa::ComponentIn
 				}
 				ImGui::PopID();
 			}
+			if (info.Name == "ParticleSystem")
+			{
+				draw_particle_controls(entity);
+			}
 		}
 	}
 	ImGui::PopID();
+}
+
+// Play, Stop and Restart of a ParticleSystem in edit mode (the game clock is not running, so nothing else would move it). The state is the system's
+// ParticleRuntime, which is not saved: it only says whether the editor is previewing this system.
+void InspectorPanel::draw_particle_controls(entt::entity entity)
+{
+	entt::registry& registry = m_Editor.scene().registry();
+	if (!registry.all_of<wiwa::ParticleSystem>(entity))
+	{
+		return;
+	}
+	ImGui::BeginDisabled(m_Editor.playing()); // while the game plays, scripts and the game clock run the system
+	wiwa::ParticleRuntime& runtime = wiwa::particle_runtime_of(registry, entity);
+	if (ImGui::Button(runtime.Playing && runtime.Preview ? "Pause" : "Play"))
+	{
+		if (runtime.Playing && runtime.Preview)
+		{
+			runtime.Playing = false;
+		}
+		else
+		{
+			runtime.Preview = true;
+			if (runtime.Finished)
+			{
+				runtime.restart();
+			}
+			runtime.Playing = true;
+		}
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Stop"))
+	{
+		runtime.Playing = false;
+		runtime.Preview = false;
+		runtime.ClearCount++; // the particles in the air go with it
+		runtime.Time = 0.0f;
+		runtime.Finished = false;
+		runtime.Remainder.fill(0.0f);
+		runtime.PreviousLocal.fill(-1.0f);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Restart"))
+	{
+		runtime.Preview = true;
+		runtime.restart();
+	}
+	ImGui::EndDisabled();
+	if (m_Editor.playing())
+	{
+		ImGui::TextDisabled("Playing the game: the system runs with the game clock");
+	}
+	else if (runtime.Preview)
+	{
+		ImGui::TextDisabled("Previewing: %.2f s", runtime.Time);
+	}
 }
 
 // A drag or typing in a widget is one undo step: the scope opens when the widget is activated and closes when it is released. The

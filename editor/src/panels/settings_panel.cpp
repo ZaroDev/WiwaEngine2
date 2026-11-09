@@ -364,6 +364,30 @@ void SettingsPanel::renderer_rows()
 			}
 		});
 
+	group("Particles");
+	field("Particle pool size", [&]()
+		{
+			int pool = static_cast<int>(q.ParticlePoolSize);
+			ImGui::SetNextItemWidth(180.0f);
+			if (ImGui::DragInt("Particle pool size", &pool, 256.0f, 4096, 4194304))
+			{
+				q.ParticlePoolSize = static_cast<wiwa::u32>(std::clamp(pool, 4096, 4194304));
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("%.1f MB", static_cast<double>(q.ParticlePoolSize) * 64.0 / (1024.0 * 1024.0));
+		});
+	field("Most particles per emitter", [&]()
+		{
+			int cap = static_cast<int>(q.ParticleMaxPerEmitter);
+			ImGui::SetNextItemWidth(180.0f);
+			if (ImGui::DragInt("Most particles per emitter", &cap, 16.0f, 64, 65536))
+			{
+				q.ParticleMaxPerEmitter = static_cast<wiwa::u32>(std::clamp(cap, 64, 65536));
+			}
+		});
+	field("Spawn rate scale", [&]() { ImGui::SetNextItemWidth(180.0f); ImGui::SliderFloat("Spawn rate scale", &q.ParticleRateScale, 0.0f, 4.0f, "%.2fx"); });
+	field("Particles collide with the depth", [&]() { ImGui::Checkbox("Particles collide with the depth", &q.ParticleCollision); });
+
 	group("Display");
 	field("Vertical sync", [&]() { ImGui::Checkbox("Vertical sync", &q.Vsync); });
 	field("Upload on the copy queue", [&]() { ImGui::Checkbox("Upload on the copy queue", &q.CopyQueue); });
@@ -526,6 +550,7 @@ void SettingsPanel::editor_rows()
 	toggle("Lights", g.Lights, defaults.Lights);
 	toggle("Cameras", g.Cameras, defaults.Cameras);
 	toggle("Decals", g.Decals, defaults.Decals);
+	toggle("Particle systems", g.Particles, defaults.Particles);
 	toggle("Bounds of the selection", g.Bounds, defaults.Bounds);
 	toggle("Outline the selection", g.Outline.Enabled, defaults.Outline.Enabled);
 	field("Outline color", [&]()

@@ -176,16 +176,6 @@ namespace wiwa
 
 	VfxEditor::~VfxEditor() = default;
 
-	// The asset a file is: the catalog knows it, or (a file that was only just made) the database imports it now.
-	AssetRef VfxEditor::find_ref(const std::filesystem::path& file)
-	{
-		if (const std::optional<AssetRef> known = asset_at(file.generic_string()))
-		{
-			return *known;
-		}
-		return m_Host.Database.ensure_imported(file).value_or(AssetRef{});
-	}
-
 	bool VfxEditor::load(const std::filesystem::path& file, std::string& error)
 	{
 		const std::optional<std::vector<std::byte>> bytes = read_binary_file(file);
@@ -201,8 +191,7 @@ namespace wiwa
 		}
 		m_File = file;
 		m_Model = std::make_unique<VfxEditModel>(std::move(*effect));
-		m_Ref = find_ref(file);
-		m_Message = m_Ref.valid() ? std::string{} : "This file is not in the asset catalog yet: the preview needs it to be imported";
+		m_Message.clear();
 		m_ShownRevision = 0;
 		return true;
 	}
@@ -234,18 +223,9 @@ namespace wiwa
 		{
 			return;
 		}
-		if (!m_Ref.valid())
+		if (!m_Preview.is_open())
 		{
-			// a file that was only just imported is not in the catalog when it is opened
-			m_Ref = find_ref(m_File);
-			if (m_Ref.valid())
-			{
-				m_Message.clear();
-			}
-		}
-		if (!m_Preview.is_open() && m_Ref.valid())
-		{
-			m_Preview.open(m_Ref);
+			m_Preview.open();
 			m_ShownRevision = 0;
 		}
 		if (m_Preview.is_open() && m_ShownRevision != m_Model->revision())

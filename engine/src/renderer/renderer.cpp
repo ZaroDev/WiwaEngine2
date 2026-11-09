@@ -370,6 +370,7 @@ namespace wiwa
 		frame.Height = m_Backend->get_height();
 		frame.Time = m_Time;
 		frame.DeltaTime = batch.DeltaTime;
+		frame.DeltaSeconds = batch.DeltaSeconds;
 		frame.FrameIndex = m_FrameIndex;
 		frame.ImGui = &batch.ImGui;
 		frame.Debug = &batch.Debug;
@@ -397,7 +398,12 @@ namespace wiwa
 
 	void Renderer::set_quality(const RenderQuality& quality)
 	{
+		const u32 previousPool = m_Quality.ParticlePoolSize;
 		m_Quality = sanitized(quality);
+		if (m_Quality.ParticlePoolSize != previousPool)
+		{
+			m_ParticlePool.set_capacity(m_Quality.ParticlePoolSize); // only when the project changed it: a pool made by hand (a test) is left alone
+		}
 		m_MainView.Data.quality() = m_Quality;
 		for (const Scope<ViewState>& view : m_ExtraViews)
 		{

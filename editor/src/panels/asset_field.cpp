@@ -145,7 +145,8 @@ AssetFieldEvent draw_asset_slot(const char* id, const char* label, const wiwa::A
 		{
 			context.FindReferences(ref);
 		}
-		if (context.OpenInAssetEditor != nullptr && (context.Expected == wiwa::AssetType::Skeleton || context.Expected == wiwa::AssetType::Mesh || context.Expected == wiwa::AssetType::AnimationClip)
+		if (context.OpenInAssetEditor != nullptr && (context.Expected == wiwa::AssetType::Skeleton || context.Expected == wiwa::AssetType::Mesh || context.Expected == wiwa::AssetType::AnimationClip
+			|| context.Expected == wiwa::AssetType::ParticleEffect)
 			&& ImGui::MenuItem("Open in Asset Editor", nullptr, false, ref.valid() && !missing))
 		{
 			context.OpenInAssetEditor(ref);

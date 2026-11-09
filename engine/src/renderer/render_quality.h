@@ -24,6 +24,10 @@ namespace wiwa
 		u32 AoSteps = 8;                  // 4..16: samples per side of a slice
 		bool Fxaa = false;                // off, like the other effects, until the project turns it on
 		bool Taa = false;                 // temporal anti-aliasing; replaces FXAA when on (sanitized clears Fxaa)
+		u32 ParticlePoolSize = 262144;    // 4096..4194304: particles the scene view's pool holds, shared by every emitter that plays (vfx.md)
+		u32 ParticleMaxPerEmitter = 65536; // 64..65536: a ring never holds more than this, whatever the effect's own MaxParticles says
+		float ParticleRateScale = 1.0f;   // 0..4: multiplies every emission rate (bursts are not scaled): the quality lever for weaker machines
+		bool ParticleCollision = true;    // false: no particle collides with the depth buffer (it passes through, as if the effect said None)
 
 		bool operator==(const RenderQuality&) const = default;
 	};
