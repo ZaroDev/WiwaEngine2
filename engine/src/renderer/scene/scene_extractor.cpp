@@ -50,6 +50,28 @@ namespace wiwa
 			return a.Kind == b.Kind && a.Position == b.Position && a.Direction == b.Direction && a.Color == b.Color && a.Intensity == b.Intensity
 				&& a.Range == b.Range && a.InnerAngle == b.InnerAngle && a.OuterAngle == b.OuterAngle && a.CastsShadows == b.CastsShadows;
 		}
+
+		RenderDecal make_decal(const Decal& decal, const glm::mat4& world)
+		{
+			RenderDecal result;
+			result.World = world;
+			result.Material = decal.Material;
+			result.Size = glm::max(decal.Size, glm::vec3(0.0f));
+			result.Opacity = std::clamp(decal.Opacity, 0.0f, 1.0f);
+			result.Channels = (decal.AffectColor ? DECAL_CHANNEL_COLOR : 0u) | (decal.AffectNormal ? DECAL_CHANNEL_NORMAL : 0u)
+				| (decal.AffectOrm ? DECAL_CHANNEL_ORM : 0u) | (decal.AffectEmissive ? DECAL_CHANNEL_EMISSIVE : 0u);
+			result.AngleFadeStart = decal.NormalAngleFadeStart;
+			result.AngleFadeEnd = decal.NormalAngleFadeEnd;
+			result.EdgeFade = std::clamp(decal.EdgeFade, 0.0f, 0.5f);
+			result.SortOrder = decal.SortOrder;
+			return result;
+		}
+
+		bool same_decal(const RenderDecal& a, const RenderDecal& b)
+		{
+			return same_matrix(a.World, b.World) && a.Material == b.Material && a.Size == b.Size && a.Opacity == b.Opacity && a.Channels == b.Channels
+				&& a.AngleFadeStart == b.AngleFadeStart && a.AngleFadeEnd == b.AngleFadeEnd && a.EdgeFade == b.EdgeFade && a.SortOrder == b.SortOrder;
+		}
 	}
 
 	namespace
@@ -173,6 +195,7 @@ namespace wiwa
 			m_Scene = scene;
 			m_Instances.clear();
 			m_Lights.clear();
+			m_Decals.clear();
 			m_HasCamera = false;
 			m_SettingsRevision = 0;
 		}
@@ -286,6 +309,40 @@ namespace wiwa
 				{
 					delta.LightRemovals.push_back(it->first);
 					it = m_Lights.erase(it);
+				}
+				else
+				{
+					++it;
+				}
+			}
+		}
+
+		size_t decalsSeen = 0;
+		for (const auto [entity, id, decal, world] : registry.view<Id, Decal, WorldTransform>().each())
+		{
+			decalsSeen++;
+			RenderDecal current = make_decal(decal, world.Matrix);
+			auto found = m_Decals.find(id.Guid);
+			if (found != m_Decals.end() && same_decal(found->second.Decal, current))
+			{
+				found->second.Seen = pass;
+				continue;
+			}
+
+			SentDecal& sent = m_Decals[id.Guid];
+			sent.Decal = current;
+			sent.Seen = pass;
+			delta.DecalUpserts.emplace_back(id.Guid, std::move(current));
+		}
+
+		if (m_Decals.size() != decalsSeen)
+		{
+			for (auto it = m_Decals.begin(); it != m_Decals.end();)
+			{
+				if (it->second.Seen != pass)
+				{
+					delta.DecalRemovals.push_back(it->first);
+					it = m_Decals.erase(it);
 				}
 				else
 				{

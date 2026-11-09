@@ -63,11 +63,16 @@ namespace wiwa
 			m_LightIndex.clear();
 			m_FreeLights.clear();
 			m_LightCount = 0;
+			m_Decals.clear();
+			m_DecalIndex.clear();
+			m_FreeDecals.clear();
+			m_DecalCount = 0;
 			m_Camera.reset();
 		}
 
 		const Slots<RenderInstance> instances{ &m_Instances, &m_InstanceIndex, &m_FreeInstances, &m_InstanceCount };
 		const Slots<RenderLight> lights{ &m_Lights, &m_LightIndex, &m_FreeLights, &m_LightCount };
+		const Slots<RenderDecal> decals{ &m_Decals, &m_DecalIndex, &m_FreeDecals, &m_DecalCount };
 
 		for (const EntityGuid& guid : delta.InstanceRemovals)
 		{
@@ -108,6 +113,14 @@ namespace wiwa
 		for (auto& [guid, light] : delta.LightUpserts)
 		{
 			upsert(lights, guid, std::move(light));
+		}
+		for (const EntityGuid& guid : delta.DecalRemovals)
+		{
+			remove(decals, guid);
+		}
+		for (auto& [guid, decal] : delta.DecalUpserts)
+		{
+			upsert(decals, guid, std::move(decal));
 		}
 
 		if (delta.Settings)
@@ -156,5 +169,11 @@ namespace wiwa
 	{
 		const auto found = m_LightIndex.find(guid);
 		return found == m_LightIndex.end() ? std::nullopt : std::optional<size_t>(found->second);
+	}
+
+	std::optional<size_t> RenderScene::find_decal(EntityGuid guid) const
+	{
+		const auto found = m_DecalIndex.find(guid);
+		return found == m_DecalIndex.end() ? std::nullopt : std::optional<size_t>(found->second);
 	}
 }

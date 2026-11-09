@@ -56,6 +56,28 @@ namespace wiwa
 		bool CastsShadows = false;
 	};
 
+	// Which channels of a decal's material are applied (RenderDecal::Channels).
+	constexpr u32 DECAL_CHANNEL_COLOR = 1u << 0;
+	constexpr u32 DECAL_CHANNEL_NORMAL = 1u << 1;
+	constexpr u32 DECAL_CHANNEL_ORM = 1u << 2;
+	constexpr u32 DECAL_CHANNEL_EMISSIVE = 1u << 3;
+
+	// A projected decal: a box at World (unit cube scaled by Size) projecting along its local -Z. Opacity is the current one (the lifetime
+	// fade is already applied on the main thread).
+	struct RenderDecal
+	{
+		bool Alive = false;
+		glm::mat4 World{ 1.0f };
+		AssetRef Material{};
+		glm::vec3 Size{ 1.0f };
+		float Opacity = 1.0f;
+		u32 Channels = DECAL_CHANNEL_COLOR | DECAL_CHANNEL_NORMAL | DECAL_CHANNEL_ORM | DECAL_CHANNEL_EMISSIVE;
+		float AngleFadeStart = 60.0f; // degrees
+		float AngleFadeEnd = 80.0f;
+		float EdgeFade = 0.1f;
+		i32 SortOrder = 0;
+	};
+
 	struct RenderCamera
 	{
 		glm::mat4 View{ 1.0f };
@@ -75,6 +97,8 @@ namespace wiwa
 		std::vector<std::pair<EntityGuid, std::vector<glm::vec4>>> PaletteUpdates{};
 		std::vector<std::pair<EntityGuid, RenderLight>> LightUpserts{};
 		std::vector<EntityGuid> LightRemovals{};
+		std::vector<std::pair<EntityGuid, RenderDecal>> DecalUpserts{};
+		std::vector<EntityGuid> DecalRemovals{};
 		std::optional<RenderCamera> Camera{}; // the primary camera, when it changed
 		bool CameraRemoved = false;
 		std::optional<SceneSettings> Settings{}; // when they changed (always with a Reset)
@@ -82,7 +106,7 @@ namespace wiwa
 		bool empty() const
 		{
 			return !Reset && InstanceUpserts.empty() && InstanceRemovals.empty() && PaletteUpdates.empty() && LightUpserts.empty() && LightRemovals.empty()
-				&& !Camera && !CameraRemoved && !Settings;
+				&& DecalUpserts.empty() && DecalRemovals.empty() && !Camera && !CameraRemoved && !Settings;
 		}
 	};
 
@@ -101,10 +125,13 @@ namespace wiwa
 		// How many instances / lights exist, and how many slots there are (some may be dead: check Alive).
 		size_t instance_count() const { return m_InstanceCount; }
 		size_t light_count() const { return m_LightCount; }
+		size_t decal_count() const { return m_DecalCount; }
 		const std::vector<RenderInstance>& instances() const { return m_Instances; }
 		const std::vector<RenderLight>& lights() const { return m_Lights; }
+		const std::vector<RenderDecal>& decals() const { return m_Decals; }
 		std::optional<size_t> find_instance(EntityGuid guid) const;
 		std::optional<size_t> find_light(EntityGuid guid) const;
+		std::optional<size_t> find_decal(EntityGuid guid) const;
 
 		// The scene's primary camera.
 		const std::optional<RenderCamera>& camera() const { return m_Camera; }
@@ -157,6 +184,11 @@ namespace wiwa
 		std::unordered_map<EntityGuid, size_t> m_LightIndex{};
 		std::vector<size_t> m_FreeLights{};
 		size_t m_LightCount = 0;
+
+		std::vector<RenderDecal> m_Decals{};
+		std::unordered_map<EntityGuid, size_t> m_DecalIndex{};
+		std::vector<size_t> m_FreeDecals{};
+		size_t m_DecalCount = 0;
 
 		std::optional<RenderCamera> m_Camera{};
 		std::optional<RenderCamera> m_CameraOverride{};

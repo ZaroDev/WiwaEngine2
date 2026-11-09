@@ -48,9 +48,16 @@ namespace wiwa
 			u64 Seen = 0;
 		};
 
+		struct SentDecal
+		{
+			RenderDecal Decal{};
+			u64 Seen = 0;
+		};
+
 		std::weak_ptr<Scene> m_Scene{};
 		std::unordered_map<EntityGuid, SentInstance> m_Instances{};
 		std::unordered_map<EntityGuid, SentLight> m_Lights{};
+		std::unordered_map<EntityGuid, SentDecal> m_Decals{};
 
 		bool m_HasCamera = false;
 		EntityGuid m_CameraId{};

@@ -137,6 +137,78 @@ namespace wiwa
 					"Reset clears everything");
 			});
 
+		register_render_check("decal_extract_and_apply", [](RenderCheckContext& context)
+			{
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity stain = scene->create("stain");
+				Decal decal;
+				decal.Material = make_ref(9);
+				decal.Size = glm::vec3(2.0f, 3.0f, 0.5f);
+				decal.Opacity = 0.5f;
+				decal.AffectNormal = false;
+				decal.SortOrder = 4;
+				scene->registry().emplace<Decal>(stain, decal);
+				const entt::entity bare = scene->create("no material");
+				scene->registry().emplace<Decal>(bare, Decal{});
+				scene->update_world_transforms();
+
+				SceneExtractor extractor;
+				SceneDelta delta = extractor.extract(scene, 1.0f);
+				context.check(delta.DecalUpserts.size() == 2, "both decals are sent, also the one without a material");
+				context.check(!delta.empty() && extractor.extract(scene, 1.0f).empty(), "an unchanged decal gives an empty delta");
+
+				RenderScene render;
+				render.apply(std::move(delta));
+				const EntityGuid stainGuid = scene->registry().get<Id>(stain).Guid;
+				const EntityGuid bareGuid = scene->registry().get<Id>(bare).Guid;
+				const std::optional<size_t> slot = render.find_decal(stainGuid);
+				context.check(render.decal_count() == 2 && slot.has_value(), "the render scene holds both");
+				if (slot)
+				{
+					const RenderDecal& stored = render.decals()[*slot];
+					context.check(stored.Alive && stored.Material == make_ref(9) && stored.Size == glm::vec3(2.0f, 3.0f, 0.5f) && near_equal(stored.Opacity, 0.5f)
+						&& stored.SortOrder == 4, "the fields arrive");
+					context.check((stored.Channels & DECAL_CHANNEL_NORMAL) == 0 && (stored.Channels & DECAL_CHANNEL_COLOR) != 0, "the channel toggles become bits");
+				}
+
+				scene->registry().get<Transform>(stain).Position = glm::vec3(1.0f, 0.0f, 0.0f);
+				scene->update_world_transforms();
+				delta = extractor.extract(scene, 1.0f);
+				context.check(delta.DecalUpserts.size() == 1 && delta.DecalUpserts[0].first == stainGuid && delta.DecalUpserts[0].second.World[3].x == 1.0f,
+					"moving a decal sends exactly that decal");
+				render.apply(std::move(delta));
+
+				scene->registry().get<Decal>(stain).Material = make_ref(10);
+				delta = extractor.extract(scene, 1.0f);
+				context.check(delta.DecalUpserts.size() == 1, "changing the material sends the decal again");
+				render.apply(std::move(delta));
+				context.check(slot && render.find_decal(stainGuid) == slot && render.decals()[*slot].Material == make_ref(10), "the same slot holds the new material");
+
+				scene->destroy(bare);
+				scene->update_world_transforms();
+				delta = extractor.extract(scene, 1.0f);
+				context.check(delta.DecalRemovals.size() == 1 && delta.DecalRemovals[0] == bareGuid && delta.DecalUpserts.empty(), "destroying a decal sends one removal");
+				const std::optional<size_t> bareSlot = render.find_decal(bareGuid);
+				render.apply(std::move(delta));
+				context.check(render.decal_count() == 1 && !render.find_decal(bareGuid) && bareSlot && !render.decals()[*bareSlot].Alive, "its slot is dead");
+
+				SceneDelta onlyDecal;
+				onlyDecal.DecalRemovals.push_back(stainGuid);
+				context.check(!onlyDecal.empty(), "a delta with only a decal change is not empty");
+				render.apply(std::move(onlyDecal));
+
+				const EntityGuid again{ 77, 77 };
+				SceneDelta add;
+				add.DecalUpserts.emplace_back(again, RenderDecal{});
+				render.apply(std::move(add));
+				context.check(render.decal_count() == 1 && slot && render.find_decal(again) == slot, "the most recently freed slot is reused");
+
+				SceneDelta reset;
+				reset.Reset = true;
+				render.apply(std::move(reset));
+				context.check(render.decal_count() == 0 && render.decals().empty(), "Reset clears the decals");
+			});
+
 		register_render_check("directional_direction", [](RenderCheckContext& context)
 			{
 				Ref<Scene> scene = CreateRef<Scene>();

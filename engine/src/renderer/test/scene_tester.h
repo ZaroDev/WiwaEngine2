@@ -121,6 +121,23 @@ namespace wiwa
 			return guid;
 		}
 
+		EntityGuid add_decal(const RenderDecal& decal)
+		{
+			const EntityGuid guid = next_guid();
+			RenderDecal copy = decal;
+			SceneDelta delta;
+			delta.DecalUpserts.emplace_back(guid, std::move(copy));
+			scene().apply(std::move(delta));
+			return guid;
+		}
+
+		void remove_decal(EntityGuid guid)
+		{
+			SceneDelta delta;
+			delta.DecalRemovals.push_back(guid);
+			scene().apply(std::move(delta));
+		}
+
 		RenderLight sun(glm::vec3 travelDirection, float intensity = 3.0f, bool casts = false) const
 		{
 			RenderLight light;
