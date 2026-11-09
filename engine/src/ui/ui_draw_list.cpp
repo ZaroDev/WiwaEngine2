@@ -83,6 +83,10 @@ namespace wiwa
 					draw_image(i, rect, with_opacity(widget.Color, opacity), clip);
 					break;
 
+				case WidgetKind::ViewImage:
+					draw_view_image(widget, rect, with_opacity(widget.Color, opacity), clip);
+					break;
+
 				case WidgetKind::Button:
 				{
 					glm::vec4 color = widget.Color;
@@ -194,6 +198,23 @@ namespace wiwa
 				fill(handle, with_opacity(color, opacity), AssetRef{}, clip);
 			}
 
+			// The picture of an offscreen view, stretched over the rect. A view that does not exist (or is not known to this list) draws nothing.
+			void draw_view_image(const UiWidget& widget, const UiRect& rect, const glm::vec4& color, const glm::vec4& clip)
+			{
+				if (!m_Input.ViewTexture || widget.ViewName.empty())
+				{
+					return;
+				}
+				const u32 texture = m_Input.ViewTexture(widget.ViewName);
+				if (texture == 0 || !(color.a > 0.0f))
+				{
+					return;
+				}
+				m_ViewTexture = texture;
+				quad(UiQuadKind::Image, AssetRef{}, clip, SdfParameters{}, rect, glm::vec2(0.0f), glm::vec2(1.0f), color);
+				m_ViewTexture = 0;
+			}
+
 			void draw_image(size_t i, const UiRect& rect, const glm::vec4& color, const glm::vec4& clip)
 			{
 				const UiWidget& widget = m_Panel.Widgets[i];
@@ -303,12 +324,13 @@ namespace wiwa
 
 				UiDrawList& list = m_List;
 				UiBatch* batch = list.Batches.empty() ? nullptr : &list.Batches.back();
-				if (batch == nullptr || batch->Kind != kind || !(batch->Texture == texture) || batch->ClipRect != clip
+				if (batch == nullptr || batch->Kind != kind || !(batch->Texture == texture) || batch->ViewTexture != m_ViewTexture || batch->ClipRect != clip
 					|| batch->SdfRange != sdf.Range || batch->PixelScale != sdf.PixelScale || batch->Outline != sdf.Outline || batch->OutlineColor != sdf.OutlineColor || batch->Shadow != sdf.Shadow)
 				{
 					UiBatch fresh;
 					fresh.Kind = kind;
 					fresh.Texture = texture;
+					fresh.ViewTexture = m_ViewTexture;
 					fresh.ClipRect = clip;
 					fresh.FirstIndex = static_cast<u32>(list.Indices.size());
 					fresh.SdfRange = sdf.Range;
@@ -332,6 +354,7 @@ namespace wiwa
 				batch->IndexCount += 6;
 			}
 
+			u32 m_ViewTexture = 0; // set while a ViewImage adds its quad
 			UiDrawList& m_List;
 			const UiPanelData& m_Panel;
 			const std::vector<UiInteractionState>& m_Interaction;

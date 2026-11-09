@@ -8,6 +8,7 @@
 #include <asset_pipeline/asset_pipeline_module.h>
 #include <asset_pipeline/asset_templates.h>
 #include <asset_pipeline/input_settings_file.h>
+#include <asset_pipeline/meta_file.h>
 #include <asset_pipeline/physics_settings_file.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
@@ -18,6 +19,11 @@
 #include <scripting/script_module.h>
 #include <ui/ui_module.h>
 
+#include "animation/animation_panel.h"
+#include "asset_editor/asset_editor_panel.h"
+#include "asset_pipeline/file_utils.h"
+#include <assets/native_anim_files.h>
+#include "editor_ui/history_panel.h"
 #include "ui/ui_editor_panel.h"
 #include "ui/ui_smoke_test.h"
 
@@ -106,8 +112,7 @@ namespace
 
 void EditorModule::init()
 {
-	const std::string editorTitle = fmt::format("Wiwa2 Editor - ({0}) <{1}>", "Default project", WI_BUILD_CONFIGURATION);
-	wiwa::Engine::get().get_module<wiwa::Window>()->set_title(editorTitle);
+	wiwa::Engine::get().get_module<wiwa::Window>()->set_title(ProjectSection::editor_title(wiwa::Engine::get().project()));
 
 	// ImGui owns the keyboard and the mouse; the Viewport hands them to the game while a scene plays
 	wiwa::Engine::get().get_module<wiwa::InputModule>()->set_capture(false);
@@ -128,7 +133,8 @@ void EditorModule::init()
 		}
 		else if (inputSettings.DefaultMap.valid())
 		{
-			wiwa::Engine::get().get_module<wiwa::InputModule>()->set_default_map(inputSettings.DefaultMap);
+			// Not yet: on a cold Library the first scan has not cooked it, and the load would fail (see update()).
+			m_PendingDefaultMap = inputSettings.DefaultMap;
 		}
 	}
 
@@ -147,14 +153,17 @@ void EditorModule::init()
 		m_UiEditorSmoke = m_UiEditorSmoke || argument == "--ui-editor-smoke";
 		m_PhysicsPanelSmoke = m_PhysicsPanelSmoke || argument == "--physics-panel-smoke";
 		m_InputPanelSmoke = m_InputPanelSmoke || argument == "--input-panel-smoke";
+		m_AnimPanelSmoke = m_AnimPanelSmoke || argument == "--anim-panel-smoke";
 		if (argument == "--demo-smoke")
 		{
 			m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
 		}
 	}
 
-	m_Panels.push_back(CreateRef<HierarchyPanel>(*m_SceneEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
-	Ref<InspectorPanel> inspector = CreateRef<InspectorPanel>(*m_SceneEditor);
+	Ref<HierarchyPanel> hierarchy = CreateRef<HierarchyPanel>(*m_SceneEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
+	m_Hierarchy = hierarchy.get(); // owned by m_Panels
+	m_Panels.push_back(hierarchy);
+	Ref<InspectorPanel> inspector = CreateRef<InspectorPanel>(*m_SceneEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 	m_Panels.push_back(inspector);
 	m_Panels.push_back(CreateRef<WorldPanel>(*m_SceneEditor));
 	// the smoke edits the matrix: it must not touch the project's physics.wsettings
@@ -171,11 +180,35 @@ void EditorModule::init()
 	Ref<InputPanel> inputPanel = CreateRef<InputPanel>(m_InputPanelSmoke ? std::filesystem::temp_directory_path() / "wiwa_input_panel_smoke.wsettings" : std::filesystem::path(wiwa::INPUT_SETTINGS_FILE));
 	m_InputPanel = inputPanel.get();
 	m_Panels.push_back(inputPanel);
+	Ref<AnimationPanel> animationPanel = CreateRef<AnimationPanel>(*m_SceneEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database(),
+		[this]() { return m_PlayMode->state() == wiwa::PlayState::Edit; });
+	m_AnimationPanel = animationPanel.get();
+	m_Panels.push_back(animationPanel);
+	{
+		wiwa::AssetDatabase& database = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database();
+		m_SkeletonIndex = CreateScope<wiwa::SkeletonIndex>(database);
+		database.add_catalog_listener(m_SkeletonIndex->invalidator());
+		m_EditorState = CreateScope<wiwa::EditorState>(database.get_library_root() / "editor_state.json");
+		Ref<AssetEditorPanel> assetEditor = CreateRef<AssetEditorPanel>(database, *m_EditorState, *m_SkeletonIndex);
+		m_AssetEditor = assetEditor.get();
+		m_Panels.push_back(assetEditor);
+		m_Thumbnails = CreateScope<wiwa::ThumbnailCache>(database, *m_SkeletonIndex, *m_EditorState);
+	}
+	Ref<EditorSection> editorSection = CreateRef<EditorSection>();
+	// every project-wide setting in one place (closed until opened from the Window menu); it shares the sections the Physics and Input panels made
+	m_Panels.push_back(CreateRef<SettingsPanel>(CreateRef<ProjectSection>(), CreateRef<RendererSection>(), physicsPanel->section(), inputPanel->section(), editorSection));
 	// the Scene and Game panels share the renderer's one view: the Game panel, added first, wins when both are visible
 	Ref<ViewOwner> viewOwner = CreateRef<ViewOwner>();
 	m_Panels.push_back(CreateRef<GamePanel>(*m_SceneEditor, viewOwner));
-	m_Panels.push_back(CreateRef<ViewportPanel>(*m_SceneEditor, viewOwner));
+	Ref<ViewportPanel> viewport = CreateRef<ViewportPanel>(*m_SceneEditor, viewOwner, editorSection);
+	m_Panels.push_back(viewport);
+	{
+		ViewportPanel* viewportPanel = viewport.get(); // owned by m_Panels
+		wiwa::SceneEditor* focusEditor = m_SceneEditor.get();
+		m_Hierarchy->set_focus([viewportPanel, focusEditor](entt::entity entity) { if (!focusEditor->playing()) { viewportPanel->focus_on(entity); } });
+	}
 	m_Panels.push_back(CreateRef<PerformancePanel>());
+	m_Panels.push_back(CreateRef<ViewPreviewPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database()));
 	m_Panels.push_back(CreateRef<ConsolePanel>());
 	Ref<MaterialPanel> materialPanel = CreateRef<MaterialPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 	m_Panels.push_back(materialPanel);
@@ -185,21 +218,468 @@ void EditorModule::init()
 	MaterialPanel* materials = materialPanel.get();
 	Ref<UiEditorPanel> uiEditorPanel = CreateRef<UiEditorPanel>(*m_SceneEditor);
 	m_Panels.push_back(uiEditorPanel);
+	m_Panels.push_back(CreateRef<HistoryPanel>(*m_SceneEditor));
 	UiEditorPanel* uiEditor = uiEditorPanel.get();
 	m_UiEditor = uiEditor;
+	uiEditor->set_maximize([this]() { m_Layout.toggle_maximize(m_UiEditor); }, [this]() { return m_Layout.maximized() == m_UiEditor; });
 	AssetBrowserPanel* browserPanel = browser.get();
+	m_Browser = browserPanel;
 	browser->set_open_material([materials](const std::filesystem::path& wmat) { materials->open(wmat); });
 	browser->set_open_ui_panel([uiEditor](const std::filesystem::path& wuipanel) { uiEditor->open(wuipanel); });
 	wiwa::SceneEditor* sceneEditor = m_SceneEditor.get();
 	browser->set_make_prefab([sceneEditor](entt::entity entity, const std::filesystem::path& folder) { return sceneEditor->make_prefab(entity, folder); });
 	inspector->set_locate([browserPanel](const wiwa::AssetRef& ref) { browserPanel->select_asset(ref); });
+	inspector->set_open_in_asset_editor([this](const wiwa::AssetRef& ref) { m_AssetEditor->open_asset(ref); });
+	browserPanel->set_thumbnails(m_Thumbnails.get());
+	browserPanel->set_open_asset_editor([this](const std::filesystem::path& file) { m_AssetEditor->open_file(file); });
+	inspector->set_find_references([this](const wiwa::AssetRef& ref) { find_references(ref); });
+	browserPanel->set_find_references([this](const wiwa::AssetRef& ref) { find_references(ref); });
 	m_BuildSettings = CreateScope<BuildSettingsPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 
+	m_Layout.init("layouts", m_Panels);
+	load_recent_scenes();
+	register_shortcuts();
 	set_theme();
+}
+
+// True when the focused window keeps an undo history of its own and handles Ctrl+Z itself (the UI Editor).
+static bool focused_window_has_own_undo()
+{
+	const ImGuiWindow* window = ImGui::GetCurrentContext()->NavWindow;
+	if (window == nullptr || window->RootWindow == nullptr)
+	{
+		return false;
+	}
+	const char* name = window->RootWindow->Name;
+	return std::strncmp(name, "UI Editor", 9) == 0 || std::strncmp(name, "Asset Editor", 12) == 0;
+}
+
+void EditorModule::register_shortcuts()
+{
+	wiwa::SceneEditor* editor = m_SceneEditor.get();
+	// while the scene plays the keyboard is the game's
+	const auto notPlaying = [editor]() { return !editor->playing(); };
+	m_Shortcuts.add({ "edit.undo", "Undo", ImGuiMod_Ctrl | ImGuiKey_Z, [editor]() { editor->undo(); },
+		[editor]() { return editor->can_undo() && !focused_window_has_own_undo(); } });
+	m_Shortcuts.add({ "edit.redo", "Redo", ImGuiMod_Ctrl | ImGuiKey_Y, [editor]() { editor->redo(); },
+		[editor]() { return editor->can_redo() && !focused_window_has_own_undo(); } });
+	m_Shortcuts.add({ "edit.redo2", "Redo", ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, [editor]() { editor->redo(); },
+		[editor]() { return editor->can_redo() && !focused_window_has_own_undo(); } });
+	m_Shortcuts.add({ "file.save", "Save scene", ImGuiMod_Ctrl | ImGuiKey_S, [this]() { save_scene(); }, [this]() { return m_AssetEditor == nullptr || !m_AssetEditor->focused(); } });
+	m_Shortcuts.add({ "edit.duplicate", "Duplicate", ImGuiMod_Ctrl | ImGuiKey_D,
+		[editor]() { editor->duplicate_entity(editor->selected()); },
+		[editor]() { return !editor->playing() && editor->selected() != entt::null; } });
+	HierarchyPanel* hierarchy = m_Hierarchy;
+	const auto hasSelection = [editor]() { return !editor->playing() && editor->selected() != entt::null; };
+	m_Shortcuts.add({ "edit.rename", "Rename", ImGuiKey_F2, [hierarchy]() { hierarchy->request_rename(); }, hasSelection });
+	m_Shortcuts.add({ "edit.copy", "Copy", ImGuiMod_Ctrl | ImGuiKey_C, [hierarchy]() { hierarchy->copy_selection(); }, [editor]() { return !editor->playing() && editor->selected() != entt::null; } });
+	m_Shortcuts.add({ "edit.cut", "Cut", ImGuiMod_Ctrl | ImGuiKey_X, [hierarchy]() { hierarchy->cut_selection(); }, hasSelection });
+	m_Shortcuts.add({ "edit.paste", "Paste", ImGuiMod_Ctrl | ImGuiKey_V, [hierarchy]() { hierarchy->paste(); }, [editor]() { return !editor->playing() && editor->has_clipboard(); } });
+	m_Shortcuts.add({ "edit.focus", "Focus selection", ImGuiKey_F, [hierarchy]() { hierarchy->focus_selection(); }, [editor]() { return !editor->playing() && editor->selected() != entt::null; } });
+	m_Shortcuts.add({ "edit.delete", "Delete", 0, [editor]() { editor->delete_entity(editor->selected()); }, hasSelection });
+	m_Shortcuts.add({ "view.maximize", "Maximize panel under the cursor", ImGuiMod_Shift | ImGuiKey_Space,
+		[this]() { m_Layout.toggle_maximize(m_Layout.maximized() != nullptr ? m_Layout.maximized() : LayoutManager::panel_at_cursor(m_Panels)); }, notPlaying });
+	m_Shortcuts.add({ "view.maximize_ui", "Maximize the UI Editor", ImGuiKey_F11, [this]() { m_Layout.toggle_maximize(m_UiEditor); }, [this]() { return !m_SceneEditor->playing() && m_UiEditor != nullptr && m_UiEditor->is_active(); } });
+	m_Shortcuts.add({ "view.palette", "Command palette", ImGuiMod_Ctrl | ImGuiKey_P, [this]() { open_palette(); }, notPlaying });
+	m_Shortcuts.add({ "help.shortcuts", "Keyboard shortcuts", ImGuiKey_F1, [this]() { m_ShowCheatsheet = !m_ShowCheatsheet; }, notPlaying });
+}
+
+void EditorModule::layout_menu()
+{
+	if (ImGui::BeginMenu("Layouts"))
+	{
+		for (const std::string& name : LayoutManager::builtin_names())
+		{
+			if (ImGui::MenuItem(name.c_str()))
+			{
+				m_Layout.request_builtin(name);
+			}
+		}
+		const std::vector<std::string> saved = m_Layout.user_names();
+		if (!saved.empty())
+		{
+			ImGui::Separator();
+			for (const std::string& name : saved)
+			{
+				if (ImGui::MenuItem(name.c_str()) && !m_Layout.request_user(name))
+				{
+					m_LayoutStatus = "The layout " + name + " could not be loaded";
+				}
+			}
+		}
+		ImGui::Separator();
+		if (ImGui::MenuItem("Save current layout..."))
+		{
+			m_SaveLayoutRequested = true;
+			std::snprintf(m_LayoutName, sizeof(m_LayoutName), "%s", "My layout");
+		}
+		if (ImGui::BeginMenu("Delete saved layout", !saved.empty()))
+		{
+			for (const std::string& name : saved)
+			{
+				if (ImGui::MenuItem(name.c_str()))
+				{
+					m_Layout.delete_user(name);
+				}
+			}
+			ImGui::EndMenu();
+		}
+		if (ImGui::MenuItem("Reset layout"))
+		{
+			m_Layout.request_builtin("Default");
+		}
+		ImGui::EndMenu();
+	}
+	const bool maximized = m_Layout.maximized() != nullptr;
+	if (ImGui::MenuItem(maximized ? "Restore panel" : "Maximize panel", "Shift+Space"))
+	{
+		m_Layout.toggle_maximize(maximized ? m_Layout.maximized() : LayoutManager::panel_at_cursor(m_Panels));
+	}
+}
+
+void EditorModule::layout_popups()
+{
+	if (m_SaveLayoutRequested)
+	{
+		m_SaveLayoutRequested = false;
+		m_LayoutStatus.clear();
+		ImGui::OpenPopup("Save layout");
+	}
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Save layout", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		if (ImGui::IsWindowAppearing())
+		{
+			ImGui::SetKeyboardFocusHere();
+		}
+		const bool entered = ImGui::InputText("##layout_name", m_LayoutName, sizeof(m_LayoutName), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+		if (!m_LayoutStatus.empty())
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_LayoutStatus.c_str());
+		}
+		if (ImGui::Button("Save") || entered)
+		{
+			if (m_Layout.save_user(m_LayoutName))
+			{
+				m_LayoutStatus.clear();
+				ImGui::CloseCurrentPopup();
+			}
+			else
+			{
+				m_LayoutStatus = "Use a name without \\ / : * ? \" < > | and not starting or ending with a dot";
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			m_LayoutStatus.clear();
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+}
+
+void EditorModule::open_palette()
+{
+	std::vector<CommandPalette::Item> items;
+
+	for (const ShortcutAction& action : m_Shortcuts.all())
+	{
+		if (action.Id == "edit.redo2" || action.Id == "view.palette" || !action.Run)
+		{
+			continue;
+		}
+		const std::string id = action.Id;
+		items.push_back({ action.Label, "Action", ShortcutRegistry::chord_text(action.Chord), [this, id]() { m_Shortcuts.run(id); } });
+	}
+
+	for (const Ref<Panel>& panel : m_Panels)
+	{
+		if (!any(panel->get_category(), PanelCategory::Window | PanelCategory::Info | PanelCategory::Renderer))
+		{
+			continue;
+		}
+		Panel* target = panel.get();
+		items.push_back({ std::string(panel->get_name()) + " panel", "Panel", panel->is_active() ? "open" : "closed", [target]() { target->switch_active(); } });
+	}
+
+	for (const std::string& name : LayoutManager::builtin_names())
+	{
+		items.push_back({ name + " layout", "Layout", "preset", [this, name]() { m_Layout.request_builtin(name); } });
+	}
+	for (const std::string& name : m_Layout.user_names())
+	{
+		items.push_back({ name + " layout", "Layout", "saved", [this, name]() { m_Layout.request_user(name); } });
+	}
+
+	if (m_SceneEditor->get_scene() != nullptr)
+	{
+		size_t shown = 0;
+		wiwa::Scene& scene = m_SceneEditor->scene();
+		scene.registry().view<wiwa::Name, wiwa::Id>().each([&](entt::entity, const wiwa::Name& name, const wiwa::Id& id)
+		{
+			if (shown++ < 2000)
+			{
+				const wiwa::EntityGuid guid = id.Guid;
+				items.push_back({ name.Value.empty() ? "(unnamed)" : name.Value, "Entity", "", [this, guid]()
+				{
+					const entt::entity entity = m_SceneEditor->get_scene() != nullptr ? m_SceneEditor->scene().find(guid) : entt::entity{ entt::null };
+					if (entity != entt::null)
+					{
+						m_SceneEditor->select(entity);
+						m_Hierarchy->focus_selection();
+					}
+				} });
+			}
+		});
+	}
+
+	if (wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>())
+	{
+		for (const wiwa::AssetCatalog::Entry& entry : assets->catalog_entries())
+		{
+			const wiwa::AssetRef ref{ entry.Guid, 0 };
+			items.push_back({ entry.Path, "Asset", "", [this, ref]() { m_Browser->select_asset(ref); } });
+		}
+	}
+
+	m_Palette.open(std::move(items));
+}
+
+void EditorModule::find_references(const wiwa::AssetRef& ref)
+{
+	if (!ref.valid())
+	{
+		return;
+	}
+	std::vector<std::filesystem::path> roots;
+	for (const wiwa::AssetDatabase::SourceRoot& root : wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().get_roots())
+	{
+		roots.push_back(root.Source);
+	}
+	const std::optional<std::filesystem::path> source = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().path_of(ref.Guid);
+	m_References.start(ref.Guid, source ? source->filename().generic_string() : std::string(), std::move(roots), wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().redirect_sources(ref.resolved()));
+	m_ShowReferences = true;
+}
+
+// A model import that moved its skeletons, clips and skinned meshes into files of their own redirects the old references, so scenes keep working;
+// this rewrites the files to name the new assets directly. It shows what it would change first and changes nothing until the button is pressed.
+void EditorModule::reference_update_popup()
+{
+	wiwa::AssetDatabase& database = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database();
+	if (m_UpdateReferencesRequested)
+	{
+		m_UpdateReferencesRequested = false;
+		m_UpdateReferencesPlan = wiwa::plan_reference_update(database);
+		m_UpdateReferencesResult.clear();
+		ImGui::OpenPopup("Update references");
+	}
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (!ImGui::BeginPopupModal("Update references", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		return;
+	}
+
+	wiwa::u32 total = 0;
+	for (const wiwa::ReferenceUpdate& item : m_UpdateReferencesPlan)
+	{
+		total += item.Count;
+	}
+	if (!m_UpdateReferencesResult.empty())
+	{
+		ImGui::TextUnformatted(m_UpdateReferencesResult.c_str());
+	}
+	else if (m_UpdateReferencesPlan.empty())
+	{
+		ImGui::TextUnformatted("No scene, prefab or UI panel names an asset that was moved into a file of its own.");
+	}
+	else
+	{
+		ImGui::Text("%u reference(s) in %zu file(s) still name the old sub-assets of a model:", total, m_UpdateReferencesPlan.size());
+		for (const wiwa::ReferenceUpdate& item : m_UpdateReferencesPlan)
+		{
+			ImGui::BulletText("%s (%u)", item.File.generic_string().c_str(), item.Count);
+		}
+		ImGui::TextDisabled("They keep working without this. Under version control the change can be reverted.");
+		if (ImGui::Button("Rewrite them"))
+		{
+			const wiwa::u32 rewritten = wiwa::apply_reference_update(database, m_UpdateReferencesPlan);
+			m_UpdateReferencesResult = "Rewrote " + std::to_string(rewritten) + " reference(s). Reload the scene to see them.";
+		}
+		ImGui::SameLine();
+	}
+	if (ImGui::Button(m_UpdateReferencesResult.empty() && !m_UpdateReferencesPlan.empty() ? "Cancel" : "Close"))
+	{
+		ImGui::CloseCurrentPopup();
+	}
+	ImGui::EndPopup();
+}
+
+void EditorModule::references_window()
+{
+	if (!m_ShowReferences)
+	{
+		return;
+	}
+
+	wiwa::AssetDatabase& database = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database();
+	const std::optional<std::filesystem::path> target = database.path_of(m_References.target());
+	const std::string title = "References to " + (target ? target->filename().string() : m_References.target().to_string().substr(0, 8)) + "###References";
+
+	ImGui::SetNextWindowSize(ImVec2(480.0f, 320.0f), ImGuiCond_FirstUseEver);
+	if (ImGui::Begin(title.c_str(), &m_ShowReferences))
+	{
+		if (!m_References.finished())
+		{
+			ImGui::ProgressBar(m_References.progress(), ImVec2(-1.0f, 0.0f), "Searching...");
+		}
+
+		const std::vector<wiwa::ReferenceHit> hits = m_References.hits();
+		if (m_References.finished() && hits.empty())
+		{
+			ImGui::TextDisabled("No references: nothing in the project uses this asset");
+		}
+		for (const wiwa::ReferenceHit& hit : hits)
+		{
+			const std::string label = hit.File.filename().string() + "  (" + std::to_string(hit.Count) + (hit.Count == 1 ? " use)" : " uses)");
+			if (ImGui::Selectable(label.c_str()))
+			{
+				if (wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>())
+				{
+					if (const std::optional<wiwa::AssetRef> found = assets->find_asset(hit.File.string()))
+					{
+						m_Browser->select_asset(*found);
+					}
+				}
+			}
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+			{
+				ImGui::SetTooltip("%s\nDouble-click opens a scene or a UI panel", hit.File.generic_string().c_str());
+			}
+			if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+			{
+				const std::string extension = hit.File.extension().string();
+				if (extension == ".wscene" && !m_SceneEditor->playing())
+				{
+					open_scene(hit.File.string());
+				}
+				else if (extension == ".wuipanel")
+				{
+					m_UiEditor->open(hit.File);
+				}
+			}
+		}
+	}
+	ImGui::End();
+}
+
+void EditorModule::status_bar()
+{
+	ImGuiViewport* viewport = ImGui::GetMainViewport();
+	const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_MenuBar;
+	if (ImGui::BeginViewportSideBar("##status_bar", viewport, ImGuiDir_Down, ImGui::GetFrameHeight(), flags))
+	{
+		if (ImGui::BeginMenuBar())
+		{
+			const std::string scene = m_SceneEditor->path().empty() ? "untitled" : m_SceneEditor->path().filename().string();
+			ImGui::Text("%s%s", scene.c_str(), m_SceneEditor->dirty() ? " *" : "");
+
+			const entt::entity selected = m_SceneEditor->selected();
+			if (m_SceneEditor->get_scene() != nullptr && selected != entt::null && m_SceneEditor->scene().registry().valid(selected))
+			{
+				ImGui::TextDisabled("|");
+				ImGui::Text("%s", m_SceneEditor->scene().registry().get<wiwa::Name>(selected).Value.c_str());
+			}
+
+			const std::string right = std::to_string(m_SceneEditor->history().undo_labels().size()) + " undo steps   " + std::to_string(static_cast<int>(ImGui::GetIO().Framerate)) + " FPS";
+			ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(right.c_str()).x - ImGui::GetStyle().WindowPadding.x * 2.0f);
+			ImGui::TextDisabled("%s", right.c_str());
+			ImGui::EndMenuBar();
+		}
+	}
+	ImGui::End();
+}
+
+void EditorModule::open_scene(const std::string& path)
+{
+	m_SceneEditor->open(path);
+	m_RecentScenes.erase(std::remove(m_RecentScenes.begin(), m_RecentScenes.end(), path), m_RecentScenes.end());
+	m_RecentScenes.insert(m_RecentScenes.begin(), path);
+	if (m_RecentScenes.size() > 8)
+	{
+		m_RecentScenes.resize(8);
+	}
+	save_recent_scenes();
+}
+
+void EditorModule::load_recent_scenes()
+{
+	std::ifstream in("recent_scenes.txt");
+	std::string line;
+	while (std::getline(in, line) && m_RecentScenes.size() < 8)
+	{
+		if (!line.empty())
+		{
+			m_RecentScenes.push_back(line);
+		}
+	}
+}
+
+void EditorModule::save_recent_scenes() const
+{
+	std::ofstream out("recent_scenes.txt", std::ios::trunc);
+	for (const std::string& scene : m_RecentScenes)
+	{
+		out << scene << '\n';
+	}
+}
+
+void EditorModule::edit_menu()
+{
+	if (!ImGui::BeginMenu("Edit"))
+	{
+		return;
+	}
+
+	const wiwa::UndoStack& history = m_SceneEditor->history();
+	const std::string undoText = m_SceneEditor->can_undo() ? "Undo: " + history.undo_label() : std::string("Undo");
+	const std::string redoText = m_SceneEditor->can_redo() ? "Redo: " + history.redo_label() : std::string("Redo");
+	if (ImGui::MenuItem(undoText.c_str(), "Ctrl+Z", false, m_SceneEditor->can_undo()))
+	{
+		m_SceneEditor->undo();
+	}
+	if (ImGui::MenuItem(redoText.c_str(), "Ctrl+Y", false, m_SceneEditor->can_redo()))
+	{
+		m_SceneEditor->redo();
+	}
+	ImGui::Separator();
+	for (const char* id : { "edit.duplicate", "edit.copy", "edit.cut", "edit.paste", "edit.rename", "edit.delete" })
+	{
+		if (const ShortcutAction* action = m_Shortcuts.find(id))
+		{
+			const std::string chord = ShortcutRegistry::chord_text(action->Chord);
+			if (ImGui::MenuItem(action->Label.c_str(), chord.c_str(), false, m_Shortcuts.enabled(*action)))
+			{
+				action->Run();
+			}
+		}
+	}
+	ImGui::Separator();
+	if (ImGui::MenuItem("Keyboard shortcuts", "F1"))
+	{
+		m_ShowCheatsheet = true;
+	}
+	ImGui::EndMenu();
 }
 
 void EditorModule::shutdown()
 {
+	// the views and scenes these hold belong to modules that shut down after this one
+	m_Thumbnails.reset();
+	if (m_AssetEditor != nullptr)
+	{
+		m_AssetEditor->close_preview();
+	}
 	// leaving while the scene plays: the scripts end and the scene that was being edited is the one that is left
 	if (m_PlayMode != nullptr)
 	{
@@ -214,6 +694,15 @@ void EditorModule::pre_update(float deltaTime)
 void EditorModule::update(float deltaTime)
 {
 	m_Frame++;
+	if (m_PendingDefaultMap.valid())
+	{
+		const Ref<wiwa::JobProgress> scan = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().scan_progress();
+		if (scan && scan->finished())
+		{
+			wiwa::Engine::get().get_module<wiwa::InputModule>()->set_default_map(m_PendingDefaultMap);
+			m_PendingDefaultMap = {};
+		}
+	}
 	if (!m_SceneEditor->playing() && !wiwa::Engine::get().get_module<wiwa::InputModule>()->backend_injected())
 	{
 		wiwa::Engine::get().get_module<wiwa::InputModule>()->set_capture(false); // the Viewport turns it on while it draws, in play mode
@@ -307,6 +796,28 @@ void EditorModule::update(float deltaTime)
 		}
 	}
 
+	if (m_AnimPanelSmoke && m_AnimationPanel != nullptr)
+	{
+		if (m_Frame == 10)
+		{
+			m_AnimationPanel->request_focus();
+			// the Asset Editor opens the demo warrior's animation graph (canvas, tool pane and the preview that plays it)
+			m_AssetEditor->open_file("assets/models/characters/Warrior_animation/warrior.wgraph");
+		}
+		if (m_Frame == 130)
+		{
+			// the panels were drawn for the whole run (the events are edited in the Asset Editor now); the graph plays in the Asset Editor's preview
+			const bool animationPanel = m_AnimationPanel->frames_drawn() >= 100 && m_AnimationPanel->last_error().empty();
+			const bool graphEditor = m_AssetEditor->open_kind() == "Animation graph" && m_AssetEditor->frames_with_editor() >= 100 && m_AssetEditor->last_error().empty()
+				&& !m_AssetEditor->preview_state().empty();
+			const bool passed = animationPanel && graphEditor;
+			WI_INFO("Editor", "Animation panel smoke test {0} (frames {1}, error \"{2}\"; graph editor '{3}' drew {4} frames, error \"{5}\", preview state '{6}')", passed ? "passed" : "FAILED",
+				m_AnimationPanel->frames_drawn(), m_AnimationPanel->last_error(), m_AssetEditor->open_kind(), m_AssetEditor->frames_with_editor(), m_AssetEditor->last_error(), m_AssetEditor->preview_state());
+			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+		}
+	}
+
 	if (m_PlaySmoke && m_Frame == 30)
 	{
 		const std::string failure = run_play_smoke();
@@ -349,17 +860,39 @@ void EditorModule::update(float deltaTime)
 		}
 	}
 
-	if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false))
-	{
-		save_scene();
-	}
+	m_Shortcuts.poll();
+	m_Shortcuts.draw_cheatsheet(m_ShowCheatsheet);
 	main_bar();
+	status_bar();
+	m_Palette.draw();
+	references_window();
+	reference_update_popup();
 	export_modal();
+	reimport_modal();
 	scene_popups();
 	m_BuildSettings->on_draw();
+	if (m_Browser != nullptr)
+	{
+		m_Browser->draw_import_dialog();
+	}
 	dock_space();
 
 	// Adopts the scene the SceneModule loaded (or opened), and expands prefab instances once their prefab is there.
+	// Anything held (a slider, a text field, the transform gizmo) is one undo step, committed when it is let go. Opened here, before the scene
+	// settles its history, so that the edits of every frame of a drag stay together.
+	{
+		const bool held = ImGui::IsAnyItemActive() || (ImGuizmo::IsUsing() && ImGui::IsMouseDown(ImGuiMouseButton_Left));
+		if (held && !m_EditHeld)
+		{
+			m_SceneEditor->begin_edit_scope();
+			m_EditHeld = true;
+		}
+		else if (!held && m_EditHeld)
+		{
+			m_SceneEditor->end_edit_scope();
+			m_EditHeld = false;
+		}
+	}
 	m_SceneEditor->update();
 	if (const std::string message = m_SceneEditor->take_message(); !message.empty())
 	{
@@ -370,14 +903,35 @@ void EditorModule::update(float deltaTime)
 	{
 		panel->on_update();
 	}
+	if (m_Browser != nullptr)
+	{
+		if (wiwa::Window* window = wiwa::Engine::get().get_module<wiwa::Window>())
+		{
+			if (std::vector<std::filesystem::path> dropped = window->take_dropped_files(); !dropped.empty())
+			{
+				m_Browser->import_dropped(dropped);
+			}
+		}
+	}
+	if (m_SkeletonIndex != nullptr)
+	{
+		m_SkeletonIndex->update();
+	}
+	if (m_Thumbnails != nullptr)
+	{
+		m_Thumbnails->update();
+	}
 
+	m_Layout.update_maximize(!m_SceneEditor->playing() && !m_Palette.is_open());
 	for (auto& panel : m_Panels)
 	{
-		if (panel->is_active())
+		// a maximized panel is the only one drawn
+		if (panel->is_active() && (m_Layout.maximized() == nullptr || m_Layout.maximized() == panel.get()))
 		{
 			panel->on_draw();
 		}
 	}
+	layout_popups();
 }
 
 void EditorModule::post_update(float deltaTime)
@@ -430,7 +984,7 @@ void EditorModule::dock_space()
 	{
 		ImGuiViewport* viewport = ImGui::GetMainViewport();
 		ImGui::SetNextWindowPos(viewport->Pos);
-		ImGui::SetNextWindowSize(viewport->Size);
+		ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, viewport->Size.y - ImGui::GetFrameHeight()));
 		ImGui::SetNextWindowViewport(viewport->ID);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -462,6 +1016,7 @@ void EditorModule::dock_space()
 	if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
 	{
 		ImGuiID dockspace_id = ImGui::GetID("DockSpace");
+		m_Layout.apply_pending(dockspace_id, m_Panels);
 		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
 	}
 
@@ -482,11 +1037,19 @@ void EditorModule::main_bar()
 				m_BuildSettings->open();
 			}
 			export_button();
+			if (ImGui::MenuItem("Update references to extracted assets..."))
+			{
+				m_UpdateReferencesRequested = true;
+			}
 			ImGui::EndMenu();
 		}
 
+		edit_menu();
+
 		if (ImGui::BeginMenu("Window"))
 		{
+			layout_menu();
+			ImGui::Separator();
 			for (auto& panel : m_Panels)
 			{
 				if (any(panel->get_category(), PanelCategory::Window))
@@ -629,6 +1192,23 @@ void EditorModule::scene_menu_items()
 	{
 		m_OpenSceneRequested = true;
 	}
+	if (ImGui::BeginMenu("Open Recent", !m_RecentScenes.empty()))
+	{
+		std::string chosen;
+		for (const std::string& scene : m_RecentScenes)
+		{
+			std::error_code exists;
+			if (std::filesystem::exists(scene, exists) && ImGui::MenuItem(std::filesystem::path(scene).filename().string().c_str()))
+			{
+				chosen = scene;
+			}
+		}
+		ImGui::EndMenu();
+		if (!chosen.empty())
+		{
+			open_scene(chosen);
+		}
+	}
 	ImGui::Separator();
 	if (ImGui::MenuItem("Save", "Ctrl+S"))
 	{
@@ -690,7 +1270,7 @@ void EditorModule::scene_popups()
 			{
 				if (ImGui::Selectable(std::filesystem::path(scene).lexically_relative(root).generic_string().c_str()))
 				{
-					m_SceneEditor->open(scene);
+					open_scene(scene);
 					ImGui::CloseCurrentPopup();
 				}
 			}
@@ -807,6 +1387,68 @@ void EditorModule::export_modal()
 		}
 		ImGui::EndPopup();
 	}
+}
+
+// The bar of "Reimport", "Reimport folder", Apply in the import dialog and dropped files: the work runs on the asset database's worker pool.
+void EditorModule::reimport_modal()
+{
+	constexpr const char* popup = "Reimporting";
+	wiwa::AssetDatabase& database = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database();
+	const Ref<wiwa::JobProgress> progress = database.reimport_progress();
+	const bool running = progress && !progress->finished();
+
+	// a job that has not been shown yet opens the popup; Escape closes a modal, so while it runs it comes back
+	if (progress && (progress != m_ReimportShownJob || (running && m_ReimportShown && !ImGui::IsPopupOpen(popup))))
+	{
+		m_ReimportShownJob = progress;
+		m_ReimportShown = true;
+		m_ReimportErrors.clear();
+		ImGui::OpenPopup(popup);
+	}
+
+	ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	if (!ImGui::BeginPopupModal(popup, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+	{
+		return;
+	}
+
+	if (running)
+	{
+		ImGui::Text("Reimporting assets...");
+		const std::string item = progress->current_item();
+		const std::string label = std::to_string(progress->done()) + " / " + std::to_string(progress->total()) + (item.empty() ? "" : "  " + item);
+		ImGui::ProgressBar(progress->fraction(), ImVec2(360.0f, 0.0f), label.c_str());
+		if (ImGui::Button("Cancel"))
+		{
+			progress->request_cancel();
+		}
+	}
+	else
+	{
+		if (m_ReimportShown)
+		{
+			m_ReimportShown = false;
+			m_ReimportErrors = database.take_reimport_errors();
+		}
+		if (m_ReimportErrors.empty())
+		{
+			ImGui::CloseCurrentPopup(); // nothing to say: it went well
+		}
+		else
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Some imports failed:");
+			for (const std::string& line : m_ReimportErrors)
+			{
+				ImGui::BulletText("%s", line.c_str());
+			}
+			if (ImGui::Button("Close"))
+			{
+				m_ReimportErrors.clear();
+				ImGui::CloseCurrentPopup();
+			}
+		}
+	}
+	ImGui::EndPopup();
 }
 
 std::string EditorModule::run_play_smoke()

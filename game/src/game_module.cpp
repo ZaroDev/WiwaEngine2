@@ -19,7 +19,7 @@ void GameModule::init()
 	}
 
 	// a game does not show debug shapes (physics bodies, a script's debug_draw calls) unless asked to; the renderer starts with them on
-	bool debugDraw = false;
+	bool debugDraw = wiwa::Engine::get().project().DebugDrawOnStart;
 	for (const std::string& argument : wiwa::Engine::get().get_arguments())
 	{
 		debugDraw = debugDraw || argument == "--debug-draw";

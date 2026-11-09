@@ -12,6 +12,7 @@
 #include <scene/scene.h>
 #include "script_context.h"
 #include "script_runtime.h"
+#include "anim_handlers.h"
 #include "ui_handlers.h"
 
 namespace wiwa
@@ -54,6 +55,7 @@ namespace wiwa
 		const Ref<Scene>& scene() const { return m_Scene; }
 		ScriptContext& context() { return m_Context; }
 		UiHandlerTable& ui_handlers() { return m_UiHandlers; }
+		AnimHandlerTable& animation_handlers() { return m_AnimHandlers; }
 
 	private:
 		struct Instance
@@ -69,6 +71,7 @@ namespace wiwa
 		bool alive(const Instance& instance) const;
 		void reap();
 		void dispatch_ui_events();
+		void dispatch_animation_events();
 		void discover();
 		void make_self(Instance& instance);
 		void begin(Instance instance);
@@ -80,6 +83,7 @@ namespace wiwa
 		ScriptRuntime& m_Runtime;
 		ScriptContext m_Context{};
 		UiHandlerTable m_UiHandlers{};
+		AnimHandlerTable m_AnimHandlers{};
 		Ref<Scene> m_Scene{};
 		std::vector<Instance> m_Instances{};              // the entity scripts, in the order they were found
 		std::vector<Instance> m_SceneInstances{};         // the scene-level scripts

@@ -20,7 +20,7 @@
 namespace wiwa
 {
 	constexpr u32 WASSET_MAGIC = 0x53534157; // "WASS"
-	constexpr u32 WASSET_VERSION = 1;
+	constexpr u32 WASSET_VERSION = 5; // 5: animation graphs. 4: skeletons carry sockets. 3: clips drive joints by name; clips and skinned meshes name their skeleton; skeletons have no node indices. 2: skeletons carry names, parents and a rest pose; clips carry events
 
 	struct WAssetHeader
 	{
@@ -140,6 +140,8 @@ namespace wiwa
 	void archive(BinaryArchive& ar, CookedShapeData& v);
 	// A version, then the JSON text (input/input_map_io.h is the one description of the format); refuses another version, trailing bytes and text input_map_from_text refuses.
 	void archive(BinaryArchive& ar, InputMapData& v);
+	// A version, then the .wgraph JSON text (native_anim_files.h is the one description of it).
+	void archive(BinaryArchive& ar, AnimationGraphData& v);
 
 	template<typename T>
 	constexpr AssetType asset_type_of();
@@ -160,6 +162,7 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<PhysicsMaterialData>() { return AssetType::PhysicsMaterial; }
 	template<> constexpr AssetType asset_type_of<CookedShapeData>() { return AssetType::PhysicsShape; }
 	template<> constexpr AssetType asset_type_of<InputMapData>() { return AssetType::InputMap; }
+	template<> constexpr AssetType asset_type_of<AnimationGraphData>() { return AssetType::AnimationGraph; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)

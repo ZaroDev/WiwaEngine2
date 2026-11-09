@@ -65,6 +65,14 @@ namespace wiwa
 		void set_source(Scope<IAssetSource> source);
 		IAssetSource* get_source() const { return m_Source.get(); }
 
+		// Reads the catalog again (the editor wrote a new one) and returns the guids that are redirected now and were not before. The caller tells
+		// the listeners they changed (notify_reimported), so what failed to load under the old name loads again under the new one. Thread-safe.
+		std::vector<AssetGuid> refresh_catalog();
+
+		// The guid an asset reference is really stored under (a sub-asset id folded in, then a catalog redirect followed once). Two references
+		// with the same result are the same asset: a legacy reference to a model's skeleton and the extracted .wskel it was moved to. Thread-safe.
+		AssetGuid resolve(AssetRef ref) const { return redirected(ref.resolved()); }
+
 		// Drops every cached asset that no handle refers to.
 		void unload_unused();
 
@@ -94,16 +102,21 @@ namespace wiwa
 		void settle(LoadBatch& batch, AssetSlot& slot);
 		void on_slot_finished(const Ref<AssetSlot>& slot);
 
+		// The guid an asset is really stored under: a redirect of the catalog followed once, else the guid itself.
+		AssetGuid redirected(AssetGuid guid) const;
+		void load_catalog_locked() const;
+
 		Ref<AssetSlot> acquire(AssetRef ref, AssetType expected);
 		Ref<AssetSlot> acquire_resolved(AssetGuid guid, AssetType expected, bool& created);
 		void run_load(Ref<AssetSlot> slot);
 		void fail(const Ref<AssetSlot>& slot, const char* why);
 
 		Scope<IAssetSource> m_Source{};
-		AssetCatalog m_Catalog{};
-		std::mutex m_CatalogMutex{};
-		std::chrono::steady_clock::time_point m_CatalogLoadedAt{};
-		bool m_CatalogLoaded = false;
+		mutable AssetCatalog m_Catalog{};
+		mutable std::unordered_map<AssetGuid, AssetGuid> m_Redirects{};
+		mutable std::mutex m_CatalogMutex{};
+		mutable std::chrono::steady_clock::time_point m_CatalogLoadedAt{};
+		mutable bool m_CatalogLoaded = false;
 		Scope<JobSystem> m_Jobs{};
 
 		mutable std::mutex m_Mutex{};

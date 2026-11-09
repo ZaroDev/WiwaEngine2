@@ -38,7 +38,7 @@ namespace
 	};
 
 	constexpr WidgetKind KINDS[] = { WidgetKind::Panel, WidgetKind::HStack, WidgetKind::VStack, WidgetKind::Text, WidgetKind::Image,
-		WidgetKind::Button, WidgetKind::Slider, WidgetKind::Toggle, WidgetKind::Bar };
+		WidgetKind::Button, WidgetKind::Slider, WidgetKind::Toggle, WidgetKind::Bar, WidgetKind::ViewImage };
 
 	constexpr const char* DRAG_PAYLOAD = "UI_WIDGET";
 	constexpr float HANDLE_SIZE = 7.0f;
@@ -386,19 +386,45 @@ void UiEditorPanel::on_draw()
 			ImGui::Separator();
 
 			const float spacing = ImGui::GetStyle().ItemSpacing.x;
+			const float splitter = 6.0f;
 			const ImVec2 available = ImGui::GetContentRegionAvail();
-			const float leftWidth = 240.0f;
-			const float rightWidth = 330.0f;
-			const float middleWidth = std::max(available.x - leftWidth - rightWidth - spacing * 2.0f, 120.0f);
+			const float widest = std::max(available.x * 0.4f, 200.0f);
+			m_LeftWidth = std::clamp(m_LeftWidth, 160.0f, widest);
+			m_RightWidth = std::clamp(m_RightWidth, 200.0f, widest);
+			const float leftWidth = m_LeftWidth;
+			const float rightWidth = m_RightWidth;
+			const float middleWidth = std::max(available.x - leftWidth - rightWidth - splitter * 2.0f - spacing * 4.0f, 120.0f);
 
 			ImGui::BeginChild("##ui_tree", ImVec2(leftWidth, available.y), ImGuiChildFlags_Borders);
 			draw_tree();
 			ImGui::EndChild();
 			ImGui::SameLine();
 
-			ImGui::BeginChild("##ui_canvas_area", ImVec2(middleWidth, available.y), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
+			ImGui::InvisibleButton("##split_left", ImVec2(splitter, available.y));
+			if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+			{
+				ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+			}
+			if (ImGui::IsItemActive())
+			{
+				m_LeftWidth += ImGui::GetIO().MouseDelta.x;
+			}
+			ImGui::SameLine();
+
+			ImGui::BeginChild("##ui_canvas_area", ImVec2(middleWidth, available.y), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 			draw_canvas();
 			ImGui::EndChild();
+			ImGui::SameLine();
+
+			ImGui::InvisibleButton("##split_right", ImVec2(splitter, available.y));
+			if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+			{
+				ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+			}
+			if (ImGui::IsItemActive())
+			{
+				m_RightWidth -= ImGui::GetIO().MouseDelta.x;
+			}
 			ImGui::SameLine();
 
 			ImGui::BeginChild("##ui_inspector", ImVec2(rightWidth, available.y), ImGuiChildFlags_Borders);
@@ -478,6 +504,18 @@ void UiEditorPanel::draw_toolbar()
 	}
 	ImGui::EndDisabled();
 	ImGui::SameLine();
+	ImGui::BeginDisabled(m_Blocked || !m_Model->dirty());
+	if (ImGui::Button("Revert"))
+	{
+		m_PendingOpen = m_File; // asks first: reloading the file drops the changes
+		m_Ask = AskAction::Open;
+	}
+	ImGui::EndDisabled();
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_AllowWhenDisabled))
+	{
+		ImGui::SetTooltip("Reload the file and drop the unsaved changes");
+	}
+	ImGui::SameLine();
 	ImGui::BeginDisabled(!m_Model->can_undo());
 	if (ImGui::Button("Undo"))
 	{
@@ -512,13 +550,30 @@ void UiEditorPanel::draw_toolbar()
 
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(120.0f);
-	ImGui::SliderFloat("##zoom", &m_Zoom, 0.1f, 2.0f, "zoom %.2f");
+	ImGui::SliderFloat("##zoom", &m_Zoom, 0.1f, 4.0f, "zoom %.2f");
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+	{
+		ImGui::SetTooltip("Mouse wheel over the canvas zooms, the middle button pans");
+	}
 	ImGui::SameLine();
 	if (ImGui::Button("Fit"))
 	{
 		// the middle column is about what is left of the window
-		const float room = std::max(ImGui::GetWindowWidth() - 240.0f - 330.0f - 48.0f, 120.0f);
-		m_Zoom = std::clamp(std::min(room / m_Canvas.x, (ImGui::GetWindowHeight() - 120.0f) / m_Canvas.y), 0.1f, 2.0f);
+		const float room = std::max(ImGui::GetWindowWidth() - m_LeftWidth - m_RightWidth - 60.0f, 120.0f);
+		m_Zoom = std::clamp(std::min(room / m_Canvas.x, (ImGui::GetWindowHeight() - 120.0f) / m_Canvas.y), 0.1f, 4.0f);
+	}
+	if (m_ToggleMaximize)
+	{
+		ImGui::SameLine();
+		const bool maximized = m_IsMaximized && m_IsMaximized();
+		if (ImGui::Button(maximized ? ICON_FK_COMPRESS " Restore" : ICON_FK_EXPAND " Maximize"))
+		{
+			m_ToggleMaximize();
+		}
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+		{
+			ImGui::SetTooltip("F11 or Shift+Space; Esc restores");
+		}
 	}
 }
 
@@ -562,6 +617,7 @@ void UiEditorPanel::draw_tree()
 		m_Selected = 0;
 	}
 	ImGui::EndDisabled();
+	m_TreeFilter.Draw("##tree_filter", -1.0f);
 	ImGui::Separator();
 
 	draw_tree_node(0);
@@ -583,6 +639,28 @@ void UiEditorPanel::draw_tree()
 	}
 }
 
+// Whether the widget or something below it passes the search box.
+bool UiEditorPanel::tree_matches(UiId id) const
+{
+	const UiWidget* widget = m_Model->data().find(id);
+	if (widget == nullptr)
+	{
+		return false;
+	}
+	if (m_TreeFilter.PassFilter(widget->Name.c_str()) || m_TreeFilter.PassFilter(widget_kind_name(widget->Kind)))
+	{
+		return true;
+	}
+	for (const UiWidget& other : m_Model->data().Widgets)
+	{
+		if (other.Parent == id && tree_matches(other.Id))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 void UiEditorPanel::draw_tree_node(UiId parent)
 {
 	// the ids first: an action in the menu changes the panel under the loop
@@ -599,9 +677,13 @@ void UiEditorPanel::draw_tree_node(UiId parent)
 	{
 		const UiId id = children[position];
 		const UiWidget* widget = m_Model->data().find(id);
-		if (widget == nullptr)
+		if (widget == nullptr || (m_TreeFilter.IsActive() && !tree_matches(id)))
 		{
 			continue;
+		}
+		if (m_TreeFilter.IsActive())
+		{
+			ImGui::SetNextItemOpen(true); // show what matched
 		}
 
 		const bool hasChildren = std::any_of(m_Model->data().Widgets.begin(), m_Model->data().Widgets.end(), [id](const UiWidget& other) { return other.Parent == id; });
@@ -721,6 +803,21 @@ void UiEditorPanel::draw_canvas()
 	{
 		ImGui::TextDisabled("The renderer is not running.");
 		return;
+	}
+
+	// wheel zoom and middle-button pan while the mouse is over the canvas area
+	if (ImGui::IsWindowHovered())
+	{
+		const ImGuiIO& canvasIo = ImGui::GetIO();
+		if (canvasIo.MouseWheel != 0.0f)
+		{
+			m_Zoom = std::clamp(m_Zoom * std::pow(1.1f, canvasIo.MouseWheel), 0.1f, 4.0f);
+		}
+		if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f))
+		{
+			ImGui::SetScrollX(ImGui::GetScrollX() - canvasIo.MouseDelta.x);
+			ImGui::SetScrollY(ImGui::GetScrollY() - canvasIo.MouseDelta.y);
+		}
 	}
 
 	// what the game draws for this panel, drawn by the renderer into a texture (like the Viewport), and shown here

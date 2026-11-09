@@ -1,17 +1,26 @@
 {
+  "version": 1,
+  "name": "plastic_red",
   "alpha": "opaque",
   "alphaCutoff": 0.5,
-  "baseColor": [0.6, 0.02, 0.02, 1.0],
-  "clearcoat": 0.0,
+  "baseColor": [
+    0.8,
+    0.05,
+    0.05,
+    1
+  ],
+  "clearcoat": 0.5,
   "clearcoatRoughness": 0.0,
   "doubleSided": false,
-  "emissive": [0.0, 0.0, 0.0],
+  "emissive": [
+    0,
+    0,
+    0
+  ],
   "metallic": 0.0,
-  "name": "plastic_red",
-  "roughness": 0.3,
+  "roughness": 0.35,
   "sheen": 0.0,
   "sheenRoughness": 0.0,
-  "textures": {},
   "transmission": 0.0,
-  "version": 1
+  "textures": {}
 }

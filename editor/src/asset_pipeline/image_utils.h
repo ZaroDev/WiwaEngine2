@@ -11,9 +11,20 @@ namespace wiwa
 	// Number of mip levels of a full chain down to 1x1.
 	u32 get_mip_count(u32 width, u32 height);
 
+	// What the import settings of a texture ask of the decoder.
+	struct TextureImportOptions
+	{
+		bool GenerateMipmaps = true; // false: only the first level is kept
+		u32 MaxSize = 0;             // 0: no limit; else the top levels are dropped until the larger side is at most this
+		bool FlipVertical = false;   // mirror the image top to bottom
+		bool InvertGreen = false;    // flip the green channel (a normal map from the other convention: DirectX y-down against OpenGL y-up)
+		bool ForceOpaque = false;    // alpha 255 everywhere
+		bool PremultiplyAlpha = false; // rgb multiplied by alpha (done on the stored values, before the mips)
+	};
+
 	// Decodes PNG/JPEG/TGA/BMP bytes to RGBA8 and builds the whole mip chain (averaged the right way for kind).
 	// name is only used in error messages.
-	std::optional<TextureData> decode_texture(std::span<const std::byte> bytes, TextureKind kind, const std::string& name, std::string& error);
+	std::optional<TextureData> decode_texture(std::span<const std::byte> bytes, TextureKind kind, const std::string& name, std::string& error, const TextureImportOptions& options = {});
 
 	// A decoded Radiance .hdr file: linear float RGB, equirectangular.
 	struct EquirectImage

@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "taa_pass.h"
 
+#include "../view/view_state.h"
+
 #include "../engine_assets.h"
 #include "../scene/scene_render_data.h"
 
@@ -71,7 +73,7 @@ namespace wiwa
 		}
 	}
 
-	bool TaaPass::create_binding_sets(ViewportTarget& viewport)
+	bool TaaPass::create_binding_sets(ViewportTarget& viewport, ViewCache& c)
 	{
 		bool ok = true;
 		for (u32 i = 0; i < 2; i++)
@@ -87,14 +89,15 @@ namespace wiwa
 			set.addItem(nvrhi::BindingSetItem::Sampler(6, m_Sampler));
 			set.addItem(nvrhi::BindingSetItem::Texture_UAV(7, viewport.taa_history(i)));
 			set.addItem(nvrhi::BindingSetItem::Texture_UAV(8, viewport.taa_depth_history(i)));
-			m_BindingSets[i] = m_Device->createBindingSet(set, m_BindingLayout);
-			ok = ok && m_BindingSets[i] != nullptr;
+			c.BindingSets[i] = m_Device->createBindingSet(set, m_BindingLayout);
+			ok = ok && c.BindingSets[i] != nullptr;
 		}
 		return ok;
 	}
 
 	void TaaPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
 	{
+		ViewCache& c = m_PerView.get(frame.View->Target);
 		if (frame.Scene == nullptr || !frame.Scene->active() || m_Failed || !frame.Scene->temporal_active())
 		{
 			return;
@@ -117,10 +120,9 @@ namespace wiwa
 			}
 		}
 
-		if (m_BindingSets[0] == nullptr || viewport.generation() != m_BuiltViewportGeneration)
+		if (c.BindingSets[0] == nullptr)
 		{
-			m_BuiltViewportGeneration = viewport.generation();
-			if (!create_binding_sets(viewport))
+			if (!create_binding_sets(viewport, c))
 			{
 				WI_TAA_LOG(Error, "Could not create the TAA bindings");
 				m_Failed = true;
@@ -130,7 +132,7 @@ namespace wiwa
 
 		// The history is the previous frame result only if this pass resolved the frame right before this one, on the same targets
 		// (TAA may have been off in between: the textures then hold an old image).
-		const bool consecutive = m_HasRun && m_LastRunFrame + 1 == frame.FrameIndex && m_LastRunGeneration == viewport.generation();
+		const bool consecutive = c.HasRun && c.LastRunFrame + 1 == frame.FrameIndex && c.LastRunGeneration == viewport.generation();
 		const bool useHistory = consecutive && frame.Scene->history_valid();
 
 		const FrameConstants& constants = frame.Scene->constants();
@@ -143,16 +145,16 @@ namespace wiwa
 
 		nvrhi::ComputeState state;
 		state.pipeline = m_Pipeline;
-		state.addBindingSet(m_BindingSets[m_Current]);
+		state.addBindingSet(c.BindingSets[c.Current]);
 		commandList->setComputeState(state);
 		commandList->dispatch((viewport.width() + GROUP_SIZE - 1) / GROUP_SIZE, (viewport.height() + GROUP_SIZE - 1) / GROUP_SIZE, 1);
 
 		// Everything after this pass reads the resolved image from hdr(); the history keeps its own copy.
-		commandList->copyTexture(viewport.hdr(), nvrhi::TextureSlice(), viewport.taa_history(m_Current), nvrhi::TextureSlice());
+		commandList->copyTexture(viewport.hdr(), nvrhi::TextureSlice(), viewport.taa_history(c.Current), nvrhi::TextureSlice());
 
-		m_HasRun = true;
-		m_LastRunFrame = frame.FrameIndex;
-		m_LastRunGeneration = viewport.generation();
-		m_Current = 1 - m_Current;
+		c.HasRun = true;
+		c.LastRunFrame = frame.FrameIndex;
+		c.LastRunGeneration = viewport.generation();
+		c.Current = 1 - c.Current;
 	}
 }

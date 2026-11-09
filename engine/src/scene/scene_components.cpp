@@ -101,5 +101,39 @@ namespace wiwa
 			WI_FIELD(PushStrength),
 			WI_FIELD(GravityFactor),
 			WI_FIELD_META(Layer, FieldMeta::range(0.0f, 31.0f))));
+
+		registry.register_component(WI_COMPONENT(Animator,
+			WI_FIELD_META(Skeleton, FieldMeta::asset(AssetType::Skeleton)),
+			WI_FIELD_META(Clips, FieldMeta::asset(AssetType::AnimationClip)),
+			WI_FIELD_META(Clip, FieldMeta::asset(AssetType::AnimationClip)),
+			WI_FIELD(PlayOnStart),
+			WI_FIELD(Speed),
+			WI_FIELD(Enabled),
+			WI_FIELD_META(BoundsPadding, FieldMeta::range(0.0f, 100.0f)),
+			WI_FIELD_META(Graph, FieldMeta::asset(AssetType::AnimationGraph))));
+
+		registry.register_component(WI_COMPONENT(AnimationSocket,
+			WI_FIELD(Joint),
+			WI_FIELD(OffsetPosition),
+			WI_FIELD(OffsetRotation),
+			WI_FIELD(OffsetScale)));
+
+		registry.register_component(WI_COMPONENT(ViewHost,
+			WI_FIELD(Name),
+			WI_FIELD_META(Model, FieldMeta::asset(AssetType::Prefab)),
+			WI_FIELD(Target),
+			WI_FIELD_META(Distance, FieldMeta::range(0.1f, 200.0f)),
+			WI_FIELD(Yaw),
+			WI_FIELD_META(Pitch, FieldMeta::range(-89.0f, 89.0f)),
+			WI_FIELD_META(Fov, FieldMeta::range(1.0f, 120.0f)),
+			WI_FIELD(SpinSpeed),
+			WI_FIELD_META(Width, FieldMeta::range(1.0f, 4096.0f)),
+			WI_FIELD_META(Height, FieldMeta::range(1.0f, 4096.0f)),
+			WI_FIELD_META(Profile, FieldMeta::enumeration({ "Full", "Preview", "Thumbnail" })),
+			WI_FIELD(Transparent),
+			WI_FIELD(Continuous)));
+
+		registry.register_component(WI_COMPONENT(SkinBinding,
+			WI_FIELD_META(Skeleton, FieldMeta::asset(AssetType::Skeleton))));
 	}
 }

@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 
+#include <animation/animation_module.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <input/input_module.h>
@@ -62,6 +63,81 @@ namespace wiwa
 	}
 
 	// Waits are in seconds as well as frames: with vsync off a frame is a fraction of a millisecond, and the file watcher and the import need real time.
+	// The animated warrior of the scene (an Animator the prefab expander made, the demo script that crossfades Survey and Run, a socket on its head).
+	void DemoSmoke::sample_fox(Scene& play)
+	{
+		AnimationModule* animation = Engine::get().get_module<AnimationModule>();
+		const entt::entity fox = find_named(play, "Warrior (animated)");
+		const entt::entity socket = find_named(play, "Warrior head socket");
+		if (animation == nullptr || fox == entt::null || socket == entt::null)
+		{
+			return;
+		}
+
+		if (m_RunFrames == 0)
+		{
+			m_Fox.EventsBefore = animation->events_total();
+		}
+		m_Fox.HasAnimator = m_Fox.HasAnimator || play.registry().all_of<Animator>(fox);
+		m_Fox.EventsSeen = animation->events_total() - m_Fox.EventsBefore;
+
+		const glm::vec3 position = play.registry().get<Transform>(socket).Position;
+		m_Fox.SocketLow = glm::min(m_Fox.SocketLow, position);
+		m_Fox.SocketHigh = glm::max(m_Fox.SocketHigh, position);
+
+		if (const AnimatorInstance* instance = animation->instance_for(fox))
+		{
+			m_Fox.Crossfaded = m_Fox.Crossfaded || instance->node_count() > 1;
+			if (instance->graph_mode())
+			{
+				m_Fox.GraphSeen = true;
+				m_Fox.BaseStates.insert(instance->state_name(0));
+				m_Fox.UpperStates.insert(instance->state_name(1));
+			}
+			for (const JointMatrix& joint : instance->palette())
+			{
+				const glm::vec4 identity[3] = { glm::vec4(1, 0, 0, 0), glm::vec4(0, 1, 0, 0), glm::vec4(0, 0, 1, 0) };
+				for (int row = 0; row < 3; row++)
+				{
+					m_Fox.PaletteMoved = m_Fox.PaletteMoved || glm::length(joint.Row[row] - identity[row]) > 0.05f;
+				}
+			}
+		}
+	}
+
+	std::string DemoSmoke::check_fox() const
+	{
+		if (!m_Fox.HasAnimator)
+		{
+			return "the warrior has no Animator (the prefab expander adds one to a model with animations)";
+		}
+		if (glm::length(m_Fox.SocketHigh - m_Fox.SocketLow) < 0.001f)
+		{
+			return "the head socket of the warrior did not move";
+		}
+		if (!m_Fox.PaletteMoved)
+		{
+			return "the warrior never left its rest pose";
+		}
+		if (!m_Fox.GraphSeen)
+		{
+			return "the warrior never played its animation graph";
+		}
+		if (!m_Fox.BaseStates.contains("Idle") || !m_Fox.BaseStates.contains("Move"))
+		{
+			return "the warrior graph did not go between Idle and Move as the script changed its speed";
+		}
+		if (!m_Fox.UpperStates.contains("Attack"))
+		{
+			return "the upper body layer of the warrior graph never played Attack when the script fired the trigger";
+		}
+		if (m_Fox.EventsSeen == 0)
+		{
+			return "no footstep of the warrior was fired";
+		}
+		return {};
+	}
+
 	bool DemoSmoke::wait(u32 frames, const char* what, std::string& failure)
 	{
 		if (m_PhaseFrames == 0)
@@ -164,9 +240,17 @@ namespace wiwa
 			m_LightLow = std::min(m_LightLow, intensity);
 			m_LightHigh = std::max(m_LightHigh, intensity);
 
+			sample_fox(play);
+
 			if (++m_RunFrames < 150)
 			{
 				return false;
+			}
+
+			if (const std::string fox = check_fox(); !fox.empty())
+			{
+				failure = fox;
+				return true;
 			}
 
 			if (!scripting->running())

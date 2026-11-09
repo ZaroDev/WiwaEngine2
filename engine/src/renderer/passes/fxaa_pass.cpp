@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "fxaa_pass.h"
 
+#include "../view/view_state.h"
+
 #include "../engine_assets.h"
 #include "../scene/scene_render_data.h"
 
@@ -54,6 +56,7 @@ namespace wiwa
 
 	void FxaaPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
 	{
+		ViewCache& c = m_PerView.get(frame.View->Target);
 		if (frame.Scene == nullptr || !frame.Scene->active() || m_Failed || !frame.Scene->quality().Fxaa)
 		{
 			return;
@@ -61,10 +64,9 @@ namespace wiwa
 
 		ViewportTarget& viewport = *frame.Scene->viewport();
 		const u32 shaderGeneration = m_Shaders->get_generation();
-		if (shaderGeneration != m_BuiltShaderGeneration || viewport.generation() != m_BuiltViewportGeneration)
+		if (shaderGeneration != m_BuiltShaderGeneration)
 		{
 			m_BuiltShaderGeneration = shaderGeneration;
-			m_BuiltViewportGeneration = viewport.generation();
 
 			nvrhi::GraphicsPipelineDesc description;
 			description.primType = nvrhi::PrimitiveType::TriangleList;
@@ -75,16 +77,25 @@ namespace wiwa
 			description.renderState.depthStencilState.depthWriteEnable = false;
 			description.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None;
 			m_Pipeline = m_Device->createGraphicsPipeline(description, viewport.ldr_framebuffer());
+			if (m_Pipeline == nullptr)
+			{
+				WI_FXAA_LOG(Error, "Could not create the FXAA pipeline");
+				m_Failed = true;
+				return;
+			}
+		}
 
+		if (c.BindingSet == nullptr)
+		{
 			nvrhi::BindingSetDesc set;
 			set.addItem(nvrhi::BindingSetItem::Texture_SRV(0, viewport.pre_fxaa()));
 			set.addItem(nvrhi::BindingSetItem::Sampler(1, m_Sampler));
 			set.addItem(nvrhi::BindingSetItem::PushConstants(2, sizeof(PushConstants)));
-			m_BindingSet = m_Device->createBindingSet(set, m_BindingLayout);
+			c.BindingSet = m_Device->createBindingSet(set, m_BindingLayout);
 
-			if (m_Pipeline == nullptr || m_BindingSet == nullptr)
+			if (c.BindingSet == nullptr)
 			{
-				WI_FXAA_LOG(Error, "Could not create the FXAA pipeline");
+				WI_FXAA_LOG(Error, "Could not create the FXAA bindings");
 				m_Failed = true;
 				return;
 			}
@@ -94,12 +105,13 @@ namespace wiwa
 		state.pipeline = m_Pipeline;
 		state.framebuffer = viewport.ldr_framebuffer();
 		state.viewport.addViewportAndScissorRect(nvrhi::Viewport(static_cast<float>(viewport.width()), static_cast<float>(viewport.height())));
-		state.addBindingSet(m_BindingSet);
+		state.addBindingSet(c.BindingSet);
 		commandList->setGraphicsState(state);
 
 		PushConstants constants;
 		constants.RcpWidth = 1.0f / static_cast<float>(viewport.width());
 		constants.RcpHeight = 1.0f / static_cast<float>(viewport.height());
+		constants.Transparent = frame.Scene->transparent_background() ? 1.0f : 0.0f;
 		commandList->setPushConstants(&constants, sizeof(constants));
 
 		nvrhi::DrawArguments arguments;

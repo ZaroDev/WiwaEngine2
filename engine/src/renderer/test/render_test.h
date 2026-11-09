@@ -77,6 +77,8 @@ namespace wiwa
 	void register_pick_checks();
 	// The temporal chain: TAA maths, velocity, TAA, motion blur (temporal_checks.cpp).
 	void register_temporal_checks();
+	// Skinning: palettes in the scene mirror, deformation in the color and the velocity (skinning_checks.cpp).
+	void register_skinning_checks();
 	// Custom materials: surface shader cache, custom records, parameter bytes (material_checks.cpp).
 	void register_material_checks();
 	// The UI pass: quads, clipping, images, SDF text (ui_checks.cpp).

@@ -126,7 +126,7 @@ namespace wiwa
 					const double duration = std::max(stack->time_end - stack->time_begin, 1.0 / BAKE_RATE);
 					const size_t keyCount = static_cast<size_t>(std::ceil(duration * BAKE_RATE)) + 1;
 
-					AnimationClipData animation;
+					ImportedClip animation;
 					animation.Name = to_string(stack->name);
 					if (animation.Name.empty())
 					{
@@ -139,7 +139,6 @@ namespace wiwa
 						const ufbx_node* node = m_Scene->nodes.data[nodeIndex];
 
 						AnimationChannel translation;
-						translation.Node = nodeIndex;
 						translation.Path = AnimationPath::Translation;
 						translation.Components = 3;
 						AnimationChannel rotation = translation;
@@ -178,6 +177,7 @@ namespace wiwa
 						animation.Channels.push_back(std::move(translation));
 						animation.Channels.push_back(std::move(rotation));
 						animation.Channels.push_back(std::move(scale));
+						animation.ChannelNodes.insert(animation.ChannelNodes.end(), 3, nodeIndex);
 					}
 
 					if (!animation.Channels.empty())
@@ -329,14 +329,25 @@ namespace wiwa
 					return found->second;
 				}
 
-				SkeletonData skin;
+				ImportedSkeleton skin;
+				// The vertices of a skinned mesh are in the geometry space of the file (a Blender character is Z up and the mesh node
+				// turns it, which only the joints see): they are moved to where the bind pose puts them, which is the model space of
+				// the other formats. Standing in the bind pose then needs no palette. The inverse bind of a joint becomes the inverse
+				// of its bind matrix: inverse(bind_to_world) * (bind_to_world * geometry_to_bone) * v is the same skinned vertex.
 				skin.Name = "Skin " + std::to_string(m_Model.Skeletons.size());
+				glm::mat4 bindToModel(1.0f);
 				for (size_t i = 0; i < deformer->clusters.count; i++)
 				{
 					const ufbx_skin_cluster* cluster = deformer->clusters.data[i];
 					skin.Joints.push_back(cluster->bone_node != nullptr ? cluster->bone_node->typed_id : 0u);
-					skin.InverseBind.push_back(to_glm(cluster->geometry_to_bone));
+					skin.InverseBind.push_back(to_glm(ufbx_matrix_invert(&cluster->bind_to_world)));
+					if (i == 0)
+					{
+						// the same for every cluster of a mesh bound in one pose (checked on the models of the demo)
+						bindToModel = to_glm(ufbx_matrix_mul(&cluster->bind_to_world, &cluster->geometry_to_bone));
+					}
 				}
+				m_SkinBind[deformer] = bindToModel;
 				m_Model.Skeletons.push_back(std::move(skin));
 				const int index = static_cast<int>(m_Model.Skeletons.size() - 1);
 				m_SkinLookup[deformer] = index;
@@ -354,8 +365,9 @@ namespace wiwa
 				}
 
 				// A mesh that is not skinned moves with its node: its geometry offset goes into the vertices, so that the node's
-				// own transform is all that is left to animate. A skinned mesh stays in its own space (the joints carry it).
-				const glm::mat4 geometryToNode = to_glm(node->geometry_to_node);
+				// own transform is all that is left to animate. A skinned mesh is placed by its bind pose (see get_skin) and
+				// ignores the node (the joints carry it).
+				const glm::mat4 geometryToNode = (skinIndex >= 0) ? m_SkinBind.at(deformer) : to_glm(node->geometry_to_node);
 				const glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(geometryToNode)));
 
 				std::vector<u32> triangle(std::max<size_t>(mesh->max_face_triangles, 1) * 3);
@@ -404,11 +416,8 @@ namespace wiwa
 									uv = glm::vec2(static_cast<float>(value.x), 1.0f - static_cast<float>(value.y)); // FBX's V goes up, ours down
 								}
 
-								if (skinIndex < 0)
-								{
-									position = glm::vec3(geometryToNode * glm::vec4(position, 1.0f));
-									normal = glm::normalize(normalMatrix * normal);
-								}
+								position = glm::vec3(geometryToNode * glm::vec4(position, 1.0f));
+								normal = glm::normalize(normalMatrix * normal);
 
 								MeshVertex vertex;
 								vertex.Position[0] = position.x;
@@ -501,6 +510,7 @@ namespace wiwa
 			static constexpr u32 NO_MATERIAL = 0xFFFFFFFFu;
 			std::unordered_map<const ufbx_material*, u32> m_MaterialLookup{};
 			std::unordered_map<const ufbx_skin_deformer*, int> m_SkinLookup{};
+			std::unordered_map<const ufbx_skin_deformer*, glm::mat4> m_SkinBind{}; // geometry space -> model space at bind, per skin
 			std::unordered_map<std::string, int> m_ImageLookup{};
 		};
 	}

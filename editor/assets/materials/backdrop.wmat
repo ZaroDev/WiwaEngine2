@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "name": "backdrop",
+  "alpha": "opaque",
+  "alphaCutoff": 0.5,
+  "baseColor": [
+    0.8,
+    0.85,
+    1,
+    1
+  ],
+  "clearcoat": 0.0,
+  "clearcoatRoughness": 0.0,
+  "doubleSided": false,
+  "emissive": [
+    0,
+    0,
+    0
+  ],
+  "metallic": 0.0,
+  "roughness": 1.0,
+  "sheen": 0.0,
+  "sheenRoughness": 0.0,
+  "transmission": 0.0,
+  "textures": {
+    "baseColor": "../textures/bricks_color.jpg",
+    "normal": "../textures/bricks_normal.jpg",
+    "orm": "../textures/bricks_orm.png"
+  }
+}

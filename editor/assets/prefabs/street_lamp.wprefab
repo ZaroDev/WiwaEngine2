@@ -1,0 +1,123 @@
+{
+  "name": "Street lamp",
+  "entities": [
+    {
+      "id": "b2e2fe074a40833b754f0efcef8d7156",
+      "components": {
+        "Name": {
+          "Value": "Street lamp"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "cd664413e0c2f675510a50a6fc1a7e11",
+      "parent": "b2e2fe074a40833b754f0efcef8d7156",
+      "components": {
+        "Name": {
+          "Value": "Pole"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            1.6,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.12,
+            3.2,
+            0.12
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 3
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b2e334f08cfdba530bb304c0214b03ed",
+      "parent": "b2e2fe074a40833b754f0efcef8d7156",
+      "components": {
+        "Name": {
+          "Value": "Head"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            3.4,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.45,
+            0.45,
+            0.45
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.7,
+            0.35,
+            1
+          ],
+          "Intensity": 18,
+          "Range": 9,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    }
+  ]
+}

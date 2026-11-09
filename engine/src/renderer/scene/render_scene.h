@@ -22,6 +22,11 @@ namespace wiwa
 		EntityGuid Guid{}; // set when the instance is added: what picking answers with
 		glm::mat4 World{ 1.0f };
 		glm::mat4 PrevWorld{ 1.0f }; // World as the last rendered frame had it (equal to World for an instance that does not move): the velocity pass reads it
+		// The joint palette of a skinned mesh: three float4 per joint (the rows of its 3x4 matrix), empty for a rigid instance. PrevPalette follows
+		// the same rule as PrevWorld: it is the palette of the last rendered frame. A SceneDelta upsert of the instance does not touch them.
+		std::vector<glm::vec4> Palette{};
+		std::vector<glm::vec4> PrevPalette{};
+		float BoundsPadding = 0.0f; // the mesh bounds grow by this much in every direction when the instance is culled (a pose reaches past them)
 		AssetRef Mesh{};
 		std::vector<AssetRef> Materials{}; // overrides per primitive; empty means the mesh's own materials
 	};
@@ -66,6 +71,8 @@ namespace wiwa
 		bool Reset = false; // the active scene is a different one: drop everything first, then apply what follows
 		std::vector<std::pair<EntityGuid, RenderInstance>> InstanceUpserts{};
 		std::vector<EntityGuid> InstanceRemovals{};
+		// The new palette of instances that exist (an empty one makes the instance rigid again), sent when a pose changed.
+		std::vector<std::pair<EntityGuid, std::vector<glm::vec4>>> PaletteUpdates{};
 		std::vector<std::pair<EntityGuid, RenderLight>> LightUpserts{};
 		std::vector<EntityGuid> LightRemovals{};
 		std::optional<RenderCamera> Camera{}; // the primary camera, when it changed
@@ -74,7 +81,7 @@ namespace wiwa
 
 		bool empty() const
 		{
-			return !Reset && InstanceUpserts.empty() && InstanceRemovals.empty() && LightUpserts.empty() && LightRemovals.empty()
+			return !Reset && InstanceUpserts.empty() && InstanceRemovals.empty() && PaletteUpdates.empty() && LightUpserts.empty() && LightRemovals.empty()
 				&& !Camera && !CameraRemoved && !Settings;
 		}
 	};

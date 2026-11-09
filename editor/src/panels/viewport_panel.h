@@ -3,6 +3,7 @@
 #include "panel.h"
 #include "play_input_router.h"
 #include "view_owner.h"
+#include "../settings/editor_section.h"
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <gizmo/gizmo_settings.h>
@@ -24,9 +25,13 @@
 class ViewportPanel : public Panel
 {
 public:
-	ViewportPanel(wiwa::SceneEditor& editor, Ref<ViewOwner> owner);
+	ViewportPanel(wiwa::SceneEditor& editor, Ref<ViewOwner> owner, Ref<EditorSection> section);
 
 	virtual void on_draw() override;
+
+	// Frames the entity with the editor camera (F, double-click in the Hierarchy): looks at its world position from a distance that
+	// fits its scale, keeping the way the camera looks.
+	void focus_on(entt::entity entity);
 
 private:
 	void apply_manipulation(entt::entity entity, const glm::mat4& world);
@@ -36,9 +41,8 @@ private:
 	PlayInputRouter m_PlayInput{};
 	int m_Operation = ImGuizmo::TRANSLATE;
 	bool m_LocalSpace = false; // the transform gizmo works in the entity's own axes (scale always does)
+	Ref<EditorSection> m_Section; // the gizmo settings, shared with the Settings page
 	wiwa::SceneGizmos m_SceneGizmos;
-	wiwa::GizmoSettings m_GizmoSettings{};
-	bool m_GizmoSettingsChanged = false; // saved once the mouse is let go
 	wiwa::EditorCamera m_Camera{};
 	bool m_UseEditorCamera = true;
 	bool m_ShowGameUi = false; // the Scene view leaves the game UI out; the Game panel shows it

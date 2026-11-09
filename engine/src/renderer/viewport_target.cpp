@@ -2,12 +2,19 @@
 #include "viewport_target.h"
 
 #include <algorithm>
+#include <atomic>
 
 namespace wiwa
 {
 	u32 ViewportTarget::clamp_dimension(u32 size)
 	{
 		return std::clamp(size, 1u, MAX_SIZE);
+	}
+
+	u32 ViewportTarget::next_uid()
+	{
+		static std::atomic<u32> counter{ 1 };
+		return counter.fetch_add(1);
 	}
 
 	bool ViewportTarget::create(nvrhi::IDevice* device, u32 width, u32 height)

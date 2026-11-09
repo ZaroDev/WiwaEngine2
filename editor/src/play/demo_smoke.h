@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <set>
 #include <string>
 
 #include <core/common.h>
@@ -41,6 +42,8 @@ namespace wiwa
 		};
 
 		bool wait(u32 frames, const char* what, std::string& failure);
+		void sample_fox(Scene& play);
+		std::string check_fox() const;
 		std::string finish_checks();
 		bool sample_physics(Scene& play, std::string& failure);
 
@@ -84,6 +87,21 @@ namespace wiwa
 		float m_BallLow = 1e9f, m_BallHigh = -1e9f;
 		float m_CameraLow = 1e9f, m_CameraHigh = -1e9f;
 		float m_LightLow = 1e9f, m_LightHigh = -1e9f;
+
+		// the animated warrior: its head socket moves, its palette leaves the rest pose, a crossfade happens, its footsteps are heard
+		struct FoxWatch
+		{
+			glm::vec3 SocketLow{ 1e9f }, SocketHigh{ -1e9f };
+			bool PaletteMoved = false;
+			bool Crossfaded = false;
+			bool GraphSeen = false;                // the Animator played its animation graph
+			std::set<std::string> BaseStates{};    // the states the base layer of the graph was in
+			std::set<std::string> UpperStates{};   // and the upper body layer
+			bool HasAnimator = false;
+			u64 EventsBefore = 0;
+			u64 EventsSeen = 0;
+		};
+		FoxWatch m_Fox{};
 
 		// the Physics phase: the joints demo (door, cart, pendulum, bridge, breaking box) and the character demo (a patrolling character, a sliding
 		// platform) of the scene while it plays

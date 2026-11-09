@@ -5,6 +5,10 @@
 
 #include <assets/asset_manager.h>
 #include <core/engine.h>
+#include <scene/entity_templates.h>
+#include <scene/reflection/component_registry.h>
+
+#include "asset_icons.h"
 
 namespace
 {
@@ -45,6 +49,11 @@ void HierarchyPanel::on_draw()
 				const entt::entity dropped = *static_cast<const entt::entity*>(payload->Data);
 				m_Deferred = [this, dropped]() { m_Editor.reparent(dropped, entt::null); };
 			}
+			else if (const ImGuiPayload* asset = ImGui::AcceptDragDropPayload("WI_ASSET"))
+			{
+				const std::string path = reinterpret_cast<const char*>(asset->Data);
+				m_Deferred = [this, path]() { drop_asset(path, entt::null); };
+			}
 			ImGui::EndDragDropTarget();
 		}
 		draw_background_menu();
@@ -72,6 +81,24 @@ void HierarchyPanel::draw_header()
 	const std::string name = m_Editor.path().empty() ? "untitled" : m_Editor.path().filename().string();
 	ImGui::Text("Scene: %s%s", name.c_str(), m_Editor.dirty() ? " *" : "");
 
+	if (ImGui::Button(ICON_FK_PLUS " Create"))
+	{
+		ImGui::OpenPopup("##create_menu");
+	}
+	if (ImGui::BeginPopup("##create_menu"))
+	{
+		draw_create_menu(entt::null);
+		ImGui::EndPopup();
+	}
+	ImGui::SameLine();
+	m_Filter.Draw("##hierarchy_filter", -ImGui::CalcTextSize("Components").x - ImGui::GetFrameHeight() - ImGui::GetStyle().ItemSpacing.x * 2.0f);
+	ImGui::SameLine();
+	ImGui::Checkbox("Components", &m_FilterComponents);
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+	{
+		ImGui::SetTooltip("The search also matches component names (Light, RigidBody...)");
+	}
+
 	if (m_Editor.is_opening())
 	{
 		if (const Ref<wiwa::JobProgress> progress = m_Editor.get_open_progress())
@@ -94,22 +121,194 @@ void HierarchyPanel::draw_background_menu()
 		return;
 	}
 
-	if (ImGui::MenuItem("New entity"))
+	draw_create_menu(entt::null);
+	ImGui::Separator();
+	if (ImGui::MenuItem("Paste", "Ctrl+V", false, m_Editor.has_clipboard()))
 	{
-		m_Deferred = [this]()
+		m_Deferred = [this]() { paste(); };
+	}
+	ImGui::EndPopup();
+}
+
+void HierarchyPanel::draw_create_menu(entt::entity parent)
+{
+	wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+	const std::vector<EntityTemplate> templates = assets != nullptr ? entity_templates(*assets) : std::vector<EntityTemplate>{};
+
+	const auto create = [this, parent](const EntityTemplate& entry)
+	{
+		m_Deferred = [this, parent, make = entry.Create]()
 		{
-			const entt::entity created = m_Editor.create_entity(entt::null);
-			if (created != entt::null)
+			const entt::entity created = make(m_Editor, parent);
+			if (created == entt::null)
+			{
+				m_Status = "Nothing can be added under that entity";
+			}
+			else
 			{
 				m_Editor.select(created);
+				m_Status.clear();
 			}
 		};
+	};
+
+	for (const EntityTemplate& entry : templates)
+	{
+		if (entry.Category.empty() && ImGui::MenuItem(entry.Name.c_str()))
+		{
+			create(entry);
+		}
 	}
-	if (ImGui::MenuItem("New prefab instance..."))
+
+	std::vector<std::string> categories;
+	for (const EntityTemplate& entry : templates)
+	{
+		if (!entry.Category.empty() && std::find(categories.begin(), categories.end(), entry.Category) == categories.end())
+		{
+			categories.push_back(entry.Category);
+		}
+	}
+	for (const std::string& category : categories)
+	{
+		if (ImGui::BeginMenu(category.c_str()))
+		{
+			for (const EntityTemplate& entry : templates)
+			{
+				if (entry.Category == category && ImGui::MenuItem(entry.Name.c_str()))
+				{
+					create(entry);
+				}
+			}
+			ImGui::EndMenu();
+		}
+	}
+
+	ImGui::Separator();
+	if (ImGui::MenuItem("Prefab instance..."))
 	{
 		m_OpenPrefabPicker = true;
 	}
-	ImGui::EndPopup();
+}
+
+bool HierarchyPanel::passes_filter(entt::entity entity) const
+{
+	const entt::registry& registry = m_Editor.scene().registry();
+	if (!registry.valid(entity))
+	{
+		return false;
+	}
+	if (m_Filter.PassFilter(registry.get<wiwa::Name>(entity).Value.c_str()))
+	{
+		return true;
+	}
+	if (m_FilterComponents)
+	{
+		for (const wiwa::ComponentInfo* info : wiwa::ComponentRegistry::get().all())
+		{
+			if (info->Has(m_Editor.scene().registry(), entity) && m_Filter.PassFilter(info->display_name().c_str()))
+			{
+				return true;
+			}
+		}
+	}
+	for (entt::entity child = registry.get<wiwa::Hierarchy>(entity).FirstChild; child != entt::null; child = registry.get<wiwa::Hierarchy>(child).NextSibling)
+	{
+		if (passes_filter(child))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+// An asset dropped on a row (target) or on the empty space (entt::null): a prefab or a model makes an instance under it, a material goes
+// onto the MeshRenderer of the row.
+void HierarchyPanel::drop_asset(const std::string& path, entt::entity target)
+{
+	wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+	const std::optional<wiwa::AssetRef> ref = assets != nullptr ? assets->find_asset(path) : std::nullopt;
+	if (!ref)
+	{
+		m_Status = "No asset at " + std::filesystem::path(path).filename().string() + " (is it imported?)";
+		return;
+	}
+
+	const std::string extension = std::filesystem::path(path).extension().string();
+	if (extension == ".wmat")
+	{
+		if (target == entt::null || !m_Editor.scene().registry().all_of<wiwa::MeshRenderer>(target))
+		{
+			m_Status = "Drop a material on an entity with a MeshRenderer";
+			return;
+		}
+		m_Editor.set_field(target, "MeshRenderer", "Materials", wiwa::FieldValue(std::vector<wiwa::AssetRef>{ *ref }));
+		m_Status.clear();
+	}
+	else if (extension == ".wprefab" || extension == ".gltf" || extension == ".glb" || extension == ".fbx")
+	{
+		const bool authored = target == entt::null || m_Editor.kind_of(target) == wiwa::SceneEditor::Kind::Authored;
+		const entt::entity instance = m_Editor.add_prefab(*ref, authored ? target : entt::null);
+		if (instance != entt::null)
+		{
+			m_Editor.select(instance);
+			m_Status.clear();
+		}
+	}
+	else
+	{
+		m_Status = "A " + (extension.empty() ? std::string("file") : extension) + " cannot be dropped in the scene";
+	}
+}
+
+void HierarchyPanel::request_rename()
+{
+	const entt::entity selected = m_Editor.selected();
+	if (selected == entt::null || !m_Editor.scene().registry().valid(selected) || m_Editor.kind_of(selected) != wiwa::SceneEditor::Kind::Authored)
+	{
+		return;
+	}
+	m_RenameTarget = m_Editor.scene().registry().get<wiwa::Id>(selected).Guid;
+	std::snprintf(m_RenameBuffer, sizeof(m_RenameBuffer), "%s", m_Editor.scene().registry().get<wiwa::Name>(selected).Value.c_str());
+	m_OpenRename = true;
+}
+
+void HierarchyPanel::copy_selection()
+{
+	if (m_Editor.selected() != entt::null && !m_Editor.copy_entity(m_Editor.selected()))
+	{
+		m_Status = "Only entities of the scene can be copied, not the parts of a prefab instance";
+	}
+}
+
+void HierarchyPanel::cut_selection()
+{
+	const entt::entity selected = m_Editor.selected();
+	if (selected != entt::null && !m_Editor.playing() && m_Editor.copy_entity(selected))
+	{
+		m_Editor.delete_entity(selected);
+	}
+}
+
+void HierarchyPanel::paste()
+{
+	// under the selected entity when it can take a child, else at the top level
+	entt::entity parent = m_Editor.selected();
+	if (parent != entt::null && (!m_Editor.scene().registry().valid(parent) || m_Editor.kind_of(parent) != wiwa::SceneEditor::Kind::Authored))
+	{
+		parent = entt::null;
+	}
+	if (m_Editor.paste_entity(parent) == entt::null)
+	{
+		m_Status = m_Editor.has_clipboard() ? "Nothing can be pasted here" : "Nothing was copied";
+	}
+}
+
+void HierarchyPanel::focus_selection()
+{
+	if (m_Focus && m_Editor.selected() != entt::null)
+	{
+		m_Focus(m_Editor.selected());
+	}
 }
 
 void HierarchyPanel::refresh_prefabs()
@@ -226,6 +425,15 @@ void HierarchyPanel::draw_node(entt::entity entity)
 		return;
 	}
 
+	if (filtering() && !passes_filter(entity))
+	{
+		return;
+	}
+	if (filtering())
+	{
+		ImGui::SetNextItemOpen(true); // show what matched
+	}
+
 	const wiwa::SceneEditor::Kind kind = m_Editor.kind_of(entity);
 	const bool isInstance = registry.all_of<wiwa::PrefabInstance>(entity);
 	const wiwa::Hierarchy& link = registry.get<wiwa::Hierarchy>(entity);
@@ -273,6 +481,10 @@ void HierarchyPanel::draw_node(entt::entity entity)
 	{
 		m_Editor.select(entity);
 	}
+	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+	{
+		m_Deferred = [this]() { focus_selection(); };
+	}
 
 	if (kind == wiwa::SceneEditor::Kind::Authored && ImGui::BeginDragDropSource())
 	{
@@ -287,6 +499,11 @@ void HierarchyPanel::draw_node(entt::entity entity)
 			const entt::entity dropped = *static_cast<const entt::entity*>(payload->Data);
 			m_Deferred = [this, dropped, entity]() { m_Editor.reparent(dropped, entity); };
 		}
+		else if (const ImGuiPayload* asset = ImGui::AcceptDragDropPayload("WI_ASSET"))
+		{
+			const std::string path = reinterpret_cast<const char*>(asset->Data);
+			m_Deferred = [this, path, entity]() { drop_asset(path, entity); };
+		}
 		ImGui::EndDragDropTarget();
 	}
 
@@ -294,26 +511,32 @@ void HierarchyPanel::draw_node(entt::entity entity)
 	{
 		m_Editor.select(entity);
 		const bool authored = kind == wiwa::SceneEditor::Kind::Authored;
-		if (ImGui::MenuItem("Create child"))
+		if (ImGui::BeginMenu("Create child"))
 		{
-			m_Deferred = [this, entity]()
-			{
-				const entt::entity created = m_Editor.create_entity(entity);
-				if (created == entt::null)
-				{
-					m_Status = "Nothing can be added under that entity";
-				}
-				else
-				{
-					m_Editor.select(created);
-				}
-			};
+			draw_create_menu(entity);
+			ImGui::EndMenu();
 		}
-		if (ImGui::MenuItem("Duplicate", nullptr, false, authored))
+		if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, authored))
 		{
 			m_Deferred = [this, entity]() { m_Editor.duplicate_entity(entity); };
 		}
-		if (ImGui::MenuItem("Rename...", nullptr, false, authored))
+		if (ImGui::MenuItem("Copy", "Ctrl+C", false, authored))
+		{
+			m_Deferred = [this]() { copy_selection(); };
+		}
+		if (ImGui::MenuItem("Cut", "Ctrl+X", false, authored))
+		{
+			m_Deferred = [this]() { cut_selection(); };
+		}
+		if (ImGui::MenuItem("Paste", "Ctrl+V", false, authored && m_Editor.has_clipboard()))
+		{
+			m_Deferred = [this]() { paste(); };
+		}
+		if (ImGui::MenuItem("Focus", "F"))
+		{
+			m_Deferred = [this]() { focus_selection(); };
+		}
+		if (ImGui::MenuItem("Rename...", "F2", false, authored))
 		{
 			m_RenameTarget = registry.get<wiwa::Id>(entity).Guid;
 			std::snprintf(m_RenameBuffer, sizeof(m_RenameBuffer), "%s", name.c_str());
@@ -337,6 +560,36 @@ void HierarchyPanel::draw_node(entt::entity entity)
 			m_Deferred = [this, entity]() { m_Editor.delete_entity(entity); };
 		}
 		ImGui::EndPopup();
+	}
+
+	// small icons for what the entity has, after its name
+	{
+		struct ComponentIcon
+		{
+			const char* Icon;
+			bool Present;
+			const char* Tooltip;
+		};
+		const ComponentIcon icons[] = {
+			{ ICON_FK_CUBE, registry.all_of<wiwa::MeshRenderer>(entity), "MeshRenderer" },
+			{ ICON_FK_LIGHTBULB_O, registry.all_of<wiwa::Light>(entity), "Light" },
+			{ ICON_FK_VIDEO_CAMERA, registry.all_of<wiwa::Camera>(entity), "Camera" },
+			{ ICON_FK_CIRCLE_O, registry.all_of<wiwa::Collider>(entity), "Collider" },
+			{ ICON_FK_HUBZILLA, registry.all_of<wiwa::RigidBody>(entity), "RigidBody" },
+			{ ICON_FK_MALE, registry.all_of<wiwa::Animator>(entity), "Animator" },
+		};
+		for (const ComponentIcon& icon : icons)
+		{
+			if (icon.Present)
+			{
+				ImGui::SameLine(0.0f, 6.0f);
+				ImGui::TextDisabled("%s", icon.Icon);
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+				{
+					ImGui::SetTooltip("%s", icon.Tooltip);
+				}
+			}
+		}
 	}
 
 	if (open)

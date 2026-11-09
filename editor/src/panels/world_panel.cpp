@@ -65,7 +65,6 @@ void WorldPanel::on_draw()
 		section("Temporal AA", false, [&]() { taa_rows(settings, render); });
 		section("Motion blur", false, [&]() { motion_blur_rows(settings, render); });
 		section("Scripts", false, [&]() { scripts_rows(settings); });
-			section("Quality (global, not saved with the scene)", false, [&]() { quality_rows(render); });
 		if (m_Filtering && !m_AnySection)
 		{
 			ImGui::TextDisabled("No settings match");
@@ -243,7 +242,7 @@ void WorldPanel::bloom_rows(wiwa::SceneSettings& settings)
 	field("Threshold", [&]() { ImGui::SliderFloat("Threshold", &bloom.Threshold, 0.0f, 4.0f); });
 	field("Knee", [&]() { ImGui::SliderFloat("Knee", &bloom.Knee, 0.0f, 1.0f); });
 	field("Intensity", [&]() { ImGui::SliderFloat("Intensity", &bloom.Intensity, 0.0f, 0.3f, "%.3f"); });
-	note("The reach of the glow is the bloom levels in the Quality section.");
+	note("The reach of the glow is the bloom levels in the Settings panel (Renderer).");
 }
 
 void WorldPanel::ao_rows(wiwa::SceneSettings& settings)
@@ -253,7 +252,7 @@ void WorldPanel::ao_rows(wiwa::SceneSettings& settings)
 	field("Enabled", [&]() { ImGui::Checkbox("Enabled", &ao.Enabled); });
 	field("Radius", [&]() { ImGui::SliderFloat("Radius", &ao.Radius, 0.01f, 10.0f, "%.2f", ImGuiSliderFlags_Logarithmic); });
 	field("Power", [&]() { ImGui::SliderFloat("Power", &ao.Power, 0.1f, 8.0f); });
-	note("It darkens the ambient light only. The quality is in the Quality section.");
+	note("It darkens the ambient light only. The quality is in the Settings panel (Renderer).");
 }
 
 void WorldPanel::taa_rows(wiwa::SceneSettings& settings, wiwa::RenderModule* render)
@@ -263,7 +262,7 @@ void WorldPanel::taa_rows(wiwa::SceneSettings& settings, wiwa::RenderModule* ren
 		{
 			if (!taaOn)
 			{
-				ImGui::TextDisabled("Temporal anti-aliasing is off. Choose TAA under Anti-aliasing in the Quality section.");
+				ImGui::TextDisabled("Temporal anti-aliasing is off. Choose TAA under Anti-aliasing in the Settings panel (Renderer).");
 			}
 		});
 	field("Feedback", [&]()
@@ -404,75 +403,4 @@ void WorldPanel::scripts_rows(wiwa::SceneSettings& settings)
 				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_ScriptStatus.c_str());
 			}
 		});
-}
-
-void WorldPanel::quality_rows(wiwa::RenderModule* render)
-{
-	if (render == nullptr || !render->is_ready())
-	{
-		field("Renderer not ready", [&]() { ImGui::TextDisabled("Renderer not ready"); });
-		return;
-	}
-
-	wiwa::RenderQuality quality = render->get_quality();
-	const wiwa::RenderQuality before = quality;
-
-	group("Shadows");
-	field("Distance", [&]() { ImGui::DragFloat("Distance", &quality.ShadowDistance, 0.5f, 1.0f, 1000.0f); });
-	field("Cascades", [&]()
-		{
-			int cascades = static_cast<int>(quality.ShadowCascades);
-			if (ImGui::SliderInt("Cascades", &cascades, 1, 4))
-			{
-				quality.ShadowCascades = static_cast<wiwa::u32>(cascades);
-			}
-		});
-	field("Split lambda", [&]() { ImGui::SliderFloat("Split lambda", &quality.ShadowSplitLambda, 0.0f, 1.0f); });
-	field("Depth bias", [&]() { ImGui::DragFloat("Depth bias", &quality.ShadowDepthBias, 0.00005f, 0.0f, 0.05f, "%.5f"); });
-	field("Normal bias (texels)", [&]() { ImGui::DragFloat("Normal bias (texels)", &quality.ShadowNormalBias, 0.05f, 0.0f, 10.0f); });
-	field("Spot depth bias", [&]() { ImGui::DragFloat("Spot depth bias", &quality.SpotShadowBias, 0.00005f, 0.0f, 0.05f, "%.5f"); });
-
-	group("Post-processing");
-	field("Anti-aliasing", [&]()
-		{
-			int antiAliasing = quality.Taa ? 2 : (quality.Fxaa ? 1 : 0);
-			if (ImGui::Combo("Anti-aliasing", &antiAliasing, "Off\0FXAA\0TAA\0"))
-			{
-				quality.Fxaa = antiAliasing == 1;
-				quality.Taa = antiAliasing == 2;
-			}
-		});
-	field("Bloom levels", [&]()
-		{
-			int bloomMips = static_cast<int>(quality.BloomMips);
-			if (ImGui::SliderInt("Bloom levels", &bloomMips, 2, 6))
-			{
-				quality.BloomMips = static_cast<wiwa::u32>(bloomMips);
-			}
-		});
-	field("AO directions", [&]()
-		{
-			int aoSlices = static_cast<int>(quality.AoSlices);
-			if (ImGui::SliderInt("AO directions", &aoSlices, 1, 4))
-			{
-				quality.AoSlices = static_cast<wiwa::u32>(aoSlices);
-			}
-		});
-	field("AO steps", [&]()
-		{
-			int aoSteps = static_cast<int>(quality.AoSteps);
-			if (ImGui::SliderInt("AO steps", &aoSteps, 4, 16))
-			{
-				quality.AoSteps = static_cast<wiwa::u32>(aoSteps);
-			}
-		});
-
-	group("Display");
-	field("Vertical sync", [&]() { ImGui::Checkbox("Vertical sync", &quality.Vsync); });
-	field("Upload on the copy queue", [&]() { ImGui::Checkbox("Upload on the copy queue", &quality.CopyQueue); });
-
-	if (!(quality == before))
-	{
-		render->set_quality(quality);
-	}
 }

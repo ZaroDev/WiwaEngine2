@@ -1,17 +1,26 @@
 {
+  "version": 1,
+  "name": "double_sided",
   "alpha": "opaque",
   "alphaCutoff": 0.5,
-  "baseColor": [0.1, 0.5, 0.15, 1.0],
+  "baseColor": [
+    0.2,
+    0.7,
+    0.2,
+    1
+  ],
   "clearcoat": 0.0,
   "clearcoatRoughness": 0.0,
   "doubleSided": true,
-  "emissive": [0.0, 0.0, 0.0],
+  "emissive": [
+    0,
+    0,
+    0
+  ],
   "metallic": 0.0,
-  "name": "double_sided",
-  "roughness": 0.3,
+  "roughness": 0.6,
   "sheen": 0.0,
   "sheenRoughness": 0.0,
-  "textures": {},
   "transmission": 0.0,
-  "version": 1
+  "textures": {}
 }

@@ -8,6 +8,7 @@
 
 #include "assets/asset_types.h"
 #include "assets/wasset_io.h"
+#include "import_option.h"
 #include "meta_file.h"
 
 namespace wiwa
@@ -46,6 +47,10 @@ namespace wiwa
 		// Names an asset this import emits but has not written yet, so that a file imported meanwhile (a model's material, which
 		// refers to the model's embedded textures) accepts a reference to it. Forgotten when this context ends.
 		void declare_pending_asset(AssetGuid guid);
+
+		// The references asset_exists() turned down. The database keeps them with the cooked file and cooks it again once one of them exists,
+		// because a dependency list that was filtered when the asset was missing would never see it.
+		const std::vector<AssetGuid>& unresolved() const { return m_Unresolved; }
 
 		// The whole-file asset (local id 0): a texture's image, a model's prefab, ...
 		AssetRef main_asset() const { return AssetRef{ m_Meta.Guid, 0 }; }
@@ -86,6 +91,11 @@ namespace wiwa
 		// The folders of source assets (Assets/, engine/); shader includes are looked up in <root>/shaders.
 		std::vector<std::filesystem::path> get_source_roots() const;
 
+		// The reference with a redirect followed once (a legacy sub-asset of a model becomes the file it was extracted to), else the same.
+		AssetRef redirected(const AssetRef& ref) const;
+		// All the redirects at once (for an importer that follows many references).
+		std::unordered_map<AssetGuid, AssetGuid> redirect_map() const;
+
 		// Whether the database knows the asset's source file (a reference may name an asset that was deleted).
 		bool asset_exists(const AssetRef& ref) const;
 
@@ -102,6 +112,12 @@ namespace wiwa
 
 		void warn(const std::string& message);
 
+		// Says that a reference to a sub-asset this import used to produce (legacy) now means another asset (target): the model importer, once it has
+		// moved a skeleton, clip or skinned mesh into a file of its own. The database keeps the pairs with the import record and writes them into the
+		// catalog, where the asset manager, the packer and the reference finder follow them. The pairs are of resolved guids.
+		void add_redirect(AssetRef legacy, AssetRef target) { m_Redirects.emplace_back(legacy.resolved(), target.resolved()); }
+		const std::vector<std::pair<AssetGuid, AssetGuid>>& redirects() const { return m_Redirects; }
+
 		std::vector<EmittedAsset>& emitted() { return m_Emitted; }
 		const std::vector<std::filesystem::path>& get_source_dependencies() const { return m_SourceDependencies; }
 
@@ -114,6 +130,8 @@ namespace wiwa
 		std::vector<EmittedAsset> m_Emitted{};
 		std::vector<std::filesystem::path> m_SourceDependencies{};
 		std::vector<AssetGuid> m_PendingAssets{};
+		std::vector<std::pair<AssetGuid, AssetGuid>> m_Redirects{};
+		mutable std::vector<AssetGuid> m_Unresolved{};
 	};
 
 	class IImporter
@@ -129,7 +147,16 @@ namespace wiwa
 		// True for importers that import other source files as dependencies (a model's textures): the scan runs them first,
 		// so that the textures are created with the settings the model asks for.
 		virtual bool imports_dependencies() const { return false; }
-		virtual nlohmann::json default_settings() const { return nlohmann::json::object(); }
+		// The settings this importer understands, with defaults; the import dialog is drawn from it. Settings the importer keeps for itself
+		// in the .meta (a model's "extracted") are not part of it, and the editor never writes them.
+		virtual std::vector<ImportOption> option_schema() const { return {}; }
+		// Whether the editor lets the user change the options (import dialog). Every importer still has its defaults.
+		virtual bool editable() const { return false; }
+		virtual nlohmann::json default_settings() const
+		{
+			const std::vector<ImportOption> schema = option_schema();
+			return schema.empty() ? nlohmann::json::object() : schema_defaults(schema);
+		}
 
 		// Cooks ctx.source(); returns false (after logging why) if it cannot.
 		virtual bool import(ImportContext& ctx) = 0;

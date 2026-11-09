@@ -1,5 +1,6 @@
 #include <pch.h>
 #include "wasset_io.h"
+#include "native_anim_files.h"
 
 #include <fstream>
 
@@ -397,6 +398,8 @@ namespace wiwa
 		ar.pod_vector(v.MorphNormals);
 		ar.value(v.BoundsMin);
 		ar.value(v.BoundsMax);
+		ar.value(v.Skeleton);
+		ar.list(v.SkinJointNames, [&](std::string& name) { ar.string(name); });
 
 		if (ar.reading() && ar.ok())
 		{
@@ -459,12 +462,35 @@ namespace wiwa
 	void archive(BinaryArchive& ar, SkeletonData& v)
 	{
 		ar.string(v.Name);
-		ar.pod_vector(v.Joints);
 		ar.pod_vector(v.InverseBind);
+		ar.list(v.JointNames, [&](std::string& name) { ar.string(name); });
+		ar.pod_vector(v.Parents);
+		ar.pod_vector(v.RestTranslation);
+		ar.pod_vector(v.RestRotation);
+		ar.pod_vector(v.RestScale);
+		ar.pod_vector(v.Pre);
+		ar.list(v.Sockets, [&](SkeletonSocket& socket)
+			{
+				ar.string(socket.Name);
+				ar.string(socket.Joint);
+				ar.value(socket.Position);
+				ar.value(socket.Rotation);
+				ar.value(socket.Scale);
+			});
 
-		if (ar.reading() && ar.ok() && v.Joints.size() != v.InverseBind.size())
+		if (ar.reading() && ar.ok())
 		{
-			ar.fail();
+			const size_t count = v.JointNames.size();
+			bool valid = v.InverseBind.size() == count && v.Parents.size() == count
+				&& v.RestTranslation.size() == count && v.RestRotation.size() == count && v.RestScale.size() == count && v.Pre.size() == count;
+			for (size_t i = 0; valid && i < count; i++)
+			{
+				valid = v.Parents[i] >= -1 && v.Parents[i] < static_cast<i32>(i); // a parent comes before its children
+			}
+			if (!valid)
+			{
+				ar.fail();
+			}
 		}
 	}
 
@@ -474,13 +500,19 @@ namespace wiwa
 		ar.value(v.Duration);
 		ar.list(v.Channels, [&](AnimationChannel& c)
 			{
-				ar.value(c.Node);
+				ar.string(c.Joint);
 				archive_enum(ar, c.Path, 4);
 				archive_enum(ar, c.Interpolation, 3);
 				ar.value(c.Components);
 				ar.pod_vector(c.Times);
 				ar.pod_vector(c.Values);
 			});
+		ar.list(v.Events, [&](AnimationEvent& e)
+			{
+				ar.value(e.Time);
+				ar.string(e.Name);
+			});
+		ar.value(v.Skeleton);
 	}
 
 	void archive(BinaryArchive& ar, PrefabData& v)
@@ -573,6 +605,36 @@ namespace wiwa
 				return;
 			}
 			v = std::move(parsed);
+		}
+	}
+
+	void archive(BinaryArchive& ar, AnimationGraphData& v)
+	{
+		u32 version = 1;
+		ar.value(version);
+		if (ar.reading() && ar.ok() && version != 1)
+		{
+			ar.fail();
+			return;
+		}
+
+		std::string text;
+		if (!ar.reading())
+		{
+			text = write_graph_file(v);
+		}
+		ar.string(text);
+
+		if (ar.reading() && ar.ok())
+		{
+			std::string error;
+			std::optional<AnimationGraphData> parsed = read_graph_file(text, error);
+			if (ar.remaining() != 0 || !parsed)
+			{
+				ar.fail();
+				return;
+			}
+			v = std::move(*parsed);
 		}
 	}
 }

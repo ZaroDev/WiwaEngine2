@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "script_instances.h"
 
+#include <animation/animation_module.h>
+
 #include <algorithm>
 
 #include <input/input_module.h>
@@ -22,10 +24,13 @@ namespace wiwa
 		bind_assets(m_Runtime, m_Context);
 		bind_render(m_Runtime, m_Context);
 		m_Context.UiHandlers = &m_UiHandlers;
+		m_Context.AnimHandlers = &m_AnimHandlers;
 		bind_engine(m_Runtime, m_Context);
 		bind_ui(m_Runtime, m_Context);
 		bind_physics(m_Runtime, m_Context);
 		bind_input(m_Runtime, m_Context);
+		bind_animation(m_Runtime, m_Context);
+		bind_settings(m_Runtime, m_Context);
 	}
 
 	ScriptInstances::~ScriptInstances()
@@ -38,6 +43,7 @@ namespace wiwa
 		stop();
 		m_Scene = std::move(scene);
 		m_Context.ActiveScene = m_Scene.get();
+		m_Context.ActiveSceneRef = m_Scene;
 		m_BrokenScripts.clear();
 	}
 
@@ -68,7 +74,9 @@ namespace wiwa
 		}
 		m_Known.clear();
 		m_UiHandlers.clear();
+		m_AnimHandlers.clear();
 		m_Context.ActiveScene = nullptr;
+		m_Context.ActiveSceneRef.reset();
 		m_Scene.reset();
 	}
 
@@ -193,6 +201,7 @@ namespace wiwa
 					call_hook(instance, "on_destroy", nullptr);
 				}
 				m_UiHandlers.remove_owner(instance.Self);
+				m_AnimHandlers.remove_owner(instance.Self);
 				m_Known.erase({ instance.Entity, instance.Script });
 				instances->erase(instances->begin() + static_cast<std::ptrdiff_t>(i));
 			}
@@ -391,6 +400,7 @@ namespace wiwa
 					if (reloaded && instance.Failed)
 					{
 						m_UiHandlers.remove_owner(instance.Self);
+				m_AnimHandlers.remove_owner(instance.Self);
 						m_Known.erase({ instance.Entity, instance.Script });
 						return true;
 					}
@@ -438,6 +448,40 @@ namespace wiwa
 						WI_SCRIPT_LOG(Error, "A UI handler failed and was removed: {0}", failure.what());
 						m_UiHandlers.remove(handler.Owner, canvas, handler.Widget, handler.Kind, sol::object(handler.Function));
 					}
+				}
+			}
+		}
+	}
+
+	// The clip events of the last frame, to the functions scripts registered with animator:on. Like the events of the widgets they run before
+	// the on_update of the scripts; they are one frame old, as the animations are evaluated after the scripts.
+	void ScriptInstances::dispatch_animation_events()
+	{
+		if (m_Context.Animation == nullptr)
+		{
+			return;
+		}
+
+		const std::vector<QueuedAnimationEvent> events = m_Context.Animation->take_events();
+		if (m_AnimHandlers.empty())
+		{
+			return;
+		}
+		for (const QueuedAnimationEvent& event : events)
+		{
+			for (const AnimHandler& handler : m_AnimHandlers.matching(event.Animator, event.Event.Name))
+			{
+				sol::table payload = m_Runtime.state().create_table();
+				payload["name"] = event.Event.Name;
+				payload["clip"] = event.Event.Clip;
+				payload["time"] = event.Event.Time;
+				sol::protected_function_result result = m_Runtime.call(handler.Function, handler.Owner, payload);
+				if (!result.valid())
+				{
+					// the handler that failed is dropped; the others and the hooks of the script go on
+					sol::error failure = result;
+					WI_SCRIPT_LOG(Error, "An animation event handler failed and was removed: {0}", failure.what());
+					m_AnimHandlers.remove_function(handler);
 				}
 			}
 		}
@@ -581,6 +625,7 @@ namespace wiwa
 		m_Context.TotalTime += deltaTime;
 
 		reap();
+		dispatch_animation_events();
 		dispatch_ui_events();
 		discover();
 

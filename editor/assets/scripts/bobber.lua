@@ -1,3 +1,4 @@
+-- Bobs the entity up and down with the shared wave helper.
 local wave = require("assets/scripts/lib/wave.lua")
 
 local Bobber = Script:extend{

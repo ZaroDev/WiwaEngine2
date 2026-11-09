@@ -12,7 +12,8 @@
 //   void Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o);   required; o arrives filled with what the built-in
 //                                                                            material computes, so a shader changes only what it wants
 //   float3 VertexOffset(VertexInput v, MaterialParams p);                    optional; an object-space offset added to the position in
-//                                                                            every pass that draws the material (not picking or outlines)
+//                                                                            every pass that draws the material (not picking or outlines);
+//                                                                            on a skinned mesh it is applied before the skinning
 // Lighting, shadows, AO, clustered lights and velocity stay the engine's. Surface runs in pixel shaders (Sample is fine there);
 // VertexOffset runs in vertex shaders, so textures must be read with SampleLevel.
 //

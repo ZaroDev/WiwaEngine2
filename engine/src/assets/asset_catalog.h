@@ -29,6 +29,16 @@ namespace wiwa
 
 		std::vector<Entry> Entries{};
 
+		// An asset that used to be something else: a reference to From (the resolved guid of a sub-asset a model import no longer produces) means To
+		// (the resolved guid of the file the model's skeleton, clip or skinned mesh was extracted to). One step, no chains. A catalog written before
+		// this ends after the entries and has none.
+		struct Redirect
+		{
+			AssetGuid From{};
+			AssetGuid To{};
+		};
+		std::vector<Redirect> Redirects{};
+
 		// nullopt if the path is not in the catalog. Slashes either way, and a leading "./", are accepted.
 		std::optional<AssetRef> find(std::string_view path) const;
 

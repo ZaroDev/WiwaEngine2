@@ -36,5 +36,14 @@ namespace wiwa
 				ar.string(entry.Path);
 				ar.value(entry.Guid);
 			});
+		if (ar.reading() && ar.remaining() == 0)
+		{
+			return;
+		}
+		ar.list(v.Redirects, [&](AssetCatalog::Redirect& redirect)
+			{
+				ar.value(redirect.From);
+				ar.value(redirect.To);
+			});
 	}
 }

@@ -1,3 +1,4 @@
+#define SKIN_SET 4 // the sets before it in this pass: see scene_common.hlsli
 #include "surface_contract.hlsli"
 
 // Draws a shadow caster with a surface shader into a shadow map: the position VertexOffset moved the vertex to and, with
@@ -26,12 +27,12 @@ struct SurfaceShadowVertexOutput
 SurfaceShadowVertexOutput VSMain(MeshVertexInput input)
 {
 	SceneInstance instance = uInstances[DrawConstants.InstanceIndex];
-	float3 worldPosition = TransformPoint(instance, SurfaceObjectPosition(input, DrawConstants.InstanceIndex, SurfaceShadowMaterial()));
+	float3 worldPosition = TransformPoint(instance, SkinPoint(instance, input, SurfaceObjectPosition(input, DrawConstants.InstanceIndex, SurfaceShadowMaterial())));
 
 	SurfaceShadowVertexOutput output;
 	output.Position = mul(ShadowMatrices[SurfaceShadowMatrix()], float4(worldPosition, 1.0));
 	output.WorldPosition = worldPosition;
-	output.WorldNormal = TransformNormal(instance, input.Normal);
+	output.WorldNormal = TransformNormal(instance, SkinNormal(instance, input, input.Normal));
 	output.Uv = input.Uv;
 	return output;
 }

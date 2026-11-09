@@ -203,4 +203,57 @@ namespace wiwa
 		float GravityFactor = 1.0f;
 		i32 Layer = 0;                // an index into the project's physics layers
 	};
+	// Plays the clips of a model on its skeleton (animation.md). Put on the root of the model: the prefab expander adds it. The runtime
+	// state (the pose, the nodes being blended) is not a component: the AnimationModule keeps it per Animator.
+	struct Animator
+	{
+		AssetRef Skeleton{};
+		std::vector<AssetRef> Clips{}; // the model's animations; a clip is played by its name
+		AssetRef Clip{};               // played when the scene starts, if PlayOnStart
+		bool PlayOnStart = true;
+		float Speed = 1.0f;
+		bool Enabled = true;
+		float BoundsPadding = 0.0f;    // the mesh bounds grow by this much in every direction for culling
+		AssetRef Graph{};              // an animation graph (.wgraph) that plays from the scene start instead of Clip
+	};
+
+	// On any descendant of an Animator: follows a joint of its skeleton. After the pose is evaluated the entity's Transform is written.
+	struct AnimationSocket
+	{
+		std::string Joint{};
+		glm::vec3 OffsetPosition{ 0.0f };
+		glm::quat OffsetRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+		glm::vec3 OffsetScale{ 1.0f };
+	};
+
+	// What a ViewHost's preview is drawn with (the profiles of renderer/view/view_types.h; the values match).
+	enum class ViewHostProfile : u32 { Full, Preview, Thumbnail };
+
+	// Shows a prefab in a small scene of its own, drawn into a texture: a 3D widget for the game UI (a ViewImage widget names the host). Everything is
+	// looked at from an orbit camera; SpinSpeed turns the model. The view exists while the entity does (views.md).
+	struct ViewHost
+	{
+		std::string Name{};          // what a ViewImage widget calls it; unique in the scene
+		AssetRef Model{};            // the prefab to show
+		glm::vec3 Target{ 0.0f, 1.0f, 0.0f }; // the point the camera looks at
+		float Distance = 4.0f;
+		float Yaw = 20.0f;           // degrees about the vertical axis
+		float Pitch = 10.0f;         // degrees above the target
+		float Fov = 35.0f;
+		float SpinSpeed = 0.0f;      // degrees per second the model turns about the vertical axis
+		i32 Width = 256;             // pixels of the texture
+		i32 Height = 256;
+		ViewHostProfile Profile = ViewHostProfile::Preview;
+		bool Transparent = true;     // nothing behind the model: the widget shows what is under it
+		bool Continuous = true;      // false: drawn again only when something above changed
+
+		bool operator==(const ViewHost&) const = default;
+	};
+
+	// On a skinned mesh node, made by the prefab expander: the skeleton that deforms the mesh. The Animator that drives it is the nearest
+	// ancestor with the same skeleton.
+	struct SkinBinding
+	{
+		AssetRef Skeleton{};
+	};
 }

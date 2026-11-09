@@ -79,7 +79,8 @@ or `debug`.
   (`"replace"` or `"additive"`) returns a handle with `progress()`, `done()`, `failed()`, `stage()`.
 - **Rendering:** `debug_draw.line / box / sphere / arrow(..., color?, duration?)`; `camera.primary()` and
   `camera.set_primary(entity)`.
-- **Engine:** `time.delta()`, `time.total()`; `log(title, message)`, `log_warning`, `log_error`; `quit()` asks the host to end the program (a game closes, the editor's Play stops).
+- **Engine:** `time.delta()`, `time.total()`; `project.name`, `project.company`, `project.description`, `project.version` (`"1.2.3"` or `"1.2.3-label"`), `project.version_major/minor/patch` (read-only, from the Settings panel's Project page); `log(title, message)`, `log_warning`, `log_error`; `quit()` asks the host to end the program (a game closes, the editor's Play stops).
+- **Settings and prefs:** `settings.graphics.get()` / `.set{ vsync, shadow_distance, shadow_cascades, bloom_mips, ao_slices, ao_steps, fxaa, taa }` read and change the renderer's quality settings of the project (applied at once, sanitized, saved to `render_quality.json`; an unknown key or a wrong type is an error that names it). `settings.scene.get()` / `.set{ bloom, ao, motion_blur, exposure_compensation }` change how the active scene is shown (at once, not saved). `prefs.get(key, default)`, `prefs.set(key, value)` (boolean, number or string) and `prefs.save()` keep the player's own options in `user_prefs.json` next to the program.
 - **UI:** `UI.panel(entity)`, widgets by path, `widget:on(event, fn)`, `UI.input` (see "UI" below).
 
 ## UI
@@ -118,6 +119,61 @@ panel:find("Menu/Volume"):on("value_changed", function(self, value) self.volume 
   has the focus or the pointer (`Escape` or `Shift+F1` hands them back, a click on the image takes them again). `UI.input` (`move_to`,
   `press`, `release`, `nav`, `scroll`, `clear_pointer`) writes to a scripted input source, which only reaches the UI while it is the one in
   use (tests and tools).
+
+## Views (3D widgets)
+
+A `ViewHost` component shows a prefab in a small scene of its own, drawn into a texture; a `ViewImage` widget (in the UI editor) names the host
+and shows the picture, so a character, an item or a model can sit in a menu. Hosts are components like any other, so a script moves the camera
+or swaps the model:
+
+```lua
+local portrait = find_entity("Wizard portrait"):get("ViewHost")
+portrait.yaw = portrait.yaw + 90 * time.delta()    -- orbit the camera (degrees)
+portrait.SpinSpeed = 0                             -- or stop the model turning (fields match exactly, or ignoring case)
+portrait.distance = 3
+portrait.model = load_asset("models/characters/Cleric.fbx")
+```
+
+`name` is what the widget's `ViewName` says (unique in the scene); `width` / `height` are the texture's pixels; `profile` is `Full`, `Preview` or
+`Thumbnail`; `transparent` leaves nothing behind the model; `continuous = false` draws only when a field changed. The model shows its bind pose
+for now (views do not play animations yet). See `docs/superpowers/specs/views.md`.
+
+## Animation
+
+A model that has animations comes with an `Animator` on its root (the clips of the model, and the `Clip` that plays when the scene
+starts). `Animation.animator(entity)` gives the handle, or `nil` for an entity without one. The game clock must play: in the editor,
+press Play.
+
+```lua
+local anim = Animation.animator(self.entity)
+anim:play("Idle", { loop = true, speed = 1.0 })
+anim:crossfade("Run", 0.2, { loop = true })
+anim:stop(0.3)                                      -- fades to the rest pose
+local up = anim:layer("upper", "Wave", { mask = "Spine", weight = 1.0, additive = false, loop = false })
+up.weight = 0.5; up:crossfade("Aim", 0.1); up:stop(0.2)
+anim:on("footstep", function(self, event) end)      -- event = { name, clip, time }
+anim:off("footstep")
+anim.speed, anim.time, anim.playing, anim.ready
+anim:set("speed", 3.5); anim:set("grounded", true)   -- parameters of the Animator's animation graph (Animator.Graph)
+anim:trigger("attack")                              -- a trigger parameter: raised for one frame
+local v = anim:get("speed")                         -- number, boolean for bool/trigger parameters, nil if unknown
+local s = anim:state("Upper")                       -- the active state of a graph layer (name or 1-based number; base layer if omitted)
+local m = anim:joint_world("RightHand")             -- mat4, the pose of the last frame
+```
+
+- A clip is a name from the animator's `Clips` or an asset from `load_asset`. An unknown name is an error that lists the clips there are.
+  A clip that has not loaded yet is held and starts the frame it is ready.
+- A handle to an entity that is gone, and a layer that ended, read `nil` and ignore writes.
+- Events are added to a model in the `animationEvents` list of its `.meta` settings (`{ "clip": "Run", "time": 0.4, "name": "footstep" }`)
+  or in the Animation panel. A clip fires an event when it plays through its time, only while it is more than half of the pose, so the
+  two sides of a crossfade do not both fire a footstep. Handlers hear it one frame later, before `on_update`; a handler that raises an
+  error is logged and removed; handlers end with the script that registered them.
+- A joint can drive an entity: put an `AnimationSocket` (joint name, offset) on a descendant of the Animator.
+- An Animator with a `Graph` plays that animation graph (states, blends and layers made in the Asset Editor) and is driven by its parameters:
+  `anim:set(name, value)`, `anim:trigger(name)`, `anim:get(name)`, `anim:state(layer)`. A wrong name or kind is logged once and ignored; writes made before the
+  graph has loaded wait and are applied when it starts. `anim:play`, `anim:crossfade` and `anim:stop` take the base pose over from the graph for good
+  (layers made with `anim:layer` stay on top of the graph).
+- Scripts cannot write the pose of a joint (that is IK).
 
 ## Physics
 
@@ -259,31 +315,28 @@ The editor sets this up itself each time it starts, so there is nothing to confi
 
 ## The demo scene
 
-`assets/scenes/demo.wscene` has scripts to try all of this (the sources are in `assets/scripts/`). Press Play and watch the Console:
+`assets/scenes/demo.wscene` is a hall of seven stations (written by `scripts/gen_demo_scene.py`; the sources are in `assets/scripts/`). Press
+Play, click the Viewport and press **1 to 7** to jump between them; the labels over the stations are widgets of the HUD anchored to entities.
 
-- **spinner** (gold knot, blue ring, crate C): turns the entity; change `degrees_per_second` or `axis` in the Inspector while playing.
-- **bobber** (neon balls): bobs them using `lib/wave.lua`. Edit `wave.sine` there while playing and every ball changes.
-- **light_pulse** (podium spot, neon lights): reads and writes the `Light` component.
-- **camera_sway** (camera): drifts the camera sideways.
-- **scene_overlay** (a scene-level script, in the scene settings): logs on Play and Stop and draws debug shapes around the podium.
-- **demo_ui** (the Hud entity, `assets/ui/demo_hud.wuipanel`): the HUD. The score counts up, a health bar breathes, the button toggles the
-  "Demo light" and the slider sets its intensity (click and drag with the mouse over the Viewport in Play mode), and the tag over the
-  "Beacon" sphere follows it on the screen. It waits for the panel to be `ready` before it looks its widgets up.
-- **input_demo** (the "Input demo" ball, `assets/input/demo.winput`): move it with WASD or the left stick, jump with Space or the pad's A, fire (a flash) with the
-  left mouse button or the right trigger. In the editor click the Viewport image first (it takes the keyboard and the mouse; Escape gives them
-  back). The panel at the right of the HUD shows the last device, the Move vector and the Jump bindings; "Rebind Jump" waits for a key or a
-  button, binds Jump to it and saves it to `input_overrides.json`. The project's default map is chosen in the Input panel (`input.wsettings`).
+| Station | Scripts and what they show |
+| --- | --- |
+| 1 Lighting and post | **spinner** (blue ring), **light_pulse** (podium spot, neon lights), **bobber** (neon balls, `lib/wave.lua`), a prefab (`street_lamp.wprefab`) instanced three times |
+| 2 Materials and shaders | PBR grid, textured bricks, glass, carpaint, cloth, double-sided, the `toon` and `hologram` surface shaders |
+| 3 Models and animation | **animation_demo** (the warrior crossfades Idle and Run, counts `footstep` events, has a head socket), **clip_player** (a lineup of FBX characters and monsters) |
+| 4 Physics | **physics_hopper** (velocity, raycast, collision events), bouncy balls, crates, **trigger_zone** (a trigger that lights up) |
+| 5 Joints | **joint_motor_swing** (door and cart motors), a spring pendulum, a bridge, **joint_breaker** and **joint_wrecker** |
+| 6 Character controller | **character_demo** (Hero is yours, Patrol walks and jumps by itself), steps, ramps, **slide_platform** |
+| 7 Scripts, input and UI | **demo_ui** (HUD: score, health bar, light button and slider, a tag following the Beacon), **input_demo** (the "Input demo" ball moves with WASD or the stick, jumps with Space or pad A, fires with the left mouse button; "Rebind Jump" waits for a key and saves it to `input_overrides.json`) |
+
+Scripts that act on the whole hall: **camera_rig** (the camera drifts and handles the station keys) and **scene_overlay** (a scene-level script
+listed in the scene settings: logs on Play and Stop and draws debug boxes). The project's default input map is `assets/input/demo.winput`
+(`input.wsettings`).
 
 Try: Pause, then Step; edit a script into a syntax error and save (the old version keeps running, the Console says why); fix it; add a
 property to `spinner.lua` and see it in the Inspector without stopping.
 
-## Orb Rush
-
-A small game built only from scripts, scenes and UI panels: `assets/scenes/orb_title.wscene` (main menu) and `orb_arena.wscene`, with the scripts in
-`assets/scripts/orbrush/`. Roll the ball (WASD or left stick), dash (Space or pad A), collect orbs before the 60 seconds end, chain pickups for
-a x5 combo, and avoid the red hazards. P or pad Start pauses; the pause, end-of-round and settings menus are UI panels driven by
-`game_manager.lua`, and Settings rebinds Dash and Pause and sets the field of view. `scripts/gen_orbrush.py` writes the scenes and panels
-(run it again after changing it). The manual play-through is in `docs/superpowers/specs/orb-rush-checklist.md`.
+Assets are free: Quaternius characters and monsters (CC0, FBX with animations), ambientCG textures (CC0), a Poly Haven sky (CC0), Lato (OFL).
+Each folder has its license file.
 
 ## Editor and builds
 

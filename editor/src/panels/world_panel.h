@@ -13,9 +13,9 @@ namespace wiwa
 }
 
 // The "World" panel: everything that decides how the scene looks, in collapsible sections (environment, lighting, exposure, tonemap, bloom,
-// ambient occlusion, temporal AA, motion blur, the scene's scripts, and the renderer's quality). The search box at the top keeps only the rows whose label (or
+// ambient occlusion, temporal AA, motion blur and the scene's scripts). The search box at the top keeps only the rows whose label (or
 // group, or section) contains the text; a section with no such row is hidden and the others are opened. The scene's settings are saved
-// with the scene; the quality is the project's and is saved to render_quality.json. Main thread, between the ImGui frame's begin and end.
+// with the scene; the renderer's quality is the project's and is in the Settings panel. Main thread, between the ImGui frame's begin and end.
 class WorldPanel final : public Panel
 {
 public:
@@ -44,7 +44,6 @@ private:
 	void taa_rows(wiwa::SceneSettings& settings, wiwa::RenderModule* render);
 	void motion_blur_rows(wiwa::SceneSettings& settings, wiwa::RenderModule* render);
 	void scripts_rows(wiwa::SceneSettings& settings);
-	void quality_rows(wiwa::RenderModule* render);
 
 	wiwa::SceneEditor& m_Editor;
 

@@ -30,6 +30,9 @@ public:
 	virtual void on_draw() = 0;
 
 	const char* get_name() const { return m_Name.c_str(); }
+	// The name ImGui knows the window by (a panel whose title changes returns a stable "###id" here).
+	virtual const char* window_name() const { return m_Name.c_str(); }
+	void set_open(bool open) { m_Open = open; }
 	PanelCategory get_category() const { return m_Category; }
 	bool is_active() const { return m_Open; }
 	void switch_active()

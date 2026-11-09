@@ -46,6 +46,7 @@ namespace wiwa
 		flag(json, "grid", settings.Grid);
 		flag(json, "axes", settings.Axes);
 		flag(json, "transform", settings.TransformHandles);
+		flag(json, "startMaximized", settings.StartMaximized);
 
 		if (json.contains("outline") && json["outline"].is_object())
 		{
@@ -82,6 +83,7 @@ namespace wiwa
 		json["grid"] = Grid;
 		json["axes"] = Axes;
 		json["transform"] = TransformHandles;
+		json["startMaximized"] = StartMaximized;
 		nlohmann::ordered_json outline = nlohmann::ordered_json::object();
 		outline["enabled"] = Outline.Enabled;
 		outline["width"] = Outline.WidthPx;

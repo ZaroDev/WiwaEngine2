@@ -2,6 +2,7 @@
 
 #include "../render_pass.h"
 #include "../shader_library.h"
+#include "../view/per_view.h"
 
 namespace wiwa
 {
@@ -24,6 +25,8 @@ namespace wiwa
 		virtual bool is_ready() const override;
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
+		virtual void on_view_removed(u32 targetUid) override { m_PerView.forget(targetUid); }
+		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return flags.AutoExposure; }
 
 	private:
 		struct HistogramConstants
@@ -55,14 +58,18 @@ namespace wiwa
 
 		nvrhi::BindingLayoutHandle m_HistogramLayout{};
 		nvrhi::BindingLayoutHandle m_ResolveLayout{};
-		nvrhi::BindingSetHandle m_HistogramSet{};
-		nvrhi::BindingSetHandle m_ResolveSet{};
+		// What belongs to one view (PerView): its binding sets and temporal state. A view's slot starts over when its target is made again.
+		struct ViewCache
+		{
+			nvrhi::BindingSetHandle HistogramSet{};
+			nvrhi::BindingSetHandle ResolveSet{};
+			bool WasActive = false;    // the previous frame measured the exposure
+			u32 LastSceneResets = ~0u; // the scene the history belongs to
+		};
+		PerView<ViewCache> m_PerView{};
 		nvrhi::ComputePipelineHandle m_HistogramPipeline{};
 		nvrhi::ComputePipelineHandle m_ResolvePipeline{};
 		u32 m_BuiltShaderGeneration = ~0u;
-		u32 m_BuiltViewportGeneration = ~0u;
 
-		bool m_WasActive = false;    // the previous frame measured the exposure
-		u32 m_LastSceneResets = ~0u; // the scene the history belongs to
 	};
 }

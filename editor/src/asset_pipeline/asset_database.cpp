@@ -69,6 +69,18 @@ namespace wiwa
 		{
 			m_ScanThread.join();
 		}
+
+		{
+			std::lock_guard<std::mutex> lock(m_ReimportMutex);
+			if (m_ReimportProgress)
+			{
+				m_ReimportProgress->request_cancel();
+			}
+		}
+		if (m_ReimportThread.joinable())
+		{
+			m_ReimportThread.join();
+		}
 	}
 
 	void AssetDatabase::register_importer(Scope<IImporter> importer)
@@ -93,6 +105,223 @@ namespace wiwa
 	bool AssetDatabase::has_importer_for(const std::filesystem::path& source) const
 	{
 		return find_importer(source) != nullptr;
+	}
+
+	const IImporter* AssetDatabase::importer_for(const std::filesystem::path& source) const
+	{
+		return find_importer(source);
+	}
+
+	bool AssetDatabase::import_failed(const std::filesystem::path& source) const
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		auto found = m_Sources.find(key_of(source));
+		return found != m_Sources.end() && found->second.State == SourceState::Failed;
+	}
+
+	bool AssetDatabase::store_import_settings(const std::filesystem::path& source, const nlohmann::json& values, std::string& error)
+	{
+		const IImporter* importer = find_importer(source);
+		if (!importer)
+		{
+			error = "there is no importer for this file";
+			return false;
+		}
+		if (!importer->editable())
+		{
+			error = std::string(importer->name()) + " has no options to change";
+			return false;
+		}
+		{
+			// the importer writes the .meta too (a model keeps its extracted files in it), so not while it runs
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			auto found = m_Sources.find(key_of(source));
+			if (found != m_Sources.end() && found->second.State == SourceState::InFlight)
+			{
+				error = "the file is being imported right now; try again when it is done";
+				return false;
+			}
+		}
+
+		const std::filesystem::path metaPath = MetaFile::meta_path_for(source);
+		std::optional<MetaFile> meta = MetaFile::load(metaPath);
+		if (!meta)
+		{
+			error = "the file has no readable .meta (it was not imported yet)";
+			return false;
+		}
+
+		// only the schema's keys: whatever else the importer keeps in its settings stays as it is
+		const nlohmann::json clean = sanitize_settings(importer->option_schema(), values);
+		if (!meta->Settings.is_object())
+		{
+			meta->Settings = nlohmann::json::object();
+		}
+		for (auto it = clean.begin(); it != clean.end(); ++it)
+		{
+			meta->Settings[it.key()] = it.value();
+		}
+		if (!meta->save(metaPath))
+		{
+			error = "cannot write the .meta";
+			return false;
+		}
+		return true;
+	}
+
+	bool AssetDatabase::store_default_import_settings(const std::filesystem::path& source, std::string& error)
+	{
+		const IImporter* importer = find_importer(source);
+		if (!importer)
+		{
+			error = "there is no importer for this file";
+			return false;
+		}
+		return store_import_settings(source, schema_defaults(importer->option_schema()), error);
+	}
+
+	Ref<JobProgress> AssetDatabase::reimport_async(std::vector<std::filesystem::path> sources)
+	{
+		std::lock_guard<std::mutex> lock(m_ReimportMutex);
+		if (m_ReimportProgress && !m_ReimportProgress->finished())
+		{
+			// the running job picks these up when it has done its batch; the bar grows
+			m_ReimportProgress->add_total(static_cast<u32>(sources.size()));
+			m_ReimportPending.insert(m_ReimportPending.end(), std::make_move_iterator(sources.begin()), std::make_move_iterator(sources.end()));
+			return m_ReimportProgress;
+		}
+
+		if (m_ReimportThread.joinable())
+		{
+			m_ReimportThread.join(); // the previous job has finished
+		}
+
+		Ref<JobProgress> progress = CreateRef<JobProgress>();
+		progress->begin("Reimporting assets", static_cast<u32>(sources.size()));
+		m_ReimportProgress = progress;
+		m_ReimportPending = std::move(sources);
+		m_ReimportErrors.clear();
+
+		// Its own thread: it waits for the pool's jobs, so it must not be one of the pool's workers.
+		m_ReimportThread = std::thread([this, progress]()
+		{
+			for (;;)
+			{
+				std::vector<std::filesystem::path> batch;
+				{
+					std::lock_guard<std::mutex> guard(m_ReimportMutex);
+					batch.swap(m_ReimportPending);
+					if (batch.empty())
+					{
+						progress->finish(true); // decided under the lock, so that a request cannot slip in between
+						return;
+					}
+				}
+
+				std::vector<std::future<void>> jobs;
+				for (const std::filesystem::path& source : batch)
+				{
+					jobs.push_back(m_Jobs.submit([this, source, progress]()
+					{
+						if (!progress->cancel_requested())
+						{
+							reimport(source, true);
+							if (import_failed(source))
+							{
+								std::lock_guard<std::mutex> guard(m_ReimportMutex);
+								m_ReimportErrors.push_back(source.filename().string() + ": the import failed (see the console); the previous asset is kept");
+							}
+						}
+						progress->advance(source.filename().string());
+					}));
+				}
+				for (std::future<void>& job : jobs)
+				{
+					job.get();
+				}
+			}
+		});
+		return progress;
+	}
+
+	std::vector<std::string> AssetDatabase::take_reimport_errors()
+	{
+		std::lock_guard<std::mutex> lock(m_ReimportMutex);
+		std::vector<std::string> errors;
+		errors.swap(m_ReimportErrors);
+		return errors;
+	}
+
+	void AssetDatabase::add_catalog_listener(std::function<void()> listener)
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		m_CatalogListeners.push_back(std::move(listener));
+	}
+
+	std::unordered_map<AssetGuid, AssetGuid> AssetDatabase::redirect_map() const
+	{
+		std::unordered_map<AssetGuid, AssetGuid> result;
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto& [guidText, entry] : m_ImportCache.items())
+		{
+			const auto list = entry.find("redirects");
+			if (list == entry.end() || !list->is_array())
+			{
+				continue;
+			}
+			for (const nlohmann::json& pair : *list)
+			{
+				if (!pair.is_array() || pair.size() != 2 || !pair[0].is_string() || !pair[1].is_string())
+				{
+					continue;
+				}
+				const std::optional<AssetGuid> from = AssetGuid::from_string(pair[0].get<std::string>());
+				const std::optional<AssetGuid> to = AssetGuid::from_string(pair[1].get<std::string>());
+				if (from && to)
+				{
+					result[*from] = *to;
+				}
+			}
+		}
+		return result;
+	}
+
+	AssetRef AssetDatabase::redirected(AssetRef ref) const
+	{
+		if (!ref.valid())
+		{
+			return ref;
+		}
+		const std::unordered_map<AssetGuid, AssetGuid> map = redirect_map();
+		const auto found = map.find(ref.resolved());
+		return found == map.end() ? ref : AssetRef{ found->second, 0 };
+	}
+
+	std::vector<AssetGuid> AssetDatabase::redirect_sources(AssetGuid target) const
+	{
+		std::vector<AssetGuid> sources;
+		const std::string wanted = target.to_string();
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto& [guidText, entry] : m_ImportCache.items())
+		{
+			const auto list = entry.find("redirects");
+			if (list == entry.end() || !list->is_array())
+			{
+				continue;
+			}
+			for (const nlohmann::json& pair : *list)
+			{
+				if (pair.is_array() && pair.size() == 2 && pair[1].is_string() && pair[1].get<std::string>() == wanted)
+				{
+					if (const std::optional<AssetGuid> source = AssetGuid::from_string(guidText))
+					{
+						sources.push_back(*source);
+					}
+					break;
+				}
+			}
+		}
+		return sources;
 	}
 
 	void AssetDatabase::add_reimport_listener(std::function<void(AssetGuid)> listener)
@@ -155,6 +384,33 @@ namespace wiwa
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		return m_PendingAssets.contains(guid);
+	}
+
+	std::unordered_map<AssetGuid, std::string> AssetDatabase::cooked_sources() const
+	{
+		std::unordered_map<AssetGuid, std::string> sources;
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto& [guidText, entry] : m_ImportCache.items())
+		{
+			if (!entry.is_object() || !entry.contains("assets"))
+			{
+				continue;
+			}
+			const std::string source = entry.value("source", std::string{});
+			for (const nlohmann::json& asset : entry["assets"])
+			{
+				if (const std::optional<AssetGuid> guid = asset.is_string() ? AssetGuid::from_string(asset.get<std::string>()) : std::nullopt)
+				{
+					sources[*guid] = source;
+				}
+			}
+		}
+		return sources;
+	}
+
+	bool AssetDatabase::guid_exists(AssetGuid guid) const
+	{
+		return path_of(guid).has_value() || is_pending_asset(guid) || is_cooked_asset(guid);
 	}
 
 	bool AssetDatabase::is_cooked_asset(AssetGuid guid) const
@@ -260,6 +516,61 @@ namespace wiwa
 		scan_async()->wait();
 	}
 
+	void AssetDatabase::index_meta_guids(const std::vector<std::filesystem::path>& sources)
+	{
+		std::vector<std::pair<AssetGuid, std::string>> found;
+		for (const std::filesystem::path& source : sources)
+		{
+			if (const std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source)))
+			{
+				if (meta->Guid.valid())
+				{
+					found.emplace_back(meta->Guid, key_of(source));
+				}
+			}
+		}
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		for (auto& [guid, key] : found)
+		{
+			m_PathByGuid.try_emplace(guid, std::move(key));
+		}
+	}
+
+	void AssetDatabase::cook_root(size_t rootIndex)
+	{
+		if (rootIndex >= m_Roots.size())
+		{
+			return;
+		}
+
+		std::vector<std::filesystem::path> sources;
+		std::error_code error;
+		auto it = std::filesystem::recursive_directory_iterator(m_Roots[rootIndex].Source, std::filesystem::directory_options::skip_permission_denied, error);
+		for (; !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error))
+		{
+			if (it->is_directory() && it->path().filename().string().starts_with("."))
+			{
+				it.disable_recursion_pending();
+			}
+			else if (it->is_regular_file() && find_importer(it->path()))
+			{
+				sources.push_back(it->path());
+			}
+		}
+
+		index_meta_guids(sources);
+		std::vector<std::future<void>> jobs;
+		for (const std::filesystem::path& source : sources)
+		{
+			jobs.push_back(m_Jobs.submit([this, source]() { ensure_imported(source); }));
+		}
+		for (std::future<void>& job : jobs)
+		{
+			job.get();
+		}
+		write_catalog();
+	}
+
 	void AssetDatabase::scan_impl(JobProgress& progress)
 	{
 		progress.begin("Finding assets", 0);
@@ -286,6 +597,7 @@ namespace wiwa
 			}
 		}
 
+		index_meta_guids(sources);
 		progress.begin("Importing assets", static_cast<u32>(sources.size()));
 
 		// Models first: they import their textures with the settings they need (a normal map as a normal map).
@@ -315,6 +627,11 @@ namespace wiwa
 
 		if (!progress.cancel_requested())
 		{
+			progress.set_stage("Resolving references");
+			if (const u32 refreshed = refresh_unresolved())
+			{
+				WI_ASSET_LOG(Info, "Cooked {0} asset file(s) again: they refer to assets that were not known the first time", refreshed);
+			}
 			progress.set_stage("Removing deleted assets");
 			const u32 removed = remove_orphans();
 			if (removed > 0)
@@ -349,6 +666,23 @@ namespace wiwa
 					continue;
 				}
 
+				if (const auto list = entry.find("redirects"); list != entry.end() && list->is_array())
+				{
+					for (const nlohmann::json& pair : *list)
+					{
+						if (!pair.is_array() || pair.size() != 2 || !pair[0].is_string() || !pair[1].is_string())
+						{
+							continue;
+						}
+						const std::optional<AssetGuid> from = AssetGuid::from_string(pair[0].get<std::string>());
+						const std::optional<AssetGuid> to = AssetGuid::from_string(pair[1].get<std::string>());
+						if (from && to)
+						{
+							catalog.Redirects.push_back({ *from, *to });
+						}
+					}
+				}
+
 				for (const SourceRoot& root : m_Roots)
 				{
 					const std::string prefix = key_of(root.Source) + "/";
@@ -367,6 +701,7 @@ namespace wiwa
 		}
 
 		std::sort(catalog.Entries.begin(), catalog.Entries.end(), [](const auto& a, const auto& b) { return a.Path < b.Path; });
+		std::sort(catalog.Redirects.begin(), catalog.Redirects.end(), [](const auto& a, const auto& b) { return a.From != b.From ? a.From < b.From : a.To < b.To; });
 		const std::vector<std::byte> bytes = serialize(catalog);
 
 		// Only written when it changed, so nothing downstream sees a new file for nothing.
@@ -386,6 +721,16 @@ namespace wiwa
 			file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
 		}
 		std::filesystem::rename(temp, path, error);
+
+		std::vector<std::function<void()>> listeners;
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+			listeners = m_CatalogListeners;
+		}
+		for (const std::function<void()>& listener : listeners)
+		{
+			listener();
+		}
 	}
 
 	// The sources whose last import read this file besides their own content.
@@ -495,6 +840,7 @@ namespace wiwa
 
 		import_source(source, true, force, nullptr);
 		write_catalog(); // a file that is new has a path now
+		refresh_unresolved(); // and files that refer to it were cooked without it
 
 		// Whatever was cooked with this file as an input (a shader that includes it) is checked again; its record holds the
 		// hash of this file, so it is cooked again only if the content really changed.
@@ -506,6 +852,65 @@ namespace wiwa
 				import_source(dependent, true, false, nullptr);
 			}
 		}
+	}
+
+	bool AssetDatabase::has_resolvable(const nlohmann::json& entry) const
+	{
+		if (!entry.is_object() || !entry.contains("unresolved") || !entry["unresolved"].is_array())
+		{
+			return false;
+		}
+		for (const nlohmann::json& text : entry["unresolved"])
+		{
+			const std::optional<AssetGuid> guid = text.is_string() ? AssetGuid::from_string(text.get<std::string>()) : std::nullopt;
+			if (guid && guid_exists(*guid))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	u32 AssetDatabase::refresh_unresolved()
+	{
+		// A file cooked before the asset it refers to was known (or while that was being imported on another thread) left the reference out of its
+		// dependencies; cook it again now. That can make a new guid known, so go on until nothing changes.
+		u32 refreshed = 0;
+		for (int pass = 0; pass < 4; pass++)
+		{
+			std::vector<std::string> stale;
+			{
+				std::vector<std::pair<std::string, nlohmann::json>> candidates;
+				{
+					std::lock_guard<std::mutex> lock(m_Mutex);
+					for (auto& [guid, entry] : m_ImportCache.items())
+					{
+						if (entry.is_object() && entry.contains("unresolved") && !entry["unresolved"].empty())
+						{
+							candidates.emplace_back(entry.value("source", std::string{}), entry);
+						}
+					}
+				}
+				for (const auto& [source, entry] : candidates)
+				{
+					std::error_code error;
+					if (!source.empty() && has_resolvable(entry) && std::filesystem::exists(source, error))
+					{
+						stale.push_back(source);
+					}
+				}
+			}
+			if (stale.empty())
+			{
+				break;
+			}
+			for (const std::string& source : stale)
+			{
+				import_source(source, true, false, nullptr);
+				refreshed++;
+			}
+		}
+		return refreshed;
 	}
 
 	std::optional<AssetRef> AssetDatabase::ensure_imported(const std::filesystem::path& source, const nlohmann::json* defaultSettings)
@@ -632,7 +1037,13 @@ namespace wiwa
 		}
 
 		bool upToDate = !force && previous.is_object() && previous.value("sourceHash", "") == sourceHash && previous.value("settingsHash", "") == settingsHash
-			&& previous.value("version", 0u) == importer->version() && previous.contains("assets");
+			&& previous.value("version", 0u) == importer->version() && previous.contains("assets")
+			&& previous.contains("unresolved") // an entry from before this was recorded is cooked once more
+			&& previous.value("wassetVersion", 0u) == WASSET_VERSION; // the cooked format changed: everything is cooked again
+		if (upToDate && has_resolvable(previous))
+		{
+			upToDate = false; // a reference it dropped as missing exists now
+		}
 		if (upToDate && previous.contains("extraSources"))
 		{
 			// the files the last import read besides the source (shader includes) must be unchanged too
@@ -741,10 +1152,23 @@ namespace wiwa
 			nlohmann::json entry;
 			entry["source"] = key;
 			entry["sourceHash"] = sourceHash;
+			entry["wassetVersion"] = WASSET_VERSION;
 			entry["settingsHash"] = settingsHash;
 			entry["version"] = importer->version();
 			entry["assets"] = cookedGuids;
 			entry["extraSources"] = extraSources;
+			nlohmann::json unresolved = nlohmann::json::array();
+			for (AssetGuid guid : context.unresolved())
+			{
+				unresolved.push_back(guid.to_string());
+			}
+			entry["unresolved"] = std::move(unresolved);
+			nlohmann::json redirects = nlohmann::json::array();
+			for (const auto& [from, to] : context.redirects())
+			{
+				redirects.push_back(nlohmann::json::array({ from.to_string(), to.to_string() }));
+			}
+			entry["redirects"] = std::move(redirects);
 			m_ImportCache[guidText] = std::move(entry);
 			save_cache_locked();
 			listeners = m_Listeners;

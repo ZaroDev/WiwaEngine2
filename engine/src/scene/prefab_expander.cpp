@@ -40,6 +40,11 @@ namespace wiwa
 					FieldRecord{ "Materials", FieldValue(std::vector<AssetRef>{}) } } });
 			}
 
+			if (node.Skeleton.valid())
+			{
+				record.Components.push_back(ComponentRecord{ "SkinBinding", { FieldRecord{ "Skeleton", FieldValue(node.Skeleton) } } });
+			}
+
 			for (const ComponentRecord& extra : node.Components)
 			{
 				if (ComponentRecord* existing = find_component(record, extra.Name))
@@ -73,6 +78,27 @@ namespace wiwa
 		ExpandResult result;
 		result.Entities.push_back(instanceRoot);
 		result.NodeIds.push_back(0);
+
+		// a model with animations plays them: its root gets an Animator, unless the scene already gave it one
+		if (!prefab.Animations.empty() && find_component(result.Entities[0], "Animator") == nullptr)
+		{
+			AssetRef skeleton{};
+			for (const PrefabNode& node : prefab.Nodes)
+			{
+				if (node.Skeleton.valid())
+				{
+					skeleton = node.Skeleton;
+					break;
+				}
+			}
+			if (skeleton.valid())
+			{
+				result.Entities[0].Components.push_back(ComponentRecord{ "Animator", {
+					FieldRecord{ "Skeleton", FieldValue(skeleton) },
+					FieldRecord{ "Clips", FieldValue(prefab.Animations) },
+					FieldRecord{ "Clip", FieldValue(prefab.Animations.front()) } } });
+			}
+		}
 
 		// the nodes, parents first: a depth-first walk from the top-level nodes (a node in a parent loop is never reached)
 		const size_t count = prefab.Nodes.size();

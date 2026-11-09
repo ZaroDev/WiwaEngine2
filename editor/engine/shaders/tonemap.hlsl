@@ -13,7 +13,8 @@ struct TonemapConstantsData
 	float Vignette;
 	float AutoExposure; // 1: the exposure is in uExposure[0]
 	float BloomIntensity; // 0: the bloom is not read
-	float3 Padding;
+	float Transparent; // 1: the alpha of the HDR image is coverage; the result has straight alpha
+	float2 Padding;
 };
 
 PUSH_CONSTANTS(TonemapConstantsData, Constants, b2);
@@ -107,7 +108,15 @@ float4 PSMain(VertexOutput input) : SV_Target0
 			exposure = measured;
 		}
 	}
-	float3 hdr = uHdr.SampleLevel(uSampler, input.Uv, 0).rgb;
+	float4 hdrSample = uHdr.SampleLevel(uSampler, input.Uv, 0);
+	float3 hdr = hdrSample.rgb;
+	float coverage = 1.0;
+	if (Constants.Transparent > 0.5)
+	{
+		// Blended surfaces accumulated color times alpha; the tone mapping wants the color itself.
+		coverage = saturate(hdrSample.a);
+		hdr = coverage > 0.0001 ? hdr / coverage : float3(0.0, 0.0, 0.0);
+	}
 	if (Constants.BloomIntensity > 0.0) // a uniform branch: nothing is read when it is off
 	{
 		hdr += uBloom.SampleLevel(uLinearSampler, input.Uv, 0).rgb * Constants.BloomIntensity;
@@ -116,5 +125,5 @@ float4 PSMain(VertexOutput input) : SV_Target0
 	float3 mapped = ApplyOperator(Grade(hdr), Constants.Operator);
 	float2 fromCenter = input.Uv - 0.5;
 	mapped *= 1.0 - Constants.Vignette * smoothstep(0.25, 0.75, length(fromCenter));
-	return float4(LinearToSrgb(mapped), 1.0);
+	return float4(LinearToSrgb(mapped), coverage);
 }

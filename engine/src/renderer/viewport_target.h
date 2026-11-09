@@ -75,8 +75,13 @@ namespace wiwa
 
 		// Where the pixels are: counts up on every create, so a pass that cached a framebuffer notices.
 		u32 generation() const { return m_Generation; }
+		// Names this target for good: unique among every target made in the process, and unchanged by create(). A pass keys what it caches
+		// per view on it (PerView).
+		u32 uid() const { return m_Uid; }
 
 	private:
+		static u32 next_uid();
+		u32 m_Uid = next_uid();
 		nvrhi::TextureHandle m_Hdr{};
 		nvrhi::TextureHandle m_Depth{};
 		nvrhi::TextureHandle m_Ldr{};

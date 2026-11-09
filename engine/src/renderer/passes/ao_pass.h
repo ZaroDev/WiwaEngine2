@@ -2,6 +2,7 @@
 
 #include "../render_pass.h"
 #include "../shader_library.h"
+#include "../view/per_view.h"
 #include "../viewport_target.h"
 
 namespace wiwa
@@ -20,6 +21,8 @@ namespace wiwa
 		virtual bool is_ready() const override;
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
+		virtual void on_view_removed(u32 targetUid) override { m_PerView.forget(targetUid); }
+		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return flags.Ao; }
 
 	private:
 		static constexpr u32 GROUP_SIZE = 8;        // [numthreads] of gtao.hlsl and gtao_blur.hlsl
@@ -34,8 +37,6 @@ namespace wiwa
 			glm::vec4 Settings{ 1.0f };       // x = radius (world units), y = power, z = slices, w = steps
 		};
 
-		bool create_binding_sets(ViewportTarget& viewport);
-
 		nvrhi::IDevice* m_Device = nullptr;
 		ShaderLibrary* m_Shaders = nullptr;
 		bool m_Failed = false;
@@ -47,13 +48,18 @@ namespace wiwa
 		nvrhi::BindingLayoutHandle m_DepthLayout{};
 		nvrhi::BindingLayoutHandle m_AoLayout{};
 		nvrhi::BindingLayoutHandle m_BlurLayout{};
-		nvrhi::BindingSetHandle m_DepthSet{};
-		nvrhi::BindingSetHandle m_AoSet{};
-		nvrhi::BindingSetHandle m_BlurSet{};
+		// What belongs to one view (PerView): its binding sets. A view's slot starts over when its target is made again.
+		struct ViewCache
+		{
+			nvrhi::BindingSetHandle DepthSet{};
+			nvrhi::BindingSetHandle AoSet{};
+			nvrhi::BindingSetHandle BlurSet{};
+		};
+		PerView<ViewCache> m_PerView{};
+		bool create_binding_sets(ViewportTarget& viewport, ViewCache& c);
 		nvrhi::ComputePipelineHandle m_DepthPipeline{};
 		nvrhi::ComputePipelineHandle m_AoPipeline{};
 		nvrhi::ComputePipelineHandle m_BlurPipeline{};
 		u32 m_BuiltShaderGeneration = ~0u;
-		u32 m_BuiltViewportGeneration = ~0u;
 	};
 }

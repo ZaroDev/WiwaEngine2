@@ -9,7 +9,7 @@ Code: `engine/src/renderer`, shaders in `editor/engine/shaders`. Verified by `--
 - During a frame the main thread appends deltas to the current `RenderBatch`; `end_frame()` seals it (frame time, window size, copied ImGui draw data, debug-draw data, UI draw list) and pushes it to a bounded queue (depth 2 frames ahead; blocks when full). Queue depth adds up to two frames of latency; it is a constant.
 - Back to main: stats, pass timings, shader status, pick results and the per-frame times go through double-buffered snapshots. There are no commands back.
 - Resize: main sends the viewport size; a minimized window pauses rendering. Shutdown: quit command, join, `waitForIdle` before destroying resources.
-- ImGui is built on the main thread and its draw data copied into the batch; the font atlas is sent once. ImGui texture ids map to render-side textures through a registry (entry 0 is the font atlas); the Viewport panel shows the viewport target through it.
+- ImGui is built on the main thread and its draw data copied into the batch; the font atlas is sent once. ImGui texture ids map to render-side textures through a registry (entry 0 is the font atlas); the Viewport panel shows the viewport target through it. Offscreen views (views.md) add dynamic ids, `FIRST_VIEW_TEXTURE_ID + view id`.
 
 ## Backends
 
@@ -17,7 +17,7 @@ Code: `engine/src/renderer`, shaders in `editor/engine/shaders`. Verified by `--
 
 ## Scene to render thread
 
-`SceneExtractor` (main thread, every frame) compares `MeshRenderer`, `Light`, `Camera` and scene settings with what it last sent, keyed by `EntityGuid`, and emits deltas: `UpsertInstance/RemoveInstance`, `UpsertLight/RemoveLight`, `SetCamera`, settings, one `ResetScene` when the active scene changes. Commands carry `AssetRef`s, never handles. `RenderScene` (render thread) keeps instances/lights/camera in flat arrays by stable slot with a guid-to-slot map; bounds come from `MeshData` once the mesh is Ready. `RenderInstance` keeps `PrevWorld` for velocity; `RenderScene::end_frame()` sets it after the passes are recorded.
+`SceneExtractor` (main thread, every frame; the main view's, and one per offscreen view, see views.md) compares `MeshRenderer`, `Light`, `Camera` and scene settings with what it last sent, keyed by `EntityGuid`, and emits deltas: `UpsertInstance/RemoveInstance`, `UpsertLight/RemoveLight`, `SetCamera`, settings, one `ResetScene` when the active scene changes. Commands carry `AssetRef`s, never handles. `RenderScene` (render thread) keeps instances/lights/camera in flat arrays by stable slot with a guid-to-slot map; bounds come from `MeshData` once the mesh is Ready. `RenderInstance` keeps `PrevWorld` for velocity; `RenderScene::end_frame()` sets it after the passes are recorded.
 
 ## GPU resources
 
@@ -38,7 +38,7 @@ Vulkan ownership trap: NVRHI creates buffers/images `EXCLUSIVE` and does no queu
 
 ## The frame
 
-Registration order in `render_module.cpp`:
+Registration order in `render_module.cpp` (the whole list runs once per view: the offscreen views first, the main view last; views.md):
 
 ```
 Shadows -> Depth+Normal+Velocity prepass -> Light culling -> AO
@@ -74,7 +74,7 @@ Forward+ (clustered forward), not deferred: a depth prepass and a compute light-
 ## Settings
 
 - `SceneSettings` (scene.md): the look; reaches the render thread through the extractor.
-- `RenderQuality` (`render_quality.json`, `render_quality.h`): shadow distance/cascades/split lambda/bias values, vsync, copy queue, bloom mips (2..6), AO slices (1..4) and steps (4..16), FXAA, TAA. `sanitized()` clears FXAA when TAA is set. Read at renderer start, written when the World panel changes a value, sent to the render thread as a command applied at the start of the next frame. Missing file or keys give defaults.
+- `RenderQuality` (`render_quality.json`, `render_quality.h`): shadow distance/cascades/split lambda/bias values, vsync, copy queue, bloom mips (2..6), AO slices (1..4) and steps (4..16), FXAA, TAA. `sanitized()` clears FXAA when TAA is set. Read at renderer start, written when the Settings panel (Renderer page) changes a value, sent to the render thread as a command applied at the start of the next frame. Missing file or keys give defaults.
 - The anti-aliasing choice is Off / FXAA / TAA, exclusive (FXAA after a TAA resolve only blurs).
 
 ## Shaders
@@ -88,6 +88,7 @@ HLSL in `editor/engine/shaders` (user shaders in `Assets/`). The editor's shader
 | frame: `b0/b1`, `t1..t9`, `s10/s11` | instances, materials, lights, clusters, cascades, spot atlas, environment, BRDF, samplers |
 | material set 1: `t10..t13`, `s14` | base color, normal, ORM, emissive, material sampler |
 | `t15` | ambient occlusion |
+| skin set (the last set of every pass that draws meshes): `t22` palettes, `t23` skin vertices | GPU skinning, animation.md |
 | surface set 3: `t16..t19`, `t20/t21`, `s15` | user textures, surface records, parameter bytes, sampler |
 
 New passes use their own binding layouts rather than extending the frame set.
@@ -102,3 +103,7 @@ New passes use their own binding layouts rather than extending the frame set.
 ## Stats
 
 `RenderSnapshot` carries per-pass GPU times, scene/cache counters, upload stats and the per-frame render times that feed `PerfStats` (editor.md).
+
+## Skinning
+
+Skinned meshes are deformed in the vertex shaders by a joint palette (`scene_common.hlsli`: `SkinPoint`, `SkinNormal`; the previous palette for the velocity). Palettes arrive in `SceneDelta::PaletteUpdates`, the previous palette is rolled in `RenderScene::end_frame` like `PrevWorld`, skin vertices live in a per-page buffer next to the vertex buffer, and both are bound in a skin set that is the last set of every pass that draws meshes (`SceneRenderData::skin_layout`). The base vertex of a draw is a push constant because `SV_VertexID` excludes it on D3D. Everything is in animation.md.

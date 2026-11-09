@@ -24,6 +24,10 @@ private:
 	ImVector<wiwa::u32>       m_LineOffsets; // Index to lines offset. We maintain this with AddLog() calls.
 	ImVector<wiwa::LogLevel>  m_LogLevels;
 	bool                m_AutoScroll;  // Keep scrolling if already at the bottom.
+	bool                m_ShowInfo = true;
+	bool                m_ShowWarning = true;
+	bool                m_ShowError = true;
+	bool level_visible(wiwa::LogLevel level) const;
 
 	ImVec4 m_LevelColors[wiwa::LogLevel::Last];
 	wiwa::u32 m_InfoCount;

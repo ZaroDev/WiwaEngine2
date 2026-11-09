@@ -565,6 +565,95 @@ function UI.input.nav(name) end
 ---@param amount number
 function UI.input.scroll(amount) end
 
+--- What a clip event hands to its handler.
+---@class AnimationEvent
+---@field name string
+---@field clip string the clip that fired it
+---@field time number seconds on the clip's own time
+
+--- A clip by name (one of the animator's clips) or an asset from load_asset.
+---@alias ClipRef string|Asset
+
+---@class AnimationPlayOptions
+---@field loop? boolean default true
+---@field speed? number default 1
+
+---@class AnimationLayerOptions
+---@field mask? string a joint name: the layer reaches that joint and everything below it
+---@field weight? number default 1
+---@field additive? boolean adds the change of the clip from its first frame to the pose below; default false
+---@field loop? boolean default false
+
+--- A layer above the base animation. Nil fields and ignored writes once the layer has ended.
+---@class AnimationLayer
+---@field weight number? 0 to 1
+local AnimationLayer = {}
+--- Fades to another clip (an additive layer swaps its clip at once).
+---@param clip ClipRef
+---@param seconds? number
+---@param options? AnimationPlayOptions
+function AnimationLayer:crossfade(clip, seconds, options) end
+--- Fades the layer out over some seconds, then removes it.
+---@param seconds? number
+function AnimationLayer:stop(seconds) end
+
+--- Plays the clips of an entity's Animator.
+---@class AnimatorHandle
+---@field speed number? the Animator's Speed
+---@field time number? seconds of the clip that plays
+---@field playing boolean? a clip plays and has not finished
+---@field ready boolean? the skeleton has loaded
+local AnimatorHandle = {}
+--- Plays a clip now. An unknown name is an error that lists the clips.
+---@param clip ClipRef
+---@param options? AnimationPlayOptions
+function AnimatorHandle:play(clip, options) end
+--- Fades from what plays to a clip.
+---@param clip ClipRef
+---@param seconds? number
+---@param options? AnimationPlayOptions
+function AnimatorHandle:crossfade(clip, seconds, options) end
+--- Fades to the rest pose.
+---@param seconds? number
+function AnimatorHandle:stop(seconds) end
+--- A named layer above the base; a layer of the same name is replaced.
+---@param name string
+---@param clip ClipRef
+---@param options? AnimationLayerOptions
+---@return AnimationLayer?
+function AnimatorHandle:layer(name, clip, options) end
+--- Calls the function when a clip fires an event of that name, one frame later. Call it from a script hook; it ends with the script.
+---@param event string
+---@param handler fun(self: table, event: AnimationEvent)
+function AnimatorHandle:on(event, handler) end
+---@param event string
+function AnimatorHandle:off(event) end
+--- The world matrix of a joint as of the last evaluated pose. nil if the animator is not running.
+---@param joint string
+---@return mat4?
+function AnimatorHandle:joint_world(joint) end
+--- Sets a parameter of the Animator's animation graph (a number, or a boolean for a bool parameter). An unknown name, a trigger or a value of another kind is logged once and ignored. Safe to call every frame.
+---@param name string
+---@param value number|boolean
+function AnimatorHandle:set(name, value) end
+--- The value of a graph parameter (a boolean for a bool or trigger parameter), or nil.
+---@param name string
+---@return number|boolean|nil
+function AnimatorHandle:get(name) end
+--- Raises a trigger parameter of the graph for one frame (the transition that waits for it consumes it).
+---@param name string
+function AnimatorHandle:trigger(name) end
+--- The name of the active state of a graph layer (a layer name or a 1-based number; the base layer when omitted), or nil when the Animator plays no graph.
+---@param layer? string|integer
+---@return string?
+function AnimatorHandle:state(layer) end
+
+Animation = {}
+--- The animator of an entity that has an Animator, or nil.
+---@param entity Entity
+---@return AnimatorHandle?
+function Animation.animator(entity) end
+
 time = {}
 --- Seconds of the update that is running.
 ---@return number
@@ -573,8 +662,64 @@ function time.delta() end
 ---@return number
 function time.total() end
 
+--- The project's identity (Settings panel, Project): read-only strings and numbers.
+---@class ProjectInfo
+---@field name string
+---@field company string
+---@field description string
+--- "1.2.3", or "1.2.3-label" when the project has a version label.
+---@field version string
+---@field version_major integer
+---@field version_minor integer
+---@field version_patch integer
+---@type ProjectInfo
+project = {}
+
 --- Asks the host to end the program: a game closes, the editor stops play mode.
 function quit() end
+
+--- The renderer's quality settings of the project. `set` merges the keys it is given, applies them at once and saves render_quality.json.
+---@class GraphicsSettings
+---@field vsync boolean
+---@field shadow_distance number
+---@field shadow_cascades integer 1 to 4
+---@field bloom_mips integer 2 to 6
+---@field ao_slices integer 1 to 4
+---@field ao_steps integer 4 to 16
+---@field fxaa boolean
+---@field taa boolean TAA replaces FXAA when both are asked for
+
+--- How the active scene is shown. Applied at once, not saved.
+---@class SceneLook
+---@field bloom boolean
+---@field ao boolean
+---@field motion_blur boolean
+---@field exposure_compensation number stops
+
+settings = {}
+settings.graphics = {}
+settings.scene = {}
+---@return GraphicsSettings
+function settings.graphics.get() end
+---@param values table<string, boolean|number> an unknown key or a value of the wrong type is an error
+function settings.graphics.set(values) end
+---@return SceneLook
+function settings.scene.get() end
+---@param values table<string, boolean|number> an unknown key or a value of the wrong type is an error
+function settings.scene.set(values) end
+
+--- The player's own options of this game, kept in user_prefs.json next to the program.
+prefs = {}
+---@param key string
+---@param default any returned when there is no such pref
+---@return boolean|number|string|any
+function prefs.get(key, default) end
+---@param key string
+---@param value boolean|number|string
+function prefs.set(key, value) end
+--- Writes user_prefs.json; false if the file could not be written.
+---@return boolean
+function prefs.save() end
 
 ---@param title string
 ---@param message string

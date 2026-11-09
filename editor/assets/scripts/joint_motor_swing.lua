@@ -1,5 +1,4 @@
--- Joints demo: drives the entity's hinge or slider with a motor, back and forth: the direction flips every `period` seconds.
--- The Joint component has the axis and the limits; this only sets the motor (joint.set_motor), one physics step later.
+-- Drives the Joint of its entity with a velocity motor and turns it around every period.
 local Swing = Script:extend{
   properties = {
     speed = { type = "float", default = 1, min = 0, max = 20 },
