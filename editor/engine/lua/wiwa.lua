@@ -678,6 +678,49 @@ project = {}
 --- Asks the host to end the program: a game closes, the editor stops play mode.
 function quit() end
 
+--- The renderer's quality settings of the project. `set` merges the keys it is given, applies them at once and saves render_quality.json.
+---@class GraphicsSettings
+---@field vsync boolean
+---@field shadow_distance number
+---@field shadow_cascades integer 1 to 4
+---@field bloom_mips integer 2 to 6
+---@field ao_slices integer 1 to 4
+---@field ao_steps integer 4 to 16
+---@field fxaa boolean
+---@field taa boolean TAA replaces FXAA when both are asked for
+
+--- How the active scene is shown. Applied at once, not saved.
+---@class SceneLook
+---@field bloom boolean
+---@field ao boolean
+---@field motion_blur boolean
+---@field exposure_compensation number stops
+
+settings = {}
+settings.graphics = {}
+settings.scene = {}
+---@return GraphicsSettings
+function settings.graphics.get() end
+---@param values table<string, boolean|number> an unknown key or a value of the wrong type is an error
+function settings.graphics.set(values) end
+---@return SceneLook
+function settings.scene.get() end
+---@param values table<string, boolean|number> an unknown key or a value of the wrong type is an error
+function settings.scene.set(values) end
+
+--- The player's own options of this game, kept in user_prefs.json next to the program.
+prefs = {}
+---@param key string
+---@param default any returned when there is no such pref
+---@return boolean|number|string|any
+function prefs.get(key, default) end
+---@param key string
+---@param value boolean|number|string
+function prefs.set(key, value) end
+--- Writes user_prefs.json; false if the file could not be written.
+---@return boolean
+function prefs.save() end
+
 ---@param title string
 ---@param message string
 function log(title, message) end

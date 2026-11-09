@@ -80,6 +80,7 @@ or `debug`.
 - **Rendering:** `debug_draw.line / box / sphere / arrow(..., color?, duration?)`; `camera.primary()` and
   `camera.set_primary(entity)`.
 - **Engine:** `time.delta()`, `time.total()`; `project.name`, `project.company`, `project.description`, `project.version` (`"1.2.3"` or `"1.2.3-label"`), `project.version_major/minor/patch` (read-only, from the Settings panel's Project page); `log(title, message)`, `log_warning`, `log_error`; `quit()` asks the host to end the program (a game closes, the editor's Play stops).
+- **Settings and prefs:** `settings.graphics.get()` / `.set{ vsync, shadow_distance, shadow_cascades, bloom_mips, ao_slices, ao_steps, fxaa, taa }` read and change the renderer's quality settings of the project (applied at once, sanitized, saved to `render_quality.json`; an unknown key or a wrong type is an error that names it). `settings.scene.get()` / `.set{ bloom, ao, motion_blur, exposure_compensation }` change how the active scene is shown (at once, not saved). `prefs.get(key, default)`, `prefs.set(key, value)` (boolean, number or string) and `prefs.save()` keep the player's own options in `user_prefs.json` next to the program.
 - **UI:** `UI.panel(entity)`, widgets by path, `widget:on(event, fn)`, `UI.input` (see "UI" below).
 
 ## UI

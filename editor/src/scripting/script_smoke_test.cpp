@@ -22,6 +22,7 @@
 #include <assets/asset_manager.h>
 #include <assets/pak_source.h>
 #include <core/engine.h>
+#include <core/user_prefs.h>
 #include <renderer/debug/debug_draw.h>
 #include <scene/scene_module.h>
 #include <scripting/script_context.h>
@@ -1945,6 +1946,41 @@ namespace wiwa
 
 	namespace
 	{
+		// settings.graphics / settings.scene / prefs: the prefs make a round trip through a file, a wrong key or type is an error that names it.
+		void check_settings_api(Check& check)
+		{
+			const std::filesystem::path file = std::filesystem::temp_directory_path() / "wiwa_prefs_smoke.json";
+			std::error_code removed;
+			std::filesystem::remove(file, removed);
+			UserPrefs::get().set_file(file);
+
+			MemorySource source;
+			ScriptRuntime runtime(source);
+			ScriptInstances instances(runtime);
+			sol::environment env(runtime.state(), sol::create, runtime.sandbox());
+			auto run = [&](const char* code) { return runtime.state().safe_script(code, env, sol::script_pass_on_error); };
+
+			sol::protected_function_result result = run("prefs.set('sens', 2.5) prefs.set('hints', false) prefs.set('name', 'x') return prefs.save()");
+			check(result.valid() && result.get<bool>(), "prefs_save_writes_the_file");
+			UserPrefs::get().set_file(file); // read again, as a new start of the game would
+			result = run("return prefs.get('sens', 0) == 2.5 and prefs.get('hints', true) == false and prefs.get('name', '') == 'x' and prefs.get('none', 7) == 7");
+			check(result.valid() && result.get<bool>(), "prefs_round_trip_and_defaults");
+			result = run("prefs.set('bad', {})");
+			check(!result.valid(), "prefs_set_refuses_a_table");
+
+			result = run("settings.graphics.set({ not_a_setting = true })");
+			check(!result.valid(), "graphics_set_unknown_key_is_an_error");
+			result = run("settings.graphics.set({ vsync = 3 })");
+			check(!result.valid(), "graphics_set_wrong_type_is_an_error");
+			result = run("return type(settings.graphics.get().shadow_distance) == 'number' and type(settings.graphics.get().vsync) == 'boolean'");
+			check(result.valid() && result.get<bool>(), "graphics_get_returns_the_quality");
+			result = run("settings.scene.set({ bloom = true })");
+			check(!result.valid(), "scene_set_without_a_scene_is_an_error");
+
+			std::filesystem::remove(file, removed);
+			UserPrefs::get().set_file("user_prefs.json");
+		}
+
 		// The globals the sandbox adds to the standard libraries must be exactly the ones editor/engine/lua/wiwa.lua declares.
 		void check_stub_globals(Check& check)
 		{
@@ -2836,6 +2872,7 @@ namespace wiwa
 		check_physics_scripts(check);
 		check_joint_scripts(check);
 		check_character_scripts(check);
+		check_settings_api(check);
 		check_stub_globals(check);
 		check_component_stubs(check);
 		check_lua_stubs(check, pipeline);

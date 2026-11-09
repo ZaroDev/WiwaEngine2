@@ -39,6 +39,10 @@ namespace wiwa
 	// Animation.animator(entity), the animator handle (play, crossfade, stop, layer, on, off, joint_world, ...) and layer handles.
 	void bind_animation(ScriptRuntime& runtime, ScriptContext& context);
 
+	// settings.graphics.get / set (the renderer's quality settings, saved), settings.scene.get / set (the active scene's look), and
+	// prefs.get / set / save (the player's options of a game, user_prefs.json).
+	void bind_settings(ScriptRuntime& runtime, ScriptContext& context);
+
 	// A field's value as Lua holds it. A vector or quaternion keeps `link` so that writes to its parts reach the field.
 	sol::object field_to_lua(sol::state_view lua, const FieldValue& value, const FieldDescriptor& field, const FieldLink& link);
 
