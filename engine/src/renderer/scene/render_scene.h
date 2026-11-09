@@ -5,7 +5,10 @@
 #include <utility>
 #include <vector>
 
+#include <array>
+
 #include <assets/asset_guid.h>
+#include <assets/particle_effect.h>
 #include <math/math.h>
 #include <scene/components.h>
 #include <scene/entity_guid.h>
@@ -79,6 +82,23 @@ namespace wiwa
 		i32 SortOrder = 0;
 	};
 
+	// A particle system as the render thread knows it (vfx.md): which effect, where it is, how it is scaled, and how many particles each emitter still has
+	// to spawn. The particles themselves live in the GPU pool. Spawns add up (several deltas can arrive between two rendered frames) until the simulation
+	// takes them with take_pending_spawns().
+	struct RenderParticleSystem
+	{
+		bool Alive = false;
+		glm::mat4 World{ 1.0f };
+		glm::mat4 PrevWorld{ 1.0f }; // World as the last simulated frame had it (emitters inherit the motion)
+		AssetRef Effect{};
+		i32 SortBias = 0;
+		glm::vec4 ColorTint{ 1.0f };
+		float SizeScale = 1.0f;
+		float RateScale = 1.0f;
+		u32 Seed = 0;
+		std::array<u32, PARTICLE_MAX_EMITTERS> PendingSpawns{};
+	};
+
 	struct RenderCamera
 	{
 		glm::mat4 View{ 1.0f };
@@ -100,6 +120,10 @@ namespace wiwa
 		std::vector<EntityGuid> LightRemovals{};
 		std::vector<std::pair<EntityGuid, RenderDecal>> DecalUpserts{};
 		std::vector<EntityGuid> DecalRemovals{};
+		// The system's configuration (its PendingSpawns and PrevWorld are the render scene's own), when it changed; and what it spawned this frame.
+		std::vector<std::pair<EntityGuid, RenderParticleSystem>> ParticleUpserts{};
+		std::vector<EntityGuid> ParticleRemovals{};
+		std::vector<std::pair<EntityGuid, std::array<u32, PARTICLE_MAX_EMITTERS>>> ParticleSpawns{};
 		std::optional<RenderCamera> Camera{}; // the primary camera, when it changed
 		bool CameraRemoved = false;
 		std::optional<SceneSettings> Settings{}; // when they changed (always with a Reset)
@@ -107,7 +131,7 @@ namespace wiwa
 		bool empty() const
 		{
 			return !Reset && InstanceUpserts.empty() && InstanceRemovals.empty() && PaletteUpdates.empty() && LightUpserts.empty() && LightRemovals.empty()
-				&& DecalUpserts.empty() && DecalRemovals.empty() && !Camera && !CameraRemoved && !Settings;
+				&& DecalUpserts.empty() && DecalRemovals.empty() && ParticleUpserts.empty() && ParticleRemovals.empty() && ParticleSpawns.empty() && !Camera && !CameraRemoved && !Settings;
 		}
 	};
 
@@ -133,6 +157,13 @@ namespace wiwa
 		std::optional<size_t> find_instance(EntityGuid guid) const;
 		std::optional<size_t> find_light(EntityGuid guid) const;
 		std::optional<size_t> find_decal(EntityGuid guid) const;
+
+		size_t particle_system_count() const { return m_ParticleCount; }
+		const std::vector<RenderParticleSystem>& particle_systems() const { return m_Particles; }
+		std::optional<size_t> find_particle_system(EntityGuid guid) const;
+		// Hands the simulation what the system at `slot` has to spawn and starts counting again; also makes PrevWorld the current World (the simulation
+		// ran for this frame). Zeros for a slot that is not alive.
+		std::array<u32, PARTICLE_MAX_EMITTERS> take_pending_spawns(size_t slot);
 
 		// The scene's primary camera.
 		const std::optional<RenderCamera>& camera() const { return m_Camera; }
@@ -190,6 +221,11 @@ namespace wiwa
 		std::unordered_map<EntityGuid, size_t> m_DecalIndex{};
 		std::vector<size_t> m_FreeDecals{};
 		size_t m_DecalCount = 0;
+
+		std::vector<RenderParticleSystem> m_Particles{};
+		std::unordered_map<EntityGuid, size_t> m_ParticleIndex{};
+		std::vector<size_t> m_FreeParticles{};
+		size_t m_ParticleCount = 0;
 
 		std::optional<RenderCamera> m_Camera{};
 		std::optional<RenderCamera> m_CameraOverride{};

@@ -8,6 +8,7 @@
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <scene/decal_lifetime.h>
+#include <scene/particle_runtime.h>
 
 namespace wiwa
 {
@@ -67,6 +68,26 @@ namespace wiwa
 			result.EdgeFade = std::clamp(decal.EdgeFade, 0.0f, 0.5f);
 			result.SortOrder = decal.SortOrder;
 			return result;
+		}
+
+		// (The SpawnCount of the runtime is not part of it: those are sent as ParticleSpawns.)
+		RenderParticleSystem make_particle_system(const ParticleSystem& system, const glm::mat4& world, const ParticleRuntime* runtime)
+		{
+			RenderParticleSystem result;
+			result.World = world;
+			result.Effect = system.Effect;
+			result.SortBias = system.SortBias;
+			result.ColorTint = system.ColorTint;
+			result.SizeScale = std::max(system.SizeScale, 0.0f);
+			result.RateScale = std::max(system.RateScale, 0.0f);
+			result.Seed = runtime != nullptr ? runtime->Seed : 0u;
+			return result;
+		}
+
+		bool same_particle_system(const RenderParticleSystem& a, const RenderParticleSystem& b)
+		{
+			return same_matrix(a.World, b.World) && a.Effect == b.Effect && a.SortBias == b.SortBias && a.ColorTint == b.ColorTint && a.SizeScale == b.SizeScale
+				&& a.RateScale == b.RateScale && a.Seed == b.Seed;
 		}
 
 		bool same_decal(const RenderDecal& a, const RenderDecal& b)
@@ -198,6 +219,7 @@ namespace wiwa
 			m_Instances.clear();
 			m_Lights.clear();
 			m_Decals.clear();
+			m_Particles.clear();
 			m_HasCamera = false;
 			m_SettingsRevision = 0;
 		}
@@ -348,6 +370,57 @@ namespace wiwa
 				{
 					delta.DecalRemovals.push_back(it->first);
 					it = m_Decals.erase(it);
+				}
+				else
+				{
+					++it;
+				}
+			}
+		}
+
+		size_t particlesSeen = 0;
+		for (const auto [entity, system, id, world] : registry.view<ParticleSystem, Id, WorldTransform>().each())
+		{
+			if (!system.Effect.valid())
+			{
+				continue; // nothing to play (yet); a system sent before is removed below
+			}
+
+			particlesSeen++;
+			ParticleRuntime* runtime = registry.try_get<ParticleRuntime>(entity);
+			RenderParticleSystem current = make_particle_system(system, world.Matrix, runtime);
+			auto found = m_Particles.find(id.Guid);
+			if (found != m_Particles.end() && same_particle_system(found->second.System, current))
+			{
+				found->second.Seen = pass;
+			}
+			else
+			{
+				SentParticles& sent = m_Particles[id.Guid];
+				sent.System = current;
+				sent.Seen = pass;
+				delta.ParticleUpserts.emplace_back(id.Guid, std::move(current));
+			}
+
+			if (runtime != nullptr)
+			{
+				const bool any = std::any_of(runtime->SpawnCount.begin(), runtime->SpawnCount.end(), [](u32 count) { return count != 0; });
+				if (any)
+				{
+					delta.ParticleSpawns.emplace_back(id.Guid, runtime->SpawnCount);
+					runtime->SpawnCount.fill(0); // taken: a paused game does not tick, and must not send the same spawns again
+				}
+			}
+		}
+
+		if (m_Particles.size() != particlesSeen)
+		{
+			for (auto it = m_Particles.begin(); it != m_Particles.end();)
+			{
+				if (it->second.Seen != pass)
+				{
+					delta.ParticleRemovals.push_back(it->first);
+					it = m_Particles.erase(it);
 				}
 				else
 				{
