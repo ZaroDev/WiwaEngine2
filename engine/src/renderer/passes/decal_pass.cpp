@@ -74,8 +74,8 @@ namespace wiwa
 		m_Shaders->request(engine_assets::DECAL_SHADER, ShaderStage::Vertex);
 		m_Shaders->request(engine_assets::DECAL_SHADER, ShaderStage::Pixel);
 
-		// Slots match decal.hlsl (set 2 on Vulkan; registers are unique across the layouts of the pass): SRV 28 the depth, 29 its stencil,
-		// 30 the prepass normals, 31 the decal records.
+		// Slots match decal.hlsl (set 2 on Vulkan; registers are unique across the layouts of the pass): SRV 32 the depth, 33 its stencil,
+		// 34 the prepass normals, 35 the decal records.
 		nvrhi::VulkanBindingOffsets offsets;
 		offsets.shaderResource = 0;
 		offsets.sampler = 0;
@@ -84,10 +84,10 @@ namespace wiwa
 		nvrhi::BindingLayoutDesc layout;
 		layout.visibility = nvrhi::ShaderType::All;
 		layout.bindingOffsets = offsets;
-		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(28));
-		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(29));
-		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(30));
-		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(31));
+		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(32));
+		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(33));
+		layout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(34));
+		layout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(35));
 		m_Layout = m_Device->createBindingLayout(layout);
 		return m_Layout != nullptr;
 	}
@@ -116,10 +116,10 @@ namespace wiwa
 		cache.Records = m_Device->createBuffer(records);
 
 		nvrhi::BindingSetDesc set;
-		set.addItem(nvrhi::BindingSetItem::Texture_SRV(28, viewport.depth()));
-		set.addItem(nvrhi::BindingSetItem::Texture_SRV(29, viewport.depth(), ViewportTarget::STENCIL_VIEW_FORMAT));
-		set.addItem(nvrhi::BindingSetItem::Texture_SRV(30, viewport.normal()));
-		set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(31, cache.Records));
+		set.addItem(nvrhi::BindingSetItem::Texture_SRV(32, viewport.depth()));
+		set.addItem(nvrhi::BindingSetItem::Texture_SRV(33, viewport.depth(), ViewportTarget::STENCIL_VIEW_FORMAT));
+		set.addItem(nvrhi::BindingSetItem::Texture_SRV(34, viewport.normal()));
+		set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(35, cache.Records));
 		cache.BindingSet = cache.Records ? m_Device->createBindingSet(set, m_Layout) : nullptr;
 		return cache.Records && cache.BindingSet;
 	}

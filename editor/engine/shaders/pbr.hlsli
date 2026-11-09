@@ -111,10 +111,10 @@ void SurfaceTangentFrame(float3 worldPosition, float3 normal, float2 uv, out flo
 // Four screen-sized targets, premultiplied by the coverage of the decals (alpha): albedo (linear), the octahedral world normal and the
 // occlusion / roughness / metallic of the decals, and the light they add. Without decals every one is a 1x1 texel of zeros, read with the
 // coordinates clamped, which changes nothing: albedo * (1 - 0) + 0, and the branches below are not taken.
-VK_BINDING(24, 2) Texture2D<float4> uDecalAlbedo : register(t24);
-VK_BINDING(25, 2) Texture2D<float4> uDecalNormal : register(t25);
-VK_BINDING(26, 2) Texture2D<float4> uDecalOrm : register(t26);
-VK_BINDING(27, 2) Texture2D<float4> uDecalEmissive : register(t27);
+VK_BINDING(25, 2) Texture2D<float4> uDecalAlbedo : register(t25);
+VK_BINDING(26, 2) Texture2D<float4> uDecalNormal : register(t26);
+VK_BINDING(27, 2) Texture2D<float4> uDecalOrm : register(t27);
+VK_BINDING(28, 2) Texture2D<float4> uDecalEmissive : register(t28);
 
 // pixel = SV_Position.xy. The normal is the shading normal in world space.
 void ApplyDecals(float2 pixel, inout float3 albedo, inout float3 normal, inout float metallic, inout float roughness, inout float occlusion, inout float3 emissive)
@@ -383,7 +383,7 @@ float3 AmbientLight(SurfaceData surface)
 }
 
 // The blurred screen-space ambient occlusion, 1 = open (a white 1x1 texture when it is off). A layout of its own: set 2 on Vulkan.
-VK_BINDING(15, 2) Texture2D<float> uAmbientOcclusion : register(t15);
+VK_BINDING(24, 2) Texture2D<float> uAmbientOcclusion : register(t24);
 
 // The forward pass's light at a pixel (pixel = SV_Position.xy): ambient dimmed by the AO, emission, the sun with its shadow and
 // the clustered lights.

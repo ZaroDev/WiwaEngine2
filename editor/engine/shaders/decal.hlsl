@@ -25,10 +25,10 @@ static const uint CHANNEL_NORMAL = 2u;
 static const uint CHANNEL_ORM = 4u;
 static const uint CHANNEL_EMISSIVE = 8u;
 
-VK_BINDING(28, 2) Texture2D<float> uDecalDepth : register(t28);
-VK_BINDING(29, 2) STENCIL_TEXTURE uDecalStencil : register(t29);
-VK_BINDING(30, 2) Texture2D<float2> uPrepassNormal : register(t30);
-VK_BINDING(31, 2) StructuredBuffer<DecalRecord> uDecals : register(t31);
+VK_BINDING(32, 2) Texture2D<float> uDecalDepth : register(t32);
+VK_BINDING(33, 2) STENCIL_TEXTURE uDecalStencil : register(t33);
+VK_BINDING(34, 2) Texture2D<float2> uPrepassNormal : register(t34);
+VK_BINDING(35, 2) StructuredBuffer<DecalRecord> uDecals : register(t35);
 
 // Bit 4 of the stencil marks the pixels of meshes that do not receive decals (the depth prepass writes it).
 static const uint STENCIL_NO_DECALS = 4u;

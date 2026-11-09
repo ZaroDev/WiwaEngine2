@@ -171,9 +171,9 @@ namespace wiwa
 		// The scene has ambient occlusion on this frame: the AO pass writes ViewportTarget::ao() and the forward pass reads it (else a
 		// white stand-in).
 		bool ao_active() const { return m_AoActive; }
-		// The forward pass reads the occlusion through a layout of its own (one SRV, t15): the frame layout's registers already span
+		// The forward pass reads the occlusion through a layout of its own (one SRV, t24): the frame layout's registers already span
 		// 1..9, and NVRHI rejects layouts whose register ranges overlap those of the material layout (t10..t13).
-		// The set also carries the four decal targets (t24..t27, stand-ins that change nothing when the view has no decals).
+		// The set also carries the four decal targets (t25..t28, stand-ins that change nothing when the view has no decals).
 		nvrhi::IBindingLayout* ao_layout() const { return m_AoLayout; }
 		nvrhi::IBindingSet* ao_bindings() const { return m_AoBindings; }
 

@@ -89,12 +89,12 @@ namespace wiwa
 		layout.addItem(nvrhi::BindingLayoutItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
 		m_FrameLayout = device->createBindingLayout(layout);
 
-		// Slot t15 of set 2 on Vulkan (see ao_layout()).
+		// Slots t24 (the occlusion) and t25..t28 (the decal targets) of set 2 on Vulkan (see ao_layout()). They sit together past the other sets' registers: on D3D11 the register range of a layout may not enclose that of another.
 		nvrhi::BindingLayoutDesc aoLayout;
 		aoLayout.visibility = nvrhi::ShaderType::Pixel;
 		aoLayout.bindingOffsets = make_zero_binding_offsets();
-		aoLayout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(15));
-		for (u32 slot = 24; slot <= 27; slot++)
+		aoLayout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(24));
+		for (u32 slot = 25; slot <= 28; slot++)
 		{
 			aoLayout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(slot)); // the decal targets: albedo, normal, ORM, emissive
 		}
@@ -816,10 +816,10 @@ namespace wiwa
 		if (m_AoBindings == nullptr || m_BoundAo != ao || m_BoundDecalAlbedo != decalTextures[0] || m_BoundDecalGeneration != (realDecals ? m_Viewport->decal_generation() : 0u))
 		{
 			nvrhi::BindingSetDesc aoSet;
-			aoSet.addItem(nvrhi::BindingSetItem::Texture_SRV(15, ao));
+			aoSet.addItem(nvrhi::BindingSetItem::Texture_SRV(24, ao));
 			for (u32 i = 0; i < 4; i++)
 			{
-				aoSet.addItem(nvrhi::BindingSetItem::Texture_SRV(24 + i, decalTextures[i]));
+				aoSet.addItem(nvrhi::BindingSetItem::Texture_SRV(25 + i, decalTextures[i]));
 			}
 			m_AoBindings = m_Device->createBindingSet(aoSet, m_AoLayout);
 			m_BoundAo = ao;
