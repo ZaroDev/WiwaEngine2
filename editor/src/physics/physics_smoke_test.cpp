@@ -1370,6 +1370,962 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// ---- joints: bodies and joints made by commands, so that a joint can be set up without a scene ----
+
+		BodyDesc box_body(MotionType motion, glm::vec3 position, glm::vec3 halfExtents = glm::vec3(0.5f))
+		{
+			BodyDesc desc;
+			desc.Motion = motion;
+			desc.Position = position;
+			desc.Shape.Kind = ShapeKind::Box;
+			desc.Shape.Size = halfExtents;
+			return desc;
+		}
+
+		// A world with commands pushed straight to it; every published step can be walked through with take_steps().
+		struct CommandWorld
+		{
+			PhysicsThread Thread;
+			u64 Generation = 0;
+
+			bool start(glm::vec3 gravity = glm::vec3(0.0f, -9.81f, 0.0f))
+			{
+				PhysicsSettings settings;
+				settings.Gravity = gravity;
+				if (!Thread.start(settings))
+				{
+					return false;
+				}
+				Generation = Thread.generation();
+				return true;
+			}
+
+			void send(PhysicsCommand command) { Thread.push(std::move(command), Generation); }
+
+			// Every step published until `steps` more have completed, oldest first.
+			std::vector<Ref<const PhysicsStepSnapshot>> run_steps(u32 steps)
+			{
+				std::vector<Ref<const PhysicsStepSnapshot>> seen;
+				const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(20);
+				while (seen.size() < steps && Clock::now() < giveUp)
+				{
+					for (Ref<const PhysicsStepSnapshot>& step : Thread.take_steps())
+					{
+						seen.push_back(std::move(step));
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+				return seen;
+			}
+		};
+
+		glm::vec3 world_point(const BodyPose& pose, glm::vec3 local) { return pose.Position + pose.Rotation * local; }
+
+		// The angle of the box's local x axis in the xy plane, degrees.
+		float hinge_angle_deg(const BodyPose& pose)
+		{
+			const glm::vec3 direction = pose.Rotation * glm::vec3(1.0f, 0.0f, 0.0f);
+			return glm::degrees(std::atan2(direction.y, direction.x));
+		}
+
+		JointDesc hinge_desc()
+		{
+			JointDesc joint;
+			joint.Type = JointType::Hinge;
+			joint.AnchorA = glm::vec3(-1.0f, 0.0f, 0.0f); // the left end of a box 2 m long
+			joint.AnchorB = glm::vec3(0.0f, -0.5f, 0.0f); // on the anchor body, which sits above the plank's end (no overlap)
+			joint.Axis = glm::vec3(0.0f, 0.0f, 1.0f);
+			return joint;
+		}
+
+		// An anchor (static, 0.5 m above the world's (0, 5, 0), the hinge point) and a 2 m long plank hinged there by its left end, level.
+		struct HingeRig
+		{
+			BodyKey Anchor = EntityGuid::generate();
+			BodyKey Plank = EntityGuid::generate();
+		};
+
+		HingeRig make_hinge_rig(CommandWorld& world, JointDesc joint)
+		{
+			HingeRig rig;
+			world.send(CreateBody{ rig.Anchor, box_body(MotionType::Static, glm::vec3(0.0f, 5.5f, 0.0f), glm::vec3(0.1f)) });
+			world.send(CreateBody{ rig.Plank, box_body(MotionType::Dynamic, glm::vec3(1.0f, 5.0f, 0.0f), glm::vec3(1.0f, 0.1f, 0.1f)) });
+			joint.A = rig.Plank;
+			joint.B = rig.Anchor;
+			world.send(CreateJoint{ joint });
+			return rig;
+		}
+
+		// A hinge keeps its two anchor points together and turns only around its axis: the plank swings and does not fall away.
+		void check_joint_hinge(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "joint_hinge_start: the world starts");
+			const HingeRig rig = make_hinge_rig(world, hinge_desc());
+			const auto steps = world.run_steps(120);
+			const BodyPose* plank = steps.empty() ? nullptr : find_pose(steps.back().get(), rig.Plank);
+			check(plank != nullptr, "joint_hinge_pose: the plank has a pose");
+			if (plank != nullptr)
+			{
+				const glm::vec3 end = world_point(*plank, glm::vec3(-1.0f, 0.0f, 0.0f));
+				check(glm::length(end - glm::vec3(0.0f, 5.0f, 0.0f)) < 1e-2f, "joint_hinge_anchor: the plank's end stays on the anchor, got " + fmt_vec(end));
+				check(std::abs(plank->AngularVelocity.x) + std::abs(plank->AngularVelocity.y) < 1e-3f, "joint_hinge_axis: the plank turns only around z, got " + fmt_vec(plank->AngularVelocity));
+				check(glm::length(plank->Position - glm::vec3(1.0f, 5.0f, 0.0f)) > 0.3f, "joint_hinge_swings: gravity swings the plank away from where it started");
+			}
+			check(!steps.empty() && steps.back()->JointCount == 1, "joint_hinge_count: the snapshot counts one joint");
+			world.Thread.stop();
+		}
+
+		// Limits hold, a motor reaches its target speed, a slider stops at its limit.
+		void check_joint_limits_motor(Check& check)
+		{
+			{
+				CommandWorld world;
+				check(world.start(), "joint_limits_start: the world starts");
+				JointDesc joint = hinge_desc();
+				joint.LimitMin = -30.0f;
+				joint.LimitMax = 30.0f;
+				const HingeRig rig = make_hinge_rig(world, joint);
+				float lowest = 1000.0f;
+				float highest = -1000.0f;
+				for (const auto& step : world.run_steps(180))
+				{
+					if (const BodyPose* plank = find_pose(step.get(), rig.Plank))
+					{
+						lowest = std::min(lowest, hinge_angle_deg(*plank));
+						highest = std::max(highest, hinge_angle_deg(*plank));
+					}
+				}
+				check(lowest > -31.5f && lowest < -25.0f, "joint_limits_hinge_low: the plank swings down to the -30 degree limit and not past it, lowest " + std::to_string(lowest));
+				check(highest < 5.0f, "joint_limits_hinge_high: it does not swing up past its start, highest " + std::to_string(highest));
+				world.Thread.stop();
+			}
+			{
+				CommandWorld world;
+				check(world.start(glm::vec3(0.0f)), "joint_motor_start: the world starts");
+				JointDesc joint = hinge_desc();
+				joint.MotorMode = JointMotorMode::Velocity;
+				joint.MotorTarget = 1.0f;
+				joint.MotorMaxForce = 1.0e6f;
+				const HingeRig rig = make_hinge_rig(world, joint);
+				const auto steps = world.run_steps(45); // 43 degrees: before the plank turns into the anchor body above it
+				const BodyPose* plank = steps.empty() ? nullptr : find_pose(steps.back().get(), rig.Plank);
+				check(plank != nullptr && std::abs(plank->AngularVelocity.z - 1.0f) < 0.05f, "joint_motor_velocity: the motor turns the plank at 1 rad/s, got " + (plank ? fmt_vec(plank->AngularVelocity) : std::string("no pose")));
+				world.Thread.stop();
+			}
+			{
+				CommandWorld world;
+				check(world.start(glm::vec3(9.81f, 0.0f, 0.0f)), "joint_slider_start: the world starts");
+				const BodyKey anchor = EntityGuid::generate();
+				const BodyKey cart = EntityGuid::generate();
+				world.send(CreateBody{ anchor, box_body(MotionType::Static, glm::vec3(0.0f, 6.0f, 0.0f), glm::vec3(0.1f)) });
+				world.send(CreateBody{ cart, box_body(MotionType::Dynamic, glm::vec3(0.0f, 5.0f, 0.0f), glm::vec3(0.3f)) });
+				JointDesc joint;
+				joint.Type = JointType::Slider;
+				joint.A = cart;
+				joint.B = anchor;
+				joint.AnchorB = glm::vec3(0.0f, -1.0f, 0.0f);
+				joint.Axis = glm::vec3(1.0f, 0.0f, 0.0f);
+				joint.NormalAxis = glm::vec3(0.0f, 1.0f, 0.0f);
+				joint.LimitMin = 0.0f;
+				joint.LimitMax = 2.0f;
+				world.send(CreateJoint{ joint });
+				const auto steps = world.run_steps(180);
+				const BodyPose* pose = steps.empty() ? nullptr : find_pose(steps.back().get(), cart);
+				check(pose != nullptr && std::abs(pose->Position.x - 2.0f) < 0.02f, "joint_slider_limit: the slider stops at its 2 m limit, got " + (pose ? fmt_vec(pose->Position) : std::string("no pose")));
+				check(pose != nullptr && std::abs(pose->Position.y - 5.0f) < 1e-2f && std::abs(pose->Position.z) < 1e-2f, "joint_slider_axis: it moves along x only");
+
+				// the cart rests against its limit and goes to sleep; a motor set now has to wake it
+				world.run_steps(120);
+				const Ref<const PhysicsStepSnapshot> resting = world.Thread.latest();
+				const BodyPose* asleep = find_pose(resting.get(), cart);
+				check(asleep != nullptr && !asleep->Active, "joint_motor_wake_setup: the cart pressed against its limit goes to sleep");
+				world.send(SetJointMotor{ cart, JointMotorMode::Velocity, -1.0f, 1.0e6f });
+				const auto back = world.run_steps(60);
+				const BodyPose* moved = back.empty() ? nullptr : find_pose(back.back().get(), cart);
+				check(moved != nullptr && moved->Position.x < 1.5f, "joint_motor_wakes: a motor set on a sleeping body moves it, got x " + (moved ? std::to_string(moved->Position.x) : std::string("no pose")));
+				world.Thread.stop();
+			}
+		}
+
+		// A joint named before its second body exists waits and is made when the body appears; destroying a body unmakes its joints; a
+		// body made again (CreateBody for an existing key) keeps its joints.
+		void check_joint_pending_destroy(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "joint_pending_start: the world starts");
+			const BodyKey anchor = EntityGuid::generate();
+			const BodyKey ball = EntityGuid::generate();
+			world.send(CreateBody{ ball, box_body(MotionType::Dynamic, glm::vec3(1.0f, 5.0f, 0.0f), glm::vec3(0.2f)) });
+			JointDesc joint;
+			joint.Type = JointType::Point;
+			joint.A = ball;
+			joint.B = anchor;
+			joint.AnchorA = glm::vec3(-1.0f, 0.0f, 0.0f);
+			world.send(CreateJoint{ joint });
+
+			auto steps = world.run_steps(20);
+			const BodyPose* falling = steps.empty() ? nullptr : find_pose(steps.back().get(), ball);
+			check(!steps.empty() && steps.back()->JointCount == 0, "joint_pending_waits: a joint without its second body is not made");
+			check(falling != nullptr && falling->Position.y < 4.9f, "joint_pending_free: the body is free while the joint waits");
+
+			world.send(CreateBody{ anchor, box_body(MotionType::Static, glm::vec3(0.0f, 5.0f, 0.0f), glm::vec3(0.1f)) });
+			steps = world.run_steps(300);
+			const BodyPose* hanging = steps.empty() ? nullptr : find_pose(steps.back().get(), ball);
+			check(!steps.empty() && steps.back()->JointCount == 1, "joint_pending_made: the joint is made when the second body appears");
+			check(hanging != nullptr && glm::length(world_point(*hanging, glm::vec3(-1.0f, 0.0f, 0.0f)) - glm::vec3(0.0f, 5.0f, 0.0f)) < 0.05f,
+				"joint_pending_holds: the made joint holds the body to the anchor, got " + (hanging ? fmt_vec(world_point(*hanging, glm::vec3(-1.0f, 0.0f, 0.0f))) : std::string("no pose")));
+
+			// the body made again keeps the joint
+			BodyDesc again = box_body(MotionType::Dynamic, hanging != nullptr ? hanging->Position : glm::vec3(0.0f, 5.0f, 0.0f), glm::vec3(0.2f));
+			again.Rotation = hanging != nullptr ? hanging->Rotation : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+			world.send(CreateBody{ ball, again });
+			steps = world.run_steps(120);
+			const BodyPose* replaced = steps.empty() ? nullptr : find_pose(steps.back().get(), ball);
+			check(!steps.empty() && steps.back()->JointCount == 1, "joint_replace_count: a body made again keeps its joint");
+			check(replaced != nullptr && glm::length(world_point(*replaced, glm::vec3(-1.0f, 0.0f, 0.0f)) - glm::vec3(0.0f, 5.0f, 0.0f)) < 0.05f,
+				"joint_replace_holds: the joint still holds the body made again, got " + (replaced ? fmt_vec(world_point(*replaced, glm::vec3(-1.0f, 0.0f, 0.0f))) : std::string("no pose")));
+
+			// destroying the other body unmakes the joint; the ball is free and the world goes on
+			world.send(DestroyBody{ anchor });
+			steps = world.run_steps(60);
+			const BodyPose* freed = steps.empty() ? nullptr : find_pose(steps.back().get(), ball);
+			check(!steps.empty() && steps.back()->JointCount == 0, "joint_destroy_count: destroying a joint's body unmakes it");
+			check(freed != nullptr && freed->Position.y < 3.0f, "joint_destroy_free: the ball falls once its anchor is gone, got " + (freed ? fmt_vec(freed->Position) : std::string("no pose")));
+			world.Thread.stop();
+		}
+	}
+
+	namespace
+	{
+		// Two boxes overlapping by half a box, joined by a loose distance joint (it only limits them to 5 m): with CollideConnected off they
+		// are not pushed apart, with it on they are.
+		float overlapping_pair_distance(bool collideConnected)
+		{
+			CommandWorld world;
+			if (!world.start(glm::vec3(0.0f)))
+			{
+				return -1.0f;
+			}
+			const BodyKey a = EntityGuid::generate();
+			const BodyKey b = EntityGuid::generate();
+			world.send(CreateBody{ a, box_body(MotionType::Dynamic, glm::vec3(0.0f, 5.0f, 0.0f)) });
+			world.send(CreateBody{ b, box_body(MotionType::Dynamic, glm::vec3(0.5f, 5.0f, 0.0f)) });
+			JointDesc joint;
+			joint.Type = JointType::Distance;
+			joint.A = a;
+			joint.B = b;
+			joint.LimitMin = 0.0f;
+			joint.LimitMax = 5.0f;
+			joint.CollideConnected = collideConnected;
+			world.send(CreateJoint{ joint });
+			const auto steps = world.run_steps(60);
+			const BodyPose* poseA = steps.empty() ? nullptr : find_pose(steps.back().get(), a);
+			const BodyPose* poseB = steps.empty() ? nullptr : find_pose(steps.back().get(), b);
+			world.Thread.stop();
+			return poseA != nullptr && poseB != nullptr ? glm::length(poseA->Position - poseB->Position) : -1.0f;
+		}
+
+		void check_joint_no_collide(Check& check)
+		{
+			const float quiet = overlapping_pair_distance(false);
+			const float pushed = overlapping_pair_distance(true);
+			check(std::abs(quiet - 0.5f) < 1e-3f, "joint_no_collide: joined boxes with CollideConnected off are not pushed apart, distance " + std::to_string(quiet));
+			check(pushed > 0.9f, "joint_collide: with CollideConnected on the overlapping boxes are pushed apart, distance " + std::to_string(pushed));
+		}
+
+		// A 1000 kg box (weight about 9810 N) hangs from the world by a fixed joint. Break force 5000: it breaks, once, and the box falls.
+		// Break force 100000: it holds and no event comes.
+		void check_joint_break(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "joint_break_start: the world starts");
+			const BodyKey weak = EntityGuid::generate();
+			const BodyKey strong = EntityGuid::generate();
+			const auto hang = [&](BodyKey key, float x, float breakForce)
+			{
+				world.send(CreateBody{ key, box_body(MotionType::Dynamic, glm::vec3(x, 4.7f, 0.0f)) });
+				JointDesc joint;
+				joint.Type = JointType::Fixed;
+				joint.A = key;
+				joint.AnchorA = glm::vec3(0.0f, 0.5f, 0.0f);
+				joint.AnchorB = glm::vec3(x, 5.2f, 0.0f); // a world point: no second body
+				joint.BreakForce = breakForce;
+				world.send(CreateJoint{ joint });
+			};
+			hang(weak, 0.0f, 5000.0f);
+			hang(strong, 10.0f, 100000.0f);
+
+			u32 weakBreaks = 0;
+			u32 strongBreaks = 0;
+			u32 lastJointCount = 99;
+			const BodyPose* weakPose = nullptr;
+			const BodyPose* strongPose = nullptr;
+			const auto steps = world.run_steps(180);
+			for (const auto& step : steps)
+			{
+				for (const PhysicsEvent& event : step->Events)
+				{
+					if (event.Kind == PhysicsEventKind::JointBreak)
+					{
+						weakBreaks += event.A == weak && !event.B.valid() ? 1u : 0u;
+						strongBreaks += event.A == strong ? 1u : 0u;
+					}
+				}
+				lastJointCount = step->JointCount;
+			}
+			if (!steps.empty())
+			{
+				weakPose = find_pose(steps.back().get(), weak);
+				strongPose = find_pose(steps.back().get(), strong);
+			}
+			check(weakBreaks == 1, "joint_break_event: the overloaded joint breaks exactly once and the event names its owner and the world, got " + std::to_string(weakBreaks));
+			check(strongBreaks == 0, "joint_break_strong: a joint under its limit does not break, events " + std::to_string(strongBreaks));
+			check(weakPose != nullptr && weakPose->Position.y < 2.0f, "joint_break_falls: the box falls once its joint is gone, got " + (weakPose ? fmt_vec(weakPose->Position) : std::string("no pose")));
+			check(strongPose != nullptr && std::abs(strongPose->Position.y - 4.7f) < 0.05f, "joint_break_holds: the strong joint holds its box, got " + (strongPose ? fmt_vec(strongPose->Position) : std::string("no pose")));
+			check(lastJointCount == 1, "joint_break_count: one joint is left made, got " + std::to_string(lastJointCount));
+			world.Thread.stop();
+		}
+	}
+
+	namespace
+	{
+		// ---- joints from a scene: Joint components through PhysicsSync ----
+
+		struct DoorScene
+		{
+			entt::entity Anchor{ entt::null };
+			entt::entity Door{ entt::null };
+		};
+
+		// A static anchor 0.5 m above the hinge point (0, 5, 0) and a 2 m plank, a dynamic body level with the hinge, hinged to the anchor.
+		DoorScene make_door_scene(Scene& scene)
+		{
+			DoorScene rig;
+			rig.Anchor = add_entity(scene, "Anchor", glm::vec3(0.0f, 5.5f, 0.0f));
+			add_box_collider(scene, rig.Anchor, glm::vec3(0.1f));
+			rig.Door = add_entity(scene, "Door", glm::vec3(1.0f, 5.0f, 0.0f));
+			add_body(scene, rig.Door, MotionType::Dynamic);
+			add_box_collider(scene, rig.Door, glm::vec3(1.0f, 0.1f, 0.1f));
+			Joint joint;
+			joint.Type = JointType::Hinge;
+			joint.Connected = key_of(scene, rig.Anchor);
+			joint.AnchorA = glm::vec3(-1.0f, 0.0f, 0.0f);
+			joint.AnchorB = glm::vec3(0.0f, -0.5f, 0.0f);
+			joint.Axis = glm::vec3(0.0f, 0.0f, 1.0f);
+			scene.registry().emplace<Joint>(rig.Door, joint);
+			return rig;
+		}
+
+		glm::vec3 door_end(const Scene& scene, entt::entity door)
+		{
+			const Transform& transform = scene.registry().get<Transform>(door);
+			return transform.Position + transform.Rotation * glm::vec3(-1.0f, 0.0f, 0.0f);
+		}
+
+		float door_angle_deg(const Scene& scene, entt::entity door)
+		{
+			const glm::vec3 direction = scene.registry().get<Transform>(door).Rotation * glm::vec3(1.0f, 0.0f, 0.0f);
+			return glm::degrees(std::atan2(direction.y, direction.x));
+		}
+
+		void check_joint_sync(Check& check)
+		{
+			// the door swings on its hinge, and a limit changed while it runs takes effect without making the joint again
+			{
+				Scene scene;
+				const DoorScene rig = make_door_scene(scene);
+				PhysicsThread thread;
+				PhysicsSync sync;
+				check(start_scene(thread, sync, scene), "joint_sync_start: the world starts");
+				Joint& joint = scene.registry().get<Joint>(rig.Door);
+				joint.LimitMin = -30.0f;
+				joint.LimitMax = 30.0f;
+				const Ref<const PhysicsStepSnapshot> settled = run_for(thread, sync, scene, 3.0);
+				check(settled != nullptr && settled->JointCount == 1, "joint_sync_made: the Joint component makes one joint");
+				check(glm::length(door_end(scene, rig.Door) - glm::vec3(0.0f, 5.0f, 0.0f)) < 2e-2f, "joint_sync_anchor: the door's end stays on the hinge point, got " + fmt_vec(door_end(scene, rig.Door)));
+				const float angle = door_angle_deg(scene, rig.Door);
+				check(angle > -31.5f && angle < -26.0f, "joint_sync_limits: the limits set on the component hold the door at -30 degrees, got " + std::to_string(angle));
+
+				// removing the component frees the door
+				const float before = scene.registry().get<Transform>(rig.Door).Position.y;
+				scene.registry().remove<Joint>(rig.Door);
+				const Ref<const PhysicsStepSnapshot> freed = run_for(thread, sync, scene, 1.0);
+				check(freed != nullptr && freed->JointCount == 0, "joint_sync_removed: removing the component unmakes the joint");
+				check(scene.registry().get<Transform>(rig.Door).Position.y < before - 1.0f, "joint_sync_free: the door falls once its Joint is removed");
+				thread.stop();
+			}
+
+			// a joint to its own entity is not made
+			{
+				Scene scene;
+				const entt::entity lonely = add_entity(scene, "Lonely", glm::vec3(0.0f, 5.0f, 0.0f));
+				add_body(scene, lonely, MotionType::Dynamic);
+				add_box_collider(scene, lonely, glm::vec3(0.5f));
+				Joint joint;
+				joint.Connected = key_of(scene, lonely);
+				scene.registry().emplace<Joint>(lonely, joint);
+				PhysicsThread thread;
+				PhysicsSync sync;
+				check(start_scene(thread, sync, scene), "joint_self_start: the world starts");
+				const Ref<const PhysicsStepSnapshot> later = run_for(thread, sync, scene, 0.3);
+				check(later != nullptr && later->JointCount == 0 && sync.joint_count() == 0, "joint_self_not_made: a joint connected to its own entity is not sent and not made");
+				check(scene.registry().get<Transform>(lonely).Position.y < 4.9f, "joint_self_falls: the body is free");
+				thread.stop();
+			}
+
+			// destroying the connected entity while the joint runs: no crash, the joint is unmade, no break event for it
+			{
+				Scene scene;
+				const DoorScene rig = make_door_scene(scene);
+				PhysicsThread thread;
+				PhysicsSync sync;
+				check(start_scene(thread, sync, scene), "joint_destroy_start: the world starts");
+				run_for(thread, sync, scene, 0.3);
+				scene.destroy(rig.Anchor);
+				u32 breaks = 0;
+				const Clock::time_point until = Clock::now() + std::chrono::milliseconds(600);
+				while (Clock::now() < until)
+				{
+					scene.update_world_transforms();
+					sync.push_changes(scene, thread);
+					for (const Ref<const PhysicsStepSnapshot>& step : thread.take_steps())
+					{
+						for (const PhysicsEvent& event : step->Events)
+						{
+							breaks += event.Kind == PhysicsEventKind::JointBreak ? 1u : 0u;
+						}
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(8));
+				}
+				const Ref<const PhysicsStepSnapshot> later = thread.latest();
+				check(later != nullptr && later->JointCount == 0, "joint_destroy_unmade: the joint of a destroyed entity is unmade");
+				check(breaks == 0, "joint_destroy_no_break: no break event comes for a destroyed entity's joint");
+				thread.stop();
+			}
+		}
+
+		// A joint that breaks in every world, ten worlds one after the other from the same scene: each world gives one break, and nothing
+		// of an older world shows up in a newer one.
+		void check_joint_world_lifetime(Check& check)
+		{
+			Scene scene;
+			const entt::entity box = add_entity(scene, "Hanging", glm::vec3(0.0f, 4.7f, 0.0f));
+			add_body(scene, box, MotionType::Dynamic);
+			add_box_collider(scene, box, glm::vec3(0.5f));
+			Joint joint;
+			joint.Type = JointType::Fixed;
+			joint.AnchorA = glm::vec3(0.0f, 0.5f, 0.0f);
+			joint.AnchorB = glm::vec3(0.0f, 5.2f, 0.0f);
+			joint.BreakForce = 5000.0f;
+			scene.registry().emplace<Joint>(box, joint);
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			bool stale = false;
+			bool oneEach = true;
+			for (int round = 0; round < 10; round++)
+			{
+				if (!start_scene(thread, sync, scene))
+				{
+					check(false, "joint_lifetime_start: the world starts, round " + std::to_string(round));
+					return;
+				}
+				const Ref<const PhysicsStepSnapshot> first = thread.latest();
+				stale = stale || first == nullptr || first->JointCount != 0;
+				u32 breaks = 0;
+				u32 stepsSeen = 0;
+				const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(10);
+				while (stepsSeen < 90 && Clock::now() < giveUp)
+				{
+					scene.update_world_transforms();
+					sync.push_changes(scene, thread);
+					for (const Ref<const PhysicsStepSnapshot>& step : thread.take_steps())
+					{
+						stale = stale || step->World != thread.generation();
+						stepsSeen++;
+						for (const PhysicsEvent& event : step->Events)
+						{
+							breaks += event.Kind == PhysicsEventKind::JointBreak ? 1u : 0u;
+						}
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(4));
+				}
+				oneEach = oneEach && breaks == 1;
+				thread.stop();
+				// the scene's box fell in the world that just ended: it starts again where its entity is, so put it back
+				scene.registry().get<Transform>(box).Position = glm::vec3(0.0f, 4.7f, 0.0f);
+			}
+			check(!stale, "joint_lifetime_no_stale: a new world starts with no joints and shows nothing of an older one");
+			check(oneEach, "joint_lifetime_one_break: every world gives exactly one break, none carried over");
+		}
+	}
+
+	namespace
+	{
+		// The lines the debug renderer recorded for two bodies, with or without a limited hinge between them (0 in Shipping).
+		size_t joint_debug_lines(bool withJoint)
+		{
+#if defined(WI_DEBUG) || defined(WI_RELEASE)
+			CommandWorld world;
+			if (!world.start(glm::vec3(0.0f)))
+			{
+				return 0;
+			}
+			const BodyKey anchor = EntityGuid::generate();
+			const BodyKey plank = EntityGuid::generate();
+			world.send(CreateBody{ anchor, box_body(MotionType::Static, glm::vec3(0.0f, 5.5f, 0.0f), glm::vec3(0.1f)) });
+			world.send(CreateBody{ plank, box_body(MotionType::Dynamic, glm::vec3(1.0f, 5.0f, 0.0f), glm::vec3(1.0f, 0.1f, 0.1f)) });
+			if (withJoint)
+			{
+				JointDesc joint = hinge_desc();
+				joint.A = plank;
+				joint.B = anchor;
+				joint.LimitMin = -30.0f;
+				joint.LimitMax = 30.0f;
+				world.send(CreateJoint{ joint });
+			}
+			world.send(SetDebugDraw{ true });
+			size_t lines = 0;
+			const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(5);
+			while (lines == 0 && Clock::now() < giveUp)
+			{
+				for (const auto& step : world.Thread.take_steps())
+				{
+					lines = step->Debug != nullptr ? step->Debug->Lines.size() : lines;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(2));
+			}
+			world.Thread.stop();
+			return lines;
+#else
+			(void)withJoint;
+			return 0;
+#endif
+		}
+
+		void check_joint_debug_draw(Check& check)
+		{
+#if defined(WI_DEBUG) || defined(WI_RELEASE)
+			const size_t without = joint_debug_lines(false);
+			const size_t with = joint_debug_lines(true);
+			check(without > 0 && with > without + 4, "joint_debug_draw: a hinge with limits adds lines to the debug drawing, " + std::to_string(without) + " without, " + std::to_string(with) + " with");
+#else
+			(void)check;
+#endif
+		}
+	}
+
+	namespace
+	{
+		// The module's stats count the made joints (the Physics panel shows them).
+		void check_joint_stats(Check& check)
+		{
+			PhysicsModule module;
+			module.set_auto_start(false);
+			Ref<Scene> scene = CreateRef<Scene>();
+			make_door_scene(*scene);
+			check(module.start_world(scene), "joint_stats_start: the world starts");
+			module.thread().set_paused(false);
+			u32 joints = 0;
+			for (int attempt = 0; attempt < 200 && joints == 0; attempt++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(5));
+				module.pump();
+				joints = module.stats().Joints;
+			}
+			check(joints == 1, "joint_stats_count: PhysicsModule::stats counts one joint, got " + std::to_string(joints));
+			module.stop_world();
+		}
+	}
+
+	namespace
+	{
+		// ---- characters: made and driven by commands ----
+
+		const CharacterPose* find_character(const PhysicsStepSnapshot* snapshot, BodyKey key)
+		{
+			if (snapshot == nullptr)
+			{
+				return nullptr;
+			}
+			for (const CharacterPose& pose : snapshot->Characters)
+			{
+				if (pose.Key == key)
+				{
+					return &pose;
+				}
+			}
+			return nullptr;
+		}
+
+		// The entity origin is at the character's feet: the capsule (1.8 m, radius 0.4) is lifted by half its height.
+		CharacterDesc standing_character(glm::vec3 feet)
+		{
+			CharacterDesc desc;
+			desc.Offset = glm::vec3(0.0f, 0.9f, 0.0f);
+			desc.Position = feet;
+			return desc;
+		}
+
+		BodyKey make_floor(CommandWorld& world)
+		{
+			const BodyKey floor = EntityGuid::generate();
+			world.send(CreateBody{ floor, box_body(MotionType::Static, glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(40.0f, 0.5f, 10.0f)) });
+			return floor;
+		}
+
+		// A character dropped on a floor stands on it, and walks where it is told to.
+		void check_character_stand_walk(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "character_stand_start: the world starts");
+			make_floor(world);
+			const BodyKey hero = EntityGuid::generate();
+			world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 1.0f, 0.0f)) });
+			auto steps = world.run_steps(60);
+			const CharacterPose* landed = steps.empty() ? nullptr : find_character(steps.back().get(), hero);
+			check(landed != nullptr && landed->Ground == GroundState::Grounded, "character_stand_grounded: a dropped character ends up Grounded");
+			check(landed != nullptr && std::abs(landed->Position.y) < 0.04f && glm::length(landed->Velocity) < 0.05f, "character_stand_rests: it rests on the floor, got " + (landed ? fmt_vec(landed->Position) : std::string("no pose")));
+			check(!steps.empty() && steps.back()->CharacterCount == 1, "character_stand_count: the snapshot counts one character");
+
+			world.send(SetCharacterVelocity{ hero, glm::vec3(2.0f, 0.0f, 0.0f) });
+			steps = world.run_steps(60);
+			const CharacterPose* walked = steps.empty() ? nullptr : find_character(steps.back().get(), hero);
+			check(walked != nullptr && std::abs(walked->Position.x - 2.0f) < 0.2f && std::abs(walked->Position.y) < 0.04f, "character_walk: 60 steps at 2 m/s are 2 m, got " + (walked ? fmt_vec(walked->Position) : std::string("no pose")));
+			world.Thread.stop();
+		}
+
+		// How high a character that walks 4 s at 2 m/s towards +x gets, and how far, over a block (top at `blockTop`, x from 4 to 6) or a ramp.
+		struct WalkResult
+		{
+			float HighestY = 0.0f;
+			float FinalX = 0.0f;
+			float FinalY = 0.0f;
+		};
+
+		WalkResult walk_over(bool ramp, float blockTopOrAngleDegrees, float stepHeight = 0.35f)
+		{
+			WalkResult result;
+			CommandWorld world;
+			if (!world.start())
+			{
+				return result;
+			}
+			make_floor(world);
+			if (!ramp)
+			{
+				const float top = blockTopOrAngleDegrees;
+				world.send(CreateBody{ EntityGuid::generate(), box_body(MotionType::Static, glm::vec3(5.0f, top * 0.5f, 0.0f), glm::vec3(1.0f, top * 0.5f, 5.0f)) });
+			}
+			else
+			{
+				// a plank 6 m long and 0.2 m thick that rises from (3, 0) at the given angle
+				const float angle = glm::radians(blockTopOrAngleDegrees);
+				const glm::vec3 surfaceMid(3.0f + 3.0f * std::cos(angle), 3.0f * std::sin(angle), 0.0f);
+				const glm::vec3 normal(-std::sin(angle), std::cos(angle), 0.0f);
+				BodyDesc plank = box_body(MotionType::Static, surfaceMid - 0.1f * normal, glm::vec3(3.0f, 0.1f, 5.0f));
+				plank.Rotation = glm::angleAxis(angle, glm::vec3(0.0f, 0.0f, 1.0f));
+				world.send(CreateBody{ EntityGuid::generate(), plank });
+			}
+			const BodyKey hero = EntityGuid::generate();
+			CharacterDesc desc = standing_character(glm::vec3(0.0f, 0.05f, 0.0f));
+			desc.StepHeight = stepHeight;
+			world.send(CreateCharacter{ hero, desc });
+			world.run_steps(20);
+			world.send(SetCharacterVelocity{ hero, glm::vec3(2.0f, 0.0f, 0.0f) });
+			for (const auto& step : world.run_steps(240))
+			{
+				if (const CharacterPose* pose = find_character(step.get(), hero))
+				{
+					result.HighestY = std::max(result.HighestY, pose->Position.y);
+					result.FinalX = pose->Position.x;
+					result.FinalY = pose->Position.y;
+				}
+			}
+			world.Thread.stop();
+			return result;
+		}
+
+		// Steps up to StepHeight are climbed, taller ones stop the character; slopes up to MaxSlopeAngle (45) are climbed, steeper ones are not.
+		void check_character_step_slope(Check& check)
+		{
+			const WalkResult low = walk_over(false, 0.3f);
+			check(low.HighestY > 0.25f && low.FinalX > 7.0f, "character_step_low: a 0.3 m step is climbed, got highest " + std::to_string(low.HighestY) + ", x " + std::to_string(low.FinalX));
+			const WalkResult high = walk_over(false, 0.6f);
+			check(high.HighestY < 0.15f && high.FinalX < 4.0f, "character_step_high: a 0.6 m step stops the character, got highest " + std::to_string(high.HighestY) + ", x " + std::to_string(high.FinalX));
+			// the 0.6 m step again with a character whose StepHeight is 0.6: the stair logic climbs it (the capsule's rounded bottom alone would not)
+			const WalkResult stairs = walk_over(false, 0.6f, 0.6f);
+			check(stairs.HighestY > 0.5f && stairs.FinalX > 7.0f, "character_step_stairs: a 0.6 m step is climbed with StepHeight 0.6, got highest " + std::to_string(stairs.HighestY) + ", x " + std::to_string(stairs.FinalX));
+			const WalkResult gentle = walk_over(true, 30.0f);
+			check(gentle.HighestY > 2.0f, "character_slope_walkable: a 30 degree ramp is climbed, got highest " + std::to_string(gentle.HighestY));
+			const WalkResult steep = walk_over(true, 60.0f);
+			check(steep.HighestY < 0.6f, "character_slope_steep: a 60 degree ramp is not climbed, got highest " + std::to_string(steep.HighestY));
+		}
+
+		// A jump of 5 m/s peaks at about v^2 / 2g = 1.27 m, and a jump asked for in the air does nothing.
+		void check_character_jump(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "character_jump_start: the world starts");
+			make_floor(world);
+			const BodyKey hero = EntityGuid::generate();
+			world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 0.05f, 0.0f)) });
+			world.run_steps(40);
+			world.send(CharacterJump{ hero, 5.0f });
+			float peak = 0.0f;
+			for (const auto& step : world.run_steps(20))
+			{
+				if (const CharacterPose* pose = find_character(step.get(), hero))
+				{
+					peak = std::max(peak, pose->Position.y);
+				}
+			}
+			world.send(CharacterJump{ hero, 5.0f }); // in the air: ignored
+			for (const auto& step : world.run_steps(60))
+			{
+				if (const CharacterPose* pose = find_character(step.get(), hero))
+				{
+					peak = std::max(peak, pose->Position.y);
+				}
+			}
+			check(peak > 1.1f && peak < 1.5f, "character_jump_peak: a 5 m/s jump peaks near 1.27 m and a jump in the air adds nothing, got " + std::to_string(peak));
+			world.Thread.stop();
+		}
+
+		// A character on a kinematic platform that moves at 1 m/s is carried along.
+		void check_character_platform(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "character_platform_start: the world starts");
+			const BodyKey platform = EntityGuid::generate();
+			world.send(CreateBody{ platform, box_body(MotionType::Kinematic, glm::vec3(0.0f, 0.15f, 0.0f), glm::vec3(1.5f, 0.15f, 1.5f)) });
+			const BodyKey hero = EntityGuid::generate();
+			world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 0.35f, 0.0f)) });
+			float heroX = -1000.0f;
+			float platformX = 0.0f;
+			for (int i = 0; i < 90; i++)
+			{
+				const auto steps = world.run_steps(1);
+				if (steps.empty())
+				{
+					break;
+				}
+				const PhysicsStepSnapshot& step = *steps.back();
+				platformX = static_cast<float>((step.Time + step.FixedDt) * 1.0);
+				world.send(SetKinematicTarget{ platform, glm::vec3(platformX, 0.15f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f) });
+				if (const CharacterPose* pose = find_character(&step, hero))
+				{
+					heroX = pose->Position.x;
+				}
+			}
+			check(platformX > 1.0f && std::abs(heroX - platformX) < 0.25f, "character_platform: the character rides the platform, platform x " + std::to_string(platformX) + ", character x " + std::to_string(heroX));
+			world.Thread.stop();
+		}
+	}
+
+	namespace
+	{
+		// A standing character is hit by a ray, found by an overlap, and enters and leaves a trigger volume once.
+		void check_character_queries(Check& check)
+		{
+			CommandWorld world;
+			check(world.start(), "character_queries_start: the world starts");
+			make_floor(world);
+			const BodyKey volume = EntityGuid::generate();
+			BodyDesc trigger = box_body(MotionType::Static, glm::vec3(5.0f, 1.0f, 0.0f), glm::vec3(1.0f, 1.0f, 5.0f));
+			trigger.IsTrigger = true;
+			world.send(CreateBody{ volume, trigger });
+			const BodyKey hero = EntityGuid::generate();
+			world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 0.05f, 0.0f)) });
+
+			auto steps = world.run_steps(40);
+			const Ref<const QuerySnapshot> query = steps.empty() ? nullptr : steps.back()->Query;
+			check(query != nullptr, "character_queries_snapshot: the step has a query snapshot");
+			if (query != nullptr)
+			{
+				const std::optional<RayHit> down = query->raycast(glm::vec3(0.0f, 10.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), 20.0f);
+				check(down && down->Key == hero && std::abs(down->Distance - 8.2f) < 0.15f, "character_queries_ray: a ray from above hits the character at the top of its capsule, got " +
+					(down ? std::to_string(down->Distance) : std::string("no hit")));
+				const std::vector<BodyKey> inside = query->overlap_sphere(glm::vec3(0.0f, 0.9f, 0.0f), 0.3f);
+				check(std::find(inside.begin(), inside.end(), hero) != inside.end(), "character_queries_overlap: an overlap sphere around its middle finds the character");
+			}
+
+			world.send(SetCharacterVelocity{ hero, glm::vec3(2.0f, 0.0f, 0.0f) });
+			u32 enters = 0;
+			u32 exits = 0;
+			for (const auto& step : world.run_steps(240))
+			{
+				for (const PhysicsEvent& event : step->Events)
+				{
+					const bool pair = (event.A == hero && event.B == volume) || (event.A == volume && event.B == hero);
+					enters += pair && event.Kind == PhysicsEventKind::TriggerEnter ? 1u : 0u;
+					exits += pair && event.Kind == PhysicsEventKind::TriggerExit ? 1u : 0u;
+				}
+			}
+			check(enters == 1 && exits == 1, "character_queries_trigger: walking through a trigger volume gives one enter and one exit, got " + std::to_string(enters) + " and " + std::to_string(exits));
+			world.Thread.stop();
+		}
+	}
+
+	namespace
+	{
+		entt::entity add_character(Scene& scene, const std::string& name, glm::vec3 feet)
+		{
+			const entt::entity hero = add_entity(scene, name, feet);
+			CharacterController controller;
+			controller.Offset = glm::vec3(0.0f, 0.9f, 0.0f);
+			scene.registry().emplace<CharacterController>(hero, controller);
+			return hero;
+		}
+
+		// CharacterController components through PhysicsSync: the character lands and its Transform follows it; moving the entity from the
+		// outside teleports it; removing the component or the entity stops it; an entity that also has a body is not a character.
+		void check_character_sync(Check& check)
+		{
+			Scene scene;
+			add_ground(scene);
+			const entt::entity hero = add_character(scene, "Hero", glm::vec3(0.0f, 2.0f, 0.0f));
+			const entt::entity both = add_character(scene, "Both", glm::vec3(10.0f, 1.0f, 0.0f));
+			add_body(scene, both, MotionType::Dynamic);
+			add_box_collider(scene, both, glm::vec3(0.5f));
+
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "character_sync_start: the world starts");
+			Ref<const PhysicsStepSnapshot> landed = run_for(thread, sync, scene, 2.5);
+			const float y = scene.registry().get<Transform>(hero).Position.y;
+			check(landed != nullptr && landed->CharacterCount == 1 && sync.has_character(key_of(scene, hero)), "character_sync_made: the component makes one character");
+			// the ground box has its top at y = 0.5
+			check(std::abs(y - 0.5f) < 0.05f, "character_sync_lands: the character lands and its Transform follows, got y " + std::to_string(y));
+			check(!sync.has_character(key_of(scene, both)), "character_sync_with_body: an entity that also has a RigidBody is not a character");
+
+			// moved from the outside: teleported, and not pulled back
+			scene.registry().get<Transform>(hero).Position = glm::vec3(5.0f, 0.5f, 0.0f);
+			const Ref<const PhysicsStepSnapshot> moved = run_for(thread, sync, scene, 0.4);
+			const CharacterPose* pose = find_character(moved.get(), key_of(scene, hero));
+			check(pose != nullptr && std::abs(pose->Position.x - 5.0f) < 0.05f && std::abs(scene.registry().get<Transform>(hero).Position.x - 5.0f) < 0.05f,
+				"character_sync_teleport: a Transform set from outside teleports the character, got x " + (pose ? std::to_string(pose->Position.x) : std::string("no pose")));
+
+			// the component removed: the character is gone and its entity stays where it is
+			scene.registry().remove<CharacterController>(hero);
+			const Ref<const PhysicsStepSnapshot> removed = run_for(thread, sync, scene, 0.3);
+			check(removed != nullptr && removed->CharacterCount == 0 && !sync.has_character(key_of(scene, hero)), "character_sync_removed: removing the component removes the character");
+			thread.stop();
+
+			// the entity destroyed while the character moves: no crash, no pose for it
+			Scene other;
+			add_ground(other);
+			const entt::entity walker = add_character(other, "Walker", glm::vec3(0.0f, 0.5f, 0.0f));
+			PhysicsThread second;
+			PhysicsSync secondSync;
+			check(start_scene(second, secondSync, other), "character_sync_destroy_start: the world starts");
+			run_for(second, secondSync, other, 0.3);
+			other.destroy(walker);
+			const Ref<const PhysicsStepSnapshot> after = run_for(second, secondSync, other, 0.3);
+			check(after != nullptr && after->CharacterCount == 0, "character_sync_destroyed: a destroyed entity's character is gone");
+			second.stop();
+		}
+
+		// The same commands give the same walk twice, step for step.
+		void check_character_repeatable(Check& check)
+		{
+			const auto walk = []() -> std::vector<glm::vec3>
+			{
+				CommandWorld world;
+				std::vector<glm::vec3> positions;
+				if (!world.start())
+				{
+					return positions;
+				}
+				world.Thread.set_paused(true);
+				make_floor(world);
+				const BodyKey hero = EntityGuid::generate();
+				world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 1.0f, 0.0f)) });
+				world.send(SetCharacterVelocity{ hero, glm::vec3(1.5f, 0.0f, 0.5f) });
+				world.Thread.take_steps();
+				world.Thread.set_paused(false);
+				for (const auto& step : world.run_steps(150))
+				{
+					if (const CharacterPose* pose = find_character(step.get(), hero))
+					{
+						positions.push_back(pose->Position);
+					}
+				}
+				world.Thread.stop();
+				return positions;
+			};
+			const std::vector<glm::vec3> first = walk();
+			const std::vector<glm::vec3> second = walk();
+			const size_t count = std::min(first.size(), second.size());
+			bool same = count >= 100;
+			for (size_t i = 0; i < count && same; i++)
+			{
+				same = first[i] == second[i];
+			}
+			check(same, "character_repeatable: two runs of the same commands give the same positions step for step, " + std::to_string(first.size()) + " and " + std::to_string(second.size()) + " samples");
+		}
+	}
+
+	namespace
+	{
+		// The module's stats count the characters (the Physics panel shows them).
+		void check_character_stats(Check& check)
+		{
+			PhysicsModule module;
+			module.set_auto_start(false);
+			Ref<Scene> scene = CreateRef<Scene>();
+			add_ground(*scene);
+			add_character(*scene, "Hero", glm::vec3(0.0f, 1.0f, 0.0f));
+			check(module.start_world(scene), "character_stats_start: the world starts");
+			module.thread().set_paused(false);
+			u32 characters = 0;
+			for (int attempt = 0; attempt < 200 && characters == 0; attempt++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(5));
+				module.pump();
+				characters = module.stats().Characters;
+			}
+			check(characters == 1, "character_stats_count: PhysicsModule::stats counts one character, got " + std::to_string(characters));
+			module.stop_world();
+		}
+
+		// The debug capsule of a character is drawn in a colour for its state: airborne while it falls, grounded once it has landed.
+		void check_character_debug_draw(Check& check)
+		{
+#if defined(WI_DEBUG) || defined(WI_RELEASE)
+			const u32 grounded = 0xFF78FF3Cu; // 0xAABBGGRR of (60, 255, 120)
+			const u32 airborne = 0xFF3246FFu;  // (255, 70, 50)
+			CommandWorld world;
+			check(world.start(), "character_debug_start: the world starts");
+			make_floor(world);
+			const BodyKey hero = EntityGuid::generate();
+			world.send(CreateCharacter{ hero, standing_character(glm::vec3(0.0f, 3.0f, 0.0f)) });
+			world.send(SetDebugDraw{ true });
+			bool sawAirborne = false;
+			bool sawGrounded = false;
+			for (const auto& step : world.run_steps(120))
+			{
+				if (step->Debug == nullptr)
+				{
+					continue;
+				}
+				for (const PhysicsDebugLine& line : step->Debug->Lines)
+				{
+					sawAirborne = sawAirborne || line.Color == airborne;
+					sawGrounded = sawGrounded || line.Color == grounded;
+				}
+			}
+			check(sawAirborne && sawGrounded, "character_debug_draw: the capsule is drawn in the airborne colour while it falls and the grounded colour once it stands, airborne " + std::to_string(sawAirborne) + ", grounded " + std::to_string(sawGrounded));
+			world.Thread.stop();
+#else
+			(void)check;
+#endif
+		}
+	}
+
 	bool run_physics_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -1393,6 +2349,24 @@ namespace wiwa
 		check_debug_draw(check);
 		check_repeatable(check);
 		check_world_lifetime(check);
+		check_joint_hinge(check);
+		check_joint_limits_motor(check);
+		check_joint_pending_destroy(check);
+		check_joint_no_collide(check);
+		check_joint_break(check);
+		check_joint_sync(check);
+		check_joint_world_lifetime(check);
+		check_joint_debug_draw(check);
+		check_joint_stats(check);
+		check_character_stand_walk(check);
+		check_character_step_slope(check);
+		check_character_jump(check);
+		check_character_platform(check);
+		check_character_queries(check);
+		check_character_sync(check);
+		check_character_repeatable(check);
+		check_character_debug_draw(check);
+		check_character_stats(check);
 
 		if (check.Failures == 0)
 		{

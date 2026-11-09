@@ -12,7 +12,11 @@ project "wiwa_editor"
 		"src/**.h",
 		"src/**.cpp",
 		"vendor/ImGuizmo/ImGuizmo.h",
-		"vendor/ImGuizmo/ImGuizmo.cpp"
+		"vendor/ImGuizmo/ImGuizmo.cpp",
+		"vendor/ImGuizmo/ImCurveEdit.h",
+		"vendor/ImGuizmo/ImCurveEdit.cpp",
+		"vendor/ImGuizmo/GraphEditor.h",
+		"vendor/ImGuizmo/GraphEditor.cpp"
 	}
 
 	includedirs

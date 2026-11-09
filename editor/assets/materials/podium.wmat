@@ -1,17 +1,30 @@
 {
+  "version": 1,
+  "name": "podium",
   "alpha": "opaque",
   "alphaCutoff": 0.5,
-  "baseColor": [0.35, 0.33, 0.3, 1.0],
+  "baseColor": [
+    1,
+    1,
+    1,
+    1
+  ],
   "clearcoat": 0.0,
   "clearcoatRoughness": 0.0,
   "doubleSided": false,
-  "emissive": [0.0, 0.0, 0.0],
-  "metallic": 0.0,
-  "name": "podium",
-  "roughness": 0.6,
+  "emissive": [
+    0,
+    0,
+    0
+  ],
+  "metallic": 1.0,
+  "roughness": 1.0,
   "sheen": 0.0,
   "sheenRoughness": 0.0,
-  "textures": {},
   "transmission": 0.0,
-  "version": 1
+  "textures": {
+    "baseColor": "../textures/metal_color.jpg",
+    "normal": "../textures/metal_normal.jpg",
+    "orm": "../textures/metal_orm.png"
+  }
 }

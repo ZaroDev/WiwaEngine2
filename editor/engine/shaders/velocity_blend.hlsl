@@ -1,3 +1,4 @@
+#define SKIN_SET 2 // the sets before it in this pass: see scene_common.hlsli
 #include "depth.hlsli"
 #include "material_common.hlsli"
 

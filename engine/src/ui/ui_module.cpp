@@ -204,6 +204,21 @@ namespace wiwa
 		};
 		input.Fonts = m_Fonts;
 		input.TextureSize = m_TextureSizes;
+		input.ViewTexture = [this](std::string_view name) -> u32
+		{
+			RenderModule* render = Engine::get().get_module<RenderModule>();
+			const ViewId view = render != nullptr ? render->get_view_names().find(name) : INVALID_VIEW;
+			if (view == INVALID_VIEW)
+			{
+				// Said once per name: a menu that names a host that is not there (yet) is not an error every frame.
+				if (m_WarnedViews.insert(std::string(name)).second)
+				{
+					WI_LOG(Warning, "UI", "No view named '{0}' (a ViewImage widget names a ViewHost)", std::string(name));
+				}
+				return 0;
+			}
+			return view_texture_id(view);
+		};
 		return input;
 	}
 

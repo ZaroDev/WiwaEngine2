@@ -1,9 +1,12 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_map>
+
+#include <imgui.h>
 
 #include <panels/panel.h>
 #include <scene/scene_editor.h>
@@ -31,6 +34,14 @@ public:
 	void open(const std::filesystem::path& wuipanel);
 
 	virtual void on_draw() override;
+	virtual const char* window_name() const override { return "###UiEditor"; }
+
+	// What the Maximize button and F11 do (the editor points them at its layout manager).
+	void set_maximize(std::function<void()> toggle, std::function<bool()> isMaximized)
+	{
+		m_ToggleMaximize = std::move(toggle);
+		m_IsMaximized = std::move(isMaximized);
+	}
 
 	// For the launch smoke: a file is loaded, and the canvas is being drawn by the renderer.
 	bool loaded() const { return m_Model != nullptr && !m_Blocked; }
@@ -83,6 +94,7 @@ private:
 	void draw_rect_section(const wiwa::UiWidget& widget);
 	void draw_field(const wiwa::UiWidget& widget, const wiwa::UiField& field);
 	void draw_unsaved_popup();
+	bool tree_matches(wiwa::UiId id) const;
 
 	bool save();
 	void load(const std::filesystem::path& file);
@@ -118,6 +130,13 @@ private:
 	// asking what to do with unsaved changes
 	AskAction m_Ask = AskAction::None;
 	std::filesystem::path m_PendingOpen{};
+
+	// the columns and the tree search
+	float m_LeftWidth = 240.0f;
+	float m_RightWidth = 330.0f;
+	ImGuiTextFilter m_TreeFilter{};
+	std::function<void()> m_ToggleMaximize{};
+	std::function<bool()> m_IsMaximized{};
 
 	std::string m_RenameBuffer{};
 	wiwa::UiId m_Renaming = 0;

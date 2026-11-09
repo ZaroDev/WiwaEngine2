@@ -1,5 +1,5 @@
 #include <pch.h>
-#include "render_test.h"
+#include "scene_tester.h"
 
 #include "../render_world.h"
 #include "../renderer.h"
@@ -303,6 +303,103 @@ namespace wiwa
 				context.check(gpu != nullptr && gpu->ready() && gpu->Generation == workingGeneration, "a broken reload keeps the old version");
 				context.check(shaders.generation() == beforeBroken, "and changes nothing");
 				context.check(cache.get_material_shader(slot) == index && (cache.material_record(slot).Flags & MATERIAL_CUSTOM_BIT) != 0, "the material still draws custom");
+			});
+
+		// The pixels of a draw with a surface shader: the shader runs (not the built-in material), reads the parameter bytes of its own
+		// material, and its VertexOffset moves the geometry. The shader is editor/engine/shaders/surface_check.wshader.
+		register_render_check("custom_material_draws_with_its_shader", [](RenderCheckContext& context)
+			{
+				AssetManager* assets = context.World.get_renderer().get_assets();
+				const std::optional<AssetRef> shader = assets != nullptr ? assets->find_asset("engine/shaders/surface_check.wshader") : std::nullopt;
+				context.check(shader.has_value(), "surface_check.wshader is an engine asset");
+				if (!shader)
+				{
+					return;
+				}
+
+				// One cube, lit by a sun, whose material is green as far as the built-in shader knows. The surface shader emits Tint instead.
+				const auto render = [&](glm::vec3 tint, float lift, glm::ivec3& center, glm::ivec3& top)
+				{
+					SceneTester test(context);
+					SceneSettings settings;
+					settings.AmbientIntensity = 0.0f;
+					settings.BackgroundColor = glm::vec3(0.0f);
+					test.scene().set_settings(settings);
+					test.add_light(test.sun(glm::vec3(0.0f, 0.0f, -1.0f)));
+
+					MaterialData material = test.color_material(glm::vec3(0.0f, 1.0f, 0.0f));
+					material.Shader = *shader;
+					const float block[8] = { tint.r, tint.g, tint.b, 1.0f, lift, 0.0f, 0.0f, 0.0f };
+					material.ParamBytes.resize(sizeof(block));
+					std::memcpy(material.ParamBytes.data(), block, sizeof(block));
+					test.add_instance(test.add_mesh(make_test_cube(test.add_material(material))), glm::mat4(1.0f));
+
+					const bool ok = test.render(30);
+					center = test.pixel(test.to_pixel(glm::vec3(0.0f, 0.0f, 0.5f)));
+					top = test.pixel(test.to_pixel(glm::vec3(0.0f, 1.5f, 0.5f)));
+					return ok;
+				};
+
+				glm::ivec3 center{};
+				glm::ivec3 top{};
+				context.check(render(glm::vec3(1.0f, 0.0f, 0.0f), 0.0f, center, top), "render a cube with the red tint");
+				WI_LOG(Info, "RenderTest", "custom_material red ({0}, {1}, {2})", center.r, center.g, center.b);
+				context.check(center.r > 150 && center.g < 40 && center.b < 40, "the surface shader emits the red Tint, not the green of the material");
+
+				context.check(render(glm::vec3(0.0f, 0.0f, 1.0f), 0.0f, center, top), "render it with the blue tint");
+				WI_LOG(Info, "RenderTest", "custom_material blue ({0}, {1}, {2})", center.r, center.g, center.b);
+				context.check(center.b > 150 && center.r < 40 && center.g < 40, "another parameter value gives another color");
+
+				context.check(render(glm::vec3(1.0f, 0.0f, 0.0f), 1.5f, center, top), "render it lifted by VertexOffset");
+				WI_LOG(Info, "RenderTest", "custom_material lifted center ({0}, {1}, {2}) top ({3}, {4}, {5})", center.r, center.g, center.b, top.r, top.g, top.b);
+				context.check(center.r < 40 && top.r > 150, "VertexOffset moved the cube up");
+			});
+
+		// The shadow of a caster with a surface shader: its VertexOffset is applied in the shadow map as well, so lowering the cube
+		// with Lift moves its shadow along the ground (surface_shadow.hlsl, the Shadow variant).
+		register_render_check("custom_material_casts_shadow_from_its_shader", [](RenderCheckContext& context)
+			{
+				AssetManager* assets = context.World.get_renderer().get_assets();
+				const std::optional<AssetRef> shader = assets != nullptr ? assets->find_asset("engine/shaders/surface_check.wshader") : std::nullopt;
+				context.check(shader.has_value(), "surface_check.wshader is an engine asset");
+				if (!shader)
+				{
+					return;
+				}
+
+				// A sun travelling along +x and down: a point at height y casts its shadow y - 0.05 to the right, so the cube at height 1.5 shades
+				// x from 0.45 to 2.45 of the ground and, lowered by 0.8, from -0.35 to 1.65: the spot is in the first and out of the second.
+				const glm::vec3 spot(2.2f, 0.05f, 0.0f);
+				const auto ground_luma = [&](float lift, int& luma)
+				{
+					SceneTester test(context);
+					SceneSettings settings;
+					settings.AmbientIntensity = 0.08f;
+					test.scene().set_settings(settings);
+					test.set_camera(glm::vec3(0.0f, 7.0f, 7.0f), glm::vec3(0.0f));
+					test.add_light(test.sun(glm::vec3(1.0f, -1.0f, 0.0f), 3.0f, true));
+
+					const AssetRef ground = test.add_material(test.color_material(glm::vec3(0.8f)));
+					test.add_instance(test.add_mesh(make_test_box(glm::vec3(8.0f, 0.05f, 8.0f), ground)), glm::mat4(1.0f));
+
+					MaterialData material = test.color_material(glm::vec3(0.8f));
+					material.Shader = *shader;
+					const float block[8] = { 1.0f, 1.0f, 1.0f, 1.0f, lift, 0.0f, 0.0f, 0.0f };
+					material.ParamBytes.resize(sizeof(block));
+					std::memcpy(material.ParamBytes.data(), block, sizeof(block));
+					test.add_instance(test.add_mesh(make_test_box(glm::vec3(0.5f), test.add_material(material))), glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f)));
+
+					const bool ok = test.render(30);
+					luma = SceneTester::luma(test.pixel(test.to_pixel(spot)));
+					return ok;
+				};
+
+				int shadowed = 0;
+				int lit = 0;
+				context.check(ground_luma(0.0f, shadowed), "render the cube's shadow");
+				context.check(ground_luma(-0.8f, lit), "render it again with the cube lowered by VertexOffset");
+				WI_LOG(Info, "RenderTest", "custom_material shadow: ground luma in the shadow {0}, after lowering the cube {1}", shadowed, lit);
+				context.check(lit > shadowed * 2 + 20, "lowering the cube moved its shadow off the spot");
 			});
 	}
 }

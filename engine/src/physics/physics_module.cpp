@@ -46,6 +46,8 @@ namespace wiwa
 		{
 			stats.Bodies = m_Latest->BodyCount;
 			stats.ActiveBodies = m_Latest->ActiveBodies;
+			stats.Joints = m_Latest->JointCount;
+			stats.Characters = m_Latest->CharacterCount;
 			stats.StepMs = m_Latest->StepMs;
 		}
 		return stats;
@@ -231,8 +233,10 @@ namespace wiwa
 		events.reserve(step.Events.size());
 		for (const PhysicsEvent& event : step.Events)
 		{
-			// an entity destroyed since the step: its events go (by guid, the entity may be gone before its DestroyBody was applied)
-			if (scene->find(event.A) != entt::null && scene->find(event.B) != entt::null)
+			// an entity destroyed since the step: its events go (by guid, the entity may be gone before its DestroyBody was applied). A
+			// joint that broke needs only the entity that owns it: it was connected to the world, or to an entity that may be gone.
+			const bool needsOther = event.Kind != PhysicsEventKind::JointBreak;
+			if (scene->find(event.A) != entt::null && (!needsOther || scene->find(event.B) != entt::null))
 			{
 				events.push_back(event);
 			}
@@ -288,6 +292,26 @@ namespace wiwa
 	void PhysicsModule::wake(BodyKey key) { submit(WakeBody{ key }); }
 	void PhysicsModule::set_gravity(glm::vec3 gravity) { submit(SetGravity{ gravity }); }
 	void PhysicsModule::set_kinematic_target(BodyKey key, glm::vec3 position, glm::quat rotation) { submit(SetKinematicTarget{ key, position, rotation }); }
+
+	void PhysicsModule::set_character_velocity(BodyKey key, glm::vec3 velocity) { submit(SetCharacterVelocity{ key, velocity }); }
+	void PhysicsModule::character_jump(BodyKey key, float speed) { submit(CharacterJump{ key, speed }); }
+
+	std::optional<CharacterPose> PhysicsModule::newest_character(BodyKey key) const
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		if (m_Latest == nullptr || m_Latest->World != m_Sync.generation())
+		{
+			return std::nullopt;
+		}
+		for (const CharacterPose& pose : m_Latest->Characters)
+		{
+			if (pose.Key == key)
+			{
+				return pose;
+			}
+		}
+		return std::nullopt;
+	}
 
 	std::optional<BodyPose> PhysicsModule::newest_pose(BodyKey key) const
 	{

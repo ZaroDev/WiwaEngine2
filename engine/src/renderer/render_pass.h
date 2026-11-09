@@ -14,6 +14,8 @@ namespace wiwa
 	class TextureRegistry;
 	class GpuResourceCache;
 	class SceneRenderData;
+	struct ViewState;
+	struct ViewFlags;
 	struct DebugDrawData;
 	struct PickState;
 
@@ -32,6 +34,8 @@ namespace wiwa
 		const DebugDrawData* Debug = nullptr; // the debug shapes of this frame (null when there are none)
 		const UiDrawList* Ui = nullptr; // the game UI of this frame (null when there is none)
 		const SceneRenderData* Scene = nullptr; // the scene's draw lists and buffers for this frame (null when there is nothing to draw)
+		ViewState* View = nullptr; // the view being drawn: its target and scene. The main view is the Viewport panel (or the window)
+		bool IsMainView = true;    // false: an offscreen view; the passes that only make sense on screen (game UI, outline, debug, pick, blit, ImGui) skip it
 	};
 
 	struct PassInitializationDescription
@@ -61,6 +65,12 @@ namespace wiwa
 
 		// The renderer only runs the passes once all of them are ready.
 		virtual bool is_ready() const { return true; }
+
+		// False: the pass is left out of a view with these flags (an offscreen view; isMain is the Viewport panel or the window). The default runs everywhere.
+		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const { return true; }
+
+		// An offscreen view is being destroyed: forget what was cached for its target (ViewportTarget::uid), so that its images are not kept alive.
+		virtual void on_view_removed(u32 targetUid) {}
 		virtual bool has_failed() const { return false; }
 
 		virtual void on_resize(nvrhi::IDevice* device, u32 width, u32 height) {}

@@ -10,6 +10,7 @@
 #include "../resources/gpu_resource_cache.h"
 #include "../environment/environment_cache.h"
 #include "../render_quality.h"
+#include "../view/view_types.h"
 #include "../viewport_target.h"
 #include "render_scene.h"
 
@@ -48,7 +49,10 @@ namespace wiwa
 	struct DrawItem
 	{
 		u32 Instance = 0;   // slot in the scene's instance array (and the instance buffer)
-		u32 Material = 0;   // slot in the material buffer
+		u32 Material = 0;   // slot in the material buffer (a shadow caster carries its shadow matrix index here)
+		u32 Slot = 0;       // the material's own slot, also for a shadow caster
+		u32 Shader = 0;     // surface shader index (SurfaceShaderCache) the material draws with; 0 is the built-in material
+		bool Masked = false; // alpha-masked (picks the masked variant of a surface shader)
 		u32 Page = 0;       // which shared vertex / index buffer pair
 		u32 FirstIndex = 0;
 		u32 IndexCount = 0;
@@ -57,6 +61,8 @@ namespace wiwa
 		float Depth = 0.0f; // view-space distance of the primitive's bounds center (for sorting blended draws)
 	};
 
+	constexpr u32 NO_PALETTE = ~0u; // GpuInstance::Skin.x of an instance that is not skinned (mirrored in scene_common.hlsli)
+
 	// One scene instance as the shaders read it (SceneInstance in scene_common.hlsli): the world matrix, the matrix for normals and the
 	// world matrix of the previous frame, each as four columns.
 	struct GpuInstance
@@ -64,8 +70,9 @@ namespace wiwa
 		glm::mat4 World{ 1.0f };
 		glm::mat4 Normal{ 1.0f };
 		glm::mat4 PrevWorld{ 1.0f };
+		glm::uvec4 Skin{ NO_PALETTE, NO_PALETTE, 0, 0 }; // x, y: row of this frame's and the previous frame's joint palette in uPalettes; NO_PALETTE: a rigid instance
 	};
-	static_assert(sizeof(GpuInstance) == 192);
+	static_assert(sizeof(GpuInstance) == 208);
 
 	// The per-frame constant buffer (FrameBuffer in scene_common.hlsli).
 	struct FrameConstants
@@ -119,12 +126,22 @@ namespace wiwa
 	class SceneRenderData
 	{
 	public:
-		bool initialize(nvrhi::IDevice* device);
+		// shareLayoutsFrom: the data of another view. Every view uses the binding layouts of the first one, so that a pipeline made with them
+		// fits the binding sets of all views (pipelines are made once, not per view).
+		bool initialize(nvrhi::IDevice* device, const SceneRenderData* shareLayoutsFrom = nullptr);
 		void shutdown();
 
 		// Culls the scene against the effective camera and fills the draw lists and the constants. Without a viewport target there
 		// is nothing to draw into and the data is inactive.
 		void build(RenderScene& scene, GpuResourceCache& cache, ViewportTarget& viewport);
+
+		// What the view this data belongs to switches on (the main view is Full). Applied by build(): the settings copy loses the effects the
+		// view does not run, shadows are cut down, light culling can go.
+		void set_view_flags(const ViewFlags& flags) { m_Flags = flags; }
+		// The background is nothing (alpha 0), not the sky or the colour: views made for UI widgets and thumbnails. The alpha of the HDR image is
+		// coverage then, and the LDR image holds straight alpha. Never for the main view.
+		void set_transparent_background(bool transparent) { m_TransparentBackground = transparent; }
+		bool transparent_background() const { return m_TransparentBackground; }
 
 		// The index of the frame about to be built: it picks the jitter.
 		void set_frame_index(u64 index) { m_FrameIndex = index; }
@@ -180,6 +197,13 @@ namespace wiwa
 
 		nvrhi::IBindingLayout* frame_layout() const { return m_FrameLayout; }
 		nvrhi::IBindingSet* frame_bindings() const { return m_FrameBindings; }
+		// The frame set with stand-ins for the shadow maps, for drawing into them (a surface shader's casters read the whole frame set).
+		nvrhi::IBindingSet* shadow_frame_bindings() const { return m_ShadowFrameBindings; }
+		// The skin set (joint palettes t22, the skin vertices of the page t23): the last set of every pass that draws meshes, so its layout is
+		// the last of each pass layouts. A page without skinned meshes gets stand-ins. The frame layout cannot hold it: its registers span 1..9
+		// and the material layout sits in t10..t13 (see ao_layout()).
+		nvrhi::IBindingLayout* skin_layout() const { return m_SkinLayout; }
+		nvrhi::IBindingSet* skin_bindings(u32 page) const;
 
 		// Draw counts of the last build, for the stats.
 		u32 visible_instances() const { return m_VisibleInstances; }
@@ -216,6 +240,8 @@ namespace wiwa
 		const RenderScene* m_Scene = nullptr;
 		SceneSettings m_Settings{};
 		RenderQuality m_Quality{};
+		ViewFlags m_Flags{};
+		bool m_TransparentBackground = false;
 		FrameConstants m_Constants{};
 		u64 m_FrameIndex = 0;
 		bool m_TemporalActive = false;
@@ -274,6 +300,7 @@ namespace wiwa
 		nvrhi::BufferHandle m_ClusterIndices{};
 		nvrhi::BindingLayoutHandle m_FrameLayout{};
 		nvrhi::BindingSetHandle m_FrameBindings{};
+		nvrhi::BindingSetHandle m_ShadowFrameBindings{};
 		nvrhi::BufferHandle m_ConstantBuffer{};
 		nvrhi::BufferHandle m_InstanceBuffer{};
 		u32 m_InstanceCapacity = 0;
@@ -281,5 +308,24 @@ namespace wiwa
 		const nvrhi::IBuffer* m_BoundInstanceBuffer = nullptr;
 		const nvrhi::IBuffer* m_BoundMaterialBuffer = nullptr;
 		std::vector<GpuInstance> m_InstanceScratch{};
+
+		struct SkinSet
+		{
+			nvrhi::BindingSetHandle Set{};
+			const nvrhi::IBuffer* Palette = nullptr;
+			const nvrhi::IBuffer* Skin = nullptr;
+		};
+		void update_skin_sets(GpuResourceCache& cache);
+		// Fills Skin of the instance scratch and the palette rows of the skinned instances; true when there are any.
+		bool pack_palettes();
+		nvrhi::BindingLayoutHandle m_SkinLayout{};
+		nvrhi::BufferHandle m_DummyPalette{};
+		nvrhi::BufferHandle m_DummySkin{};
+		nvrhi::BufferHandle m_PaletteBuffer{};
+		bool m_HadSkinned = false;                 // the last instance write had palettes: the next one clears them
+		u32 m_PaletteCapacity = 0;                 // rows
+		std::vector<glm::vec4> m_PaletteScratch{};
+		SkinSet m_DefaultSkinSet{};
+		std::vector<SkinSet> m_SkinSets{}; // per mesh page
 	};
 }

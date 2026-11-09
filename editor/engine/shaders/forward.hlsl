@@ -1,3 +1,4 @@
+#define SKIN_SET 3 // the sets before it in this pass: see scene_common.hlsli
 #include "pbr.hlsli"
 
 // The forward pass: PBR metallic-roughness for opaque and alpha-masked materials (the depth prepass has already cut the masked
@@ -14,12 +15,12 @@ struct ForwardVertexOutput
 ForwardVertexOutput VSMain(MeshVertexInput input)
 {
 	SceneInstance instance = uInstances[DrawConstants.InstanceIndex];
-	float3 worldPosition = TransformPoint(instance, input.Position);
+	float3 worldPosition = TransformPoint(instance, SkinPoint(instance, input, input.Position));
 
 	ForwardVertexOutput output;
 	output.Position = mul(ViewProjection, float4(worldPosition, 1.0));
 	output.WorldPosition = worldPosition;
-	output.WorldNormal = TransformNormal(instance, input.Normal);
+	output.WorldNormal = TransformNormal(instance, SkinNormal(instance, input, input.Normal));
 	output.Uv = input.Uv;
 	return output;
 }
@@ -36,5 +37,7 @@ float4 PSMain(ForwardVertexOutput input, bool frontFace : SV_IsFrontFace) : SV_T
 	}
 
 	float3 color = ForwardLighting(surface, input.Position.xy);
-	return float4(color, surface.Alpha);
+	// The alpha of the HDR image is coverage (views with a transparent background): opaque and masked surfaces cover the pixel.
+	float alpha = (material.Flags & MATERIAL_ALPHA_BLEND_BIT) != 0u ? surface.Alpha : 1.0;
+	return float4(color, alpha);
 }

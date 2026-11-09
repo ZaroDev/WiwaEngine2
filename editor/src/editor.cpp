@@ -4,7 +4,9 @@
 #include <core/engine.h>
 
 #include "editor_module.h"
+#include "gizmo/gizmo_settings.h"
 #include "asset_pipeline/asset_pipeline_module.h"
+#include "asset_pipeline/builtin_importers.h"
 #include "asset_pipeline/asset_smoke_test.h"
 #include "asset_pipeline/packager.h"
 #include "scene/scene_smoke_test.h"
@@ -12,12 +14,23 @@
 #include "ui/ui_smoke_test.h"
 #include "physics/physics_smoke_test.h"
 #include "input/input_smoke_test.h"
+#include "animation/anim_smoke_test.h"
 
 class Editor final : public wiwa::Engine
 {
 public:
 	Editor(int argc, char** argv) : wiwa::Engine(argc, argv)
 	{
+		// The engine's own assets (shaders, ...) are cooked before the engine starts: on a cold Library (the first run, or after the cooked format
+		// changed) the renderer would find none and a pass would fail. A warm Library only checks that they are up to date.
+		wiwa::Log::init();
+		{
+			wiwa::AssetDatabase database("assets", "library");
+			database.add_root("engine", "library/engine");
+			wiwa::register_builtin_importers(database);
+			database.cook_root(1);
+		}
+
 		// The editor reads the Library it imports into, never a pack.
 		wiwa::AssetManager::set_prefer_pack(false);
 
@@ -25,7 +38,10 @@ public:
 		{
 			m_Args.emplace_back(argv[i]);
 		}
-		
+
+		// Command-line runs (smokes, --pack) keep the plain window; an interactive start follows the "Start maximized" setting.
+		const bool interactive = std::none_of(m_Args.begin(), m_Args.end(), [](const std::string& arg) { return arg.rfind("--", 0) == 0; });
+		set_start_maximized(interactive && wiwa::GizmoSettings::load().StartMaximized);
 	}
 
 	
@@ -103,6 +119,13 @@ protected:
 				m_CommandThread = std::thread([this, assets]()
 				{
 					m_CommandResult = wiwa::run_input_smoke_test(*assets) ? 0 : 1;
+				});
+			}
+			else if (m_Args[i] == "--anim-smoke")
+			{
+				m_CommandThread = std::thread([this, assets]()
+				{
+					m_CommandResult = wiwa::run_anim_smoke_test(*assets) ? 0 : 1;
 				});
 			}
 			else if (m_Args[i] == "--asset-smoke")

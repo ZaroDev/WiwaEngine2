@@ -19,9 +19,14 @@
 
 namespace wiwa
 {
-	std::unordered_set<AssetGuid> select_pack_set(const std::vector<PackCandidate>& candidates, const BuildSettings& settings, std::vector<AssetGuid>& missing)
+	std::unordered_set<AssetGuid> select_pack_set(const std::vector<PackCandidate>& candidates, const BuildSettings& settings, std::vector<AssetGuid>& missing, const std::unordered_map<AssetGuid, AssetGuid>& redirects)
 	{
 		missing.clear();
+		auto redirected = [&redirects](AssetGuid guid)
+		{
+			const auto found = redirects.find(guid);
+			return found == redirects.end() ? guid : found->second;
+		};
 
 		std::unordered_map<AssetGuid, const PackCandidate*> byGuid;
 		std::vector<AssetGuid> pending;
@@ -36,8 +41,9 @@ namespace wiwa
 
 		for (const std::vector<AssetGuid>* roots : { &settings.Scenes, &settings.AlwaysInclude })
 		{
-			for (AssetGuid guid : *roots)
+			for (AssetGuid named : *roots)
 			{
+				const AssetGuid guid = redirected(named);
 				if (byGuid.contains(guid))
 				{
 					pending.push_back(guid);
@@ -69,12 +75,26 @@ namespace wiwa
 			{
 				continue;
 			}
-			pending.insert(pending.end(), found->second->Dependencies.begin(), found->second->Dependencies.end());
+			for (AssetGuid dependency : found->second->Dependencies)
+			{
+				pending.push_back(redirected(dependency));
+			}
 		}
 		return selected;
 	}
 
-	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile, const std::filesystem::path& inputSettingsFile)
+	namespace
+	{
+		// A source path as the log shows it: relative to the working directory (the editor's project folder) when it is inside.
+		std::string shown_path(const std::string& path)
+		{
+			std::error_code error;
+			const std::filesystem::path relative = std::filesystem::path(path).lexically_relative(std::filesystem::current_path(error));
+			return (!error && !relative.empty() && *relative.begin() != "..") ? relative.generic_string() : path;
+		}
+	}
+
+	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile, const std::filesystem::path& inputSettingsFile, const std::filesystem::path& projectSettingsFile)
 	{
 		JobProgress local;
 		if (progress == nullptr)
@@ -150,7 +170,7 @@ namespace wiwa
 					effective.AlwaysInclude.push_back(inputSettings.DefaultMap.Guid);
 				}
 			}
-			const std::unordered_set<AssetGuid> selected = select_pack_set(candidates, effective, missing);
+			const std::unordered_set<AssetGuid> selected = select_pack_set(candidates, effective, missing, database.redirect_map());
 			if (!missing.empty())
 			{
 				for (AssetGuid guid : missing)
@@ -189,6 +209,8 @@ namespace wiwa
 		PakHeader header;
 		out.write(reinterpret_cast<const char*>(&header), sizeof(header)); // patched at the end
 
+		// where each cooked guid came from, to name it in the log (the cache also knows the sub-assets of a model)
+		const std::unordered_map<AssetGuid, std::string> sourceOf = database.cooked_sources();
 		std::vector<PakEntry> index;
 		std::unordered_set<AssetGuid> packed; // the assets (not the catalog or the build info) that went in
 		u64 offset = sizeof(PakHeader);
@@ -229,6 +251,12 @@ namespace wiwa
 			return true;
 		};
 
+		// what went into the pack besides cooked assets, named in the log the same way
+		auto log_extra = [&](AssetGuid guid, const std::string& what)
+		{
+			WI_ASSET_LOG(Info, "Pack: {0} {1:<10} {2}", guid.to_string(), "data", what);
+		};
+
 		for (const std::filesystem::path& file : files)
 		{
 			if (progress->cancel_requested())
@@ -262,6 +290,9 @@ namespace wiwa
 			if (add_blob(assetHeader->Guid, static_cast<u32>(assetHeader->Type), *blob, file))
 			{
 				packed.insert(assetHeader->Guid);
+				const auto source = sourceOf.find(assetHeader->Guid);
+				WI_ASSET_LOG(Info, "Pack: {0} {1:<10} {2}", assetHeader->Guid.to_string(), asset_type_name(assetHeader->Type),
+					source != sourceOf.end() ? shown_path(source->second) : std::string("(no source: the Library file alone)"));
 			}
 			else
 			{
@@ -288,6 +319,13 @@ namespace wiwa
 							kept.Entries.push_back(entry);
 						}
 					}
+					for (const AssetCatalog::Redirect& redirect : whole->Redirects)
+					{
+						if (packed.contains(redirect.To))
+						{
+							kept.Redirects.push_back(redirect);
+						}
+					}
 					catalog = serialize(kept);
 				}
 				else
@@ -297,6 +335,7 @@ namespace wiwa
 				}
 			}
 			ok = add_blob(CATALOG_GUID, 0, *catalog, catalogPath) && ok;
+			log_extra(CATALOG_GUID, "asset catalog (path to guid)");
 		}
 		else
 		{
@@ -310,6 +349,7 @@ namespace wiwa
 			BuildInfo info;
 			info.DefaultScene = settings->DefaultScene;
 			ok = add_blob(BUILD_INFO_GUID, 0, serialize(info), "build info") && ok;
+			log_extra(BUILD_INFO_GUID, "build info (default scene)");
 		}
 
 		// The project's physics layers, if the editor has saved any.
@@ -322,6 +362,7 @@ namespace wiwa
 				if (load_physics_layers(physicsSettingsFile, layers, layersError))
 				{
 					ok = add_blob(PHYSICS_SETTINGS_GUID, 0, serialize(layers), "physics settings") && ok;
+					log_extra(PHYSICS_SETTINGS_GUID, shown_path(physicsSettingsFile.generic_string()));
 				}
 				else
 				{
@@ -341,10 +382,30 @@ namespace wiwa
 				if (load_input_settings(inputSettingsFile, inputSettings, inputError))
 				{
 					ok = add_blob(INPUT_SETTINGS_GUID, 0, serialize(inputSettings), "input settings") && ok;
+					log_extra(INPUT_SETTINGS_GUID, shown_path(inputSettingsFile.generic_string()));
 				}
 				else
 				{
 					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", inputSettingsFile.string(), inputError);
+					ok = false;
+				}
+			}
+		}
+
+		// The project's name, version and launch settings, if the editor has saved any.
+		{
+			std::error_code exists;
+			if (std::filesystem::exists(projectSettingsFile, exists))
+			{
+				std::string projectError;
+				if (const std::optional<ProjectSettings> project = load_project_settings(projectSettingsFile, projectError))
+				{
+					ok = add_blob(PROJECT_SETTINGS_GUID, 0, serialize(*project), "project settings") && ok;
+					log_extra(PROJECT_SETTINGS_GUID, shown_path(projectSettingsFile.generic_string()));
+				}
+				else
+				{
+					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", projectSettingsFile.string(), projectError);
 					ok = false;
 				}
 			}

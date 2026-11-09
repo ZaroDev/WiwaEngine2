@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <span>
 #include <vector>
 
 #include <nvrhi/nvrhi.h>
@@ -18,6 +19,8 @@
 #include "scene/scene_render_data.h"
 #include "texture_registry.h"
 #include "upload_queue.h"
+#include "view/readback.h"
+#include "view/view_state.h"
 #include "viewport_target.h"
 
 namespace wiwa
@@ -47,10 +50,10 @@ namespace wiwa
 		nvrhi::IDevice* get_device() const { return m_Backend ? m_Backend->get_device() : nullptr; }
 		ShaderLibrary* get_shader_library() const { return m_Shaders.get(); }
 		UploadQueue& get_upload_queue() { return m_Uploads; }
-		RenderScene& get_scene() { return m_Scene; }
+		RenderScene& get_scene() { return m_MainView.Scene; }
 		GpuResourceCache& get_cache() { return *m_Cache; }
 		EnvironmentCache& get_environments() { return *m_Environments; }
-		SceneRenderData& get_scene_data() { return m_SceneData; }
+		SceneRenderData& get_scene_data() { return m_MainView.Data; }
 		AssetManager* get_assets() const { return m_Description.Assets; }
 		TextureRegistry& get_textures() { return m_Textures; }
 
@@ -72,7 +75,25 @@ namespace wiwa
 		PickState& get_pick() { return m_Pick; }
 		void set_pick_request(const PickRequest& request) { m_Pick.Pending = request; }
 		void set_pick_channel(PickChannel* channel) { m_Pick.Channel = channel; }
-		ViewportTarget& get_viewport() { return m_Viewport; }
+		ViewportTarget& get_viewport() { return m_MainView.Target; }
+
+		// Views: the main one (the Viewport panel, or the window) is always there; the others are made for RenderViews and drawn into targets of
+		// their own with the same passes. add_view returns INVALID_VIEW at MAX_VIEWS live views or when the view cannot be set up.
+		ViewState& get_main_view() { return m_MainView; }
+		ViewState* find_view(ViewId id);
+		ViewId add_view(ViewId id, const ViewDesc& desc);
+		void remove_view(ViewId id);
+		// The size a view is drawn at (clamped, and capped by its profile). A size that did not change does nothing; 0 in either dimension too.
+		void resize_view(ViewId id, u32 width, u32 height);
+		u32 view_count() const { return 1 + static_cast<u32>(m_ExtraViews.size()); }
+
+		// Reads the image of a view back to the CPU: the copy is recorded the frame the view has drawn (or at once for a view that has drawn and
+		// is not waiting to draw again), and the pixels reach the channel when the GPU has finished it. At most MAX_READBACKS_IN_FLIGHT copies are
+		// recorded at a time; the rest wait in order. An empty ImageData answers a request that cannot be served (no such view, a failed target).
+		void request_readback(ViewId view, u64 requestId, bool premultiplied);
+		void set_readback_channel(ReadbackChannel* channel) { m_ReadbackChannel = channel; }
+		static constexpr size_t MAX_READBACKS_IN_FLIGHT = 4;
+		const std::vector<Scope<ViewState>>& extra_views() const { return m_ExtraViews; }
 		nvrhi::IFramebuffer* get_reference_framebuffer() const { return m_Backend ? m_Backend->get_reference_framebuffer() : nullptr; }
 
 		// The size the scene is rendered at (the Viewport panel's size). The target is made, or made again, at the start of the next
@@ -108,9 +129,20 @@ namespace wiwa
 	private:
 		bool apply_vsync(u32 width, u32 height);
 		void update_viewport();
+		void update_view_target(ViewState& view);
+		void write_view_stand_ins();
+		void record_readbacks(const std::vector<ViewState*>& rendered);
+		void mark_readbacks_submitted();
+		void deliver_finished_readbacks();
+		void answer_empty(u64 requestId);
+		void drop_unsubmitted_readbacks();
+		// The views to draw this frame: the active non-main ones (within the per-frame budget), then the main one.
+		std::vector<ViewState*> pick_views_to_render();
+		// The quality settings a view is drawn with: the project's, with the anti-aliasing its profile decides.
+		RenderQuality effective_quality(const ViewState& view) const;
 		bool resize_backend(u32 width, u32 height);
 		PassInitializationDescription make_pass_description();
-		FrameDescription make_frame_description(nvrhi::IFramebuffer* backbuffer, const RenderBatch& batch);
+		FrameDescription make_frame_description(nvrhi::IFramebuffer* backbuffer, const RenderBatch& batch, ViewState& view);
 
 		// Frames in flight: block until fewer than MaxFramesInFlight frames are still running on the GPU.
 		void wait_for_frame_slot();
@@ -127,13 +159,38 @@ namespace wiwa
 		Scope<IRenderBackend> m_Backend{};
 		Scope<ShaderLibrary> m_Shaders{};
 		UploadQueue m_Uploads{};
-		RenderScene m_Scene{};
 		Scope<JobSystem> m_Jobs{};                 // background work of the renderer (the BRDF table, atmosphere builds)
 		Scope<GpuResourceCache> m_Cache{};
 		Scope<EnvironmentCache> m_Environments{};
-		SceneRenderData m_SceneData{};
+		ViewState m_MainView{};                      // view 0: its scene, frame data and target (what get_scene() and friends return)
+		std::vector<Scope<ViewState>> m_ExtraViews{}; // the views made for RenderViews, by creation order
+		// 1x1 images the registry shows for a view that has not drawn yet (transparent) or whose target could not be made (magenta).
+		nvrhi::TextureHandle m_ViewBlank{};
+		nvrhi::TextureHandle m_ViewFailed{};
+		bool m_StandInsWritten = false;
+
+		struct ReadbackRequest
+		{
+			ViewId View = INVALID_VIEW;
+			u64 Id = 0;
+			bool Premultiplied = false;
+			u64 QueuedFrame = 0; // the frame it was asked in: a request that cannot be served for MAX_READBACK_WAIT_FRAMES gets an empty answer
+		};
+		static constexpr u64 MAX_READBACK_WAIT_FRAMES = 600;
+		struct ReadbackCopy
+		{
+			ReadbackRequest Request{};
+			bool Transparent = false;
+			u32 Width = 0;
+			u32 Height = 0;
+			nvrhi::StagingTextureHandle Staging{};
+			nvrhi::EventQueryHandle Query{};
+			bool Submitted = false;
+		};
+		std::deque<ReadbackRequest> m_ReadbackQueue{};
+		std::vector<ReadbackCopy> m_ReadbackCopies{};
+		ReadbackChannel* m_ReadbackChannel = nullptr;
 		TextureRegistry m_Textures{};
-		ViewportTarget m_Viewport{};
 		u32 m_RequestedViewportWidth = 0;
 		u32 m_RequestedViewportHeight = 0;
 		RenderQuality m_Quality{};

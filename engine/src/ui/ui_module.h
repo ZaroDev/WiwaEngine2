@@ -4,6 +4,7 @@
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <assets/asset_manager.h>
@@ -100,6 +101,7 @@ namespace wiwa
 		std::optional<glm::vec2> m_CanvasOverride{};
 		PanelLoader m_Loader{};
 		FontProvider m_Fonts{};
+		std::unordered_set<std::string> m_WarnedViews{}; // names of views a ViewImage asked for that did not exist
 		TextureSizeProvider m_TextureSizes{};
 		std::unordered_map<AssetGuid, Handle<FontData>> m_FontHandles{};
 		std::unordered_map<AssetGuid, Handle<TextureData>> m_TextureHandles{};

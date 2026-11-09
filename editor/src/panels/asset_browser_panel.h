@@ -9,8 +9,10 @@
 
 #include "panel.h"
 
+#include <asset_editor/thumbnail_cache.h>
 #include <asset_pipeline/asset_database.h>
 #include <asset_pipeline/asset_templates.h>
+#include "import_settings_dialog.h"
 
 // The "Assets" panel: a folder tree of the source roots known to the AssetDatabase (assets/ and the engine's own assets) beside the
 // files of the selected folder, with a search box that filters the files of the whole tree. Files can be dragged out (payload
@@ -29,11 +31,23 @@ public:
 
 	// What opening a .wmat (a double click, or "New material") calls; the editor points it at the Material panel.
 	void set_open_material(std::function<void(const std::filesystem::path&)> open) { m_OpenMaterial = std::move(open); }
+	// What "Find references" in the context menu calls with the selected asset.
+	void set_find_references(std::function<void(const wiwa::AssetRef&)> find) { m_FindReferences = std::move(find); }
+	// The thumbnails the cells of animation assets show (the editor gives it; without one a cell shows its icon).
+	void set_thumbnails(wiwa::ThumbnailCache* thumbnails) { m_Thumbnails = thumbnails; }
 	void set_open_ui_panel(std::function<void(const std::filesystem::path&)> open) { m_OpenUiPanel = std::move(open); }
+	// What a double click on a .wskel or .wmesh calls (the editor points it at the Asset Editor).
+	void set_open_asset_editor(std::function<void(const std::filesystem::path&)> open) { m_OpenAssetEditor = std::move(open); }
 
 	// What an entity dragged here from the Hierarchy calls (payload "WI_ENTITY"): makes a prefab of it in the folder it was dropped on, and
 	// returns why that cannot be done, or an empty string. The editor points it at SceneEditor::make_prefab.
 	void set_make_prefab(std::function<std::string(entt::entity, const std::filesystem::path&)> make) { m_MakePrefab = std::move(make); }
+
+	// The import settings modal. The editor draws it every frame (even with this panel closed), because files dropped from the OS open it too.
+	void draw_import_dialog() { m_ImportDialog.draw(); }
+	// Files dragged in from the OS: each one that has an importer is copied into the open folder (never over a file), imported with the defaults,
+	// and, if its importer has options to change, offered in the import dialog.
+	void import_dropped(const std::vector<std::filesystem::path>& files);
 
 private:
 	struct FileEntry
@@ -57,6 +71,7 @@ private:
 	void draw_file_grid();
 	void draw_file(const std::filesystem::path& file, float thumbnailSize);
 	void draw_context_menu();
+	std::function<void(const wiwa::AssetRef&)> m_FindReferences{};
 	// The popup that asks for the name of a new asset, and makes it.
 	void draw_create_popup();
 	void begin_create(wiwa::CreateKind kind);
@@ -68,13 +83,21 @@ private:
 	const std::filesystem::path* find_root(const std::filesystem::path& path) const;
 	void collect_matches(const FolderEntry& folder, std::vector<const FileEntry*>& out) const;
 
+	// Cooks every importable file below folder again with its current settings; returns how many were cooked.
+	wiwa::u32 reimport_folder(const std::filesystem::path& folder);
+
 	wiwa::AssetDatabase& m_Database;
+	ImportSettingsDialog m_ImportDialog;
+	std::vector<std::filesystem::path> m_DialogsAfterImport{}; // dropped files whose import settings dialog opens once the import is done
+	wiwa::ThumbnailCache* m_Thumbnails = nullptr;
+	std::string m_ReextractStatus{};
 
 	std::vector<FolderEntry> m_Roots{}; // one per source root of the database
 	std::filesystem::path m_CurrentDir{};
 	std::filesystem::path m_Selected{};
 	std::function<void(const std::filesystem::path&)> m_OpenMaterial{};
 	std::function<void(const std::filesystem::path&)> m_OpenUiPanel{};
+	std::function<void(const std::filesystem::path&)> m_OpenAssetEditor{};
 	std::function<std::string(entt::entity, const std::filesystem::path&)> m_MakePrefab{};
 	std::string m_Status{};             // why the last dropped entity did not become a prefab
 

@@ -75,11 +75,15 @@ namespace wiwa
 			virtual u32 version() const override { return 1; }
 			virtual std::vector<std::string> extensions() const override { return { ".ttf", ".otf" }; }
 
-			virtual nlohmann::json default_settings() const override
+			virtual bool editable() const override { return true; }
+			virtual std::vector<ImportOption> option_schema() const override
 			{
-				// pixelSize: the size the glyphs are rendered at (bigger is sharper when scaled up); sdfRange: pixels of distance the
-				// field reaches on each side of the outline (bigger allows thicker outlines and shadows); charset: "ascii" or "latin1"
-				return nlohmann::json{ { "pixelSize", 48 }, { "sdfRange", 8 }, { "charset", "latin1" } };
+				return {
+					ImportOption::make_int("pixelSize", "Pixel size", 48, 8, 256, "The size the glyphs are rendered at; bigger is sharper when scaled up."),
+					ImportOption::make_int("sdfRange", "SDF range", 8, 1, 32, "Pixels of distance the field reaches on each side of the outline; bigger allows thicker outlines and shadows."),
+					ImportOption::make_enum("charset", "Characters", "latin1", { "ascii", "latin1" }, "Which characters get into the atlas."),
+					ImportOption{ "extraCharacters", "Extra characters", "Characters to add to the atlas besides the set above (accents, symbols, other scripts the font has). Type or paste them.", ImportOptionType::String, "" },
+				};
 			}
 
 			virtual bool import(ImportContext& ctx) override
@@ -122,6 +126,31 @@ namespace wiwa
 					for (u32 cp = 160; cp <= 255; cp++)
 					{
 						codepoints.push_back(cp);
+					}
+				}
+
+				// extraCharacters: UTF-8 text; each character not already in the set is added (an invalid byte is skipped)
+				{
+					const std::string extra = settings.value("extraCharacters", std::string());
+					for (size_t i = 0; i < extra.size();)
+					{
+						const unsigned char lead = static_cast<unsigned char>(extra[i]);
+						const size_t length = lead < 0x80 ? 1 : (lead >> 5) == 0x6 ? 2 : (lead >> 4) == 0xE ? 3 : (lead >> 3) == 0x1E ? 4 : 0;
+						if (length == 0 || i + length > extra.size())
+						{
+							i++;
+							continue;
+						}
+						u32 cp = length == 1 ? lead : (lead & (0xFF >> (length + 1)));
+						for (size_t k = 1; k < length; k++)
+						{
+							cp = (cp << 6) | (static_cast<unsigned char>(extra[i + k]) & 0x3F);
+						}
+						i += length;
+						if (cp >= 32 && std::find(codepoints.begin(), codepoints.end(), cp) == codepoints.end())
+						{
+							codepoints.push_back(cp);
+						}
 					}
 				}
 

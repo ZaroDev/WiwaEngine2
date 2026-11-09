@@ -4,6 +4,7 @@
 
 #include "../render_pass.h"
 #include "../shader_library.h"
+#include "../view/per_view.h"
 #include "../viewport_target.h"
 
 namespace wiwa
@@ -21,6 +22,8 @@ namespace wiwa
 		virtual bool is_ready() const override;
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
+		virtual void on_view_removed(u32 targetUid) override { m_PerView.forget(targetUid); }
+		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return flags.Bloom; }
 
 	private:
 		static constexpr u32 GROUP_SIZE = 8;
@@ -37,8 +40,6 @@ namespace wiwa
 			float Padding1[2]{};
 		};
 
-		bool create_binding_sets(ViewportTarget& viewport);
-
 		nvrhi::IDevice* m_Device = nullptr;
 		ShaderLibrary* m_Shaders = nullptr;
 		bool m_Failed = false;
@@ -48,10 +49,15 @@ namespace wiwa
 		nvrhi::BindingLayoutHandle m_UpLayout{};
 		nvrhi::ComputePipelineHandle m_DownPipeline{};
 		nvrhi::ComputePipelineHandle m_UpPipeline{};
-		std::array<nvrhi::BindingSetHandle, ViewportTarget::MAX_BLOOM_MIPS> m_DownSets{};          // [i]: reads level i - 1 (the scene for 0), writes down(i)
-		std::array<nvrhi::BindingSetHandle, ViewportTarget::MAX_BLOOM_MIPS - 1> m_UpSets{};        // [i]: down(i) + up(i + 1) spread -> up(i)
-		std::array<nvrhi::BindingSetHandle, ViewportTarget::MAX_BLOOM_MIPS - 1> m_UpDeepestSets{}; // [i]: down(i) + down(i + 1) spread -> up(i)
+		// What belongs to one view (PerView): its binding sets. A view's slot starts over when its target is made again.
+		struct ViewCache
+		{
+			std::array<nvrhi::BindingSetHandle, ViewportTarget::MAX_BLOOM_MIPS> DownSets{};          // [i]: reads level i - 1 (the scene for 0), writes down(i)
+			std::array<nvrhi::BindingSetHandle, ViewportTarget::MAX_BLOOM_MIPS - 1> UpSets{};        // [i]: down(i) + up(i + 1) spread -> up(i)
+			std::array<nvrhi::BindingSetHandle, ViewportTarget::MAX_BLOOM_MIPS - 1> UpDeepestSets{}; // [i]: down(i) + down(i + 1) spread -> up(i)
+		};
+		PerView<ViewCache> m_PerView{};
+		bool create_binding_sets(ViewportTarget& viewport, ViewCache& c);
 		u32 m_BuiltShaderGeneration = ~0u;
-		u32 m_BuiltViewportGeneration = ~0u;
 	};
 }

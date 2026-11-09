@@ -1,6 +1,6 @@
+-- A shared helper: scripts load it with require. Edit it while the game plays and every script that uses it changes.
 local wave = {}
 
--- A sine in [-1, 1] with a period of 2 * pi.
 function wave.sine(t)
   return math.sin(t)
 end

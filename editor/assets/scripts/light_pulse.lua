@@ -1,3 +1,4 @@
+-- Reads and writes the Light component of its own entity.
 local wave = require("assets/scripts/lib/wave.lua")
 
 local LightPulse = Script:extend{

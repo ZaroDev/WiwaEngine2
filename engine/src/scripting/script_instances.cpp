@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "script_instances.h"
 
+#include <animation/animation_module.h>
+
 #include <algorithm>
 
 #include <input/input_module.h>
@@ -22,10 +24,13 @@ namespace wiwa
 		bind_assets(m_Runtime, m_Context);
 		bind_render(m_Runtime, m_Context);
 		m_Context.UiHandlers = &m_UiHandlers;
+		m_Context.AnimHandlers = &m_AnimHandlers;
 		bind_engine(m_Runtime, m_Context);
 		bind_ui(m_Runtime, m_Context);
 		bind_physics(m_Runtime, m_Context);
 		bind_input(m_Runtime, m_Context);
+		bind_animation(m_Runtime, m_Context);
+		bind_settings(m_Runtime, m_Context);
 	}
 
 	ScriptInstances::~ScriptInstances()
@@ -38,6 +43,7 @@ namespace wiwa
 		stop();
 		m_Scene = std::move(scene);
 		m_Context.ActiveScene = m_Scene.get();
+		m_Context.ActiveSceneRef = m_Scene;
 		m_BrokenScripts.clear();
 	}
 
@@ -68,7 +74,9 @@ namespace wiwa
 		}
 		m_Known.clear();
 		m_UiHandlers.clear();
+		m_AnimHandlers.clear();
 		m_Context.ActiveScene = nullptr;
+		m_Context.ActiveSceneRef.reset();
 		m_Scene.reset();
 	}
 
@@ -193,6 +201,7 @@ namespace wiwa
 					call_hook(instance, "on_destroy", nullptr);
 				}
 				m_UiHandlers.remove_owner(instance.Self);
+				m_AnimHandlers.remove_owner(instance.Self);
 				m_Known.erase({ instance.Entity, instance.Script });
 				instances->erase(instances->begin() + static_cast<std::ptrdiff_t>(i));
 			}
@@ -391,6 +400,7 @@ namespace wiwa
 					if (reloaded && instance.Failed)
 					{
 						m_UiHandlers.remove_owner(instance.Self);
+				m_AnimHandlers.remove_owner(instance.Self);
 						m_Known.erase({ instance.Entity, instance.Script });
 						return true;
 					}
@@ -443,6 +453,40 @@ namespace wiwa
 		}
 	}
 
+	// The clip events of the last frame, to the functions scripts registered with animator:on. Like the events of the widgets they run before
+	// the on_update of the scripts; they are one frame old, as the animations are evaluated after the scripts.
+	void ScriptInstances::dispatch_animation_events()
+	{
+		if (m_Context.Animation == nullptr)
+		{
+			return;
+		}
+
+		const std::vector<QueuedAnimationEvent> events = m_Context.Animation->take_events();
+		if (m_AnimHandlers.empty())
+		{
+			return;
+		}
+		for (const QueuedAnimationEvent& event : events)
+		{
+			for (const AnimHandler& handler : m_AnimHandlers.matching(event.Animator, event.Event.Name))
+			{
+				sol::table payload = m_Runtime.state().create_table();
+				payload["name"] = event.Event.Name;
+				payload["clip"] = event.Event.Clip;
+				payload["time"] = event.Event.Time;
+				sol::protected_function_result result = m_Runtime.call(handler.Function, handler.Owner, payload);
+				if (!result.valid())
+				{
+					// the handler that failed is dropped; the others and the hooks of the script go on
+					sol::error failure = result;
+					WI_SCRIPT_LOG(Error, "An animation event handler failed and was removed: {0}", failure.what());
+					m_AnimHandlers.remove_function(handler);
+				}
+			}
+		}
+	}
+
 	namespace
 	{
 		const char* physics_hook(PhysicsEventKind kind)
@@ -453,6 +497,7 @@ namespace wiwa
 			case PhysicsEventKind::CollisionStay: return "on_collision_stay";
 			case PhysicsEventKind::CollisionExit: return "on_collision_exit";
 			case PhysicsEventKind::TriggerEnter: return "on_trigger_enter";
+			case PhysicsEventKind::JointBreak: return "on_joint_break";
 			default: return "on_trigger_exit";
 			}
 		}
@@ -468,8 +513,33 @@ namespace wiwa
 			return;
 		}
 
-		const bool contact = event.Kind != PhysicsEventKind::TriggerEnter && event.Kind != PhysicsEventKind::TriggerExit;
 		const char* hook = physics_hook(event.Kind);
+
+		// a joint that broke goes to the entity that owns it only; `other` is the entity it was connected to, nil for the world (or when
+		// that entity is gone)
+		if (event.Kind == PhysicsEventKind::JointBreak)
+		{
+			const bool otherAlive = m_Scene->find(event.B) != entt::null;
+			for (size_t i = 0; i < m_Instances.size(); i++)
+			{
+				Instance& instance = m_Instances[i];
+				if (instance.Entity != event.A || instance.Failed || !alive(instance))
+				{
+					continue;
+				}
+				call_hook_with(instance, hook, [&](const sol::protected_function& function)
+				{
+					if (otherAlive)
+					{
+						return m_Runtime.call(function, instance.Self, EntityHandle{ event.B, &m_Context });
+					}
+					return m_Runtime.call(function, instance.Self, sol::lua_nil);
+				});
+			}
+			return;
+		}
+
+		const bool contact = event.Kind != PhysicsEventKind::TriggerEnter && event.Kind != PhysicsEventKind::TriggerExit;
 		sol::state_view lua = m_Runtime.state().lua_state();
 
 		for (int side = 0; side < 2; side++)
@@ -555,6 +625,7 @@ namespace wiwa
 		m_Context.TotalTime += deltaTime;
 
 		reap();
+		dispatch_animation_events();
 		dispatch_ui_events();
 		discover();
 

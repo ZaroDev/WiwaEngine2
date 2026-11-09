@@ -79,7 +79,27 @@ namespace wiwa
 			// A new instance has no motion; one that exists keeps the matrix of the last rendered frame, however many times it moves before the next.
 			const auto existing = m_InstanceIndex.find(guid);
 			instance.PrevWorld = existing != m_InstanceIndex.end() ? m_Instances[existing->second].PrevWorld : instance.World;
+			if (existing != m_InstanceIndex.end())
+			{
+				instance.Palette = m_Instances[existing->second].Palette;
+				instance.PrevPalette = m_Instances[existing->second].PrevPalette;
+			}
 			upsert(instances, guid, std::move(instance));
+		}
+		for (auto& [guid, rows] : delta.PaletteUpdates)
+		{
+			const auto found = m_InstanceIndex.find(guid);
+			if (found == m_InstanceIndex.end())
+			{
+				continue;
+			}
+			RenderInstance& instance = m_Instances[found->second];
+			// the first palette has no motion; a palette of another size cannot be compared with the one before it
+			if (rows.empty() || instance.PrevPalette.size() != rows.size())
+			{
+				instance.PrevPalette = rows;
+			}
+			instance.Palette = std::move(rows);
 		}
 		for (const EntityGuid& guid : delta.LightRemovals)
 		{
@@ -115,6 +135,11 @@ namespace wiwa
 			if (instance.Alive && instance.PrevWorld != instance.World)
 			{
 				instance.PrevWorld = instance.World;
+				moved = true;
+			}
+			if (instance.Alive && !instance.Palette.empty() && instance.PrevPalette != instance.Palette)
+			{
+				instance.PrevPalette = instance.Palette;
 				moved = true;
 			}
 		}

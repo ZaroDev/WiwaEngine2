@@ -342,6 +342,48 @@ function physics.shape_cast(shape, from, to, layer_mask) end
 ---@param gravity vec3
 function physics.set_gravity(gravity) end
 
+--- Joints: these write the entity's `Joint` component, the physics world gets the change at the start of the next step.
+--- A motor of a hinge turns, and one of a slider moves, the entity that owns the joint relative to the one it is connected to.
+joint = {}
+--- `mode` is "off", "velocity" (rad/s for a hinge, m/s for a slider) or "position" (degrees, metres). `max_force` (N or N m, nil: as it was)
+--- limits the motor; 0 is no limit. Raises an error for an entity without a `Joint` and for an unknown mode.
+---@param entity Entity
+---@param mode "off"|"velocity"|"position"
+---@param target number
+---@param max_force? number
+function joint.set_motor(entity, mode, target, max_force) end
+--- Limits of the joint from its rest pose (degrees for a hinge, metres for a slider): `min <= 0 <= max`; both 0 is no limit.
+---@param entity Entity
+---@param min number
+---@param max number
+function joint.set_limits(entity, min, max) end
+
+--- Characters (the `CharacterController` component): commands go to the physics world and take effect in the next step; reads are from the newest step.
+--- Up is +Y. A call on an entity without a `CharacterController` is an error.
+character = {}
+--- The horizontal velocity (m/s, world space) the character tries to keep until the next call; `y` is ignored (gravity and jumps are the physics world's).
+---@param entity Entity
+---@param velocity vec3
+function character.move(entity, velocity) end
+--- Jumps with an upward speed (m/s) in the next step, only if the character stands on something then.
+---@param entity Entity
+---@param speed number
+function character.jump(entity, speed) end
+--- True when it stands on ground it can walk on.
+---@param entity Entity
+---@return boolean
+function character.is_grounded(entity) end
+--- `grounded`, `sliding` (on a slope too steep to stand on), `ground` (the entity it stands on, nil for none), `ground normal`, and its real `velocity`; nil while the world has no such character.
+---@class CharacterState
+---@field grounded boolean
+---@field sliding boolean
+---@field ground Entity?
+---@field normal vec3
+---@field velocity vec3
+---@param entity Entity
+---@return CharacterState?
+function character.state(entity) end
+
 --------------------------------------------------------------------------------------------------------------------------------
 -- Input
 --------------------------------------------------------------------------------------------------------------------------------
@@ -523,6 +565,95 @@ function UI.input.nav(name) end
 ---@param amount number
 function UI.input.scroll(amount) end
 
+--- What a clip event hands to its handler.
+---@class AnimationEvent
+---@field name string
+---@field clip string the clip that fired it
+---@field time number seconds on the clip's own time
+
+--- A clip by name (one of the animator's clips) or an asset from load_asset.
+---@alias ClipRef string|Asset
+
+---@class AnimationPlayOptions
+---@field loop? boolean default true
+---@field speed? number default 1
+
+---@class AnimationLayerOptions
+---@field mask? string a joint name: the layer reaches that joint and everything below it
+---@field weight? number default 1
+---@field additive? boolean adds the change of the clip from its first frame to the pose below; default false
+---@field loop? boolean default false
+
+--- A layer above the base animation. Nil fields and ignored writes once the layer has ended.
+---@class AnimationLayer
+---@field weight number? 0 to 1
+local AnimationLayer = {}
+--- Fades to another clip (an additive layer swaps its clip at once).
+---@param clip ClipRef
+---@param seconds? number
+---@param options? AnimationPlayOptions
+function AnimationLayer:crossfade(clip, seconds, options) end
+--- Fades the layer out over some seconds, then removes it.
+---@param seconds? number
+function AnimationLayer:stop(seconds) end
+
+--- Plays the clips of an entity's Animator.
+---@class AnimatorHandle
+---@field speed number? the Animator's Speed
+---@field time number? seconds of the clip that plays
+---@field playing boolean? a clip plays and has not finished
+---@field ready boolean? the skeleton has loaded
+local AnimatorHandle = {}
+--- Plays a clip now. An unknown name is an error that lists the clips.
+---@param clip ClipRef
+---@param options? AnimationPlayOptions
+function AnimatorHandle:play(clip, options) end
+--- Fades from what plays to a clip.
+---@param clip ClipRef
+---@param seconds? number
+---@param options? AnimationPlayOptions
+function AnimatorHandle:crossfade(clip, seconds, options) end
+--- Fades to the rest pose.
+---@param seconds? number
+function AnimatorHandle:stop(seconds) end
+--- A named layer above the base; a layer of the same name is replaced.
+---@param name string
+---@param clip ClipRef
+---@param options? AnimationLayerOptions
+---@return AnimationLayer?
+function AnimatorHandle:layer(name, clip, options) end
+--- Calls the function when a clip fires an event of that name, one frame later. Call it from a script hook; it ends with the script.
+---@param event string
+---@param handler fun(self: table, event: AnimationEvent)
+function AnimatorHandle:on(event, handler) end
+---@param event string
+function AnimatorHandle:off(event) end
+--- The world matrix of a joint as of the last evaluated pose. nil if the animator is not running.
+---@param joint string
+---@return mat4?
+function AnimatorHandle:joint_world(joint) end
+--- Sets a parameter of the Animator's animation graph (a number, or a boolean for a bool parameter). An unknown name, a trigger or a value of another kind is logged once and ignored. Safe to call every frame.
+---@param name string
+---@param value number|boolean
+function AnimatorHandle:set(name, value) end
+--- The value of a graph parameter (a boolean for a bool or trigger parameter), or nil.
+---@param name string
+---@return number|boolean|nil
+function AnimatorHandle:get(name) end
+--- Raises a trigger parameter of the graph for one frame (the transition that waits for it consumes it).
+---@param name string
+function AnimatorHandle:trigger(name) end
+--- The name of the active state of a graph layer (a layer name or a 1-based number; the base layer when omitted), or nil when the Animator plays no graph.
+---@param layer? string|integer
+---@return string?
+function AnimatorHandle:state(layer) end
+
+Animation = {}
+--- The animator of an entity that has an Animator, or nil.
+---@param entity Entity
+---@return AnimatorHandle?
+function Animation.animator(entity) end
+
 time = {}
 --- Seconds of the update that is running.
 ---@return number
@@ -531,8 +662,64 @@ function time.delta() end
 ---@return number
 function time.total() end
 
+--- The project's identity (Settings panel, Project): read-only strings and numbers.
+---@class ProjectInfo
+---@field name string
+---@field company string
+---@field description string
+--- "1.2.3", or "1.2.3-label" when the project has a version label.
+---@field version string
+---@field version_major integer
+---@field version_minor integer
+---@field version_patch integer
+---@type ProjectInfo
+project = {}
+
 --- Asks the host to end the program: a game closes, the editor stops play mode.
 function quit() end
+
+--- The renderer's quality settings of the project. `set` merges the keys it is given, applies them at once and saves render_quality.json.
+---@class GraphicsSettings
+---@field vsync boolean
+---@field shadow_distance number
+---@field shadow_cascades integer 1 to 4
+---@field bloom_mips integer 2 to 6
+---@field ao_slices integer 1 to 4
+---@field ao_steps integer 4 to 16
+---@field fxaa boolean
+---@field taa boolean TAA replaces FXAA when both are asked for
+
+--- How the active scene is shown. Applied at once, not saved.
+---@class SceneLook
+---@field bloom boolean
+---@field ao boolean
+---@field motion_blur boolean
+---@field exposure_compensation number stops
+
+settings = {}
+settings.graphics = {}
+settings.scene = {}
+---@return GraphicsSettings
+function settings.graphics.get() end
+---@param values table<string, boolean|number> an unknown key or a value of the wrong type is an error
+function settings.graphics.set(values) end
+---@return SceneLook
+function settings.scene.get() end
+---@param values table<string, boolean|number> an unknown key or a value of the wrong type is an error
+function settings.scene.set(values) end
+
+--- The player's own options of this game, kept in user_prefs.json next to the program.
+prefs = {}
+---@param key string
+---@param default any returned when there is no such pref
+---@return boolean|number|string|any
+function prefs.get(key, default) end
+---@param key string
+---@param value boolean|number|string
+function prefs.set(key, value) end
+--- Writes user_prefs.json; false if the file could not be written.
+---@return boolean
+function prefs.save() end
 
 ---@param title string
 ---@param message string
@@ -592,6 +779,9 @@ function ScriptClass:on_collision_exit(other, contact) end
 function ScriptClass:on_trigger_enter(other) end
 ---@param other Entity
 function ScriptClass:on_trigger_exit(other) end
+--- A joint of this entity went over its break force or torque and is gone. `other` is the entity it was connected to, nil for the world.
+---@param other Entity?
+function ScriptClass:on_joint_break(other) end
 ---@param definition? ScriptDefinition
 ---@return ScriptClass
 function ScriptClass:extend(definition) end

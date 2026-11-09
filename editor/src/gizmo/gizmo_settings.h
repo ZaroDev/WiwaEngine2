@@ -16,6 +16,7 @@ namespace wiwa
 		bool Axes = true;     // the world axes at the origin: X red, Y green, Z blue
 		bool TransformHandles = true; // the move / rotate / scale gizmo of the selected entity
 		SelectionOutlineStyle Outline{};
+		bool StartMaximized = true; // the editor window opens maximized (read at start, before the window exists)
 
 		bool operator==(const GizmoSettings&) const = default;
 

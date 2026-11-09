@@ -2,6 +2,7 @@
 
 #include "../render_pass.h"
 #include "../shader_library.h"
+#include "../view/per_view.h"
 
 namespace wiwa
 {
@@ -17,6 +18,7 @@ namespace wiwa
 		virtual bool is_ready() const override;
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
+		virtual void on_view_removed(u32 targetUid) override { m_PerView.forget(targetUid); }
 
 	private:
 		struct PushConstants
@@ -30,7 +32,8 @@ namespace wiwa
 			float Vignette = 0.0f;
 			float AutoExposure = 0.0f; // 1: the exposure comes from the viewport's exposure buffer
 			float BloomIntensity = 0.0f; // 0: the bloom is not read
-			float Padding[3]{};
+			float Transparent = 0.0f;    // 1: the view has a transparent background (the HDR alpha is coverage)
+			float Padding[2]{};
 		};
 
 		nvrhi::IDevice* m_Device = nullptr;
@@ -40,9 +43,13 @@ namespace wiwa
 		nvrhi::SamplerHandle m_Sampler{};
 		nvrhi::SamplerHandle m_LinearSampler{}; // the bloom is a smaller image
 		nvrhi::BindingLayoutHandle m_BindingLayout{};
-		nvrhi::BindingSetHandle m_BindingSet{};
+		// What belongs to one view (PerView): its binding sets. A view's slot starts over when its target is made again.
+		struct ViewCache
+		{
+			nvrhi::BindingSetHandle BindingSet{};
+		};
+		PerView<ViewCache> m_PerView{};
 		nvrhi::GraphicsPipelineHandle m_Pipeline{};
 		u32 m_BuiltShaderGeneration = ~0u;
-		u32 m_BuiltViewportGeneration = ~0u;
 	};
 }

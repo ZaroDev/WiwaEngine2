@@ -2,6 +2,7 @@
 
 #include "../render_pass.h"
 #include "../shader_library.h"
+#include "../view/per_view.h"
 
 namespace wiwa
 {
@@ -17,6 +18,8 @@ namespace wiwa
 		virtual bool is_ready() const override;
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
+		virtual void on_view_removed(u32 targetUid) override { m_PerView.forget(targetUid); }
+		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return flags.Fxaa; }
 
 	private:
 		// Mirrors FxaaData in fxaa.hlsl.
@@ -24,7 +27,8 @@ namespace wiwa
 		{
 			float RcpWidth = 1.0f;
 			float RcpHeight = 1.0f;
-			float Padding[2]{};
+			float Transparent = 0.0f; // 1: straight alpha in the image
+			float Padding = 0.0f;
 		};
 
 		nvrhi::IDevice* m_Device = nullptr;
@@ -33,9 +37,13 @@ namespace wiwa
 
 		nvrhi::SamplerHandle m_Sampler{};
 		nvrhi::BindingLayoutHandle m_BindingLayout{};
-		nvrhi::BindingSetHandle m_BindingSet{};
+		// What belongs to one view (PerView): its binding sets. A view's slot starts over when its target is made again.
+		struct ViewCache
+		{
+			nvrhi::BindingSetHandle BindingSet{};
+		};
+		PerView<ViewCache> m_PerView{};
 		nvrhi::GraphicsPipelineHandle m_Pipeline{};
 		u32 m_BuiltShaderGeneration = ~0u;
-		u32 m_BuiltViewportGeneration = ~0u;
 	};
 }

@@ -325,6 +325,175 @@ namespace wiwa
 				tracked.LastWorld = world;
 			}
 		}
+
+		push_joints(scene, thread);
+		push_characters(scene, thread);
+	}
+
+	void PhysicsSync::push_joints(const Scene& scene, PhysicsThread& thread)
+	{
+		const entt::registry& registry = scene.registry();
+		std::unordered_map<BodyKey, JointDesc> wanted;
+		for (const entt::entity entity : registry.view<Joint>())
+		{
+			const BodyKey owner = registry.get<Id>(entity).Guid;
+			if (!m_Bodies.contains(owner))
+			{
+				continue; // no body on this entity (yet): nothing to hold the joint
+			}
+			const Joint& joint = registry.get<Joint>(entity);
+			if (joint.Connected == owner)
+			{
+				if (m_WarnedJoints.insert(owner).second)
+				{
+					WI_PHYSICS_LOG(Warning, "Entity {0}: its Joint is connected to the entity itself; it is not made", owner.to_string());
+				}
+				continue;
+			}
+			JointDesc desc;
+			desc.Type = joint.Type;
+			desc.A = owner;
+			desc.B = joint.Connected;
+			desc.CollideConnected = joint.CollideConnected;
+			desc.AnchorA = joint.AnchorA;
+			desc.AnchorB = joint.AnchorB;
+			desc.Axis = joint.Axis;
+			desc.NormalAxis = joint.NormalAxis;
+			desc.LimitMin = joint.LimitMin;
+			desc.LimitMax = joint.LimitMax;
+			desc.SwingHalfAngle = joint.SwingHalfAngle;
+			desc.TwistHalfAngle = joint.TwistHalfAngle;
+			desc.SpringFrequency = joint.SpringFrequency;
+			desc.SpringDamping = joint.SpringDamping;
+			desc.MotorMode = joint.MotorMode;
+			desc.MotorTarget = joint.MotorTarget;
+			desc.MotorMaxForce = joint.MotorMaxForce;
+			desc.BreakForce = joint.BreakForce;
+			desc.BreakTorque = joint.BreakTorque;
+			wanted.emplace(owner, desc);
+		}
+
+		for (auto it = m_Joints.begin(); it != m_Joints.end();)
+		{
+			if (!wanted.contains(it->first))
+			{
+				thread.push(DestroyJoint{ it->first }, m_Generation);
+				it = m_Joints.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+
+		for (const auto& [owner, desc] : wanted)
+		{
+			const auto it = m_Joints.find(owner);
+			if (it == m_Joints.end())
+			{
+				thread.push(CreateJoint{ desc }, m_Generation);
+				m_Joints.emplace(owner, desc);
+				continue;
+			}
+			JointDesc& sent = it->second;
+			if (sent == desc)
+			{
+				continue;
+			}
+			// only the motor or the limits changed: the joint keeps its rest pose
+			JointDesc rest = desc;
+			rest.MotorMode = sent.MotorMode;
+			rest.MotorTarget = sent.MotorTarget;
+			rest.MotorMaxForce = sent.MotorMaxForce;
+			rest.LimitMin = sent.LimitMin;
+			rest.LimitMax = sent.LimitMax;
+			if (!(rest == sent))
+			{
+				thread.push(CreateJoint{ desc }, m_Generation);
+				sent = desc;
+				continue;
+			}
+			if (desc.MotorMode != sent.MotorMode || desc.MotorTarget != sent.MotorTarget || desc.MotorMaxForce != sent.MotorMaxForce)
+			{
+				thread.push(SetJointMotor{ owner, desc.MotorMode, desc.MotorTarget, desc.MotorMaxForce }, m_Generation);
+			}
+			if (desc.LimitMin != sent.LimitMin || desc.LimitMax != sent.LimitMax)
+			{
+				thread.push(SetJointLimits{ owner, desc.LimitMin, desc.LimitMax }, m_Generation);
+			}
+			sent = desc;
+		}
+	}
+
+	void PhysicsSync::push_characters(const Scene& scene, PhysicsThread& thread)
+	{
+		const entt::registry& registry = scene.registry();
+		std::unordered_map<BodyKey, CharacterDesc> wanted;
+		for (const entt::entity entity : registry.view<CharacterController>())
+		{
+			const BodyKey owner = registry.get<Id>(entity).Guid;
+			if (registry.all_of<RigidBody>(entity) || registry.all_of<Collider>(entity))
+			{
+				if (m_WarnedCharacters.insert(owner).second)
+				{
+					WI_PHYSICS_LOG(Warning, "Entity {0}: a CharacterController cannot share its entity with a RigidBody or a Collider; it is not made", owner.to_string());
+				}
+				continue;
+			}
+			const CharacterController& controller = registry.get<CharacterController>(entity);
+			CharacterDesc desc;
+			desc.Radius = controller.Radius;
+			desc.Height = controller.Height;
+			desc.Offset = controller.Offset;
+			desc.StepHeight = controller.StepHeight;
+			desc.MaxSlopeAngle = controller.MaxSlopeAngle;
+			desc.Mass = controller.Mass;
+			desc.PushStrength = controller.PushStrength;
+			desc.GravityFactor = controller.GravityFactor;
+			desc.Layer = controller.Layer;
+			desc.Position = glm::vec3(registry.get<WorldTransform>(entity).Matrix[3]);
+			wanted.emplace(owner, desc);
+		}
+
+		for (auto it = m_Characters.begin(); it != m_Characters.end();)
+		{
+			if (!wanted.contains(it->first))
+			{
+				thread.push(DestroyCharacter{ it->first }, m_Generation);
+				it = m_Characters.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+
+		for (const auto& [owner, desc] : wanted)
+		{
+			const auto it = m_Characters.find(owner);
+			if (it == m_Characters.end())
+			{
+				thread.push(CreateCharacter{ owner, desc }, m_Generation);
+				m_Characters.emplace(owner, TrackedCharacter{ desc, desc.Position });
+				continue;
+			}
+			TrackedCharacter& tracked = it->second;
+			CharacterDesc sentWithoutPosition = tracked.Desc;
+			sentWithoutPosition.Position = desc.Position;
+			const bool sameFields = sentWithoutPosition.Radius == desc.Radius && sentWithoutPosition.Height == desc.Height && sentWithoutPosition.Offset == desc.Offset
+				&& sentWithoutPosition.StepHeight == desc.StepHeight && sentWithoutPosition.MaxSlopeAngle == desc.MaxSlopeAngle && sentWithoutPosition.Mass == desc.Mass
+				&& sentWithoutPosition.PushStrength == desc.PushStrength && sentWithoutPosition.GravityFactor == desc.GravityFactor && sentWithoutPosition.Layer == desc.Layer;
+			if (!sameFields)
+			{
+				thread.push(CreateCharacter{ owner, desc }, m_Generation); // made again where its entity is
+				tracked = TrackedCharacter{ desc, desc.Position };
+			}
+			else if (glm::length(desc.Position - tracked.Expected) > 1e-3f)
+			{
+				thread.push(TeleportCharacter{ owner, desc.Position }, m_Generation); // something other than the physics moved the entity
+				tracked.Expected = desc.Position;
+			}
+		}
 	}
 
 	void PhysicsSync::apply_poses(Scene& scene, const PhysicsStepSnapshot& prev, const PhysicsStepSnapshot& latest, float alpha)
@@ -385,6 +554,41 @@ namespace wiwa
 				transform.Position = glm::vec3(glm::inverse(parentWorld) * glm::vec4(position, 1.0f));
 				transform.Rotation = glm::normalize(glm::inverse(decompose(parentWorld).Rotation) * rotation);
 			}
+		}
+
+		// characters: only their position is written; the entity keeps its rotation and scale
+		std::unordered_map<BodyKey, const CharacterPose*> previousCharacters;
+		if (interpolate)
+		{
+			for (const CharacterPose& pose : prev.Characters)
+			{
+				previousCharacters.emplace(pose.Key, &pose);
+			}
+		}
+		for (const CharacterPose& pose : latest.Characters)
+		{
+			const auto tracked = m_Characters.find(pose.Key);
+			if (tracked == m_Characters.end())
+			{
+				continue;
+			}
+			const entt::entity entity = scene.find(pose.Key);
+			if (entity == entt::null || !registry.valid(entity))
+			{
+				continue; // destroyed since: its DestroyCharacter is on the way
+			}
+			glm::vec3 position = pose.Position;
+			if (interpolate)
+			{
+				if (const auto before = previousCharacters.find(pose.Key); before != previousCharacters.end())
+				{
+					position = glm::mix(before->second->Position, pose.Position, alpha);
+				}
+			}
+			Transform& transform = registry.get<Transform>(entity);
+			const entt::entity parent = registry.get<Hierarchy>(entity).Parent;
+			transform.Position = parent == entt::null ? position : glm::vec3(glm::inverse(registry.get<WorldTransform>(parent).Matrix) * glm::vec4(position, 1.0f));
+			tracked->second.Expected = position;
 		}
 	}
 
@@ -478,5 +682,9 @@ namespace wiwa
 		m_Materials.clear();
 		m_Shapes.clear();
 		m_WarnedColliders.clear();
+		m_Joints.clear();
+		m_WarnedJoints.clear();
+		m_Characters.clear();
+		m_WarnedCharacters.clear();
 	}
 }

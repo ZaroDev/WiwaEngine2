@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "light_cull_pass.h"
 
+#include "../view/view_state.h"
+
 #include "../engine_assets.h"
 #include "../scene/scene_render_data.h"
 
@@ -74,15 +76,16 @@ namespace wiwa
 			}
 		}
 
-		if (m_BindingSet == nullptr)
+		ViewCache& cache = m_PerView.get(frame.View->Target);
+		if (cache.BindingSet == nullptr)
 		{
 			nvrhi::BindingSetDesc set;
 			set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, data.constant_buffer()));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(3, data.light_buffer()));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(6, data.cluster_counts()));
 			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(7, data.cluster_indices()));
-			m_BindingSet = m_Device->createBindingSet(set, m_Layout);
-			if (m_BindingSet == nullptr)
+			cache.BindingSet = m_Device->createBindingSet(set, m_Layout);
+			if (cache.BindingSet == nullptr)
 			{
 				WI_CULL_LOG(Error, "Could not create the light culling bindings");
 				m_Failed = true;
@@ -92,7 +95,7 @@ namespace wiwa
 
 		nvrhi::ComputeState state;
 		state.pipeline = m_Pipeline;
-		state.addBindingSet(m_BindingSet);
+		state.addBindingSet(cache.BindingSet);
 		commandList->setComputeState(state);
 		commandList->dispatch(CLUSTERS_X / 4, CLUSTERS_Y / 3, CLUSTERS_Z / 4);
 	}

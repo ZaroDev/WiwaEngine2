@@ -31,6 +31,7 @@ namespace wiwa
 		Slider,
 		Toggle,
 		Bar,
+		ViewImage, // an offscreen view (a ViewHost of the scene), by name
 
 		Last
 	};
@@ -84,6 +85,9 @@ namespace wiwa
 		AssetRef Texture{};
 		bool Slice9 = false;
 		glm::vec4 SliceBorders{ 0.0f }; // left, top, right, bottom in texels
+
+		// ViewImage: the Name of the ViewHost whose picture this shows
+		std::string ViewName{};
 
 		// Slider, toggle (Value > 0.5 is on) and bar (0..1)
 		float Value = 0.0f;

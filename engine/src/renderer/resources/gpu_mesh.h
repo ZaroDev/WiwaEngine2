@@ -25,5 +25,7 @@ namespace wiwa
 		std::vector<GpuPrimitive> Primitives{};
 		glm::vec3 BoundsMin{ 0.0f };
 		glm::vec3 BoundsMax{ 0.0f };
+		bool Skinned = false;  // its skin vertices are on the page's skin buffer (GpuResourceCache::skin_buffer)
+		u32 JointCount = 0;    // the palette needs this many joints: the highest joint a vertex is weighted to, plus one
 	};
 }

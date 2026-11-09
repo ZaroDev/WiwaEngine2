@@ -1752,6 +1752,140 @@ namespace wiwa
 			const entt::entity crate = expanded.Entities.size() == 2 ? crateScene.find(expanded.Entities[1].Id) : entt::null;
 			check(crate != entt::null && crateScene.registry().all_of<Collider>(crate) && crateScene.registry().get<Collider>(crate).Size == glm::vec3(2, 3, 4), "physics: the overridden Collider.Size reaches the loaded component");
 		}
+
+		// Joint survives save, cook, load (binary and the text of the file) and a prefab override of LimitMax applies.
+		void check_joint_data(Check& check)
+		{
+			register_scene_components();
+			check(ComponentRegistry::get().find("Joint") != nullptr, "joint: Joint is registered");
+
+			Scene source;
+			const EntityGuid otherId = EntityGuid::generate();
+			source.create(otherId, "Other");
+			const EntityGuid ownerId = EntityGuid::generate();
+			const entt::entity owner = source.create(ownerId, "Owner");
+			Joint joint;
+			joint.Type = JointType::Slider;
+			joint.Connected = otherId;
+			joint.CollideConnected = true;
+			joint.AnchorA = glm::vec3(1, 2, 3);
+			joint.AnchorB = glm::vec3(-1, -2, -3);
+			joint.Axis = glm::vec3(0, 0, 1);
+			joint.NormalAxis = glm::vec3(0, 1, 0);
+			joint.LimitMin = -1.5f;
+			joint.LimitMax = 2.5f;
+			joint.SwingHalfAngle = 33.0f;
+			joint.TwistHalfAngle = 22.0f;
+			joint.SpringFrequency = 4.0f;
+			joint.SpringDamping = 0.5f;
+			joint.MotorMode = JointMotorMode::Velocity;
+			joint.MotorTarget = 1.25f;
+			joint.MotorMaxForce = 99.0f;
+			joint.BreakForce = 123.0f;
+			joint.BreakTorque = 45.0f;
+			source.registry().emplace<Joint>(owner, joint);
+
+			const SceneData first = data_from_scene(source, "joint");
+			const std::vector<std::byte> bytes = serialize(first);
+			std::optional<SceneData> back = deserialize<SceneData>(bytes);
+			check(back.has_value(), "joint: the scene survives the cooked format");
+			if (!back)
+			{
+				return;
+			}
+			Scene copy;
+			const ApplyReport report = apply_scene_data(copy, *back);
+			check(report.UnknownComponents == 0 && report.UnknownFields == 0, "joint: nothing in the saved scene is unknown");
+			const entt::entity loaded = copy.find(ownerId);
+			check(loaded != entt::null && copy.registry().all_of<Joint>(loaded), "joint: the entity keeps its Joint");
+			if (loaded != entt::null && copy.registry().all_of<Joint>(loaded))
+			{
+				const Joint& j = copy.registry().get<Joint>(loaded);
+				check(j.Type == JointType::Slider && j.Connected == otherId && j.CollideConnected, "joint: type, connection and collide flag survive");
+				check(j.AnchorA == joint.AnchorA && j.AnchorB == joint.AnchorB && j.Axis == joint.Axis && j.NormalAxis == joint.NormalAxis, "joint: anchors and axes survive");
+				check(j.LimitMin == -1.5f && j.LimitMax == 2.5f && j.SwingHalfAngle == 33.0f && j.TwistHalfAngle == 22.0f, "joint: limits survive");
+				check(j.SpringFrequency == 4.0f && j.SpringDamping == 0.5f, "joint: spring survives");
+				check(j.MotorMode == JointMotorMode::Velocity && j.MotorTarget == 1.25f && j.MotorMaxForce == 99.0f, "joint: motor survives");
+				check(j.BreakForce == 123.0f && j.BreakTorque == 45.0f, "joint: break limits survive");
+			}
+			check(serialize(data_from_scene(copy, "joint")) == bytes, "joint: save, load, save gives the same bytes");
+
+			const SceneJsonResult viaJson = scene_from_json(SceneJson::parse(scene_to_json(first).dump(2)));
+			check(viaJson.Scene.has_value() && serialize(*viaJson.Scene) == bytes, "joint: the text of the file gives the same binary scene (" + viaJson.Error + ")");
+
+			PrefabData prefab;
+			prefab.Name = "door";
+			PrefabNode node = make_node("Door", -1);
+			node.Components.push_back(ComponentRecord{ "Joint", { FieldRecord{ "LimitMax", FieldValue(90.0f) } } });
+			prefab.Nodes = { node };
+			assign_stable_ids(prefab.Nodes);
+			const u64 nodeId = prefab.Nodes[0].StableId;
+			EntityRecord instance = make_instance(EntityGuid::generate(), AssetRef{ AssetGuid::generate(), 0 });
+			instance.Overrides = { set_field_override(nodeId, "Joint", "LimitMax", FieldValue(45.0f)) };
+			const ExpandResult expanded = expand_prefab(instance, prefab);
+			const FieldValue* limit = expanded.Entities.size() == 2 ? find_field(expanded.Entities[1].Components, "Joint", "LimitMax") : nullptr;
+			check(limit != nullptr && std::get_if<float>(limit) != nullptr && *std::get_if<float>(limit) == 45.0f, "joint: a prefab override of Joint.LimitMax applies");
+		}
+
+		// CharacterController survives save, cook, load (binary and the text of the file) and a prefab override of StepHeight applies.
+		void check_character_data(Check& check)
+		{
+			register_scene_components();
+			check(ComponentRegistry::get().find("CharacterController") != nullptr, "character: CharacterController is registered");
+
+			Scene source;
+			const EntityGuid ownerId = EntityGuid::generate();
+			const entt::entity owner = source.create(ownerId, "Hero");
+			CharacterController controller;
+			controller.Radius = 0.33f;
+			controller.Height = 1.7f;
+			controller.Offset = glm::vec3(0.0f, 0.1f, 0.0f);
+			controller.StepHeight = 0.4f;
+			controller.MaxSlopeAngle = 50.0f;
+			controller.Mass = 80.0f;
+			controller.PushStrength = 150.0f;
+			controller.GravityFactor = 1.5f;
+			controller.Layer = 3;
+			source.registry().emplace<CharacterController>(owner, controller);
+
+			const SceneData first = data_from_scene(source, "character");
+			const std::vector<std::byte> bytes = serialize(first);
+			std::optional<SceneData> back = deserialize<SceneData>(bytes);
+			check(back.has_value(), "character: the scene survives the cooked format");
+			if (!back)
+			{
+				return;
+			}
+			Scene copy;
+			const ApplyReport report = apply_scene_data(copy, *back);
+			check(report.UnknownComponents == 0 && report.UnknownFields == 0, "character: nothing in the saved scene is unknown");
+			const entt::entity loaded = copy.find(ownerId);
+			check(loaded != entt::null && copy.registry().all_of<CharacterController>(loaded), "character: the entity keeps its CharacterController");
+			if (loaded != entt::null && copy.registry().all_of<CharacterController>(loaded))
+			{
+				const CharacterController& c = copy.registry().get<CharacterController>(loaded);
+				check(c.Radius == 0.33f && c.Height == 1.7f && c.Offset == controller.Offset, "character: the capsule survives");
+				check(c.StepHeight == 0.4f && c.MaxSlopeAngle == 50.0f, "character: step height and slope survive");
+				check(c.Mass == 80.0f && c.PushStrength == 150.0f && c.GravityFactor == 1.5f && c.Layer == 3, "character: mass, push, gravity and layer survive");
+			}
+			check(serialize(data_from_scene(copy, "character")) == bytes, "character: save, load, save gives the same bytes");
+
+			const SceneJsonResult viaJson = scene_from_json(SceneJson::parse(scene_to_json(first).dump(2)));
+			check(viaJson.Scene.has_value() && serialize(*viaJson.Scene) == bytes, "character: the text of the file gives the same binary scene (" + viaJson.Error + ")");
+
+			PrefabData prefab;
+			prefab.Name = "hero";
+			PrefabNode node = make_node("Hero", -1);
+			node.Components.push_back(ComponentRecord{ "CharacterController", { FieldRecord{ "StepHeight", FieldValue(0.35f) } } });
+			prefab.Nodes = { node };
+			assign_stable_ids(prefab.Nodes);
+			const u64 nodeId = prefab.Nodes[0].StableId;
+			EntityRecord instance = make_instance(EntityGuid::generate(), AssetRef{ AssetGuid::generate(), 0 });
+			instance.Overrides = { set_field_override(nodeId, "CharacterController", "StepHeight", FieldValue(0.5f)) };
+			const ExpandResult expanded = expand_prefab(instance, prefab);
+			const FieldValue* step = expanded.Entities.size() == 2 ? find_field(expanded.Entities[1].Components, "CharacterController", "StepHeight") : nullptr;
+			check(step != nullptr && std::get_if<float>(step) != nullptr && *std::get_if<float>(step) == 0.5f, "character: a prefab override of CharacterController.StepHeight applies");
+		}
 	}
 
 	bool run_scene_smoke_test(AssetPipelineModule& pipeline)
@@ -1763,6 +1897,8 @@ namespace wiwa
 		check_render_components(check);
 		check_scene_data(check);
 		check_physics_data(check);
+		check_joint_data(check);
+		check_character_data(check);
 		check_node_ids(check, pipeline);
 		check_node_components(check);
 		check_prefab(check);

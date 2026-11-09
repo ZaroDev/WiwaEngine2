@@ -26,6 +26,5 @@ namespace wiwa
 		nvrhi::GraphicsPipelineHandle m_Pipeline{};           // the environment cube
 		nvrhi::GraphicsPipelineHandle m_AtmospherePipeline{}; // the analytic atmosphere
 		u32 m_BuiltShaderGeneration = ~0u;
-		u32 m_BuiltViewportGeneration = ~0u;
 	};
 }

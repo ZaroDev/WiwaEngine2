@@ -1,17 +1,26 @@
 {
+  "version": 1,
+  "name": "carpaint",
   "alpha": "opaque",
   "alphaCutoff": 0.5,
-  "baseColor": [0.5, 0.0, 0.02, 1.0],
+  "baseColor": [
+    0.7,
+    0.02,
+    0.02,
+    1
+  ],
   "clearcoat": 1.0,
-  "clearcoatRoughness": 0.05,
+  "clearcoatRoughness": 0.0,
   "doubleSided": false,
-  "emissive": [0.0, 0.0, 0.0],
+  "emissive": [
+    0,
+    0,
+    0
+  ],
   "metallic": 0.6,
-  "name": "carpaint",
-  "roughness": 0.35,
+  "roughness": 0.25,
   "sheen": 0.0,
   "sheenRoughness": 0.0,
-  "textures": {},
   "transmission": 0.0,
-  "version": 1
+  "textures": {}
 }

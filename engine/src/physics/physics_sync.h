@@ -37,7 +37,7 @@ namespace wiwa
 		// generation than the one built are ignored.
 		void apply_poses(Scene& scene, const PhysicsStepSnapshot& prev, const PhysicsStepSnapshot& latest, float alpha);
 
-		// Forgets every body (the world is gone).
+		// Forgets every body and joint (the world is gone).
 		void clear();
 
 		// What a Collider's Material reference means for the world, on the main thread (the physics thread never sees the AssetManager). A
@@ -52,10 +52,17 @@ namespace wiwa
 		std::shared_ptr<const CookedShapeData> resolve_shape(AssetRef mesh, CookedShapeKind kind, EntityGuid collider);
 
 		u64 generation() const { return m_Generation; }
+		size_t joint_count() const { return m_Joints.size(); }
+		bool has_character(BodyKey key) const { return m_Characters.contains(key); }
 		size_t body_count() const { return m_Bodies.size(); }
 		bool has_body(BodyKey key) const { return m_Bodies.contains(key); }
 
 	private:
+		// Sends the joints of the scene's Joint components (on entities that have a body, after the bodies were sent).
+		void push_joints(const Scene& scene, PhysicsThread& thread);
+		// Sends the characters of the scene's CharacterController components, and teleports the ones whose entity was moved from outside.
+		void push_characters(const Scene& scene, PhysicsThread& thread);
+
 		struct Tracked
 		{
 			BodyDesc Desc{};          // as last sent (Desc.Shape is the shape last sent)
@@ -78,6 +85,19 @@ namespace wiwa
 		std::unordered_map<AssetGuid, MaterialEntry> m_Materials{}; // by the guid the asset is stored under
 		std::unordered_map<AssetGuid, ShapeEntry> m_Shapes{};           // by the guid the shape asset is stored under
 		std::set<EntityGuid> m_WarnedColliders{};
+		// The joints sent: a Joint component on the entity of a body gives one, named by that entity. Changes to the motor or the limits go
+		// as SetJointMotor / SetJointLimits (the joint keeps its rest pose); any other change makes the joint again.
+		std::unordered_map<BodyKey, JointDesc> m_Joints{};
+		std::set<EntityGuid> m_WarnedJoints{};
+		// The characters sent: a CharacterController on an entity that has no body of its own gives one, named by the entity. Expected is
+		// the world position the entity should have if nothing but the physics moved it (what apply_poses wrote); another one is a teleport.
+		struct TrackedCharacter
+		{
+			CharacterDesc Desc{};
+			glm::vec3 Expected{ 0.0f };
+		};
+		std::unordered_map<BodyKey, TrackedCharacter> m_Characters{};
+		std::set<EntityGuid> m_WarnedCharacters{};
 		u64 m_Generation = 0;
 	};
 }

@@ -9,6 +9,7 @@
 #include "../scene/scene_json.h"
 #include "material_file.h"
 #include "physics_material_file.h"
+#include <assets/native_anim_files.h>
 #include <input/input_map_io.h>
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
@@ -18,6 +19,22 @@ namespace wiwa
 	namespace
 	{
 		// The map a new .winput starts with: Jump on Space and the pad's A, Move on WASD and the left stick.
+		// One base layer with one state that has no clip yet: the graph editor opens it, and the importer refuses it until a clip is assigned.
+		AnimationGraphData default_animation_graph(const std::string& name)
+		{
+			AnimationGraphData graph;
+			graph.Name = name;
+			GraphLayer layer;
+			layer.Name = "Base";
+			layer.Mode = GraphLayerMode::Base;
+			GraphState state;
+			state.Name = "Idle";
+			layer.DefaultState = state.Name;
+			layer.States.push_back(std::move(state));
+			graph.Layers.push_back(std::move(layer));
+			return graph;
+		}
+
 		InputMapData default_input_map()
 		{
 			Binding space;
@@ -175,6 +192,7 @@ namespace wiwa
 		case CreateKind::UiPanel: return "UI panel";
 		case CreateKind::PhysicsMaterial: return "Physics Material";
 		case CreateKind::InputMap: return "Input Map";
+		case CreateKind::AnimationGraph: return "Animation graph";
 		}
 		return "";
 	}
@@ -193,6 +211,7 @@ namespace wiwa
 		case CreateKind::UiPanel: return "NewPanel";
 		case CreateKind::PhysicsMaterial: return "New physics material";
 		case CreateKind::InputMap: return "New input map";
+		case CreateKind::AnimationGraph: return "New animation graph";
 		}
 		return "";
 	}
@@ -211,6 +230,7 @@ namespace wiwa
 		case CreateKind::UiPanel: return ".wuipanel";
 		case CreateKind::PhysicsMaterial: return ".wphysmat";
 		case CreateKind::InputMap: return ".winput";
+		case CreateKind::AnimationGraph: return ".wgraph";
 		}
 		return "";
 	}
@@ -316,6 +336,9 @@ namespace wiwa
 			break;
 		case CreateKind::InputMap:
 			written = write_text(path, input_map_to_text(default_input_map()));
+			break;
+		case CreateKind::AnimationGraph:
+			written = write_text(path, write_graph_file(default_animation_graph(name)));
 			break;
 		}
 

@@ -1,6 +1,5 @@
 // Toon-styled PBR: a demo of the surface shader contract (engine/surface_contract.hlsli).
-// The engine keeps the lighting, so the cel look comes from what the shader feeds it: a posterized albedo, cel-banded
-// shading by view angle, flat highlights (no metal, high roughness) and a Fresnel rim in the emissive.
+// The engine keeps the lighting; the cel look comes from what the shader feeds it: a posterized albedo, bands by view angle and a hard rim.
 struct MaterialParams
 {
 	float4 Tint;          // color default(1,1,1,1)
@@ -16,15 +15,11 @@ struct MaterialParams
 void Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o)
 {
 	float bands = (float)p.Bands;
-
-	// Posterize the luminance and keep the hue, so the colour bands stay clean.
 	float3 albedo = o.Albedo * p.Tint.rgb;
 	float luma = max(dot(albedo, float3(0.299, 0.587, 0.114)), 1e-4);
-	float3 chroma = albedo / luma;
-	chroma = lerp(float3(1, 1, 1), chroma, p.Saturation);
+	float3 chroma = lerp(float3(1, 1, 1), albedo / luma, p.Saturation);
 	float quantized = floor(saturate(luma) * bands + 0.5) / bands;
 
-	// Cel bands by the angle to the camera: dark where the surface turns away.
 	float facing = saturate(dot(i.WorldNormal, i.ViewDirection));
 	float band = floor(facing * bands) / max(bands - 1.0, 1.0);
 	float shade = lerp(1.0 - p.ShadeStrength, 1.0, saturate(band));
@@ -34,8 +29,7 @@ void Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o)
 	o.Roughness = 0.9;
 	o.Occlusion = 1.0;
 
-	float rim = pow(1.0 - facing, p.RimPower);
-	rim = step(0.5, rim) * p.RimStrength;
+	float rim = step(0.5, pow(1.0 - facing, p.RimPower)) * p.RimStrength;
 	o.Emissive += p.RimColor.rgb * rim;
 }
 

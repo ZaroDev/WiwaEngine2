@@ -1,6 +1,9 @@
 #include <editor_common.h>
 #include "asset_browser_panel.h"
 
+#include <asset_editor/asset_summary.h>
+#include "asset_icons.h"
+
 #include <imgui.h>
 
 #include <asset_pipeline/build_settings.h>
@@ -19,6 +22,8 @@
 #include <Windows.h>
 #include <shellapi.h>
 #endif
+
+using wiwa::LogLevel; // the WI_LOG macro names its level through it
 
 namespace
 {
@@ -50,12 +55,13 @@ namespace
 	bool is_texture_file(const std::filesystem::path& path)
 	{
 		const std::filesystem::path e = path.extension();
-		return e == ".png" || e == L".jpg";
+		return e == ".png" || e == ".jpg";
 	}
+
 }
 
 AssetBrowserPanel::AssetBrowserPanel(wiwa::AssetDatabase& database)
-	: Panel("Asset Browser", PanelCategory::Window), m_Database(database)
+	: Panel("Asset Browser", PanelCategory::Window), m_Database(database), m_ImportDialog(database)
 {
 	rescan();
 	if (!m_Roots.empty())
@@ -66,6 +72,20 @@ AssetBrowserPanel::AssetBrowserPanel(wiwa::AssetDatabase& database)
 
 void AssetBrowserPanel::on_update()
 {
+	// dropped files get their dialog once the import that makes their .meta is done
+	if (!m_DialogsAfterImport.empty())
+	{
+		const Ref<wiwa::JobProgress> progress = m_Database.reimport_progress();
+		if (!progress || progress->finished())
+		{
+			for (const std::filesystem::path& file : m_DialogsAfterImport)
+			{
+				m_ImportDialog.request(file);
+			}
+			m_DialogsAfterImport.clear();
+		}
+	}
+
 	if (!m_Open)
 	{
 		return;
@@ -323,6 +343,10 @@ void AssetBrowserPanel::draw_top_bar()
 	ImGui::SetNextItemWidth(100.0f);
 	ImGui::SliderFloat("##asset_zoom", &m_ThumbnailScale, 0.5f, 2.0f, "Size %.1f");
 
+	if (!m_ReextractStatus.empty())
+	{
+		ImGui::TextDisabled("%s", m_ReextractStatus.c_str());
+	}
 	if (!m_Status.empty())
 	{
 		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_Status.c_str());
@@ -438,6 +462,11 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 		textureId = render != nullptr ? render->get_asset_texture_id(*found) : 0;
 	}
 
+	if (textureId == 0 && m_Thumbnails != nullptr && wiwa::ThumbnailCache::handles(file))
+	{
+		textureId = m_Thumbnails->request(file);
+	}
+
 	if (textureId != 0)
 	{
 		ImGui::PushID(file.string().c_str());
@@ -446,11 +475,12 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 	}
 	else
 	{
-		clicked = ImGui::Button(ICON_FK_FILE_O, ImVec2(thumbnailSize, thumbnailSize));
+
+		clicked = ImGui::Button(get_filetype_icon(file), ImVec2(thumbnailSize, thumbnailSize));
 	}
-	if (clicked)
+	if (clicked || ImGui::IsItemClicked(ImGuiMouseButton_Right))
 	{
-		m_Selected = file;
+		m_Selected = file; // a right click selects too: the context menu is about the selected file
 	}
 	if (selected)
 	{
@@ -470,6 +500,10 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 		{
 			m_OpenUiPanel(file);
 		}
+		else if ((file.extension() == ".wskel" || file.extension() == ".wmesh" || file.extension() == ".wanim" || file.extension() == ".wgraph") && m_OpenAssetEditor)
+		{
+			m_OpenAssetEditor(file);
+		}
 		else if (file.extension() == ".wmat" && m_OpenMaterial)
 		{
 			m_OpenMaterial(file);
@@ -478,6 +512,22 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 		{
 			open_externally(file);
 		}
+	}
+	if ((wiwa::ThumbnailCache::is_animation_asset(file) || file.extension() == ".wgraph") && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+	{
+		const std::string summary = wiwa::summarize_animation_file(file);
+		const std::string from = wiwa::extracted_from(file);
+		ImGui::BeginTooltip();
+		ImGui::TextUnformatted(file.filename().string().c_str());
+		if (!summary.empty())
+		{
+			ImGui::TextDisabled("%s", summary.c_str());
+		}
+		if (!from.empty())
+		{
+			ImGui::TextDisabled("Extracted from %s", from.c_str());
+		}
+		ImGui::EndTooltip();
 	}
 	ImGui::TextWrapped("%s", file.filename().string().c_str());
 }
@@ -573,7 +623,7 @@ void AssetBrowserPanel::draw_context_menu()
 	if (ImGui::BeginMenu("Create"))
 	{
 		for (const wiwa::CreateKind kind : { wiwa::CreateKind::Folder, wiwa::CreateKind::Material, wiwa::CreateKind::Script, wiwa::CreateKind::Scene,
-			wiwa::CreateKind::SurfaceShader, wiwa::CreateKind::HlslShader, wiwa::CreateKind::HlslInclude, wiwa::CreateKind::UiPanel, wiwa::CreateKind::PhysicsMaterial, wiwa::CreateKind::InputMap })
+			wiwa::CreateKind::SurfaceShader, wiwa::CreateKind::HlslShader, wiwa::CreateKind::HlslInclude, wiwa::CreateKind::UiPanel, wiwa::CreateKind::PhysicsMaterial, wiwa::CreateKind::InputMap, wiwa::CreateKind::AnimationGraph })
 		{
 			if (ImGui::MenuItem(wiwa::display_name(kind)))
 			{
@@ -590,8 +640,47 @@ void AssetBrowserPanel::draw_context_menu()
 		ImGui::TextDisabled("%s", m_Selected.filename().string().c_str());
 
 		// pack it although no packed scene uses it (the Build Settings panel lists these)
+		if (wiwa::ThumbnailCache::is_animation_asset(m_Selected))
+		{
+			if (m_OpenAssetEditor && ImGui::MenuItem("Open in Asset Editor"))
+			{
+				m_OpenAssetEditor(m_Selected);
+			}
+			if (!wiwa::extracted_from(m_Selected).empty() && ImGui::MenuItem("Re-extract from model..."))
+			{
+				m_ReextractStatus = wiwa::reextract_from_model(m_Database, m_Selected);
+				if (m_ReextractStatus.empty())
+				{
+					m_ReextractStatus = "The model was imported again: a new copy is next to the old file.";
+				}
+			}
+		}
+		// Reimport / import settings: a file with an importer; a folder reimports what is in it. Imports run here, on the main thread.
+		if (std::filesystem::is_directory(m_Selected, error))
+		{
+			if (ImGui::MenuItem("Reimport folder"))
+			{
+				reimport_folder(m_Selected);
+			}
+		}
+		else if (m_Database.importer_for(m_Selected) != nullptr)
+		{
+			if (ImGui::MenuItem("Reimport"))
+			{
+				m_Database.reimport_async({ m_Selected });
+			}
+			if (m_Database.importer_for(m_Selected)->editable() && ImGui::MenuItem("Import settings..."))
+			{
+				m_ImportDialog.request(m_Selected);
+			}
+		}
 		if (std::optional<wiwa::MetaFile> meta = wiwa::MetaFile::load(wiwa::MetaFile::meta_path_for(m_Selected)))
 		{
+			if (m_FindReferences && ImGui::MenuItem("Find references"))
+			{
+				m_FindReferences(wiwa::AssetRef{ meta->Guid, 0 });
+			}
+
 			std::string loadError;
 			wiwa::BuildSettings settings = wiwa::BuildSettings::load(wiwa::BUILD_SETTINGS_FILE, loadError).value_or(wiwa::BuildSettings{});
 			auto listed = std::find(settings.AlwaysInclude.begin(), settings.AlwaysInclude.end(), meta->Guid);
@@ -622,10 +711,82 @@ void AssetBrowserPanel::draw_context_menu()
 	}
 
 	ImGui::Separator();
+	if (!m_CurrentDir.empty() && ImGui::MenuItem("Reimport this folder"))
+	{
+		reimport_folder(m_CurrentDir);
+	}
 	if (ImGui::MenuItem("Open in file explorer"))
 	{
 		open_externally(m_CurrentDir);
 	}
 
 	ImGui::EndPopup();
+}
+
+wiwa::u32 AssetBrowserPanel::reimport_folder(const std::filesystem::path& folder)
+{
+	std::vector<std::filesystem::path> files;
+	std::error_code error;
+	for (std::filesystem::recursive_directory_iterator it(folder, std::filesystem::directory_options::skip_permission_denied, error), end; !error && it != end; it.increment(error))
+	{
+		if (it->is_regular_file(error) && m_Database.importer_for(it->path()) != nullptr)
+		{
+			files.push_back(it->path());
+		}
+	}
+	const wiwa::u32 count = static_cast<wiwa::u32>(files.size());
+	if (count > 0)
+	{
+		m_Database.reimport_async(std::move(files));
+	}
+	WI_LOG(Info, "Editor", "Reimporting {0} assets in {1}", count, folder.generic_string());
+	return count;
+}
+
+void AssetBrowserPanel::import_dropped(const std::vector<std::filesystem::path>& files)
+{
+	if (m_CurrentDir.empty())
+	{
+		WI_LOG(Warning, "Editor", "Dropped files ignored: no asset folder is open");
+		return;
+	}
+
+	std::vector<std::filesystem::path> copies;
+	for (const std::filesystem::path& file : files)
+	{
+		std::error_code error;
+		if (!std::filesystem::is_regular_file(file, error) || m_Database.importer_for(file) == nullptr)
+		{
+			WI_LOG(Warning, "Editor", "Dropped {0}: not a file the editor can import", file.generic_string());
+			continue;
+		}
+
+		// copied in under its own name, or the first free "name (n).ext": a file that is already there is never written over
+		std::filesystem::path target = m_CurrentDir / file.filename();
+		for (int n = 1; std::filesystem::exists(target, error) && n < 1000; n++)
+		{
+			target = m_CurrentDir / (file.stem().string() + " (" + std::to_string(n) + ")" + file.extension().string());
+		}
+		if (std::filesystem::exists(target, error) || !std::filesystem::copy_file(file, target, error) || error)
+		{
+			WI_LOG(Warning, "Editor", "Cannot copy {0} into {1}", file.generic_string(), m_CurrentDir.generic_string());
+			continue;
+		}
+		copies.push_back(target);
+		m_Selected = target;
+	}
+
+	if (!copies.empty())
+	{
+		// the dialog needs the .meta, which the import makes: the files that can be edited wait for it (on_update)
+		for (const std::filesystem::path& copy : copies)
+		{
+			if (m_Database.importer_for(copy)->editable())
+			{
+				m_DialogsAfterImport.push_back(copy);
+			}
+		}
+		m_Database.reimport_async(std::move(copies));
+	}
+	rescan();
 }

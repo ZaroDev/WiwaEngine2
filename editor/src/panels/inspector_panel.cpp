@@ -18,15 +18,12 @@ namespace
 	{
 		return component == "Name" || component == "Transform";
 	}
+}
 
-	std::string describe_ref(const wiwa::AssetRef& ref)
-	{
-		if (!ref.valid())
-		{
-			return "(none)";
-		}
-		return ref.Guid.to_string().substr(0, 8) + (ref.LocalId != 0 ? ":" + std::to_string(ref.LocalId) : std::string());
-	}
+InspectorPanel::InspectorPanel(wiwa::SceneEditor& editor, wiwa::AssetDatabase& database)
+	: Panel("Inspector", PanelCategory::Window), m_Editor(editor), m_Database(database)
+{
+	m_AssetManager = wiwa::Engine::get().get_module<wiwa::AssetManager>();
 }
 
 void InspectorPanel::on_draw()
@@ -35,13 +32,38 @@ void InspectorPanel::on_draw()
 	ImGui::SetNextWindowSize(ImVec2(284.0f, 300.0f), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin(get_name(), &m_Open) && m_Editor.get_scene() != nullptr)
 	{
-		const entt::entity entity = m_Editor.selected();
+		if (m_ScopeOpen && !ImGui::IsAnyItemActive())
+		{
+			m_Editor.end_edit_scope(); // the widget that held the scope went away (the selection changed under it)
+			m_ScopeOpen = false;
+		}
+
+		entt::entity entity = m_Editor.selected();
+		const bool pinned = m_Pinned.valid();
+		if (pinned)
+		{
+			entity = m_Editor.scene().find(m_Pinned);
+			if (entity == entt::null)
+			{
+				m_Pinned = {}; // the pinned entity is gone
+			}
+		}
 		if (entity == entt::null || !m_Editor.scene().registry().valid(entity))
 		{
 			ImGui::TextDisabled("Nothing selected");
 		}
 		else
 		{
+			if (ImGui::SmallButton(m_Pinned.valid() ? ICON_FK_LOCK " Locked" : ICON_FK_UNLOCK " Lock"))
+			{
+				m_Pinned = m_Pinned.valid() ? wiwa::EntityGuid{} : m_Editor.scene().registry().get<wiwa::Id>(entity).Guid;
+			}
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+			{
+				ImGui::SetTooltip("Keep showing this entity while other entities are selected");
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("%s", m_Editor.scene().registry().get<wiwa::Name>(entity).Value.c_str());
 			switch (m_Editor.kind_of(entity))
 			{
 			case wiwa::SceneEditor::Kind::PrefabNode:
@@ -70,9 +92,17 @@ void InspectorPanel::on_draw()
 			}
 			if (ImGui::BeginPopup("add_component"))
 			{
+				if (ImGui::IsWindowAppearing())
+				{
+					m_AddFilterBuffer[0] = '\0';
+					ImGui::SetKeyboardFocusHere();
+				}
+				ImGui::InputTextWithHint("##add_filter", "Search...", m_AddFilterBuffer, sizeof(m_AddFilterBuffer));
+				ImGui::Separator();
+				const ImGuiTextFilter filter(m_AddFilterBuffer);
 				for (const wiwa::ComponentInfo* info : wiwa::ComponentRegistry::get().all())
 				{
-					if (info->Name == "Id" || info->Name == "PrefabInstance" || info->Has(m_Editor.scene().registry(), entity))
+					if (info->Name == "Id" || info->Name == "PrefabInstance" || info->Has(m_Editor.scene().registry(), entity) || !filter.PassFilter(info->display_name().c_str()))
 					{
 						continue;
 					}
@@ -99,14 +129,51 @@ void InspectorPanel::on_draw()
 void InspectorPanel::draw_component(entt::entity entity, const wiwa::ComponentInfo& info)
 {
 	ImGui::PushID(info.Name.c_str());
-	const bool open = ImGui::CollapsingHeader(info.display_name().c_str(), ImGuiTreeNodeFlags_DefaultOpen);
-
-	if (!is_mandatory(info.Name) && info.Name != "PrefabInstance" && ImGui::BeginPopupContextItem())
+	const bool removable = !is_mandatory(info.Name) && info.Name != "PrefabInstance";
+	bool visible = true;
+	const bool open = removable ? ImGui::CollapsingHeader(info.display_name().c_str(), &visible, ImGuiTreeNodeFlags_DefaultOpen)
+	                            : ImGui::CollapsingHeader(info.display_name().c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+	if (!visible)
 	{
-		if (ImGui::MenuItem("Remove component"))
+		const std::string name = info.Name;
+		m_Deferred = [this, entity, name]() { m_Editor.remove_component(entity, name); };
+	}
+
+	if (info.Name != "PrefabInstance" && ImGui::BeginPopupContextItem())
+	{
+		if (ImGui::MenuItem("Reset to defaults"))
 		{
-			const std::string name = info.Name;
-			m_Deferred = [this, entity, name]() { m_Editor.remove_component(entity, name); };
+			for (size_t i = 0; i < info.Fields.size(); i++)
+			{
+				reset_field(entity, info, i);
+			}
+		}
+		if (ImGui::MenuItem("Copy values"))
+		{
+			ComponentClipboard clipboard;
+			clipboard.Component = info.Name;
+			for (size_t i = 0; i < info.Fields.size(); i++)
+			{
+				clipboard.Values.push_back(info.Get(m_Editor.scene().registry(), entity, i));
+			}
+			m_ComponentClipboard = std::move(clipboard);
+		}
+		const bool canPaste = m_ComponentClipboard && m_ComponentClipboard->Component == info.Name && m_ComponentClipboard->Values.size() == info.Fields.size();
+		if (ImGui::MenuItem("Paste values", nullptr, false, canPaste))
+		{
+			for (size_t i = 0; i < info.Fields.size(); i++)
+			{
+				m_Editor.set_field(entity, info.Name, info.Fields[i].Name, m_ComponentClipboard->Values[i]);
+			}
+		}
+		if (removable)
+		{
+			ImGui::Separator();
+			if (ImGui::MenuItem("Remove component"))
+			{
+				const std::string name = info.Name;
+				m_Deferred = [this, entity, name]() { m_Editor.remove_component(entity, name); };
+			}
 		}
 		ImGui::EndPopup();
 	}
@@ -117,7 +184,8 @@ void InspectorPanel::draw_component(entt::entity entity, const wiwa::ComponentIn
 		{
 			// the link to the prefab is not edited here
 			const wiwa::PrefabInstance& instance = m_Editor.scene().registry().get<wiwa::PrefabInstance>(entity);
-			ImGui::Text("Prefab: %s", describe_ref(instance.Prefab).c_str());
+			std::string ignored;
+			draw_asset_slot("##prefab", "Prefab", instance.Prefab, asset_context(wiwa::AssetType::Prefab), ignored);
 			ImGui::Text("Overrides: %zu", instance.Overrides.size());
 			if (ImGui::Button("Unpack"))
 			{
@@ -134,17 +202,202 @@ void InspectorPanel::draw_component(entt::entity entity, const wiwa::ComponentIn
 			for (size_t i = 0; i < info.Fields.size(); i++)
 			{
 				ImGui::PushID(static_cast<int>(i));
+				if (is_axis_trio(info, i))
+				{
+					draw_axis_trio(entity, info, i);
+					i += 2;
+					ImGui::PopID();
+					continue;
+				}
+
 				const wiwa::FieldValue current = info.Get(m_Editor.scene().registry(), entity, i);
 				wiwa::FieldValue edited = current;
-				if (draw_field(entity, info, i, current, edited))
+				const bool joint = info.Name == "AnimationSocket" && info.Fields[i].Name == "Joint";
+				const bool changed = joint ? draw_joint_picker(entity, std::get<std::string>(current), edited)
+				                           : draw_field(entity, info, i, current, edited);
+				if (changed)
 				{
 					m_Editor.set_field(entity, info.Name, info.Fields[i].Name, edited);
+				}
+				track_edit_scope();
+
+				const wiwa::FieldType type = info.Fields[i].Type;
+				if (type != wiwa::FieldType::Asset && type != wiwa::FieldType::AssetList && type != wiwa::FieldType::Entity && ImGui::BeginPopupContextItem("##field_menu"))
+				{
+					if (ImGui::MenuItem("Reset to default"))
+					{
+						reset_field(entity, info, i);
+					}
+					ImGui::EndPopup();
 				}
 				ImGui::PopID();
 			}
 		}
 	}
 	ImGui::PopID();
+}
+
+// A drag or typing in a widget is one undo step: the scope opens when the widget is activated and closes when it is released. The
+// edits of the frame that activates it are made before the scope matters: the scene settles at the start of the next frame.
+void InspectorPanel::track_edit_scope()
+{
+	if (ImGui::IsItemActivated() && !m_ScopeOpen)
+	{
+		m_Editor.begin_edit_scope();
+		m_ScopeOpen = true;
+	}
+	if (ImGui::IsItemDeactivated() && m_ScopeOpen)
+	{
+		m_Editor.end_edit_scope();
+		m_ScopeOpen = false;
+	}
+}
+
+void InspectorPanel::reset_field(entt::entity entity, const wiwa::ComponentInfo& info, size_t index)
+{
+	m_Editor.set_field(entity, info.Name, info.Fields[index].Name, info.Fields[index].Default);
+}
+
+AssetFieldContext InspectorPanel::asset_context(wiwa::AssetType expected) const
+{
+	AssetFieldContext context;
+	context.Expected = expected;
+	context.Database = &m_Database;
+	context.Locate = m_Locate;
+	context.FindReferences = m_FindReferences;
+	context.OpenInAssetEditor = m_OpenInAssetEditor;
+	return context;
+}
+
+bool InspectorPanel::is_axis_trio(const wiwa::ComponentInfo& info, size_t index) const
+{
+	if (index + 2 >= info.Fields.size())
+	{
+		return false;
+	}
+	const std::string& x = info.Fields[index].Name;
+	const std::string& y = info.Fields[index + 1].Name;
+	const std::string& z = info.Fields[index + 2].Name;
+	if (x.size() < 2 || y.size() != x.size() || z.size() != x.size())
+	{
+		return false;
+	}
+	const std::string prefix = x.substr(0, x.size() - 1);
+	return info.Fields[index].Type == wiwa::FieldType::Bool && info.Fields[index + 1].Type == wiwa::FieldType::Bool && info.Fields[index + 2].Type == wiwa::FieldType::Bool
+		&& x.back() == 'X' && y == prefix + "Y" && z == prefix + "Z";
+}
+
+// "[x] X  [ ] Y  [ ] Z  LockPosition": the three flags of an axis trio on one line, like the components of a vector.
+void InspectorPanel::draw_axis_trio(entt::entity entity, const wiwa::ComponentInfo& info, size_t index)
+{
+	static const char* const AXES[3] = { "X", "Y", "Z" };
+	static const ImVec4 COLORS[3] = { ImVec4(0.90f, 0.35f, 0.35f, 1.0f), ImVec4(0.45f, 0.80f, 0.40f, 1.0f), ImVec4(0.40f, 0.60f, 0.95f, 1.0f) };
+
+	const std::string& first = info.Fields[index].Name;
+	const std::string prefix = first.substr(0, first.size() - 1);
+	bool overridden = false;
+	for (size_t axis = 0; axis < 3; axis++)
+	{
+		overridden = overridden || m_Editor.is_overridden(entity, info.Name, info.Fields[index + axis].Name);
+	}
+	if (overridden)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Text, OVERRIDDEN_COLOR);
+	}
+
+	for (size_t axis = 0; axis < 3; axis++)
+	{
+		ImGui::PushID(static_cast<int>(axis));
+		const wiwa::FieldDescriptor& field = info.Fields[index + axis];
+		bool value = std::get<bool>(info.Get(m_Editor.scene().registry(), entity, index + axis));
+		if (axis > 0)
+		{
+			ImGui::SameLine();
+		}
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextColored(COLORS[axis], "%s", AXES[axis]);
+		ImGui::SameLine(0.0f, 4.0f);
+		if (ImGui::Checkbox("##axis", &value))
+		{
+			m_Editor.set_field(entity, info.Name, field.Name, wiwa::FieldValue(value));
+		}
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+		{
+			ImGui::SetTooltip("%s", field.Meta.Tooltip.empty() ? field.Name.c_str() : field.Meta.Tooltip.c_str());
+		}
+		ImGui::PopID();
+	}
+	ImGui::SameLine();
+	ImGui::AlignTextToFramePadding();
+	ImGui::TextUnformatted(prefix.c_str());
+
+	if (overridden)
+	{
+		ImGui::PopStyleColor();
+		ImGui::SameLine();
+		if (ImGui::SmallButton("R"))
+		{
+			std::vector<std::string> names;
+			for (size_t axis = 0; axis < 3; axis++)
+			{
+				names.push_back(info.Fields[index + axis].Name);
+			}
+			const std::string component = info.Name;
+			m_Deferred = [this, entity, component, names]()
+			{
+				for (const std::string& name : names)
+				{
+					m_Editor.revert_field(entity, component, name);
+				}
+			};
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Overridden: go back to the prefab value");
+		}
+	}
+}
+
+// The Joint of an AnimationSocket: a drop-down of the joints of the skeleton of the Animator above it (a text box when there is none).
+bool InspectorPanel::draw_joint_picker(entt::entity entity, const std::string& current, wiwa::FieldValue& value)
+{
+	using namespace wiwa;
+	entt::registry& registry = m_Editor.scene().registry();
+	const Animator* animator = nullptr;
+	for (entt::entity up = registry.get<Hierarchy>(entity).Parent; up != entt::null && animator == nullptr; up = registry.get<Hierarchy>(up).Parent)
+	{
+		animator = registry.try_get<Animator>(up);
+	}
+
+	AssetManager* assets = Engine::get().get_module<AssetManager>();
+	const Handle<SkeletonData> handle = (animator != nullptr && assets != nullptr) ? assets->load<SkeletonData>(animator->Skeleton) : Handle<SkeletonData>{};
+	const SkeletonData* skeleton = handle.get();
+	bool changed = false;
+	if (skeleton == nullptr)
+	{
+		char buffer[128] = {};
+		std::strncpy(buffer, current.c_str(), sizeof(buffer) - 1);
+		if (ImGui::InputText("Joint", buffer, sizeof(buffer)))
+		{
+			value = std::string(buffer);
+			changed = true;
+		}
+		return changed;
+	}
+
+	if (ImGui::BeginCombo("Joint", current.empty() ? "(none)" : current.c_str()))
+	{
+		for (const std::string& name : skeleton->JointNames)
+		{
+			if (ImGui::Selectable(name.c_str(), name == current))
+			{
+				value = name;
+				changed = true;
+			}
+		}
+		ImGui::EndCombo();
+	}
+	return changed;
 }
 
 bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& info, size_t index, const wiwa::FieldValue& current, wiwa::FieldValue& value)
@@ -247,12 +500,11 @@ bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& 
 	{
 		const AssetRef& ref = std::get<AssetRef>(current);
 		std::string dropped;
-		switch (draw_asset_field(label, describe_ref(ref), ref.valid(), dropped))
+		switch (draw_asset_slot(label, label, ref, asset_context(field.Meta.Asset), dropped))
 		{
 		case AssetFieldEvent::Dropped:
 		{
-			wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
-			const std::optional<wiwa::AssetRef> found = assets != nullptr ? assets->find_asset(dropped) : std::nullopt;
+			const std::optional<wiwa::AssetRef> found = m_AssetManager != nullptr ? m_AssetManager->find_asset(dropped) : std::nullopt;
 			if (found)
 			{
 				value = *found;
@@ -267,28 +519,63 @@ bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& 
 	}
 	case FieldType::AssetList:
 	{
-		// the slots are shown, not edited here; each one can be found in the Asset Browser
-		const std::vector<AssetRef>& refs = std::get<std::vector<AssetRef>>(current);
+		std::vector<AssetRef> refs = std::get<std::vector<AssetRef>>(current);
 		ImGui::Text("%s: %zu asset(s)", label, refs.size());
 		for (size_t i = 0; i < refs.size(); i++)
 		{
 			ImGui::PushID(static_cast<int>(i));
-			ImGui::BulletText("%s", describe_ref(refs[i]).c_str());
-			if (refs[i].valid() && m_Locate)
+			std::string dropped;
+			const std::string slot = std::string(label) + " " + std::to_string(i);
+			switch (draw_asset_slot(slot.c_str(), nullptr, refs[i], asset_context(field.Meta.Asset), dropped))
 			{
-				ImGui::SameLine();
-				if (ImGui::SmallButton("Locate"))
+			case AssetFieldEvent::Dropped:
+			{
+				const std::optional<wiwa::AssetRef> found = m_AssetManager != nullptr ? m_AssetManager->find_asset(dropped) : std::nullopt;
+				if (found)
 				{
-					m_Locate(refs[i]);
+					refs[i] = *found;
+					value = refs;
+					changed = true;
 				}
+				break;
+			}
+			case AssetFieldEvent::Cleared: refs[i] = AssetRef{}; value = refs; changed = true; break;
+			default: break;
 			}
 			ImGui::PopID();
 		}
 		break;
 	}
 	case FieldType::Entity:
-		ImGui::Text("%s: %s", label, std::get<EntityGuid>(current).valid() ? std::get<EntityGuid>(current).to_string().substr(0, 8).c_str() : "(none)");
+	{
+		const EntityGuid guid = std::get<EntityGuid>(current);
+		std::string target = "(none)";
+		bool missing = false;
+		if (guid.valid())
+		{
+			const entt::entity found = m_Editor.scene().find(guid);
+			if (found != entt::null && m_Editor.scene().registry().valid(found))
+			{
+				target = m_Editor.scene().registry().get<Name>(found).Value;
+			}
+			else
+			{
+				target = "(missing) " + guid.to_string().substr(0, 8);
+				missing = true;
+			}
+		}
+		ImGui::Text("%s:", label);
+		ImGui::SameLine();
+		if (missing)
+		{
+			ImGui::TextColored(MISSING_COLOR, "%s", target.c_str());
+		}
+		else
+		{
+			ImGui::TextUnformatted(target.c_str());
+		}
 		break;
+	}
 	}
 
 	if (overridden)

@@ -1,6 +1,7 @@
 #include <pch.h>
 #include "script_module.h"
 
+#include <animation/animation_module.h>
 #include <ui/ui_module.h>
 
 #include <algorithm>
@@ -31,6 +32,7 @@ namespace wiwa
 		context.Ui = Engine::get().get_module<UiModule>();
 		context.Physics = Engine::get().get_module<PhysicsModule>();
 		context.Input = Engine::get().get_module<InputModule>();
+		context.Animation = Engine::get().get_module<AnimationModule>();
 		context.RequestQuit = []() { Engine::get().request_quit(); };
 		if (RenderModule* renderer = Engine::get().get_module<RenderModule>())
 		{

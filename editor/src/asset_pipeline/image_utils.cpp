@@ -157,7 +157,7 @@ namespace wiwa
 		return count;
 	}
 
-	std::optional<TextureData> decode_texture(std::span<const std::byte> bytes, TextureKind kind, const std::string& name, std::string& error)
+	std::optional<TextureData> decode_texture(std::span<const std::byte> bytes, TextureKind kind, const std::string& name, std::string& error, const TextureImportOptions& options)
 	{
 		int width = 0;
 		int height = 0;
@@ -193,6 +193,37 @@ namespace wiwa
 			}
 		}
 
+		// pixel options, on the full size level before the chain is built from it
+		{
+			std::vector<u8>& level0 = texture.Mips[0];
+			if (options.FlipVertical)
+			{
+				const size_t rowBytes = static_cast<size_t>(texture.Width) * 4;
+				for (u32 y = 0; y < texture.Height / 2; y++)
+				{
+					std::swap_ranges(level0.begin() + y * rowBytes, level0.begin() + (y + 1) * rowBytes, level0.begin() + static_cast<size_t>(texture.Height - 1 - y) * rowBytes);
+				}
+			}
+			for (size_t i = 0; i < byteCount; i += 4)
+			{
+				if (options.InvertGreen)
+				{
+					level0[i + 1] = static_cast<u8>(255 - level0[i + 1]);
+				}
+				if (options.ForceOpaque)
+				{
+					level0[i + 3] = 255;
+				}
+				if (options.PremultiplyAlpha)
+				{
+					const u32 alpha = level0[i + 3];
+					level0[i] = static_cast<u8>((level0[i] * alpha + 127) / 255);
+					level0[i + 1] = static_cast<u8>((level0[i + 1] * alpha + 127) / 255);
+					level0[i + 2] = static_cast<u8>((level0[i + 2] * alpha + 127) / 255);
+				}
+			}
+		}
+
 		u32 mipWidth = texture.Width;
 		u32 mipHeight = texture.Height;
 		for (u32 level = 1; level < mipCount; level++)
@@ -200,6 +231,28 @@ namespace wiwa
 			texture.Mips.push_back(downsample(texture.Mips.back(), mipWidth, mipHeight, kind));
 			mipWidth = std::max(1u, mipWidth / 2);
 			mipHeight = std::max(1u, mipHeight / 2);
+		}
+
+		// import options: drop the levels above the size limit (the chain below stays), then the chain itself if it is not wanted
+		if (options.MaxSize > 0)
+		{
+			u32 drop = 0;
+			u32 side = std::max(texture.Width, texture.Height);
+			while (side > options.MaxSize && drop + 1 < texture.Mips.size())
+			{
+				side = std::max(1u, side / 2);
+				drop++;
+			}
+			if (drop > 0)
+			{
+				texture.Mips.erase(texture.Mips.begin(), texture.Mips.begin() + drop);
+				texture.Width = std::max(1u, texture.Width >> drop);
+				texture.Height = std::max(1u, texture.Height >> drop);
+			}
+		}
+		if (!options.GenerateMipmaps && texture.Mips.size() > 1)
+		{
+			texture.Mips.resize(1);
 		}
 
 		return texture;

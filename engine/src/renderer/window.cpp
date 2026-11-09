@@ -26,14 +26,70 @@ namespace wiwa
 #endif
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-		std::string windowTitle = fmt::format("Wiwa 2 <{0}>", WI_BUILD_CONFIGURATION);
-		m_Window = glfwCreateWindow(1280, 720, windowTitle.c_str(), nullptr, nullptr);
-	
+		// A game takes its window from the project in its pack; the editor owns its window and only sets the title later.
+		const Engine& engine = Engine::get();
+		const ProjectSettings& project = engine.project();
+		const bool fromProject = engine.project_from_pak();
+
+		std::string windowTitle = fromProject ? window_title(project) : fmt::format("Wiwa 2 <{0}>", WI_BUILD_CONFIGURATION);
+		int width = fromProject ? static_cast<int>(project.WindowWidth) : 1280;
+		int height = fromProject ? static_cast<int>(project.WindowHeight) : 720;
+		GLFWmonitor* monitor = nullptr;
+		if (fromProject)
+		{
+			glfwWindowHint(GLFW_RESIZABLE, project.Resizable ? GLFW_TRUE : GLFW_FALSE);
+			if (project.Mode != WindowMode::Windowed)
+			{
+				monitor = glfwGetPrimaryMonitor();
+				const GLFWvidmode* mode = monitor != nullptr ? glfwGetVideoMode(monitor) : nullptr;
+				if (mode != nullptr)
+				{
+					width = mode->width;
+					height = mode->height;
+					if (project.Mode == WindowMode::Borderless)
+					{
+						glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+						glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+						glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+						glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+						glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+					}
+				}
+			}
+		}
+		// Borderless is a window the size of the screen with no frame; only fullscreen takes the monitor over.
+		m_Window = glfwCreateWindow(width, height, windowTitle.c_str(), project.Mode == WindowMode::Fullscreen && fromProject ? monitor : nullptr, nullptr);
+
+		if (!fromProject && engine.start_maximized())
+		{
+			glfwMaximizeWindow(m_Window);
+		}
 
 		glfwSetWindowCloseCallback(m_Window, [](GLFWwindow* window)
 			{
 				Engine::get().request_quit();
 			});
+
+		// files dragged onto the window from the OS (called inside glfwPollEvents, on the main thread)
+		glfwSetDropCallback(m_Window, [](GLFWwindow*, int count, const char** paths)
+			{
+				if (Window* self = Engine::get().get_module<Window>())
+				{
+					std::lock_guard<std::mutex> lock(self->m_DropMutex);
+					for (int i = 0; i < count; i++)
+					{
+						self->m_DroppedFiles.push_back(std::filesystem::u8path(paths[i]));
+					}
+				}
+			});
+	}
+
+	std::vector<std::filesystem::path> Window::take_dropped_files()
+	{
+		std::lock_guard<std::mutex> lock(m_DropMutex);
+		std::vector<std::filesystem::path> files;
+		files.swap(m_DroppedFiles);
+		return files;
 	}
 
 	void Window::shutdown()

@@ -2,6 +2,7 @@
 
 #include "../render_pass.h"
 #include "../shader_library.h"
+#include "../view/per_view.h"
 #include "../viewport_target.h"
 
 namespace wiwa
@@ -19,6 +20,8 @@ namespace wiwa
 		virtual bool is_ready() const override;
 		virtual bool has_failed() const override { return m_Failed; }
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) override;
+		virtual void on_view_removed(u32 targetUid) override { m_PerView.forget(targetUid); }
+		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return flags.MotionBlur; }
 
 	private:
 		static constexpr u32 GROUP_SIZE = 8;
@@ -32,8 +35,6 @@ namespace wiwa
 			glm::vec4 Mode{ 0.0f };                   // x = 1 for the velocity debug view
 		};
 
-		bool create_binding_set(ViewportTarget& viewport);
-
 		nvrhi::IDevice* m_Device = nullptr;
 		ShaderLibrary* m_Shaders = nullptr;
 		bool m_Failed = false;
@@ -41,9 +42,14 @@ namespace wiwa
 		nvrhi::BufferHandle m_ConstantBuffer{};
 		nvrhi::SamplerHandle m_Sampler{};
 		nvrhi::BindingLayoutHandle m_BindingLayout{};
-		nvrhi::BindingSetHandle m_BindingSet{};
+		// What belongs to one view (PerView): its binding sets. A view's slot starts over when its target is made again.
+		struct ViewCache
+		{
+			nvrhi::BindingSetHandle BindingSet{};
+		};
+		PerView<ViewCache> m_PerView{};
+		bool create_binding_set(ViewportTarget& viewport, ViewCache& c);
 		nvrhi::ComputePipelineHandle m_Pipeline{};
 		u32 m_BuiltShaderGeneration = ~0u;
-		u32 m_BuiltViewportGeneration = ~0u;
 	};
 }

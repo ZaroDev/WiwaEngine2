@@ -98,6 +98,8 @@ namespace wiwa
 		{
 			u32 Bodies = 0;
 			u32 ActiveBodies = 0;
+			u32 Joints = 0;            // made (not waiting for a body)
+			u32 Characters = 0;
 			float StepMs = 0.0f;       // of the newest step
 			u32 StepsLastFrame = 0;    // steps update() took in its last call
 			u64 DroppedSteps = 0;      // folded into a later one because the main thread did not take them (see PhysicsThread::folded_steps)
@@ -108,6 +110,12 @@ namespace wiwa
 		// The velocities of a body in the newest step; none when there is no such body in it.
 		std::optional<glm::vec3> velocity(BodyKey key) const;
 		std::optional<glm::vec3> angular_velocity(BodyKey key) const;
+
+		// Characters (CharacterController): commands for the physics world, applied in the next step, and the state in the newest step
+		// (nullopt without a world, or when the entity has no character in it).
+		void set_character_velocity(BodyKey key, glm::vec3 velocity);
+		void character_jump(BodyKey key, float speed);
+		std::optional<CharacterPose> newest_character(BodyKey key) const;
 
 		// The data the queries run against: the step that is being delivered to the sink, else the newest step. Null while no world runs.
 		Ref<const QuerySnapshot> query() const;

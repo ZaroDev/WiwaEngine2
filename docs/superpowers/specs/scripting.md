@@ -34,3 +34,12 @@ A hand-written `---@meta` stub `editor/engine/lua/wiwa.lua` documents the static
 ## Editor play mode
 
 See editor.md (Play runs on a scene clone; `ScriptingModule::update` is gated on the game clock).
+
+## Animation API
+
+`bind_animation.cpp`: `Animation.animator(entity)` gives a handle (`play`, `crossfade`, `stop`, `layer`, `on`, `off`, `joint_world`, `set`, `get`, `trigger`, `state`, `speed`, `time`, `playing`, `ready`; `set`/`get`/`trigger`/`state` drive the animation graph of `Animator.Graph`: a wrong name or kind is logged once and ignored, writes before the graph has loaded wait); layer handles have `weight`, `crossfade`, `stop`. Handles resolve through the active scene on every use: a destroyed entity or an ended layer reads nil and ignores writes. `ScriptContext` carries the module and `ActiveSceneRef`, so a handle can make its animator instance on demand (scripts run before `AnimationModule::tick`). Clip event handlers live in `AnimHandlerTable`, delivered by `ScriptInstances::dispatch_animation_events` at the start of `update()` (one frame late), owned by the script instance like UI handlers (the owner is `UiHandlerTable::current()`), removed when they raise an error. `AnimationModule` must be registered before `ScriptingModule` (engine.cpp).
+
+
+## Settings and prefs
+
+`bind_settings.cpp`: `settings.graphics.get/set` (RenderQuality via `RenderModule::set_quality`, applied on the render thread and saved to `render_quality.json`), `settings.scene.get/set` (bloom, ao, motion_blur, exposure_compensation of the active scene through `Scene::set_settings`, not saved) and `prefs.get/set/save` (`UserPrefs`, a flat bool/number/string map in `user_prefs.json`, main thread). Unknown keys and wrong types are Lua errors that name the key. Covered by `check_settings_api` in `--script-smoke`.

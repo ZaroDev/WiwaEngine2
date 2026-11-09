@@ -102,6 +102,7 @@ struct SceneInstance
 	float4 PrevWorldC1;
 	float4 PrevWorldC2;
 	float4 PrevWorldC3;
+	uint4 SkinInfo; // x: row of the joint palette in uPalettes, y: row of the previous frame's palette; ~0u in x for a rigid instance
 };
 
 struct MaterialRecord
@@ -120,6 +121,7 @@ struct DrawConstantsData
 {
 	uint InstanceIndex;
 	uint MaterialSlot;
+	uint BaseVertex; // of the draw: D3D leaves it out of SV_VertexID (Vulkan includes it), see SkinVertexIndex
 };
 
 PUSH_CONSTANTS(DrawConstantsData, DrawConstants, b1);
@@ -167,6 +169,94 @@ struct MeshVertexInput
 	float3 Position : POSITION;
 	float3 Normal : NORMAL;
 	float2 Uv : TEXCOORD;
+	uint VertexId : SV_VertexID; // the vertex's place in the page's buffers, which skin data is parallel to
 };
+
+// Skinning (animation.md). Its own binding set, the last one of the pass; the set number is the number of sets before it, so each
+// shader that draws meshes says which with SKIN_SET before it includes this file (frame only: 1, frame and material: 2, and so on).
+//   t22 uPalettes      per skinned instance, rows of float4x3 per joint (three float4 each), this frame's and the previous frame's
+//   t23 uSkinVertices  four joints and weights per vertex of the page, parallel to the vertex buffer
+#ifndef SKIN_SET
+#define SKIN_SET 1
+#endif
+
+struct SkinVertex
+{
+	uint4 Joints;
+	float4 Weights;
+};
+
+VK_BINDING(22, SKIN_SET) StructuredBuffer<float4> uPalettes : register(t22);
+VK_BINDING(23, SKIN_SET) StructuredBuffer<SkinVertex> uSkinVertices : register(t23);
+
+static const uint NO_PALETTE = 0xFFFFFFFFu;
+
+// Where the vertex is in the page's buffers, which uSkinVertices is parallel to.
+uint SkinVertexIndex(MeshVertexInput input)
+{
+#ifdef VULKAN
+	return input.VertexId;
+#else
+	return input.VertexId + DrawConstants.BaseVertex;
+#endif
+}
+
+bool IsSkinned(SceneInstance instance)
+{
+	return instance.SkinInfo.x != NO_PALETTE;
+}
+
+// The point in the space of the model, skinned by the palette of this frame (previous: the one of the frame before).
+float3 SkinPointWith(SceneInstance instance, MeshVertexInput input, float3 position, bool previous)
+{
+	if (!IsSkinned(instance))
+	{
+		return position;
+	}
+
+	const uint row = previous ? instance.SkinInfo.y : instance.SkinInfo.x;
+	const SkinVertex skin = uSkinVertices[SkinVertexIndex(input)];
+	const float4 point4 = float4(position, 1.0);
+	float3 result = float3(0.0, 0.0, 0.0);
+	[unroll]
+	for (uint k = 0; k < 4; k++)
+	{
+		const float weight = skin.Weights[k];
+		if (weight > 0.0)
+		{
+			const uint first = row + skin.Joints[k] * 3u;
+			result += weight * float3(dot(uPalettes[first], point4), dot(uPalettes[first + 1u], point4), dot(uPalettes[first + 2u], point4));
+		}
+	}
+	return result;
+}
+
+float3 SkinPoint(SceneInstance instance, MeshVertexInput input, float3 position)
+{
+	return SkinPointWith(instance, input, position, false);
+}
+
+// The normal by the upper 3x3 of the palette (a joint with non-uniform scale is not supported).
+float3 SkinNormal(SceneInstance instance, MeshVertexInput input, float3 normal)
+{
+	if (!IsSkinned(instance))
+	{
+		return normal;
+	}
+
+	const SkinVertex skin = uSkinVertices[SkinVertexIndex(input)];
+	float3 result = float3(0.0, 0.0, 0.0);
+	[unroll]
+	for (uint k = 0; k < 4; k++)
+	{
+		const float weight = skin.Weights[k];
+		if (weight > 0.0)
+		{
+			const uint first = instance.SkinInfo.x + skin.Joints[k] * 3u;
+			result += weight * float3(dot(uPalettes[first].xyz, normal), dot(uPalettes[first + 1u].xyz, normal), dot(uPalettes[first + 2u].xyz, normal));
+		}
+	}
+	return normalize(result);
+}
 
 #endif // SCENE_COMMON_HLSLI

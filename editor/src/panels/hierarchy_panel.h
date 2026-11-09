@@ -3,6 +3,8 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <imgui.h>
+
 #include "panel.h"
 
 #include <asset_pipeline/asset_database.h>
@@ -20,6 +22,15 @@ public:
 
 	virtual void on_draw() override;
 
+	// What the shortcuts do (the editor registers them): rename the selected entity, copy/cut/paste it, frame it in the Viewport.
+	void request_rename();
+	void copy_selection();
+	void cut_selection();
+	void paste();
+	void focus_selection();
+	// The Viewport frames an entity (F, double-click).
+	void set_focus(std::function<void(entt::entity)> focus) { m_Focus = std::move(focus); }
+
 private:
 	struct PrefabChoice
 	{
@@ -30,6 +41,12 @@ private:
 	void draw_header();
 	void draw_popups();
 	void draw_node(entt::entity entity);
+	// The templates of the Create menu (and "New prefab instance...") under parent; the new entity is selected.
+	void draw_create_menu(entt::entity parent);
+	void drop_asset(const std::string& path, entt::entity target);
+	// Whether the entity or something below it passes the search box.
+	bool passes_filter(entt::entity entity) const;
+	bool filtering() const { return m_Filter.IsActive(); }
 	void draw_background_menu();
 	// The prefab files and models of the project, for the "Add prefab" popup.
 	void refresh_prefabs();
@@ -41,6 +58,10 @@ private:
 
 	bool m_OpenPrefabPicker = false;    // popups are opened from the panel, not from inside the context menu that asked for them
 	std::vector<PrefabChoice> m_Prefabs{};
+
+	ImGuiTextFilter m_Filter{};
+	bool m_FilterComponents = false; // the search also matches component names
+	std::function<void(entt::entity)> m_Focus{};
 
 	bool m_OpenRename = false;
 	bool m_RenameFocus = false;

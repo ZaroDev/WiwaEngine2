@@ -16,7 +16,7 @@ namespace wiwa
 		constexpr u32 INITIAL_INSTANCE_CAPACITY = 1024;
 		// How many frames' worth of constants the volatile buffer can hold at once.
 		constexpr u32 CONSTANT_BUFFER_VERSIONS = 16;
-		constexpr u32 DRAW_CONSTANTS_BYTES = 8; // instance index, material slot
+		constexpr u32 DRAW_CONSTANTS_BYTES = 12; // instance index, material slot, base vertex of the draw
 
 		nvrhi::VulkanBindingOffsets make_zero_binding_offsets()
 		{
@@ -28,12 +28,16 @@ namespace wiwa
 			return offsets;
 		}
 
-		// Sort key: single sided first, then by page, then by material.
+		// Sort key: single sided first, then by surface shader (built-in first), then by page, then by material.
 		bool draw_order(const DrawItem& a, const DrawItem& b)
 		{
 			if (a.DoubleSided != b.DoubleSided)
 			{
 				return !a.DoubleSided;
+			}
+			if (a.Shader != b.Shader)
+			{
+				return a.Shader < b.Shader;
 			}
 			if (a.Page != b.Page)
 			{
@@ -62,7 +66,7 @@ namespace wiwa
 		return m_Device->createTexture(description);
 	}
 
-	bool SceneRenderData::initialize(nvrhi::IDevice* device)
+	bool SceneRenderData::initialize(nvrhi::IDevice* device, const SceneRenderData* shareLayoutsFrom)
 	{
 		m_Device = device;
 
@@ -92,6 +96,22 @@ namespace wiwa
 		aoLayout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(15));
 		m_AoLayout = device->createBindingLayout(aoLayout);
 
+		// t22 and t23 of the skin set (scene_common.hlsli): vertex shaders only
+		nvrhi::BindingLayoutDesc skinLayout;
+		skinLayout.visibility = nvrhi::ShaderType::Vertex;
+		skinLayout.bindingOffsets = make_zero_binding_offsets();
+		skinLayout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(22));
+		skinLayout.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(23));
+		m_SkinLayout = device->createBindingLayout(skinLayout);
+
+		if (shareLayoutsFrom != nullptr)
+		{
+			// Pipelines are made once, with the layouts of the first view, and used with the binding sets of every view.
+			m_FrameLayout = shareLayoutsFrom->m_FrameLayout;
+			m_AoLayout = shareLayoutsFrom->m_AoLayout;
+			m_SkinLayout = shareLayoutsFrom->m_SkinLayout;
+		}
+
 		nvrhi::BufferDesc constants;
 		constants.byteSize = sizeof(FrameConstants);
 		constants.isConstantBuffer = true;
@@ -111,6 +131,8 @@ namespace wiwa
 			description.debugName = name;
 			return device->createBuffer(description);
 		};
+		m_DummyPalette = make_structured(3, sizeof(glm::vec4), false, "Palette stand-in");
+		m_DummySkin = make_structured(1, 32, false, "Skin vertices stand-in");
 		m_LightBuffer = make_structured(MAX_LIGHTS, sizeof(GpuLight), false, "Scene lights");
 		m_ClusterCounts = make_structured(CLUSTER_COUNT, sizeof(u32), true, "Cluster light counts");
 		m_ClusterIndices = make_structured(static_cast<u64>(CLUSTER_COUNT) * MAX_LIGHTS_PER_CLUSTER, sizeof(u32), true, "Cluster light indices");
@@ -163,6 +185,7 @@ namespace wiwa
 	void SceneRenderData::shutdown()
 	{
 		m_FrameBindings = nullptr;
+		m_ShadowFrameBindings = nullptr;
 		m_CascadeMap = nullptr;
 		m_SpotAtlas = nullptr;
 		m_DummyCascadeMap = nullptr;
@@ -181,6 +204,12 @@ namespace wiwa
 		m_InstanceBuffer = nullptr;
 		m_ConstantBuffer = nullptr;
 		m_FrameLayout = nullptr;
+		m_SkinSets.clear();
+		m_DefaultSkinSet = SkinSet{};
+		m_DummyPalette = nullptr;
+		m_DummySkin = nullptr;
+		m_PaletteBuffer = nullptr;
+		m_SkinLayout = nullptr;
 		m_Device = nullptr;
 	}
 
@@ -200,6 +229,10 @@ namespace wiwa
 		m_Cache = &cache;
 		m_Scene = &scene;
 		m_Settings = scene.settings();
+		m_Settings.Ao.Enabled = m_Settings.Ao.Enabled && m_Flags.Ao;
+		m_Settings.Bloom.Enabled = m_Settings.Bloom.Enabled && m_Flags.Bloom;
+		m_Settings.Exposure.Auto = m_Settings.Exposure.Auto && m_Flags.AutoExposure;
+		m_Settings.MotionBlur.Enabled = m_Settings.MotionBlur.Enabled && m_Flags.MotionBlur;
 		m_AoActive = false;
 		if (!m_Active)
 		{
@@ -294,7 +327,7 @@ namespace wiwa
 				WI_LOG(Warning, "Renderer", "{0} lights over the limit of {1} are not used", m_DroppedLights, MAX_LIGHTS);
 			}
 		}
-		constants.ClusterParams.w = m_ClusterCulling ? 0.0f : 1.0f;
+		constants.ClusterParams.w = (m_ClusterCulling && m_Flags.LightCulling) ? 0.0f : 1.0f;
 		if (useAtmosphere)
 		{
 			const AtmosphereDescription atmosphere = make_atmosphere_description(m_Settings.Atmosphere, sunLight != nullptr ? -sunLight->Direction : glm::vec3(0.0f));
@@ -381,7 +414,7 @@ namespace wiwa
 			// Slices are exponential in view depth between near and far: slice = log2(depth) * scale + bias.
 			const float depthRatio = std::log2(std::max(camera->Far / camera->Near, 1.0001f));
 			const float sliceScale = static_cast<float>(CLUSTERS_Z) / depthRatio;
-			constants.ClusterParams = glm::vec4(sliceScale, -std::log2(camera->Near) * sliceScale, camera->Projection[3][3] == 1.0f ? 1.0f : 0.0f, m_ClusterCulling ? 0.0f : 1.0f);
+			constants.ClusterParams = glm::vec4(sliceScale, -std::log2(camera->Near) * sliceScale, camera->Projection[3][3] == 1.0f ? 1.0f : 0.0f, (m_ClusterCulling && m_Flags.LightCulling) ? 0.0f : 1.0f);
 
 			const Frustum frustum(constants.UnjitteredViewProjection);
 			const std::vector<RenderInstance>& instances = scene.instances();
@@ -400,7 +433,8 @@ namespace wiwa
 				}
 				// One primitive: its box is the mesh's box, tested once.
 				const bool single = mesh->Primitives.size() == 1;
-				if (!single && !visible(frustum, instance.World, mesh->BoundsMin, mesh->BoundsMax))
+				const glm::vec3 padding(instance.BoundsPadding);
+				if (!single && !visible(frustum, instance.World, mesh->BoundsMin - padding, mesh->BoundsMax + padding))
 				{
 					continue;
 				}
@@ -409,7 +443,7 @@ namespace wiwa
 				for (size_t p = 0; p < mesh->Primitives.size(); p++)
 				{
 					const GpuPrimitive& primitive = mesh->Primitives[p];
-					if (!visible(frustum, instance.World, primitive.BoundsMin, primitive.BoundsMax))
+					if (!visible(frustum, instance.World, primitive.BoundsMin - padding, primitive.BoundsMax + padding))
 					{
 						continue;
 					}
@@ -421,6 +455,9 @@ namespace wiwa
 					DrawItem item;
 					item.Instance = slot;
 					item.Material = material;
+					item.Slot = material;
+					item.Shader = cache.get_material_shader(material);
+					item.Masked = (record.Flags & MATERIAL_ALPHA_MASK_BIT) != 0;
 					item.Page = mesh->Page;
 					item.FirstIndex = primitive.FirstIndex;
 					item.IndexCount = primitive.IndexCount;
@@ -447,9 +484,9 @@ namespace wiwa
 			}
 
 			// Shadows: the sun's cascades fitted to the camera, and up to four spot lights with a tile of the atlas each.
-			if (sunLight != nullptr && sunLight->CastsShadows)
+			if (sunLight != nullptr && sunLight->CastsShadows && m_Flags.ShadowCascades > 0)
 			{
-				const u32 cascades = std::clamp(m_Quality.ShadowCascades, 1u, MAX_CASCADES);
+				const u32 cascades = std::clamp(std::min(m_Quality.ShadowCascades, m_Flags.ShadowCascades), 1u, MAX_CASCADES);
 				const CascadeSet set = compute_cascades(*camera, sunLight->Direction, cascades, m_Quality.ShadowDistance, m_Quality.ShadowSplitLambda);
 				constants.ShadowParams = glm::vec4(1.0f, static_cast<float>(cascades), m_Quality.ShadowDepthBias, m_Quality.ShadowNormalBias);
 				for (u32 i = 0; i < MAX_CASCADES; i++)
@@ -476,7 +513,7 @@ namespace wiwa
 				constants.ShadowParams.w = m_Quality.ShadowNormalBias; // the spot lights use it too
 			}
 			u32 spotShadows = 0;
-			for (size_t i = 0; i < m_Lights.size() && spotShadows < MAX_SPOT_SHADOWS; i++)
+			for (size_t i = 0; i < m_Lights.size() && m_Flags.SpotShadows && spotShadows < MAX_SPOT_SHADOWS; i++)
 			{
 				if (m_Lights[i].Type != 1u || !sources[i]->CastsShadows)
 				{
@@ -529,7 +566,8 @@ namespace wiwa
 			}
 
 			const GpuMesh* mesh = m_Meshes[slot];
-			if (mesh == nullptr || (mesh->Primitives.size() != 1 && !visible(frustum, instance.World, mesh->BoundsMin, mesh->BoundsMax)))
+			const glm::vec3 padding(instance.BoundsPadding);
+			if (mesh == nullptr || (mesh->Primitives.size() != 1 && !visible(frustum, instance.World, mesh->BoundsMin - padding, mesh->BoundsMax + padding)))
 			{
 				continue;
 			}
@@ -537,14 +575,15 @@ namespace wiwa
 			for (size_t p = 0; p < mesh->Primitives.size(); p++)
 			{
 				const GpuPrimitive& primitive = mesh->Primitives[p];
-				if (!visible(frustum, instance.World, primitive.BoundsMin, primitive.BoundsMax))
+				if (!visible(frustum, instance.World, primitive.BoundsMin - padding, primitive.BoundsMax + padding))
 				{
 					continue;
 				}
 
 				const bool overridden = p < instance.Materials.size() && instance.Materials[p].valid();
 				const u32 material = overridden ? m_Cache->get_material_slot(instance.Materials[p]) : primitive.MaterialSlot;
-				if (m_Cache->material_record(material).Flags & MATERIAL_ALPHA_BLEND_BIT)
+				const GpuMaterialRecord& record = m_Cache->material_record(material);
+				if (record.Flags & MATERIAL_ALPHA_BLEND_BIT)
 				{
 					continue;
 				}
@@ -552,6 +591,9 @@ namespace wiwa
 				DrawItem item;
 				item.Instance = slot;
 				item.Material = matrixIndex; // the shadow shader reads this as the matrix index
+				item.Slot = material;
+				item.Shader = m_Cache->get_material_shader(material);
+				item.Masked = (record.Flags & MATERIAL_ALPHA_MASK_BIT) != 0;
 				item.Page = mesh->Page;
 				item.FirstIndex = primitive.FirstIndex;
 				item.IndexCount = primitive.IndexCount;
@@ -560,7 +602,18 @@ namespace wiwa
 				items.push_back(item);
 			}
 		}
-		std::sort(items.begin(), items.end(), [](const DrawItem& a, const DrawItem& b) { return a.Page < b.Page; });
+		std::sort(items.begin(), items.end(), [](const DrawItem& a, const DrawItem& b)
+			{
+				if (a.Shader != b.Shader)
+				{
+					return a.Shader < b.Shader;
+				}
+				if (a.Masked != b.Masked)
+				{
+					return b.Masked;
+				}
+				return a.Page < b.Page;
+			});
 	}
 
 	void SceneRenderData::write(nvrhi::ICommandList* commandList, GpuResourceCache& cache)
@@ -586,7 +639,13 @@ namespace wiwa
 			m_WrittenRevision = ~0ull;
 		}
 
-		if (m_InstanceBuffer && (m_WrittenRevision != m_Scene->revision() || m_Scene->previous_stale()))
+		// Skinned instances are written every frame: their palettes are (and the rows they sit at follow from the instances present).
+		bool anySkinned = false;
+		for (size_t slot = 0; slot < instances.size() && !anySkinned; slot++)
+		{
+			anySkinned = instances[slot].Alive && !instances[slot].Palette.empty();
+		}
+		if (m_InstanceBuffer && (m_WrittenRevision != m_Scene->revision() || m_Scene->previous_stale() || anySkinned || m_HadSkinned))
 		{
 			m_InstanceScratch.assign(std::max<size_t>(instances.size(), 1), GpuInstance{});
 			for (size_t slot = 0; slot < instances.size(); slot++)
@@ -598,7 +657,13 @@ namespace wiwa
 					m_InstanceScratch[slot].PrevWorld = instances[slot].PrevWorld;
 				}
 			}
+			const bool packed = pack_palettes();
 			commandList->writeBuffer(m_InstanceBuffer, m_InstanceScratch.data(), m_InstanceScratch.size() * sizeof(GpuInstance));
+			if (packed)
+			{
+				commandList->writeBuffer(m_PaletteBuffer, m_PaletteScratch.data(), m_PaletteScratch.size() * sizeof(glm::vec4));
+			}
+			m_HadSkinned = packed;
 			m_WrittenRevision = m_Scene->revision();
 		}
 
@@ -657,21 +722,26 @@ namespace wiwa
 		if (m_FrameBindings == nullptr || m_BoundInstanceBuffer != m_InstanceBuffer.Get() || m_BoundMaterialBuffer != materials
 			|| m_BoundCascades != cascades || m_BoundAtlas != atlas || m_BoundCube != cube || m_BoundBrdf != brdf)
 		{
-			nvrhi::BindingSetDesc set;
-			set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, m_InstanceBuffer));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(2, materials));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(3, m_LightBuffer));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(4, m_ClusterCounts));
-			set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(5, m_ClusterIndices));
-			set.addItem(nvrhi::BindingSetItem::Texture_SRV(6, cascades));
-			set.addItem(nvrhi::BindingSetItem::Texture_SRV(7, atlas));
-			set.addItem(nvrhi::BindingSetItem::Sampler(10, m_ShadowSampler));
-			set.addItem(nvrhi::BindingSetItem::Texture_SRV(8, cube));
-			set.addItem(nvrhi::BindingSetItem::Texture_SRV(9, brdf));
-			set.addItem(nvrhi::BindingSetItem::Sampler(11, m_EnvironmentSampler));
-			set.addItem(nvrhi::BindingSetItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
-			m_FrameBindings = m_Device->createBindingSet(set, m_FrameLayout);
+			const auto make_frame_set = [&](nvrhi::ITexture* cascadeMap, nvrhi::ITexture* spotAtlas)
+			{
+				nvrhi::BindingSetDesc set;
+				set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
+				set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, m_InstanceBuffer));
+				set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(2, materials));
+				set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(3, m_LightBuffer));
+				set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(4, m_ClusterCounts));
+				set.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(5, m_ClusterIndices));
+				set.addItem(nvrhi::BindingSetItem::Texture_SRV(6, cascadeMap));
+				set.addItem(nvrhi::BindingSetItem::Texture_SRV(7, spotAtlas));
+				set.addItem(nvrhi::BindingSetItem::Sampler(10, m_ShadowSampler));
+				set.addItem(nvrhi::BindingSetItem::Texture_SRV(8, cube));
+				set.addItem(nvrhi::BindingSetItem::Texture_SRV(9, brdf));
+				set.addItem(nvrhi::BindingSetItem::Sampler(11, m_EnvironmentSampler));
+				set.addItem(nvrhi::BindingSetItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
+				return m_Device->createBindingSet(set, m_FrameLayout);
+			};
+			m_FrameBindings = make_frame_set(cascades, atlas);
+			m_ShadowFrameBindings = make_frame_set(m_DummyCascadeMap, m_DummySpotAtlas);
 			m_BoundInstanceBuffer = m_InstanceBuffer;
 			m_BoundMaterialBuffer = materials;
 			m_BoundCascades = cascades;
@@ -679,5 +749,78 @@ namespace wiwa
 			m_BoundCube = cube;
 			m_BoundBrdf = brdf;
 		}
+
+		update_skin_sets(cache);
+	}
+
+	bool SceneRenderData::pack_palettes()
+	{
+		m_PaletteScratch.clear();
+		const std::vector<RenderInstance>& instances = m_Scene->instances();
+		for (size_t slot = 0; slot < instances.size(); slot++)
+		{
+			const RenderInstance& instance = instances[slot];
+			const GpuMesh* mesh = slot < m_Meshes.size() ? m_Meshes[slot] : nullptr;
+			// a palette that does not reach every joint the mesh names would be read past its end: the mesh is drawn as it is
+			if (!instance.Alive || instance.Palette.empty() || mesh == nullptr || !mesh->Skinned || instance.Palette.size() < static_cast<size_t>(mesh->JointCount) * 3)
+			{
+				continue;
+			}
+
+			m_InstanceScratch[slot].Skin.x = static_cast<u32>(m_PaletteScratch.size());
+			m_PaletteScratch.insert(m_PaletteScratch.end(), instance.Palette.begin(), instance.Palette.end());
+			m_InstanceScratch[slot].Skin.y = static_cast<u32>(m_PaletteScratch.size());
+			const std::vector<glm::vec4>& previous = instance.PrevPalette.size() == instance.Palette.size() ? instance.PrevPalette : instance.Palette;
+			m_PaletteScratch.insert(m_PaletteScratch.end(), previous.begin(), previous.end());
+		}
+
+		if (m_PaletteScratch.empty())
+		{
+			return false;
+		}
+		const u32 needed = static_cast<u32>(m_PaletteScratch.size());
+		if (m_PaletteBuffer == nullptr || needed > m_PaletteCapacity)
+		{
+			m_PaletteCapacity = std::max<u32>(needed + needed / 2, 3 * 256 * 4);
+			nvrhi::BufferDesc description;
+			description.byteSize = static_cast<u64>(m_PaletteCapacity) * sizeof(glm::vec4);
+			description.structStride = sizeof(glm::vec4);
+			description.initialState = nvrhi::ResourceStates::ShaderResource;
+			description.keepInitialState = true;
+			description.debugName = "Joint palettes";
+			m_PaletteBuffer = m_Device->createBuffer(description);
+		}
+		return m_PaletteBuffer != nullptr;
+	}
+
+	// One set per mesh page: the palettes of this frame and the skin vertices of the page (stand-ins where there are none).
+	void SceneRenderData::update_skin_sets(GpuResourceCache& cache)
+	{
+		nvrhi::IBuffer* palettes = m_PaletteBuffer != nullptr ? m_PaletteBuffer.Get() : m_DummyPalette.Get();
+		auto refresh = [&](SkinSet& set, nvrhi::IBuffer* skin)
+		{
+			if (set.Set == nullptr || set.Palette != palettes || set.Skin != skin)
+			{
+				nvrhi::BindingSetDesc description;
+				description.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(22, palettes));
+				description.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(23, skin));
+				set.Set = m_Device->createBindingSet(description, m_SkinLayout);
+				set.Palette = palettes;
+				set.Skin = skin;
+			}
+		};
+
+		refresh(m_DefaultSkinSet, m_DummySkin);
+		m_SkinSets.resize(cache.page_count());
+		for (u32 page = 0; page < m_SkinSets.size(); page++)
+		{
+			nvrhi::IBuffer* skin = cache.skin_buffer(page);
+			refresh(m_SkinSets[page], skin != nullptr ? skin : m_DummySkin.Get());
+		}
+	}
+
+	nvrhi::IBindingSet* SceneRenderData::skin_bindings(u32 page) const
+	{
+		return page < m_SkinSets.size() && m_SkinSets[page].Set != nullptr ? m_SkinSets[page].Set.Get() : m_DefaultSkinSet.Set.Get();
 	}
 }

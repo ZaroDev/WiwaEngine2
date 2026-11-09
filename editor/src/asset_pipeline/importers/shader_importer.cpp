@@ -62,8 +62,11 @@ namespace wiwa
 			virtual u32 version() const override { return 2; }
 			virtual std::vector<std::string> extensions() const override { return { ".hlsl", ".hlsli" }; }
 
-			// debugInfo: no optimization and debug information, for a graphics debugger.
-			virtual nlohmann::json default_settings() const override { return { { "debugInfo", false } }; }
+			// not editable in the editor: a shader's debug build is a developer switch
+			virtual std::vector<ImportOption> option_schema() const override
+			{
+				return { ImportOption::make_bool("debugInfo", "Debug info", false, "No optimization and debug information, for a graphics debugger.") };
+			}
 
 			virtual bool import(ImportContext& ctx) override
 			{

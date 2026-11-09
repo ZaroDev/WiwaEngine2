@@ -1,4 +1,4 @@
--- Physics demo: a ball that hops every few seconds (body control), shows the ray it casts downwards (queries) and flashes where it hits something hard (collision events).
+-- Body control, a raycast and collision events: hops by setting its velocity, draws a line to the ground, marks hard hits.
 local Hopper = Script:extend{
   properties = {
     interval = { type = "float", default = 3, min = 0.5, max = 20 },

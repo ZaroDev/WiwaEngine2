@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "exposure_pass.h"
 
+#include "../view/view_state.h"
+
 #include <algorithm>
 
 #include "../engine_assets.h"
@@ -65,16 +67,17 @@ namespace wiwa
 
 	void ExposurePass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
 	{
+		ViewCache& c = m_PerView.get(frame.View->Target);
 		if (frame.Scene == nullptr || !frame.Scene->active() || m_Failed)
 		{
-			m_WasActive = false;
+			c.WasActive = false;
 			return;
 		}
 
 		const ExposureSettings& settings = frame.Scene->settings().Exposure;
 		if (!settings.Auto)
 		{
-			m_WasActive = false; // the next time it is on there is no history to adapt from
+			c.WasActive = false; // the next time it is on there is no history to adapt from
 			return;
 		}
 
@@ -100,37 +103,36 @@ namespace wiwa
 			}
 		}
 
-		if (m_HistogramSet == nullptr || viewport.generation() != m_BuiltViewportGeneration)
+		if (c.HistogramSet == nullptr)
 		{
-			m_BuiltViewportGeneration = viewport.generation();
 			nvrhi::BindingSetDesc histogram;
 			histogram.addItem(nvrhi::BindingSetItem::Texture_SRV(0, viewport.hdr()));
 			histogram.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(1, viewport.histogram_buffer()));
 			histogram.addItem(nvrhi::BindingSetItem::PushConstants(2, sizeof(HistogramConstants)));
-			m_HistogramSet = m_Device->createBindingSet(histogram, m_HistogramLayout);
+			c.HistogramSet = m_Device->createBindingSet(histogram, m_HistogramLayout);
 
 			nvrhi::BindingSetDesc resolve;
 			resolve.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(0, viewport.histogram_buffer()));
 			resolve.addItem(nvrhi::BindingSetItem::StructuredBuffer_UAV(1, viewport.exposure_buffer()));
 			resolve.addItem(nvrhi::BindingSetItem::PushConstants(2, sizeof(ResolveConstants)));
-			m_ResolveSet = m_Device->createBindingSet(resolve, m_ResolveLayout);
-			if (m_HistogramSet == nullptr || m_ResolveSet == nullptr)
+			c.ResolveSet = m_Device->createBindingSet(resolve, m_ResolveLayout);
+			if (c.HistogramSet == nullptr || c.ResolveSet == nullptr)
 			{
 				WI_EXPOSURE_LOG(Error, "Could not create the exposure bindings");
 				m_Failed = true;
 				return;
 			}
-			m_WasActive = false; // new buffers: their contents are not defined
+			c.WasActive = false; // new buffers: their contents are not defined
 		}
 
 		const u32 sceneResets = frame.Scene->scene() != nullptr ? frame.Scene->scene()->reset_count() : 0;
-		if (sceneResets != m_LastSceneResets)
+		if (sceneResets != c.LastSceneResets)
 		{
-			m_LastSceneResets = sceneResets;
-			m_WasActive = false; // another scene: what the old one measured says nothing about this one
+			c.LastSceneResets = sceneResets;
+			c.WasActive = false; // another scene: what the old one measured says nothing about this one
 		}
 
-		const bool reset = !m_WasActive;
+		const bool reset = !c.WasActive;
 		if (reset)
 		{
 			commandList->clearBufferUInt(viewport.exposure_buffer(), 0);
@@ -147,13 +149,13 @@ namespace wiwa
 		resolve.DeltaSeconds = std::clamp(frame.DeltaTime, 0.0f, MAX_DELTA);
 		resolve.Speed = settings.AdaptSpeed;
 		resolve.Reset = reset ? 1.0f : 0.0f;
-		m_WasActive = true;
+		c.WasActive = true;
 
 		const HistogramConstants histogram;
 		{
 			nvrhi::ComputeState state;
 			state.pipeline = m_HistogramPipeline;
-			state.addBindingSet(m_HistogramSet);
+			state.addBindingSet(c.HistogramSet);
 			commandList->setComputeState(state);
 			commandList->setPushConstants(&histogram, sizeof(histogram));
 			commandList->dispatch((viewport.width() + 15) / 16, (viewport.height() + 15) / 16, 1);
@@ -161,7 +163,7 @@ namespace wiwa
 		{
 			nvrhi::ComputeState state;
 			state.pipeline = m_ResolvePipeline;
-			state.addBindingSet(m_ResolveSet);
+			state.addBindingSet(c.ResolveSet);
 			commandList->setComputeState(state);
 			commandList->setPushConstants(&resolve, sizeof(resolve));
 			commandList->dispatch(1, 1, 1);

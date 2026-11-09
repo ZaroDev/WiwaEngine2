@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "motion_blur_pass.h"
 
+#include "../view/view_state.h"
+
 #include "../engine_assets.h"
 #include "../scene/scene_render_data.h"
 
@@ -68,7 +70,7 @@ namespace wiwa
 		}
 	}
 
-	bool MotionBlurPass::create_binding_set(ViewportTarget& viewport)
+	bool MotionBlurPass::create_binding_set(ViewportTarget& viewport, ViewCache& c)
 	{
 		nvrhi::BindingSetDesc set;
 		set.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
@@ -77,12 +79,13 @@ namespace wiwa
 		set.addItem(nvrhi::BindingSetItem::Texture_SRV(3, viewport.depth()));
 		set.addItem(nvrhi::BindingSetItem::Sampler(4, m_Sampler));
 		set.addItem(nvrhi::BindingSetItem::Texture_UAV(5, viewport.post_scratch()));
-		m_BindingSet = m_Device->createBindingSet(set, m_BindingLayout);
-		return m_BindingSet != nullptr;
+		c.BindingSet = m_Device->createBindingSet(set, m_BindingLayout);
+		return c.BindingSet != nullptr;
 	}
 
 	void MotionBlurPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
 	{
+		ViewCache& c = m_PerView.get(frame.View->Target);
 		if (frame.Scene == nullptr || !frame.Scene->active() || m_Failed || !frame.Scene->has_camera())
 		{
 			return;
@@ -112,10 +115,9 @@ namespace wiwa
 			}
 		}
 
-		if (m_BindingSet == nullptr || viewport.generation() != m_BuiltViewportGeneration)
+		if (c.BindingSet == nullptr)
 		{
-			m_BuiltViewportGeneration = viewport.generation();
-			if (!create_binding_set(viewport))
+			if (!create_binding_set(viewport, c))
 			{
 				WI_MOTION_BLUR_LOG(Error, "Could not create the motion blur bindings");
 				m_Failed = true;
@@ -133,7 +135,7 @@ namespace wiwa
 
 		nvrhi::ComputeState state;
 		state.pipeline = m_Pipeline;
-		state.addBindingSet(m_BindingSet);
+		state.addBindingSet(c.BindingSet);
 		commandList->setComputeState(state);
 		commandList->dispatch((viewport.width() + GROUP_SIZE - 1) / GROUP_SIZE, (viewport.height() + GROUP_SIZE - 1) / GROUP_SIZE, 1);
 

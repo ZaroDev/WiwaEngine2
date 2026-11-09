@@ -11,7 +11,10 @@
 
 #include "../image_utils.h"
 #include "../material_file.h"
+#include "file_names.h"
+#include "model_extract.h"
 #include "model_import.h"
+#include "model_skeleton.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -24,48 +27,6 @@ namespace wiwa
 			std::string extension = path.extension().string();
 			std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 			return extension;
-		}
-
-		std::string lower_text(std::string text)
-		{
-			std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-			return text;
-		}
-
-		// A material name as a file name: characters outside [A-Za-z0-9 _.-] become '_'; a name that would be empty, only
-		// dots, end in a dot or space, or be a reserved device name on Windows is changed so that it is a plain file.
-		std::string safe_file_stem(const std::string& name)
-		{
-			std::string stem;
-			for (char c : name)
-			{
-				const bool allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '_' || c == '.' || c == '-';
-				stem.push_back(allowed ? c : '_');
-			}
-			if (stem.size() > 100)
-			{
-				stem.resize(100);
-			}
-			while (!stem.empty() && (stem.back() == '.' || stem.back() == ' '))
-			{
-				stem.pop_back();
-			}
-			if (stem.empty() || stem.find_first_not_of('.') == std::string::npos)
-			{
-				return "material";
-			}
-
-			static const char* const reserved[] = { "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
-				"lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9" };
-			const std::string lowered = lower_text(stem.substr(0, stem.find('.')));
-			for (const char* word : reserved)
-			{
-				if (lowered == word)
-				{
-					return stem + "_";
-				}
-			}
-			return stem;
 		}
 
 		// Box around the whole model: each mesh's box through the world transform of its node.
@@ -172,10 +133,17 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "ModelImporter"; }
-			virtual u32 version() const override { return 5; } // 5: optional cooked physics shapes; 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
+			virtual u32 version() const override { return 9; } // 9: FBX skinned vertices are in model space (bind pose) and rigid meshes below a joint get an AnimationSocket; 8: skeletons, clips and skinned meshes are extracted to .wskel/.wanim/.wmesh files next to the model, once; 7: skeleton joints keep the nodes folded above them in Pre; 6: skeletons have names, parents and a rest pose, clips have events; 5: optional cooked physics shapes; 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
 			virtual bool imports_dependencies() const override { return true; }
-			// generatePhysicsShapes: also cook a convex hull and a triangle mesh shape of every mesh, for ConvexHull and Mesh colliders
-			virtual nlohmann::json default_settings() const override { return { { "generatePhysicsShapes", false } }; }
+			virtual bool editable() const override { return true; }
+			virtual std::vector<ImportOption> option_schema() const override
+			{
+				return {
+					ImportOption::make_float("scale", "Scale", 1.0, 0.001, 1000.0, "Scales the whole prefab (applied to its root nodes and its bounds). Use 0.01 for a model made in centimeters."),
+					ImportOption::make_bool("importAnimations", "Import animations", true, "Off ignores the animation clips of the file (none are extracted)."),
+					ImportOption::make_bool("generatePhysicsShapes", "Generate physics shapes", false, "Also cook a convex hull and a triangle mesh shape of every mesh, for ConvexHull and Mesh colliders."),
+				};
+			}
 			virtual std::vector<std::string> extensions() const override { return { ".gltf", ".glb", ".fbx" }; }
 
 			virtual bool import(ImportContext& ctx) override
@@ -188,6 +156,13 @@ namespace wiwa
 					WI_ASSET_LOG(Error, "{0}", error);
 					return false;
 				}
+
+				if (!ctx.settings().value("importAnimations", true))
+				{
+					model.Animations.clear();
+				}
+				finalize_model_skeletons(model);
+				merge_animation_events(model, ctx.settings());
 
 				for (const std::string& warning : model.Warnings)
 				{
@@ -357,45 +332,62 @@ namespace wiwa
 					}
 				}
 
-				// Skeletons and clips
-				std::vector<AssetRef> skeletonRefs(model.Skeletons.size());
-				for (size_t i = 0; i < model.Skeletons.size(); i++)
+				// Every primitive gets the material it uses (the files of skinned meshes carry them as their defaults)
+				for (ImportedMesh& mesh : model.Meshes)
 				{
-					skeletonRefs[i] = ctx.sub_asset("skeleton/" + std::to_string(i));
-					ctx.emit(skeletonRefs[i], model.Skeletons[i]);
+					for (size_t p = 0; p < mesh.Data.Primitives.size(); p++)
+					{
+						mesh.Data.Primitives[p].Material = materialRefs[mesh.PrimitiveMaterials[p]];
+					}
 				}
 
-				std::vector<AssetRef> clipRefs(model.Animations.size());
-				for (size_t i = 0; i < model.Animations.size(); i++)
+				// Skeletons, clips and skinned meshes become files of their own next to the model, once (model_extract.h); the sub-assets they
+				// used to be are redirected to them. Static meshes stay sub-assets of the model.
+				ExtractedAssets extracted;
+				std::string extractError;
+				if (!extract_animation_assets(ctx, model, extracted, extractError))
 				{
-					clipRefs[i] = ctx.sub_asset("animation/" + std::to_string(i));
-					ctx.emit(clipRefs[i], model.Animations[i]);
+					WI_ASSET_LOG(Error, "{0}: the animation assets could not be extracted: {1}", ctx.source().filename().string(), extractError);
+					return false;
 				}
 
 				// Meshes
 				std::vector<AssetRef> meshRefs(model.Meshes.size());
 				for (size_t i = 0; i < model.Meshes.size(); i++)
 				{
-					ImportedMesh& mesh = model.Meshes[i];
-					std::vector<AssetRef> dependencies;
-					for (size_t p = 0; p < mesh.Data.Primitives.size(); p++)
+					if (extracted.Meshes[i].valid())
 					{
-						const AssetRef material = materialRefs[mesh.PrimitiveMaterials[p]];
-						mesh.Data.Primitives[p].Material = material;
-						dependencies.push_back(material);
+						meshRefs[i] = extracted.Meshes[i];
+						continue;
 					}
 
+					ImportedMesh& mesh = model.Meshes[i];
+					std::vector<AssetRef> dependencies;
+					for (const MeshPrimitive& primitive : mesh.Data.Primitives)
+					{
+						dependencies.push_back(primitive.Material);
+					}
 					meshRefs[i] = ctx.sub_asset("mesh/" + std::to_string(i));
 					ctx.emit(meshRefs[i], mesh.Data, dependencies);
 				}
 
 				// Physics shapes: a convex hull and a triangle mesh of every mesh, at the mesh's local id plus a fixed offset
-				// (cooked_shape.h), so that a Collider that names the mesh names its shapes too.
+				// (cooked_shape.h), so that a Collider that names the mesh names its shapes too. A skinned mesh is a file of its own and has none.
 				if (ctx.settings().value("generatePhysicsShapes", false))
 				{
+					bool skippedSkinned = false;
 					for (size_t i = 0; i < model.Meshes.size(); i++)
 					{
+						if (extracted.Meshes[i].valid())
+						{
+							skippedSkinned = true;
+							continue;
+						}
 						cook_physics_shapes(ctx, model.Meshes[i].Data, meshRefs[i], i);
+					}
+					if (skippedSkinned)
+					{
+						ctx.warn("Skinned meshes get no physics shapes");
 					}
 				}
 				else
@@ -413,19 +405,39 @@ namespace wiwa
 					{
 						prefab.Nodes[i].Mesh = meshRefs[model.NodeMesh[i]];
 					}
-					if (model.NodeSkin[i] >= 0 && model.NodeSkin[i] < static_cast<int>(skeletonRefs.size()))
+					if (model.NodeSkin[i] >= 0 && model.NodeSkin[i] < static_cast<int>(extracted.Skeletons.size()))
 					{
-						prefab.Nodes[i].Skeleton = skeletonRefs[model.NodeSkin[i]];
+						prefab.Nodes[i].Skeleton = extracted.Skeletons[model.NodeSkin[i]];
 					}
 				}
+				add_attachment_sockets(model, prefab.Nodes);
 				assign_stable_ids(prefab.Nodes);
-				prefab.Animations = clipRefs;
+				for (const AssetRef& clip : extracted.Clips)
+				{
+					if (clip.valid())
+					{
+						prefab.Animations.push_back(clip);
+					}
+				}
 				compute_bounds(model, prefab.BoundsMin, prefab.BoundsMax);
+				if (const float modelScale = ctx.settings().value("scale", 1.0f); modelScale != 1.0f && modelScale > 0.0f)
+				{
+					for (PrefabNode& node : prefab.Nodes)
+					{
+						if (node.Parent < 0)
+						{
+							node.Scale *= modelScale;
+							node.Translation *= modelScale;
+						}
+					}
+					prefab.BoundsMin *= modelScale;
+					prefab.BoundsMax *= modelScale;
+				}
 
 				std::vector<AssetRef> prefabDependencies;
 				prefabDependencies.insert(prefabDependencies.end(), meshRefs.begin(), meshRefs.end());
-				prefabDependencies.insert(prefabDependencies.end(), skeletonRefs.begin(), skeletonRefs.end());
-				prefabDependencies.insert(prefabDependencies.end(), clipRefs.begin(), clipRefs.end());
+				prefabDependencies.insert(prefabDependencies.end(), extracted.Skeletons.begin(), extracted.Skeletons.end());
+				prefabDependencies.insert(prefabDependencies.end(), prefab.Animations.begin(), prefab.Animations.end());
 
 				ctx.emit(ctx.main_asset(), prefab, prefabDependencies);
 				return true;

@@ -42,6 +42,7 @@ namespace wiwa
 			case AssetType::PhysicsMaterial: return make_asset<PhysicsMaterialData>(payload);
 			case AssetType::PhysicsShape: return make_asset<CookedShapeData>(payload);
 			case AssetType::InputMap: return make_asset<InputMapData>(payload);
+			case AssetType::AnimationGraph: return make_asset<AnimationGraphData>(payload);
 			default: return nullptr;
 			}
 		}
@@ -122,9 +123,17 @@ namespace wiwa
 			return std::nullopt;
 		}
 
-		m_CatalogLoadedAt = now;
+		load_catalog_locked();
+		return m_Catalog.find(path);
+	}
+
+	// Reads the catalog of the source (m_CatalogMutex is held) and the redirects in it.
+	void AssetManager::load_catalog_locked() const
+	{
+		m_CatalogLoadedAt = std::chrono::steady_clock::now();
 		m_CatalogLoaded = true;
 		m_Catalog = AssetCatalog{};
+		m_Redirects.clear();
 		if (m_Source)
 		{
 			if (std::optional<std::vector<std::byte>> bytes = m_Source->read_catalog())
@@ -139,8 +148,39 @@ namespace wiwa
 				}
 			}
 		}
+		for (const AssetCatalog::Redirect& redirect : m_Catalog.Redirects)
+		{
+			m_Redirects[redirect.From] = redirect.To;
+		}
+	}
 
-		return m_Catalog.find(path);
+	AssetGuid AssetManager::redirected(AssetGuid guid) const
+	{
+		std::lock_guard<std::mutex> lock(m_CatalogMutex);
+		if (!m_CatalogLoaded)
+		{
+			load_catalog_locked();
+		}
+		const auto found = m_Redirects.find(guid);
+		return found == m_Redirects.end() ? guid : found->second;
+	}
+
+	std::vector<AssetGuid> AssetManager::refresh_catalog()
+	{
+		std::lock_guard<std::mutex> lock(m_CatalogMutex);
+		const std::unordered_map<AssetGuid, AssetGuid> before = m_Redirects;
+		load_catalog_locked();
+
+		std::vector<AssetGuid> changed;
+		for (const auto& [from, to] : m_Redirects)
+		{
+			const auto old = before.find(from);
+			if (old == before.end() || old->second != to)
+			{
+				changed.push_back(from);
+			}
+		}
+		return changed;
 	}
 
 	std::vector<AssetCatalog::Entry> AssetManager::catalog_entries()
@@ -152,6 +192,7 @@ namespace wiwa
 
 	LoadState AssetManager::get_state(AssetGuid resolvedGuid) const
 	{
+		resolvedGuid = redirected(resolvedGuid);
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		auto found = m_Cache.find(resolvedGuid);
 		return found == m_Cache.end() ? LoadState::Failed : found->second->State.load(std::memory_order_acquire);
@@ -364,6 +405,7 @@ namespace wiwa
 
 	Ref<AssetSlot> AssetManager::acquire_resolved(AssetGuid guid, AssetType expected, bool& created)
 	{
+		guid = redirected(guid); // an asset a model import moved into a file of its own is loaded from there
 		Ref<AssetSlot> slot;
 		created = false;
 

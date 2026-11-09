@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "ao_pass.h"
 
+#include "../view/view_state.h"
+
 #include <algorithm>
 
 #include "../engine_assets.h"
@@ -112,7 +114,7 @@ namespace wiwa
 		}
 	}
 
-	bool AoPass::create_binding_sets(ViewportTarget& viewport)
+	bool AoPass::create_binding_sets(ViewportTarget& viewport, ViewCache& c)
 	{
 		nvrhi::BindingSetDesc depth;
 		depth.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
@@ -129,26 +131,27 @@ namespace wiwa
 				depth.addItem(nvrhi::BindingSetItem::Texture_UAV(3 + level, m_UnusedLevels[level - viewport.ao_depth_levels()]));
 			}
 		}
-		m_DepthSet = m_Device->createBindingSet(depth, m_DepthLayout);
+		c.DepthSet = m_Device->createBindingSet(depth, m_DepthLayout);
 
 		nvrhi::BindingSetDesc ao;
 		ao.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
 		ao.addItem(nvrhi::BindingSetItem::Texture_SRV(1, viewport.ao_distance()));
 		ao.addItem(nvrhi::BindingSetItem::Texture_SRV(2, viewport.normal()));
 		ao.addItem(nvrhi::BindingSetItem::Texture_UAV(3, viewport.ao_raw()));
-		m_AoSet = m_Device->createBindingSet(ao, m_AoLayout);
+		c.AoSet = m_Device->createBindingSet(ao, m_AoLayout);
 
 		nvrhi::BindingSetDesc blur;
 		blur.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
 		blur.addItem(nvrhi::BindingSetItem::Texture_SRV(1, viewport.ao_distance()));
 		blur.addItem(nvrhi::BindingSetItem::Texture_SRV(2, viewport.ao_raw()));
 		blur.addItem(nvrhi::BindingSetItem::Texture_UAV(3, viewport.ao()));
-		m_BlurSet = m_Device->createBindingSet(blur, m_BlurLayout);
-		return m_DepthSet && m_AoSet && m_BlurSet;
+		c.BlurSet = m_Device->createBindingSet(blur, m_BlurLayout);
+		return c.DepthSet && c.AoSet && c.BlurSet;
 	}
 
 	void AoPass::render(nvrhi::ICommandList* commandList, const FrameDescription& frame)
 	{
+		ViewCache& c = m_PerView.get(frame.View->Target);
 		if (frame.Scene == nullptr || !frame.Scene->active() || m_Failed || !frame.Scene->ao_active())
 		{
 			return;
@@ -181,10 +184,9 @@ namespace wiwa
 			}
 		}
 
-		if (m_DepthSet == nullptr || viewport.generation() != m_BuiltViewportGeneration)
+		if (c.DepthSet == nullptr)
 		{
-			m_BuiltViewportGeneration = viewport.generation();
-			if (!create_binding_sets(viewport))
+			if (!create_binding_sets(viewport, c))
 			{
 				WI_AO_LOG(Error, "Could not create the AO bindings");
 				m_Failed = true;
@@ -208,19 +210,19 @@ namespace wiwa
 		// The distance of every pixel with its mips: one dispatch.
 		nvrhi::ComputeState depthState;
 		depthState.pipeline = m_DepthPipeline;
-		depthState.addBindingSet(m_DepthSet);
+		depthState.addBindingSet(c.DepthSet);
 		commandList->setComputeState(depthState);
 		commandList->dispatch((viewport.width() + DEPTH_GROUP_SIZE - 1) / DEPTH_GROUP_SIZE, (viewport.height() + DEPTH_GROUP_SIZE - 1) / DEPTH_GROUP_SIZE, 1);
 
 		nvrhi::ComputeState aoState;
 		aoState.pipeline = m_AoPipeline;
-		aoState.addBindingSet(m_AoSet);
+		aoState.addBindingSet(c.AoSet);
 		commandList->setComputeState(aoState);
 		commandList->dispatch(groupsX, groupsY, 1);
 
 		nvrhi::ComputeState blurState;
 		blurState.pipeline = m_BlurPipeline;
-		blurState.addBindingSet(m_BlurSet);
+		blurState.addBindingSet(c.BlurSet);
 		commandList->setComputeState(blurState);
 		commandList->dispatch(groupsX, groupsY, 1);
 	}

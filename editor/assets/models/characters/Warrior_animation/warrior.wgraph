@@ -1,0 +1,184 @@
+{
+	"version": 1,
+	"name": "warrior",
+	"skeleton": {
+		"guid": "d515a6d6d7942fde677ff51abce7095e"
+	},
+	"parameters": [
+		{
+			"name": "speed",
+			"type": "float",
+			"default": 0
+		},
+		{
+			"name": "upper",
+			"type": "float",
+			"default": 0
+		},
+		{
+			"name": "attack",
+			"type": "trigger",
+			"default": 0
+		}
+	],
+	"layers": [
+		{
+			"name": "Base",
+			"mode": "base",
+			"weight": 1,
+			"mask": {
+				"root": "",
+				"falloff": 0,
+				"joints": []
+			},
+			"machine": {
+				"default": "Idle",
+				"states": [
+					{
+						"name": "Idle",
+						"body": {
+							"clip": {
+								"guid": "98eef1680ff750bafa91f8c188ea62af"
+							}
+						},
+						"loop": true,
+						"speed": 1.0,
+						"position": [
+							0,
+							0
+						]
+					},
+					{
+						"name": "Move",
+						"body": {
+							"blend": {
+								"x": "speed",
+								"y": "",
+								"samples": [
+									{
+										"clip": {
+											"guid": "98eef1680ff750bafa91f8c188ea62af"
+										},
+										"x": 0,
+										"y": 0
+									},
+									{
+										"clip": {
+											"guid": "8f01ea877feebd1dcab2cf60d9f3aad7"
+										},
+										"x": 1,
+										"y": 0
+									},
+									{
+										"clip": {
+											"guid": "29b839c28e727dcd38a1f0ebaaf18926"
+										},
+										"x": 3,
+										"y": 0
+									}
+								]
+							}
+						},
+						"loop": true,
+						"speed": 1.0,
+						"position": [
+							220,
+							0
+						]
+					}
+				],
+				"transitions": [
+					{
+						"to": "Move",
+						"duration": 0.15,
+						"conditions": [
+							{
+								"parameter": "speed",
+								"op": ">",
+								"value": 0.1
+							}
+						],
+						"from": "Idle"
+					},
+					{
+						"to": "Idle",
+						"duration": 0.3,
+						"conditions": [
+							{
+								"parameter": "speed",
+								"op": "<=",
+								"value": 0.1
+							}
+						],
+						"from": "Move"
+					}
+				]
+			}
+		},
+		{
+			"name": "Upper",
+			"mode": "override",
+			"weight": 1,
+			"weightParameter": "upper",
+			"mask": {
+				"root": "Abdomen",
+				"falloff": 0,
+				"joints": []
+			},
+			"machine": {
+				"default": "None",
+				"states": [
+					{
+						"name": "None",
+						"body": {
+							"clip": {
+								"guid": "98eef1680ff750bafa91f8c188ea62af"
+							}
+						},
+						"loop": true,
+						"speed": 1.0,
+						"position": [
+							0,
+							0
+						]
+					},
+					{
+						"name": "Attack",
+						"body": {
+							"clip": {
+								"guid": "a57864557685d9cbd7060436333df9f3"
+							}
+						},
+						"loop": false,
+						"speed": 1.0,
+						"position": [
+							220,
+							0
+						]
+					}
+				],
+				"transitions": [
+					{
+						"to": "Attack",
+						"duration": 0.1,
+						"conditions": [
+							{
+								"parameter": "attack",
+								"op": "fired",
+								"value": 0
+							}
+						],
+						"from": "None"
+					},
+					{
+						"to": "None",
+						"duration": 0.2,
+						"conditions": [],
+						"from": "Attack",
+						"exitTime": 0.95
+					}
+				]
+			}
+		}
+	]
+}

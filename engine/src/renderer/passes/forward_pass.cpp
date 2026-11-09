@@ -39,18 +39,27 @@ namespace wiwa
 	{
 		const SceneRenderData& data = *frame.Scene;
 		const u32 shaderGeneration = m_Shaders->get_generation();
-		if (shaderGeneration == m_BuiltShaderGeneration && data.viewport()->generation() == m_BuiltViewportGeneration)
+		if (shaderGeneration == m_BuiltShaderGeneration)
 		{
 			return;
 		}
 		m_BuiltShaderGeneration = shaderGeneration;
-		m_BuiltViewportGeneration = data.viewport()->generation();
 
 		nvrhi::IShader* vertexShader = m_Shaders->get(engine_assets::FORWARD_SHADER, ShaderStage::Vertex);
 		nvrhi::IShader* pixelShader = m_Shaders->get(engine_assets::FORWARD_SHADER, ShaderStage::Pixel);
 		m_InputLayout = scene_pass::make_mesh_input_layout(m_Device, vertexShader);
 
-		const std::vector<nvrhi::IBindingLayout*> layouts = { data.frame_layout(), data.cache()->material_layout(), data.ao_layout() };
+		const std::vector<nvrhi::IBindingLayout*> layouts = { data.frame_layout(), data.cache()->material_layout(), data.ao_layout(), data.skin_layout() };
+
+		// materials with a surface shader: frame, material, AO, the surface set (t16..t21, s15) and skin (surface_forward.hlsl)
+		const std::vector<nvrhi::IBindingLayout*> surfaceLayouts = { data.frame_layout(), data.cache()->material_layout(), data.ao_layout(), data.cache()->custom_layout(), data.skin_layout() };
+		scene_pass::PipelineOptions surfaceOptions;
+		surfaceOptions.DepthTest = true;
+		surfaceOptions.DepthWrite = false;
+		m_Surface.configure(m_Device, surfaceLayouts, surfaceOptions);
+		surfaceOptions.Blend = true;
+		m_SurfaceBlend.configure(m_Device, surfaceLayouts, surfaceOptions);
+
 		for (int doubleSided = 0; doubleSided < 2; doubleSided++)
 		{
 			scene_pass::PipelineOptions options;
@@ -78,8 +87,10 @@ namespace wiwa
 		const SceneRenderData& data = *frame.Scene;
 		if (m_Stage == Stage::Opaque)
 		{
+			// A transparent background clears to nothing: alpha 0, so that coverage is what gets drawn.
 			const glm::vec3& background = data.settings().BackgroundColor;
-			commandList->clearTextureFloat(data.viewport()->hdr(), nvrhi::AllSubresources, nvrhi::Color(background.r, background.g, background.b, 1.0f));
+			const nvrhi::Color clear = data.transparent_background() ? nvrhi::Color(0.0f, 0.0f, 0.0f, 0.0f) : nvrhi::Color(background.r, background.g, background.b, 1.0f);
+			commandList->clearTextureFloat(data.viewport()->hdr(), nvrhi::AllSubresources, clear);
 		}
 
 		const bool nothing = m_Stage == Stage::Opaque ? (data.opaque().empty() && data.masked().empty()) : data.blended().empty();
@@ -96,14 +107,18 @@ namespace wiwa
 
 		nvrhi::IFramebuffer* framebuffer = data.viewport()->hdr_framebuffer();
 		const nvrhi::Viewport viewport(static_cast<float>(data.viewport()->width()), static_cast<float>(data.viewport()->height()));
+		scene_pass::SurfaceDraw surface;
+		surface.Pipelines = &m_Surface;
+		surface.AoBindings = data.ao_bindings();
 		if (m_Stage == Stage::Opaque)
 		{
-			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Pipelines[0], m_Pipelines[1], true, data.ao_bindings());
-			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Pipelines[0], m_Pipelines[1], true, data.ao_bindings());
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Pipelines[0], m_Pipelines[1], true, data.ao_bindings(), &surface);
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Pipelines[0], m_Pipelines[1], true, data.ao_bindings(), &surface);
 		}
 		else
 		{
-			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.blended(), m_BlendPipelines[0], m_BlendPipelines[1], true, data.ao_bindings());
+			surface.Pipelines = &m_SurfaceBlend;
+			scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.blended(), m_BlendPipelines[0], m_BlendPipelines[1], true, data.ao_bindings(), &surface);
 		}
 	}
 }

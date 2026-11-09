@@ -39,8 +39,8 @@ namespace
 	}
 }
 
-ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor, Ref<ViewOwner> owner)
-	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_Owner(std::move(owner)), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>()), m_GizmoSettings(wiwa::GizmoSettings::load())
+ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor, Ref<ViewOwner> owner, Ref<EditorSection> section)
+	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_Owner(std::move(owner)), m_Section(std::move(section)), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>())
 {
 }
 
@@ -202,7 +202,7 @@ void ViewportPanel::on_draw()
 			ImGui::PopStyleColor();
 			if (ImGui::BeginPopup("##gizmo_settings"))
 			{
-				wiwa::GizmoSettings& settings = m_GizmoSettings;
+				wiwa::GizmoSettings& settings = m_Section->gizmos_mutable();
 				bool changed = false;
 				changed |= ImGui::Checkbox("Transform handles of the selection", &settings.TransformHandles);
 				changed |= ImGui::Checkbox("Grid", &settings.Grid);
@@ -215,15 +215,14 @@ void ViewportPanel::on_draw()
 				changed |= ImGui::ColorEdit3("Outline color", &settings.Outline.Color.x, ImGuiColorEditFlags_NoInputs);
 				changed |= ImGui::SliderFloat("Outline width", &settings.Outline.WidthPx, 1.0f, 8.0f, "%.0f px");
 				changed |= ImGui::SliderFloat("Hidden part", &settings.Outline.OccludedAlpha, 0.0f, 1.0f, "%.2f");
-				m_GizmoSettingsChanged |= changed;
+				if (changed)
+				{
+					m_Section->touch();
+				}
 				ImGui::EndPopup();
 			}
-			if (m_GizmoSettingsChanged && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
-			{
-				m_GizmoSettings.save();
-				m_GizmoSettingsChanged = false;
-			}
-			render->set_outline_style(m_GizmoSettings.Outline);
+			m_Section->flush(ImGui::IsMouseDown(ImGuiMouseButton_Left));
+			render->set_outline_style(m_Section->gizmos().Outline);
 			if (!render->get_snapshot().HasCamera)
 			{
 				ImGui::SetCursorPos(ImVec2(8.0f, 50.0f));
@@ -263,7 +262,7 @@ void ViewportPanel::on_draw()
 				// The move / rotate / scale gizmo of the selected entity: ImGuizmo draws it and does the mouse math, on the entity's world matrix.
 				const entt::entity selected = m_Editor.selected();
 				entt::registry& registry = m_Editor.scene().registry();
-				if (m_GizmoSettings.TransformHandles && registry.valid(selected) && registry.all_of<wiwa::WorldTransform>(selected))
+				if (m_Section->gizmos().TransformHandles && registry.valid(selected) && registry.all_of<wiwa::WorldTransform>(selected))
 				{
 					ImGuizmo::SetOrthographic(false);
 					ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
@@ -288,7 +287,7 @@ void ViewportPanel::on_draw()
 				}
 			}
 
-			m_SceneGizmos.draw(render->get_debug_draw(), m_Editor.scene(), m_Editor.selected(), m_GizmoSettings, sceneView);
+			m_SceneGizmos.draw(render->get_debug_draw(), m_Editor.scene(), m_Editor.selected(), m_Section->gizmos(), sceneView);
 
 			if (clicked && !gizmoHasMouse)
 			{
@@ -305,4 +304,21 @@ void ViewportPanel::on_draw()
 	{
 		(void)render->take_pick_result(); // a click answered while the panel is hidden must not change the selection when it comes back
 	}
+}
+
+void ViewportPanel::focus_on(entt::entity entity)
+{
+	if (m_Editor.get_scene() == nullptr || !m_Editor.scene().registry().valid(entity))
+	{
+		return;
+	}
+	const wiwa::WorldTransform* world = m_Editor.scene().registry().try_get<wiwa::WorldTransform>(entity);
+	if (world == nullptr)
+	{
+		return;
+	}
+	const glm::vec3 position(world->Matrix[3]);
+	const float radius = std::max({ glm::length(glm::vec3(world->Matrix[0])), glm::length(glm::vec3(world->Matrix[1])), glm::length(glm::vec3(world->Matrix[2])), 0.5f });
+	m_Camera.focus_on(position, std::max(3.0f, radius * 3.0f));
+	m_UseEditorCamera = true;
 }

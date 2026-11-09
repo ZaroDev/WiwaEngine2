@@ -1,0 +1,18 @@
+// A surface shader for the render checks (engine/src/renderer/test/material_checks.cpp): Tint is the color the surface emits and Lift
+// moves the vertices up, so the pixels of a draw show which parameter bytes it read and that the vertex hook ran.
+struct MaterialParams
+{
+	float4 Tint; // color default(1,1,1,1)
+	float  Lift; // default(0)
+};
+
+void Surface(SurfaceInput i, MaterialParams p, inout SurfaceOutput o)
+{
+	o.Albedo = float3(0.0, 0.0, 0.0);
+	o.Emissive = p.Tint.rgb;
+}
+
+float3 VertexOffset(VertexInput v, MaterialParams p)
+{
+	return float3(0.0, p.Lift, 0.0);
+}

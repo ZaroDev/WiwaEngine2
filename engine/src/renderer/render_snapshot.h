@@ -7,6 +7,8 @@
 
 #include <math/math.h>
 
+#include "view/view_types.h"
+
 namespace wiwa
 {
 	// What the render thread tells the main thread, for the UI. Plain data, copied on every read.
@@ -36,6 +38,7 @@ namespace wiwa
 		std::string UploadQueueName{}; // "copy queue" or "graphics queue"
 		u64 UploadBytesTotal = 0;
 		double UploadMs = 0.0; // the CPU time of the latest frame that uploaded something
+		std::vector<ViewId> FailedViews{}; // the offscreen views that could not make their target
 	};
 
 	// The render thread publishes, the main thread reads: whoever reads gets the latest complete snapshot.
