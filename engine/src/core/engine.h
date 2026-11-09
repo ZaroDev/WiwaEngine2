@@ -47,6 +47,9 @@ namespace wiwa {
 		void set_project(ProjectSettings project) { m_Project = sanitized(std::move(project)); }
 		// True when they came from the pack: only then does a game take its window and launch values from them (the editor owns its window).
 		bool project_from_pak() const { return m_ProjectFromPak; }
+		// Asked by the editor before init(): the window it owns opens maximized. A game's window always comes from its project.
+		void set_start_maximized(bool maximized) { m_StartMaximized = maximized; }
+		bool start_maximized() const { return m_StartMaximized; }
 	protected:
 		virtual void on_init() {};
 		virtual void on_update(float deltaTime) {};
@@ -63,6 +66,7 @@ namespace wiwa {
 		std::vector<std::string> m_Arguments{};
 		ProjectSettings m_Project{};
 		bool m_ProjectFromPak = false;
+		bool m_StartMaximized = false;
 		bool m_Running = true;
 		int m_ExitCode = 0;
 	};

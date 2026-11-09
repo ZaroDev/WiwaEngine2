@@ -236,7 +236,7 @@ void EditorModule::init()
 	browserPanel->set_find_references([this](const wiwa::AssetRef& ref) { find_references(ref); });
 	m_BuildSettings = CreateScope<BuildSettingsPanel>(wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 
-	m_Layout.init("layouts");
+	m_Layout.init("layouts", m_Panels);
 	load_recent_scenes();
 	register_shortcuts();
 	set_theme();

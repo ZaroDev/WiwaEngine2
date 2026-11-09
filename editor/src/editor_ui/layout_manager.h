@@ -15,7 +15,9 @@ class LayoutManager
 {
 public:
 	// folder holds the user layouts (one <name>.ini each). The first run (no imgui.ini yet) starts with the Default preset.
-	void init(const std::filesystem::path& folder);
+	// panels: whose open flags go into the ini text (imgui.ini and the saved layouts) as a [PanelState][Panels] section, so the editor opens
+	// with the panels it was left with. Panels outside the menus (PanelCategory::None) are not kept. The vector must outlive the layout manager.
+	void init(const std::filesystem::path& folder, std::vector<Ref<Panel>>& panels);
 
 	static const std::vector<std::string>& builtin_names();
 	std::vector<std::string> user_names() const;
@@ -45,6 +47,7 @@ private:
 	// reapply: put the layout back as it was when the panel was maximized (at the start of the next frame)
 	void restore_maximized(bool reapply);
 
+	std::vector<Ref<Panel>>* m_Panels = nullptr;
 	std::filesystem::path m_Folder{};
 	std::string m_PendingBuiltin{};
 	std::string m_PendingUserText{};

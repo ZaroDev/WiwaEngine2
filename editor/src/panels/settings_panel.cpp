@@ -519,6 +519,7 @@ void SettingsPanel::editor_rows()
 				}
 			});
 	};
+	toggle("Start maximized", g.StartMaximized, defaults.StartMaximized);
 	toggle("Transform handles of the selection", g.TransformHandles, defaults.TransformHandles);
 	toggle("Grid", g.Grid, defaults.Grid);
 	toggle("World axes", g.Axes, defaults.Axes);

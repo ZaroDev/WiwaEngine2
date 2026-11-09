@@ -91,8 +91,63 @@ namespace
 	}
 }
 
-void LayoutManager::init(const std::filesystem::path& folder)
+namespace
 {
+	bool persists_open_state(const Panel& panel)
+	{
+		return panel.get_category() != PanelCategory::None;
+	}
+
+	Panel* find_panel(std::vector<Ref<Panel>>& panels, const char* windowName)
+	{
+		for (const Ref<Panel>& panel : panels)
+		{
+			if (persists_open_state(*panel) && std::strcmp(panel->window_name(), windowName) == 0)
+			{
+				return panel.get();
+			}
+		}
+		return nullptr;
+	}
+}
+
+void LayoutManager::init(const std::filesystem::path& folder, std::vector<Ref<Panel>>& panels)
+{
+	m_Panels = &panels;
+	// Panel open flags ride in the same ini text as the dock layout. Entries ("<window>=0|1") are read into the panel of that name; a panel with
+	// no entry (an older ini) keeps its default.
+	ImGuiSettingsHandler handler;
+	handler.TypeName = "PanelState";
+	handler.TypeHash = ImHashStr("PanelState");
+	handler.UserData = this;
+	handler.ReadOpenFn = [](ImGuiContext*, ImGuiSettingsHandler*, const char* name) -> void* { return std::strcmp(name, "Panels") == 0 ? reinterpret_cast<void*>(1) : nullptr; };
+	handler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler* self, void*, const char* line)
+	{
+		const char* equals = std::strrchr(line, '=');
+		if (equals == nullptr || (equals[1] != '0' && equals[1] != '1'))
+		{
+			return;
+		}
+		const std::string name(line, equals);
+		if (Panel* panel = find_panel(*static_cast<LayoutManager*>(self->UserData)->m_Panels, name.c_str()))
+		{
+			panel->set_open(equals[1] == '1');
+		}
+	};
+	handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* self, ImGuiTextBuffer* out)
+	{
+		out->appendf("[%s][Panels]\n", self->TypeName);
+		for (const Ref<Panel>& panel : *static_cast<LayoutManager*>(self->UserData)->m_Panels)
+		{
+			if (persists_open_state(*panel))
+			{
+				out->appendf("%s=%d\n", panel->window_name(), panel->is_active() ? 1 : 0);
+			}
+		}
+		out->append("\n");
+	};
+	ImGui::AddSettingsHandler(&handler);
+
 	m_Folder = folder;
 	std::error_code error;
 	std::filesystem::create_directories(m_Folder, error);

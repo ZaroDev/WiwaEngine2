@@ -4,6 +4,7 @@
 #include <core/engine.h>
 
 #include "editor_module.h"
+#include "gizmo/gizmo_settings.h"
 #include "asset_pipeline/asset_pipeline_module.h"
 #include "asset_pipeline/builtin_importers.h"
 #include "asset_pipeline/asset_smoke_test.h"
@@ -37,7 +38,10 @@ public:
 		{
 			m_Args.emplace_back(argv[i]);
 		}
-		
+
+		// Command-line runs (smokes, --pack) keep the plain window; an interactive start follows the "Start maximized" setting.
+		const bool interactive = std::none_of(m_Args.begin(), m_Args.end(), [](const std::string& arg) { return arg.rfind("--", 0) == 0; });
+		set_start_maximized(interactive && wiwa::GizmoSettings::load().StartMaximized);
 	}
 
 	

@@ -60,6 +60,11 @@ namespace wiwa
 		// Borderless is a window the size of the screen with no frame; only fullscreen takes the monitor over.
 		m_Window = glfwCreateWindow(width, height, windowTitle.c_str(), project.Mode == WindowMode::Fullscreen && fromProject ? monitor : nullptr, nullptr);
 
+		if (!fromProject && engine.start_maximized())
+		{
+			glfwMaximizeWindow(m_Window);
+		}
+
 		glfwSetWindowCloseCallback(m_Window, [](GLFWwindow* window)
 			{
 				Engine::get().request_quit();
