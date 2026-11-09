@@ -244,14 +244,17 @@ namespace wiwa
 			const bool known = found != m_Instances.end();
 			SentInstance& sent = known ? found->second : m_Instances[id.Guid];
 			sent.Seen = pass;
-			if (!known || !same_matrix(sent.World, matrix) || sent.Mesh != renderer.Mesh || sent.Materials != renderer.Materials || sent.Padding != padding)
+			if (!known || !same_matrix(sent.World, matrix) || sent.Mesh != renderer.Mesh || sent.Materials != renderer.Materials || sent.Padding != padding
+				|| sent.ReceivesDecals != renderer.ReceivesDecals)
 			{
 				sent.World = matrix;
 				sent.Mesh = renderer.Mesh;
 				sent.Materials = renderer.Materials;
 				sent.Padding = padding;
+				sent.ReceivesDecals = renderer.ReceivesDecals;
 
 				RenderInstance instance;
+				instance.ReceivesDecals = renderer.ReceivesDecals;
 				instance.World = matrix;
 				instance.Mesh = renderer.Mesh;
 				instance.Materials = renderer.Materials;

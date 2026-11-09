@@ -492,6 +492,7 @@ namespace wiwa
 					item.IndexCount = primitive.IndexCount;
 					item.BaseVertex = primitive.BaseVertex;
 					item.DoubleSided = (record.Flags & MATERIAL_DOUBLE_SIDED_BIT) != 0;
+					item.ReceivesDecals = instance.ReceivesDecals;
 
 					if (record.Flags & MATERIAL_ALPHA_BLEND_BIT)
 					{

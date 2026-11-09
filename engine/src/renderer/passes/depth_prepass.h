@@ -31,6 +31,12 @@ namespace wiwa
 		nvrhi::GraphicsPipelineHandle m_Opaque[2]{}; // [double sided]
 		nvrhi::GraphicsPipelineHandle m_Masked[2]{};
 		scene_pass::SurfacePipelines m_Surface{}; // materials with a surface shader (the Depth and DepthMasked variants)
+		// The same for meshes that do not receive decals: they also write DECAL_STENCIL_BIT to the stencil, which the decal pass reads.
+		nvrhi::GraphicsPipelineHandle m_OpaqueNoDecals[2]{};
+		nvrhi::GraphicsPipelineHandle m_MaskedNoDecals[2]{};
+		scene_pass::SurfacePipelines m_SurfaceNoDecals{};
+		// Bit 2 of the stencil (value 4): the selection outline owns bits 0 and 1 (value 3) and runs later.
+		static constexpr u8 DECAL_STENCIL_BIT = 4;
 		u32 m_BuiltShaderGeneration = ~0u;
 	};
 }

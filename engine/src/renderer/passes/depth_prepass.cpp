@@ -70,6 +70,10 @@ namespace wiwa
 		surfaceOptions.DepthTest = true;
 		surfaceOptions.DepthWrite = true;
 		m_Surface.configure(m_Device, { data.frame_layout(), data.cache()->material_layout(), data.ao_layout(), data.cache()->custom_layout(), data.skin_layout() }, surfaceOptions);
+		surfaceOptions.StencilWrite = true;
+		surfaceOptions.StencilRef = DECAL_STENCIL_BIT;
+		surfaceOptions.StencilMask = DECAL_STENCIL_BIT;
+		m_SurfaceNoDecals.configure(m_Device, { data.frame_layout(), data.cache()->material_layout(), data.ao_layout(), data.cache()->custom_layout(), data.skin_layout() }, surfaceOptions);
 
 		for (int doubleSided = 0; doubleSided < 2; doubleSided++)
 		{
@@ -79,7 +83,12 @@ namespace wiwa
 			options.DepthWrite = true;
 			m_Opaque[doubleSided] = scene_pass::make_pipeline(m_Device, m_OpaqueInputLayout, opaqueVertex, opaquePixel, opaqueLayouts, framebuffer, options);
 			m_Masked[doubleSided] = scene_pass::make_pipeline(m_Device, m_MaskedInputLayout, maskedVertex, maskedPixel, maskedLayouts, framebuffer, options);
-			if (m_Opaque[doubleSided] == nullptr || m_Masked[doubleSided] == nullptr)
+			options.StencilWrite = true;
+			options.StencilRef = DECAL_STENCIL_BIT;
+			options.StencilMask = DECAL_STENCIL_BIT;
+			m_OpaqueNoDecals[doubleSided] = scene_pass::make_pipeline(m_Device, m_OpaqueInputLayout, opaqueVertex, opaquePixel, opaqueLayouts, framebuffer, options);
+			m_MaskedNoDecals[doubleSided] = scene_pass::make_pipeline(m_Device, m_MaskedInputLayout, maskedVertex, maskedPixel, maskedLayouts, framebuffer, options);
+			if (m_Opaque[doubleSided] == nullptr || m_Masked[doubleSided] == nullptr || m_OpaqueNoDecals[doubleSided] == nullptr || m_MaskedNoDecals[doubleSided] == nullptr)
 			{
 				WI_DEPTH_LOG(Error, "Could not create the depth prepass pipelines");
 				m_Failed = true;
@@ -118,7 +127,13 @@ namespace wiwa
 		surface.Kind = SurfaceVariantKind::Depth;
 		surface.MaskedKind = SurfaceVariantKind::DepthMasked;
 		surface.AoBindings = data.ao_bindings();
-		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Opaque[0], m_Opaque[1], false, nullptr, &surface);
-		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Masked[0], m_Masked[1], true, nullptr, &surface);
+		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_Opaque[0], m_Opaque[1], false, nullptr, &surface, scene_pass::DecalFilter::Receivers);
+		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_Masked[0], m_Masked[1], true, nullptr, &surface, scene_pass::DecalFilter::Receivers);
+
+		// Meshes that opt out of decals mark their pixels in the stencil (the decal pass skips them).
+		scene_pass::SurfaceDraw surfaceNoDecals = surface;
+		surfaceNoDecals.Pipelines = &m_SurfaceNoDecals;
+		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.opaque(), m_OpaqueNoDecals[0], m_OpaqueNoDecals[1], false, nullptr, &surfaceNoDecals, scene_pass::DecalFilter::NonReceivers);
+		scene_pass::draw_items(commandList, data, framebuffer, viewport, data.frame_bindings(), data.masked(), m_MaskedNoDecals[0], m_MaskedNoDecals[1], true, nullptr, &surfaceNoDecals, scene_pass::DecalFilter::NonReceivers);
 	}
 }

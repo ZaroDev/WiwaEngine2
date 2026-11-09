@@ -27,6 +27,7 @@ namespace wiwa
 		std::vector<glm::vec4> Palette{};
 		std::vector<glm::vec4> PrevPalette{};
 		float BoundsPadding = 0.0f; // the mesh bounds grow by this much in every direction when the instance is culled (a pose reaches past them)
+		bool ReceivesDecals = true;
 		AssetRef Mesh{};
 		std::vector<AssetRef> Materials{}; // overrides per primitive; empty means the mesh's own materials
 	};

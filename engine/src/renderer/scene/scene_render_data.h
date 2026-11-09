@@ -58,6 +58,7 @@ namespace wiwa
 		u32 IndexCount = 0;
 		i32 BaseVertex = 0;
 		bool DoubleSided = false;
+		bool ReceivesDecals = true; // false: the depth prepass marks its pixels in the stencil and the decals leave them alone
 		float Depth = 0.0f; // view-space distance of the primitive's bounds center (for sorting blended draws)
 	};
 

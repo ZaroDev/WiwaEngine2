@@ -67,9 +67,17 @@ namespace wiwa::scene_pass
 		bool Caster = false;                                         // shadow casters: the push constants carry matrix | (material slot << 3)
 	};
 
+	// Which items draw_items takes by DrawItem::ReceivesDecals (the depth prepass draws the two kinds with different stencil state).
+	enum class DecalFilter
+	{
+		All,
+		Receivers,
+		NonReceivers,
+	};
+
 	// Draws the items: one indexed draw each, with the state set again only when the pipeline, the mesh page or (with bindMaterial)
 	// the material changes. extraBindings, if given, is the set after the material's; the skin set of the page comes last. singleSided / doubleSided are the pipelines for the two cull modes; frameBindings is set 0.
 	void draw_items(nvrhi::ICommandList* commandList, const SceneRenderData& data, nvrhi::IFramebuffer* framebuffer, const nvrhi::Viewport& viewport,
 		nvrhi::IBindingSet* frameBindings, const std::vector<DrawItem>& items, nvrhi::IGraphicsPipeline* singleSided, nvrhi::IGraphicsPipeline* doubleSided,
-		bool bindMaterial, nvrhi::IBindingSet* extraBindings = nullptr, const SurfaceDraw* surface = nullptr);
+		bool bindMaterial, nvrhi::IBindingSet* extraBindings = nullptr, const SurfaceDraw* surface = nullptr, DecalFilter filter = DecalFilter::All);
 }

@@ -187,6 +187,42 @@ namespace wiwa
 				context.check(same_pixel(on_plane(test, 0.0f, 0.0f), before), "a surface turned away from the projection does not get the decal");
 			});
 
+		register_render_check("decal_receives_opt_out", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				test.set_camera(glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f));
+				test.add_light(test.sun(glm::vec3(0.0f, -0.3f, -1.0f), 2.0f));
+				const AssetRef grey = test.add_material(test.color_material(glm::vec3(0.3f)));
+				const AssetRef plate = test.add_mesh(make_test_box(glm::vec3(0.7f, 1.5f, 0.05f), grey));
+				test.add_instance(plate, glm::translate(glm::mat4(1.0f), glm::vec3(-0.8f, 0.0f, 0.0f)));
+				const EntityGuid right = test.add_instance(plate, glm::translate(glm::mat4(1.0f), glm::vec3(0.8f, 0.0f, 0.0f)));
+				context.check(test.render(), "render without a decal");
+				const glm::ivec3 leftBefore = on_plane(test, -0.8f, 0.0f);
+				const glm::ivec3 rightBefore = on_plane(test, 0.8f, 0.0f);
+
+				test.add_decal(make_decal(color_decal(test, glm::vec3(1.0f, 0.0f, 0.0f)), glm::vec3(3.0f, 1.0f, 2.0f)));
+				context.check(test.render(), "render with a decal over both plates");
+				const glm::ivec3 left = on_plane(test, -0.8f, 0.0f);
+				context.check(left.r > leftBefore.r + 20 && left.r > left.g * 2, "the plate that receives decals turns red");
+				context.check(on_plane(test, 0.8f, 0.0f).r > rightBefore.r + 20, "so does the other one while it receives decals too");
+
+				// the right plate stops receiving decals
+				const std::optional<size_t> slot = test.scene().find_instance(right);
+				context.check(slot.has_value(), "the right plate is in the scene");
+				if (slot)
+				{
+					RenderInstance copy = test.scene().instances()[*slot];
+					copy.ReceivesDecals = false;
+					SceneDelta delta;
+					delta.InstanceUpserts.emplace_back(right, std::move(copy));
+					test.scene().apply(std::move(delta));
+				}
+				context.check(test.render(), "render with the right plate opted out");
+				context.check(same_pixel(on_plane(test, 0.8f, 0.0f), rightBefore), "the plate that does not receive decals is as it was");
+				const glm::ivec3 leftAgain = on_plane(test, -0.8f, 0.0f);
+				context.check(leftAgain.r > leftBefore.r + 20, "and the other plate still gets the decal");
+			});
+
 		register_render_check("decal_cap", [](RenderCheckContext& context)
 			{
 				SceneTester test(context);

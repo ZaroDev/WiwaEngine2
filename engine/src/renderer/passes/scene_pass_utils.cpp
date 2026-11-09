@@ -118,7 +118,7 @@ namespace wiwa::scene_pass
 
 	void draw_items(nvrhi::ICommandList* commandList, const SceneRenderData& data, nvrhi::IFramebuffer* framebuffer, const nvrhi::Viewport& viewport,
 		nvrhi::IBindingSet* frameBindings, const std::vector<DrawItem>& items, nvrhi::IGraphicsPipeline* singleSided, nvrhi::IGraphicsPipeline* doubleSided,
-		bool bindMaterial, nvrhi::IBindingSet* extraBindings, const SurfaceDraw* surface)
+		bool bindMaterial, nvrhi::IBindingSet* extraBindings, const SurfaceDraw* surface, DecalFilter filter)
 	{
 		if (items.empty() || frameBindings == nullptr)
 		{
@@ -140,6 +140,11 @@ namespace wiwa::scene_pass
 
 		for (const DrawItem& item : items)
 		{
+			if ((filter == DecalFilter::Receivers && !item.ReceivesDecals) || (filter == DecalFilter::NonReceivers && item.ReceivesDecals))
+			{
+				continue;
+			}
+
 			// a material with a surface shader draws with the shader's variant, else (or when that cannot be made) as built-in
 			nvrhi::IGraphicsPipeline* pipeline = nullptr;
 			bool custom = false;
