@@ -1,0 +1,1874 @@
+{
+  "version": 1,
+  "referenceResolution": [
+    1920,
+    1080
+  ],
+  "match": 0.5,
+  "nextId": 78,
+  "widgets": [
+    {
+      "id": 2,
+      "kind": "Panel",
+      "Name": "Options",
+      "Color": [
+        0,
+        0,
+        0,
+        0.3
+      ],
+      "Visible": true,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 3,
+      "kind": "VStack",
+      "Name": "Box",
+      "parent": 2,
+      "AnchorMin": [
+        1,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        -760,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.92
+      ],
+      "Spacing": 12,
+      "Padding": [
+        48,
+        40,
+        48,
+        32
+      ]
+    },
+    {
+      "id": 4,
+      "kind": "Text",
+      "Name": "Title",
+      "parent": 3,
+      "OffsetMax": [
+        664,
+        70
+      ],
+      "Text": "Options",
+      "Font": {
+        "guid": "9a864d5349d63ea8c2fbb4fad1646e13",
+        "localId": 0
+      },
+      "FontSize": 56,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 5,
+      "kind": "HStack",
+      "Name": "Tabs",
+      "parent": 3,
+      "OffsetMax": [
+        664,
+        48
+      ],
+      "Spacing": 8,
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 6,
+      "kind": "Button",
+      "Name": "Graphics",
+      "parent": 5,
+      "OffsetMax": [
+        170,
+        44
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.14
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.3
+      ]
+    },
+    {
+      "id": 7,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 6,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        8
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Graphics",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 26,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 8,
+      "kind": "Button",
+      "Name": "Controls",
+      "parent": 5,
+      "OffsetMax": [
+        170,
+        44
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.14
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.3
+      ]
+    },
+    {
+      "id": 9,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 8,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        8
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Controls",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 26,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 10,
+      "kind": "Button",
+      "Name": "Game",
+      "parent": 5,
+      "OffsetMax": [
+        170,
+        44
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.14
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.3
+      ]
+    },
+    {
+      "id": 11,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 10,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        8
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Game",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 26,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 12,
+      "kind": "Panel",
+      "Name": "Divider",
+      "parent": 3,
+      "OffsetMax": [
+        664,
+        2
+      ],
+      "Color": [
+        0.66,
+        0.6,
+        0.74,
+        0.5
+      ]
+    },
+    {
+      "id": 13,
+      "kind": "VStack",
+      "Name": "GraphicsTab",
+      "parent": 3,
+      "OffsetMax": [
+        664,
+        560
+      ],
+      "Spacing": 8,
+      "Visible": true,
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 14,
+      "kind": "HStack",
+      "Name": "Vsync",
+      "parent": 13,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 15,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 14,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Vertical sync",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 16,
+      "kind": "Toggle",
+      "Name": "Control",
+      "parent": 14,
+      "OffsetMax": [
+        60,
+        34
+      ],
+      "Value": 0.0,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 17,
+      "kind": "HStack",
+      "Name": "Shadows",
+      "parent": 13,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 18,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 17,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Shadow distance",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 19,
+      "kind": "Slider",
+      "Name": "Control",
+      "parent": 17,
+      "OffsetMax": [
+        300,
+        28
+      ],
+      "MinValue": 20,
+      "MaxValue": 150,
+      "Step": 10,
+      "Value": 60,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 20,
+      "kind": "HStack",
+      "Name": "Bloom",
+      "parent": 13,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 21,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 20,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Bloom",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 22,
+      "kind": "Toggle",
+      "Name": "Control",
+      "parent": 20,
+      "OffsetMax": [
+        60,
+        34
+      ],
+      "Value": 0.0,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 23,
+      "kind": "HStack",
+      "Name": "Ao",
+      "parent": 13,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 24,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 23,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Ambient occlusion",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 25,
+      "kind": "Toggle",
+      "Name": "Control",
+      "parent": 23,
+      "OffsetMax": [
+        60,
+        34
+      ],
+      "Value": 0.0,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 26,
+      "kind": "HStack",
+      "Name": "MotionBlur",
+      "parent": 13,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 27,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 26,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Motion blur",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 28,
+      "kind": "Toggle",
+      "Name": "Control",
+      "parent": 26,
+      "OffsetMax": [
+        60,
+        34
+      ],
+      "Value": 0.0,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 29,
+      "kind": "HStack",
+      "Name": "AntiAliasing",
+      "parent": 13,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 30,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 29,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Anti-aliasing",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 31,
+      "kind": "Button",
+      "Name": "Control",
+      "parent": 29,
+      "OffsetMax": [
+        250,
+        40
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.1
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.3
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.5
+      ]
+    },
+    {
+      "id": 32,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 31,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        8
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Off",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 20,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 33,
+      "kind": "HStack",
+      "Name": "Fov",
+      "parent": 13,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 34,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 33,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Field of view",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 35,
+      "kind": "Slider",
+      "Name": "Control",
+      "parent": 33,
+      "OffsetMax": [
+        300,
+        28
+      ],
+      "MinValue": 50,
+      "MaxValue": 90,
+      "Step": 1,
+      "Value": 60,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 36,
+      "kind": "VStack",
+      "Name": "ControlsTab",
+      "parent": 3,
+      "OffsetMax": [
+        664,
+        560
+      ],
+      "Spacing": 8,
+      "Visible": false,
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 37,
+      "kind": "HStack",
+      "Name": "Jump",
+      "parent": 36,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 38,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 37,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Jump",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 39,
+      "kind": "Button",
+      "Name": "Control",
+      "parent": 37,
+      "OffsetMax": [
+        250,
+        40
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.1
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.3
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.5
+      ]
+    },
+    {
+      "id": 40,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 39,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        8
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "-",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 20,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 41,
+      "kind": "HStack",
+      "Name": "Fire",
+      "parent": 36,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 42,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 41,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Fire",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 43,
+      "kind": "Button",
+      "Name": "Control",
+      "parent": 41,
+      "OffsetMax": [
+        250,
+        40
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.1
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.3
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.5
+      ]
+    },
+    {
+      "id": 44,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 43,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        8
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "-",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 20,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 45,
+      "kind": "HStack",
+      "Name": "Melee",
+      "parent": 36,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 46,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 45,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Melee",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 47,
+      "kind": "Button",
+      "Name": "Control",
+      "parent": 45,
+      "OffsetMax": [
+        250,
+        40
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.1
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.3
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.5
+      ]
+    },
+    {
+      "id": 48,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 47,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        8
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "-",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 20,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 49,
+      "kind": "HStack",
+      "Name": "Pause",
+      "parent": 36,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 50,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 49,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Pause",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 51,
+      "kind": "Button",
+      "Name": "Control",
+      "parent": 49,
+      "OffsetMax": [
+        250,
+        40
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.1
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.3
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.5
+      ]
+    },
+    {
+      "id": 52,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 51,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        8
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "-",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 20,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 53,
+      "kind": "HStack",
+      "Name": "Sensitivity",
+      "parent": 36,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 54,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 53,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Mouse sensitivity",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 55,
+      "kind": "Slider",
+      "Name": "Control",
+      "parent": 53,
+      "OffsetMax": [
+        300,
+        28
+      ],
+      "MinValue": 0.2,
+      "MaxValue": 3,
+      "Step": 0.1,
+      "Value": 1,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 56,
+      "kind": "HStack",
+      "Name": "InvertY",
+      "parent": 36,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 57,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 56,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Invert Y",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 58,
+      "kind": "Toggle",
+      "Name": "Control",
+      "parent": 56,
+      "OffsetMax": [
+        60,
+        34
+      ],
+      "Value": 0.0,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 59,
+      "kind": "HStack",
+      "Name": "Reset",
+      "parent": 36,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 60,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 59,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Controls",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 61,
+      "kind": "Button",
+      "Name": "Control",
+      "parent": 59,
+      "OffsetMax": [
+        250,
+        40
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.1
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.3
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.5
+      ]
+    },
+    {
+      "id": 62,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 61,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        8
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Reset to defaults",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 20,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 63,
+      "kind": "Text",
+      "Name": "Note",
+      "parent": 36,
+      "OffsetMax": [
+        640,
+        28
+      ],
+      "Text": "",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 18,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 64,
+      "kind": "VStack",
+      "Name": "GameTab",
+      "parent": 3,
+      "OffsetMax": [
+        664,
+        560
+      ],
+      "Spacing": 8,
+      "Visible": false,
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 65,
+      "kind": "HStack",
+      "Name": "Difficulty",
+      "parent": 64,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 66,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 65,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Difficulty",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 67,
+      "kind": "Button",
+      "Name": "Control",
+      "parent": 65,
+      "OffsetMax": [
+        250,
+        40
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.1
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.3
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.5
+      ]
+    },
+    {
+      "id": 68,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 67,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        8
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Normal",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 20,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 69,
+      "kind": "HStack",
+      "Name": "CameraDistance",
+      "parent": 64,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 70,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 69,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Camera distance",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 71,
+      "kind": "Slider",
+      "Name": "Control",
+      "parent": 69,
+      "OffsetMax": [
+        300,
+        28
+      ],
+      "MinValue": 3,
+      "MaxValue": 9,
+      "Step": 0.5,
+      "Value": 5.5,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 72,
+      "kind": "HStack",
+      "Name": "Hints",
+      "parent": 64,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Spacing": 12,
+      "Padding": [
+        14,
+        6,
+        14,
+        6
+      ],
+      "Color": [
+        1,
+        1,
+        1,
+        0.05
+      ]
+    },
+    {
+      "id": 73,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 72,
+      "OffsetMax": [
+        290,
+        40
+      ],
+      "Text": "Objective hints",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 74,
+      "kind": "Toggle",
+      "Name": "Control",
+      "parent": 72,
+      "OffsetMax": [
+        60,
+        34
+      ],
+      "Value": 0.0,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 75,
+      "kind": "Button",
+      "Name": "Back",
+      "parent": 3,
+      "OffsetMax": [
+        664,
+        52
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 76,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 75,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 77,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 75,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        10
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Back",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    }
+  ]
+}

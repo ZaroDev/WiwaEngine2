@@ -11,5 +11,5 @@
   "aoSlices": 2,
   "aoSteps": 8,
   "fxaa": false,
-  "taa": false
+  "taa": true
 }

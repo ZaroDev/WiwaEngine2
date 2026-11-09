@@ -1,0 +1,1215 @@
+{
+  "name": "Boss arena",
+  "settings": {
+    "source": "file",
+    "environment": {
+      "guid": "22b9ea5527874a7e50f0de24b422dfae",
+      "localId": 0
+    },
+    "background": "sky",
+    "ambient": 0.35,
+    "rotation": 120,
+    "scripts": [],
+    "exposure": {
+      "auto": true,
+      "compensation": -0.3,
+      "minEv": -3,
+      "maxEv": 3,
+      "adaptSpeed": 2
+    },
+    "bloom": {
+      "enabled": true,
+      "threshold": 0.9,
+      "knee": 0.5,
+      "intensity": 0.2
+    },
+    "tonemap": {
+      "operator": "aces",
+      "contrast": 1.08,
+      "saturation": 1.15,
+      "temperature": 0.25,
+      "vignette": 0.45
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1.2,
+      "power": 1.6
+    },
+    "motionBlur": {
+      "enabled": false
+    }
+  },
+  "entities": [
+    {
+      "id": "33d375420af4d55cc0641a03d4366604",
+      "components": {
+        "Name": {
+          "Value": "Arena"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "35ecce4b1859a7038c25e1b3d989eadb",
+      "components": {
+        "Name": {
+          "Value": "Arena ground"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            -80
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            40,
+            1,
+            40
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 7
+          },
+          "Materials": [
+            {
+              "guid": "b8d71ec809d30fe6760ab3d9f52eeed4",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "6fdac6b2013df01ca9f1b61c0cfea4e4",
+      "components": {
+        "Name": {
+          "Value": "Arena ground collider"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.5,
+            -80
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            40,
+            1,
+            40
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "92ffc288e5c1a2608f274d01d59a238a",
+      "components": {
+        "Name": {
+          "Value": "Arena wall west"
+        },
+        "Transform": {
+          "Position": [
+            -20.5,
+            2.5,
+            -80
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            5,
+            40
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "01006fff189e84b6b4b27ffdaf9f70ce",
+      "components": {
+        "Name": {
+          "Value": "Arena wall east"
+        },
+        "Transform": {
+          "Position": [
+            20.5,
+            2.5,
+            -80
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            5,
+            40
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "759e2e50eae8f863afa27b226d200783",
+      "components": {
+        "Name": {
+          "Value": "Arena wall back"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            2.5,
+            -100.5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            42,
+            5,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "27ada105100a5550319719518c6c1247",
+      "components": {
+        "Name": {
+          "Value": "Arena wall front left"
+        },
+        "Transform": {
+          "Position": [
+            -12,
+            2.5,
+            -60.5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            16,
+            5,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "419025c39ae10c905d1bede649fcbc43",
+      "components": {
+        "Name": {
+          "Value": "Arena wall front right"
+        },
+        "Transform": {
+          "Position": [
+            12,
+            2.5,
+            -60.5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            16,
+            5,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "d64512aae4acdfb5bb42ad64edf5f4e6",
+      "components": {
+        "Name": {
+          "Value": "Arena pillar 1"
+        },
+        "Transform": {
+          "Position": [
+            -10,
+            3,
+            -72
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.6,
+            6,
+            1.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "4f81c13e8bae1551a55cce909d08399b",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "21900da9102bc482844d75c736e3bd2e",
+      "components": {
+        "Name": {
+          "Value": "Arena brazier 1"
+        },
+        "Transform": {
+          "Position": [
+            -10,
+            6.4,
+            -72
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.7,
+            0.7,
+            0.7
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.4,
+            0.15,
+            1
+          ],
+          "Intensity": 30,
+          "Range": 14,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "9115b297296d96aab74c8b3f90b9602d",
+      "components": {
+        "Name": {
+          "Value": "Arena pillar 2"
+        },
+        "Transform": {
+          "Position": [
+            10,
+            3,
+            -72
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.6,
+            6,
+            1.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "4f81c13e8bae1551a55cce909d08399b",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "9dee6a1ba86e6624218512ac595e1c90",
+      "components": {
+        "Name": {
+          "Value": "Arena brazier 2"
+        },
+        "Transform": {
+          "Position": [
+            10,
+            6.4,
+            -72
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.7,
+            0.7,
+            0.7
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.4,
+            0.15,
+            1
+          ],
+          "Intensity": 30,
+          "Range": 14,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "443196bfec0242d82932475982c753de",
+      "components": {
+        "Name": {
+          "Value": "Arena pillar 3"
+        },
+        "Transform": {
+          "Position": [
+            -10,
+            3,
+            -88
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.6,
+            6,
+            1.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "4f81c13e8bae1551a55cce909d08399b",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "dbc5d7d7b83971fd35a48b8b2581adb1",
+      "components": {
+        "Name": {
+          "Value": "Arena brazier 3"
+        },
+        "Transform": {
+          "Position": [
+            -10,
+            6.4,
+            -88
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.7,
+            0.7,
+            0.7
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.4,
+            0.15,
+            1
+          ],
+          "Intensity": 30,
+          "Range": 14,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "1f2c4d03153932b9077070537667a987",
+      "components": {
+        "Name": {
+          "Value": "Arena pillar 4"
+        },
+        "Transform": {
+          "Position": [
+            10,
+            3,
+            -88
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.6,
+            6,
+            1.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "4f81c13e8bae1551a55cce909d08399b",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "46071444cac12dd44703a57893d73290",
+      "components": {
+        "Name": {
+          "Value": "Arena brazier 4"
+        },
+        "Transform": {
+          "Position": [
+            10,
+            6.4,
+            -88
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.7,
+            0.7,
+            0.7
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.4,
+            0.15,
+            1
+          ],
+          "Intensity": 30,
+          "Range": 14,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "67cdd3f49bb5f6368b420477303768d6",
+      "components": {
+        "Name": {
+          "Value": "Arena light"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            9,
+            -80
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.15,
+            0.1,
+            1
+          ],
+          "Intensity": 30,
+          "Range": 40,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        },
+        "script:2c4c17cff8286f2b14a1b0de443aa143": {
+          "amplitude": 14,
+          "speed": 2.2
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "7dfe6f590f031646ee121615cb0ed6a7",
+      "components": {
+        "Name": {
+          "Value": "Arena zone"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            3,
+            -80
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            40,
+            8,
+            40
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "script:e3fd15b31b7fdb8f2a11ec595e0b1d98": {
+          "zone": "arena"
+        }
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "4c96f5aa2bcbde4572ffeca902b5e4be",
+      "components": {
+        "Name": {
+          "Value": "Checkpoint 4"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0.1,
+            -63
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            8,
+            3,
+            2
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0,
+            0,
+            0
+          ],
+          "IsTrigger": true
+        },
+        "script:ac0114e3e1c2e22a2ba1390ec0d4a5d7": {}
+      },
+      "parent": "33d375420af4d55cc0641a03d4366604"
+    },
+    {
+      "id": "5ca04d75dd9fb50140894dfa041e8235",
+      "components": {
+        "Name": {
+          "Value": "Dragon"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0.1,
+            -90
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "CharacterController": {
+          "Radius": 0.85,
+          "Height": 3.06,
+          "Offset": [
+            0,
+            1.53,
+            0
+          ]
+        },
+        "script:da12ed173a427584205cba432cd50040": {
+          "max_hp": 600,
+          "speed": 3.4,
+          "damage": 24,
+          "reach": 3.2,
+          "aggro": 60,
+          "group": "boss",
+          "bar": 0,
+          "boss": true,
+          "dormant": false,
+          "model_scale": 1.7,
+          "bar_height": 4.08,
+          "clip_idle": "MonsterArmature|Flying",
+          "clip_move": "MonsterArmature|Flying",
+          "clip_attack": "MonsterArmature|Bite_Front",
+          "clip_death": "MonsterArmature|Death"
+        }
+      }
+    },
+    {
+      "id": "b60d85e0efe16cd4781b1b67b7499e1c",
+      "components": {
+        "Name": {
+          "Value": "Dragon model"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.7,
+            1.7,
+            1.7
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "68f72c40414ce82d082c2d2978019b40",
+            "localId": 0
+          }
+        }
+      },
+      "parent": "5ca04d75dd9fb50140894dfa041e8235"
+    },
+    {
+      "id": "714721b03fbde2e50b965469040e7e69",
+      "components": {
+        "Name": {
+          "Value": "Enemy 7"
+        },
+        "Transform": {
+          "Position": [
+            -9,
+            0.1,
+            -92
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "CharacterController": {
+          "Radius": 0.5,
+          "Height": 1.8,
+          "Offset": [
+            0,
+            0.9,
+            0
+          ]
+        },
+        "script:da12ed173a427584205cba432cd50040": {
+          "max_hp": 50,
+          "speed": 4.2,
+          "damage": 8,
+          "reach": 1.8,
+          "aggro": 12,
+          "group": "minions",
+          "bar": 0,
+          "boss": false,
+          "dormant": true,
+          "model_scale": 1.0,
+          "bar_height": 2.4,
+          "clip_idle": "MonsterArmature|Idle",
+          "clip_move": "MonsterArmature|Walk",
+          "clip_attack": "MonsterArmature|Bite_Front",
+          "clip_death": "MonsterArmature|Death"
+        }
+      }
+    },
+    {
+      "id": "40a5e77da9911c59a2d56b6daf39fb5d",
+      "components": {
+        "Name": {
+          "Value": "Enemy 7 model"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "a1bf9c7eb011dbcf68fdc51c1a0dc8e6",
+            "localId": 0
+          }
+        }
+      },
+      "parent": "714721b03fbde2e50b965469040e7e69"
+    },
+    {
+      "id": "6f6975728d7f53111a29768e9edd819f",
+      "components": {
+        "Name": {
+          "Value": "Enemy 8"
+        },
+        "Transform": {
+          "Position": [
+            9,
+            0.1,
+            -92
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "CharacterController": {
+          "Radius": 0.5,
+          "Height": 1.8,
+          "Offset": [
+            0,
+            0.9,
+            0
+          ]
+        },
+        "script:da12ed173a427584205cba432cd50040": {
+          "max_hp": 50,
+          "speed": 4.2,
+          "damage": 8,
+          "reach": 1.8,
+          "aggro": 12,
+          "group": "minions",
+          "bar": 0,
+          "boss": false,
+          "dormant": true,
+          "model_scale": 1.0,
+          "bar_height": 2.4,
+          "clip_idle": "MonsterArmature|Idle",
+          "clip_move": "MonsterArmature|Walk",
+          "clip_attack": "MonsterArmature|Bite_Front",
+          "clip_death": "MonsterArmature|Death"
+        }
+      }
+    },
+    {
+      "id": "15deb6dc739032eb164bad6e3227b847",
+      "components": {
+        "Name": {
+          "Value": "Enemy 8 model"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "a1bf9c7eb011dbcf68fdc51c1a0dc8e6",
+            "localId": 0
+          }
+        }
+      },
+      "parent": "6f6975728d7f53111a29768e9edd819f"
+    }
+  ]
+}

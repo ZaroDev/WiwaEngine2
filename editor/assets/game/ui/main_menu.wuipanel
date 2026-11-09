@@ -1,0 +1,1474 @@
+{
+  "version": 1,
+  "referenceResolution": [
+    1920,
+    1080
+  ],
+  "match": 0.5,
+  "nextId": 58,
+  "widgets": [
+    {
+      "id": 2,
+      "kind": "Panel",
+      "Name": "Title",
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "Visible": true,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 3,
+      "kind": "Panel",
+      "Name": "Band1",
+      "parent": 2,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0.46,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.28
+      ]
+    },
+    {
+      "id": 4,
+      "kind": "Panel",
+      "Name": "Band2",
+      "parent": 2,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0.34,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.28
+      ]
+    },
+    {
+      "id": 5,
+      "kind": "Panel",
+      "Name": "Band3",
+      "parent": 2,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0.22,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.28
+      ]
+    },
+    {
+      "id": 6,
+      "kind": "VStack",
+      "Name": "Box",
+      "parent": 2,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        0
+      ],
+      "OffsetMin": [
+        96,
+        150
+      ],
+      "OffsetMax": [
+        620,
+        900
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "Spacing": 10
+    },
+    {
+      "id": 7,
+      "kind": "Text",
+      "Name": "Title",
+      "parent": 6,
+      "OffsetMax": [
+        520,
+        190
+      ],
+      "Text": "Warrior's Crossing",
+      "Font": {
+        "guid": "9a864d5349d63ea8c2fbb4fad1646e13",
+        "localId": 0
+      },
+      "FontSize": 84,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Wrap": true,
+      "Outline": 0.12,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        0.8
+      ]
+    },
+    {
+      "id": 8,
+      "kind": "Text",
+      "Name": "Tagline",
+      "parent": 6,
+      "OffsetMax": [
+        520,
+        70
+      ],
+      "Text": "Cross the bridge. Face the dragon.",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 24,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ],
+      "Wrap": true
+    },
+    {
+      "id": 9,
+      "kind": "Button",
+      "Name": "Play",
+      "parent": 6,
+      "OffsetMax": [
+        460,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 10,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 9,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 11,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 9,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        24,
+        11
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Play",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 30,
+      "Align": "Left",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 12,
+      "kind": "Button",
+      "Name": "Options",
+      "parent": 6,
+      "OffsetMax": [
+        460,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 13,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 12,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 14,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 12,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        24,
+        11
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Options",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 30,
+      "Align": "Left",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 15,
+      "kind": "Button",
+      "Name": "Quit",
+      "parent": 6,
+      "OffsetMax": [
+        460,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 16,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 15,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 17,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 15,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        24,
+        11
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Quit",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 30,
+      "Align": "Left",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 18,
+      "kind": "Text",
+      "Name": "Version",
+      "parent": 2,
+      "AnchorMin": [
+        0,
+        1
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        96,
+        -64
+      ],
+      "OffsetMax": [
+        500,
+        -30
+      ],
+      "Text": "Version",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 18,
+      "Color": [
+        0.66,
+        0.6,
+        0.74,
+        1
+      ]
+    },
+    {
+      "id": 19,
+      "kind": "Text",
+      "Name": "Controls",
+      "parent": 2,
+      "AnchorMin": [
+        1,
+        1
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        -860,
+        -64
+      ],
+      "OffsetMax": [
+        -60,
+        -30
+      ],
+      "Text": "WASD move   Space jump   Left click attack   P pause",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 18,
+      "Align": "Right",
+      "Color": [
+        0.66,
+        0.6,
+        0.74,
+        1
+      ]
+    },
+    {
+      "id": 20,
+      "kind": "Panel",
+      "Name": "Heroes",
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "Visible": false,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 21,
+      "kind": "Text",
+      "Name": "Header",
+      "parent": 20,
+      "AnchorMin": [
+        0.5,
+        0
+      ],
+      "AnchorMax": [
+        0.5,
+        0
+      ],
+      "OffsetMin": [
+        -500,
+        44
+      ],
+      "OffsetMax": [
+        500,
+        124
+      ],
+      "Text": "Choose who crosses",
+      "Font": {
+        "guid": "9a864d5349d63ea8c2fbb4fad1646e13",
+        "localId": 0
+      },
+      "FontSize": 64,
+      "Align": "Center",
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Outline": 0.12,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        0.8
+      ]
+    },
+    {
+      "id": 22,
+      "kind": "VStack",
+      "Name": "Box",
+      "parent": 20,
+      "AnchorMin": [
+        0.5,
+        1
+      ],
+      "AnchorMax": [
+        0.5,
+        1
+      ],
+      "OffsetMin": [
+        -500,
+        -420
+      ],
+      "OffsetMax": [
+        500,
+        -40
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "Spacing": 12,
+      "ChildAlign": "Center"
+    },
+    {
+      "id": 23,
+      "kind": "HStack",
+      "Name": "Cards",
+      "parent": 22,
+      "OffsetMax": [
+        964,
+        290
+      ],
+      "Spacing": 284,
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 24,
+      "kind": "VStack",
+      "Name": "WarriorCard",
+      "parent": 23,
+      "OffsetMax": [
+        340,
+        290
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.8
+      ],
+      "Spacing": 8,
+      "Padding": [
+        20,
+        14,
+        20,
+        14
+      ]
+    },
+    {
+      "id": 25,
+      "kind": "Text",
+      "Name": "Name",
+      "parent": 24,
+      "OffsetMax": [
+        300,
+        50
+      ],
+      "Text": "Warrior",
+      "Font": {
+        "guid": "9a864d5349d63ea8c2fbb4fad1646e13",
+        "localId": 0
+      },
+      "FontSize": 44,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 26,
+      "kind": "Text",
+      "Name": "Role",
+      "parent": 24,
+      "OffsetMax": [
+        300,
+        46
+      ],
+      "Text": "Close-range fighter. Swings a sword, spends stamina.",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 18,
+      "Color": [
+        0.66,
+        0.6,
+        0.74,
+        1
+      ],
+      "Wrap": true
+    },
+    {
+      "id": 27,
+      "kind": "HStack",
+      "Name": "StatPower",
+      "parent": 24,
+      "OffsetMax": [
+        300,
+        22
+      ],
+      "Spacing": 10,
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 28,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 27,
+      "OffsetMax": [
+        80,
+        22
+      ],
+      "Text": "Power",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 18,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 29,
+      "kind": "Bar",
+      "Name": "Value",
+      "parent": 27,
+      "OffsetMax": [
+        210,
+        10
+      ],
+      "Value": 0.85,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.55
+      ]
+    },
+    {
+      "id": 30,
+      "kind": "HStack",
+      "Name": "StatReach",
+      "parent": 24,
+      "OffsetMax": [
+        300,
+        22
+      ],
+      "Spacing": 10,
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 31,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 30,
+      "OffsetMax": [
+        80,
+        22
+      ],
+      "Text": "Reach",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 18,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 32,
+      "kind": "Bar",
+      "Name": "Value",
+      "parent": 30,
+      "OffsetMax": [
+        210,
+        10
+      ],
+      "Value": 0.2,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.55
+      ]
+    },
+    {
+      "id": 33,
+      "kind": "HStack",
+      "Name": "StatSpeed",
+      "parent": 24,
+      "OffsetMax": [
+        300,
+        22
+      ],
+      "Spacing": 10,
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 34,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 33,
+      "OffsetMax": [
+        80,
+        22
+      ],
+      "Text": "Speed",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 18,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 35,
+      "kind": "Bar",
+      "Name": "Value",
+      "parent": 33,
+      "OffsetMax": [
+        210,
+        10
+      ],
+      "Value": 0.6,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.55
+      ]
+    },
+    {
+      "id": 36,
+      "kind": "Button",
+      "Name": "Select",
+      "parent": 24,
+      "OffsetMax": [
+        300,
+        48
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        0.24
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.45
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.65
+      ]
+    },
+    {
+      "id": 37,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 36,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        10
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Choose Warrior",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 24,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 38,
+      "kind": "VStack",
+      "Name": "WizardCard",
+      "parent": 23,
+      "OffsetMax": [
+        340,
+        290
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.8
+      ],
+      "Spacing": 8,
+      "Padding": [
+        20,
+        14,
+        20,
+        14
+      ]
+    },
+    {
+      "id": 39,
+      "kind": "Text",
+      "Name": "Name",
+      "parent": 38,
+      "OffsetMax": [
+        300,
+        50
+      ],
+      "Text": "Wizard",
+      "Font": {
+        "guid": "9a864d5349d63ea8c2fbb4fad1646e13",
+        "localId": 0
+      },
+      "FontSize": 44,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 40,
+      "kind": "Text",
+      "Name": "Role",
+      "parent": 38,
+      "OffsetMax": [
+        300,
+        46
+      ],
+      "Text": "Spell caster. Fires magic bolts, spends mana.",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 18,
+      "Color": [
+        0.66,
+        0.6,
+        0.74,
+        1
+      ],
+      "Wrap": true
+    },
+    {
+      "id": 41,
+      "kind": "HStack",
+      "Name": "StatPower",
+      "parent": 38,
+      "OffsetMax": [
+        300,
+        22
+      ],
+      "Spacing": 10,
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 42,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 41,
+      "OffsetMax": [
+        80,
+        22
+      ],
+      "Text": "Power",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 18,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 43,
+      "kind": "Bar",
+      "Name": "Value",
+      "parent": 41,
+      "OffsetMax": [
+        210,
+        10
+      ],
+      "Value": 0.55,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.55
+      ]
+    },
+    {
+      "id": 44,
+      "kind": "HStack",
+      "Name": "StatReach",
+      "parent": 38,
+      "OffsetMax": [
+        300,
+        22
+      ],
+      "Spacing": 10,
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 45,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 44,
+      "OffsetMax": [
+        80,
+        22
+      ],
+      "Text": "Reach",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 18,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 46,
+      "kind": "Bar",
+      "Name": "Value",
+      "parent": 44,
+      "OffsetMax": [
+        210,
+        10
+      ],
+      "Value": 0.95,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.55
+      ]
+    },
+    {
+      "id": 47,
+      "kind": "HStack",
+      "Name": "StatSpeed",
+      "parent": 38,
+      "OffsetMax": [
+        300,
+        22
+      ],
+      "Spacing": 10,
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 48,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 47,
+      "OffsetMax": [
+        80,
+        22
+      ],
+      "Text": "Speed",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 18,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 49,
+      "kind": "Bar",
+      "Name": "Value",
+      "parent": 47,
+      "OffsetMax": [
+        210,
+        10
+      ],
+      "Value": 0.5,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.55
+      ]
+    },
+    {
+      "id": 50,
+      "kind": "Button",
+      "Name": "Select",
+      "parent": 38,
+      "OffsetMax": [
+        300,
+        48
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        0.24
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.45
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.65
+      ]
+    },
+    {
+      "id": 51,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 50,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        10
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Choose Wizard",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 24,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 52,
+      "kind": "Button",
+      "Name": "Back",
+      "parent": 22,
+      "OffsetMax": [
+        200,
+        52
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 53,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 52,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 54,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 52,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        11
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Back",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 26,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 55,
+      "kind": "VStack",
+      "Name": "Loading",
+      "AnchorMin": [
+        0.5,
+        0.5
+      ],
+      "AnchorMax": [
+        0.5,
+        0.5
+      ],
+      "OffsetMin": [
+        -250,
+        120
+      ],
+      "OffsetMax": [
+        250,
+        190
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.7
+      ],
+      "Spacing": 6,
+      "Padding": [
+        10,
+        8,
+        10,
+        8
+      ],
+      "Visible": false
+    },
+    {
+      "id": 56,
+      "kind": "Text",
+      "Name": "LoadText",
+      "parent": 55,
+      "OffsetMax": [
+        480,
+        28
+      ],
+      "Text": "Setting out",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ],
+      "Align": "Center"
+    },
+    {
+      "id": 57,
+      "kind": "Bar",
+      "Name": "LoadBar",
+      "parent": 55,
+      "OffsetMax": [
+        480,
+        16
+      ],
+      "Value": 0.0,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.55
+      ]
+    }
+  ]
+}

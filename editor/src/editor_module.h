@@ -8,6 +8,7 @@
 #include <ImGuizmo.h>
 #include <panels/panels.h>
 #include <play/demo_smoke.h>
+#include <play/game_smoke.h>
 #include <play/play_mode.h>
 #include <scene/scene_editor.h>
 
@@ -114,6 +115,7 @@ private:
 	Scope<wiwa::PlayMode> m_PlayMode;
 	bool m_StopPlayRequested = false; // a script called quit()
 	Scope<wiwa::DemoSmoke> m_DemoSmoke;
+	Scope<wiwa::GameSmoke> m_GameSmoke;
 	bool m_PlaySmoke = false;
 	wiwa::AssetRef m_PendingDefaultMap{}; // input.wsettings' map, applied once the first import scan has cooked it
 	class HierarchyPanel* m_Hierarchy = nullptr; // owned by m_Panels

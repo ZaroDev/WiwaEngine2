@@ -1,0 +1,2 @@
+assets\scenes\demo.wscene
+assets/scenes/demo.wscene

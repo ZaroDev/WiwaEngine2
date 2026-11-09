@@ -1,0 +1,6922 @@
+{
+  "name": "level",
+  "entities": [
+    {
+      "id": "14c13bb5133352ea35142ebd0ed6e343",
+      "components": {
+        "Name": {
+          "Value": "Camera"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            5.0,
+            18.0
+          ],
+          "Rotation": [
+            -0.15643446147441864,
+            0.0,
+            0.0,
+            0.9876883625984192
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "Camera": {
+          "Projection": "Perspective",
+          "FovY": 60.0,
+          "Near": 0.10000000149011612,
+          "Far": 400.0,
+          "OrthoSize": 10.0,
+          "Primary": true
+        },
+        "script:15fc631cde86d64c45efa6a7404b88c4": {
+          "distance": 5.5,
+          "height": 1.600000023841858,
+          "sensitivity": 1.0
+        }
+      }
+    },
+    {
+      "id": "3bb5728b02cd528cc2adac9795552518",
+      "components": {
+        "Name": {
+          "Value": "Sun"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            20.0,
+            0.0
+          ],
+          "Rotation": [
+            -0.19537308812141418,
+            0.33454617857933044,
+            0.07110998779535294,
+            0.9191581010818481
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "Light": {
+          "Kind": "Directional",
+          "Color": [
+            1.0,
+            0.7400000095367432,
+            0.47999998927116394,
+            1.0
+          ],
+          "Intensity": 3.4000000953674316,
+          "Range": 10.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": true
+        }
+      }
+    },
+    {
+      "id": "9313a6266e1931b26aff755235549ddf",
+      "components": {
+        "Name": {
+          "Value": "Hud"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "UICanvas": {
+          "Panel": {
+            "guid": "15c4ace99c8340e09eb543afb292e1d4",
+            "localId": 0
+          },
+          "SortOrder": 0,
+          "Visible": true
+        }
+      }
+    },
+    {
+      "id": "2e8391e14660b2da37708d20df16710e",
+      "components": {
+        "Name": {
+          "Value": "Options"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "UICanvas": {
+          "Panel": {
+            "guid": "4bc61883f7b4048ca01223c62aa30865",
+            "localId": 0
+          },
+          "SortOrder": 10,
+          "Visible": true
+        }
+      }
+    },
+    {
+      "id": "c6afdddaa0b984d1366830e81808bece",
+      "components": {
+        "Name": {
+          "Value": "GameState"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "script:aad3db34a457b5469ca98eac2980713d": {
+          "fall_y": -6.0,
+          "menu": "assets/game/scenes/main_menu.wscene"
+        }
+      }
+    },
+    {
+      "id": "6e65c3b6517e2bfd562e935a5b53e656",
+      "components": {
+        "Name": {
+          "Value": "SelfTest"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "script:f44a4d8a5dc7ce68dd6d728d0fbe56bb": {}
+      }
+    },
+    {
+      "id": "c326ae859751ca5fa2955e50827db87f",
+      "components": {
+        "Name": {
+          "Value": "Spawn point"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.10000000149011612,
+            12.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "37398d902a4d630b2c7961fcd6bb8469",
+      "components": {
+        "Name": {
+          "Value": "Player"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.10000000149011612,
+            12.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "CharacterController": {
+          "Radius": 0.5,
+          "Height": 1.7999999523162842,
+          "Offset": [
+            0.0,
+            0.8999999761581421,
+            0.0
+          ],
+          "StepHeight": 0.3499999940395355,
+          "MaxSlopeAngle": 45.0,
+          "Mass": 70.0,
+          "PushStrength": 100.0,
+          "GravityFactor": 1.0,
+          "Layer": 0
+        },
+        "script:99520b6ab8bde8657bf38f8a50951955": {
+          "jump_speed": 8.0,
+          "melee_damage": 30.0,
+          "run_blend": 3.0,
+          "shot_cooldown": 0.4000000059604645,
+          "speed": 6.0,
+          "wizard_attack": "CharacterArmature|Spell1",
+          "wizard_idle": "CharacterArmature|Idle",
+          "wizard_walk": "CharacterArmature|Walk"
+        }
+      }
+    },
+    {
+      "id": "42afa6aaff8fe6327dff60cf69fa7e0c",
+      "parent": "37398d902a4d630b2c7961fcd6bb8469",
+      "components": {
+        "Name": {
+          "Value": "Warrior model"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "b898dc0290fb5347a780ef8c57719cc0",
+            "localId": 0
+          }
+        },
+        "Animator": {
+          "Skeleton": {
+            "guid": "b898dc0290fb5347a780ef8c57719cc0",
+            "localId": 1
+          },
+          "Clips": [],
+          "Clip": null,
+          "PlayOnStart": false,
+          "Speed": 1.0,
+          "Enabled": true,
+          "BoundsPadding": 0.0,
+          "Graph": {
+            "guid": "bcba63970f059ed0d34a706f340d48c4",
+            "localId": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "698a0b933e01745852e4b5b311d12030",
+      "parent": "37398d902a4d630b2c7961fcd6bb8469",
+      "components": {
+        "Name": {
+          "Value": "Wizard model"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "97a52376805e5e2b05c209ff8e1825ef",
+            "localId": 0
+          }
+        },
+        "Animator": {
+          "Skeleton": {
+            "guid": "ddde200f62432b9a6fc5805d4a03df44",
+            "localId": 0
+          },
+          "Clips": [
+            {
+              "guid": "152448d9016d0bc480a657c5e2b80323",
+              "localId": 0
+            },
+            {
+              "guid": "9440727fb17c30e558fce5d9c30d9ed5",
+              "localId": 0
+            },
+            {
+              "guid": "01b494a2fd01f7b69b0616c5e98742c2",
+              "localId": 0
+            },
+            {
+              "guid": "5a38983785c6db19fa11d617c05ba1cd",
+              "localId": 0
+            },
+            {
+              "guid": "106aa66f5ff9bbf5a1a9b89737eeef0c",
+              "localId": 0
+            },
+            {
+              "guid": "680e3e2221568a051cf8b33f8adab50f",
+              "localId": 0
+            },
+            {
+              "guid": "82cf9cf78a39f53e12fd9ea31050b8ae",
+              "localId": 0
+            },
+            {
+              "guid": "4c9910b43daac1dc1829f8a670bc063c",
+              "localId": 0
+            },
+            {
+              "guid": "89f1d00f77ffea67fb8d2271b2633e37",
+              "localId": 0
+            },
+            {
+              "guid": "0cd65521c7424cdd69c56f78e78d0066",
+              "localId": 0
+            },
+            {
+              "guid": "79670b6ce6f37e0c710570eeb7b7fc1d",
+              "localId": 0
+            },
+            {
+              "guid": "b6b3b443fd6a3874fa35e50802399d38",
+              "localId": 0
+            },
+            {
+              "guid": "1c6fdc2d8b928d8a0a1aa8cb0b69d8ad",
+              "localId": 0
+            },
+            {
+              "guid": "eea612cd8517dea90ea0bcc8d41e05e8",
+              "localId": 0
+            },
+            {
+              "guid": "5f5c40d16f43874352971552071a1296",
+              "localId": 0
+            }
+          ],
+          "Clip": {
+            "guid": "152448d9016d0bc480a657c5e2b80323",
+            "localId": 0
+          },
+          "PlayOnStart": true,
+          "Speed": 1.0,
+          "Enabled": true,
+          "BoundsPadding": 0.0,
+          "Graph": null
+        }
+      }
+    },
+    {
+      "id": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "World"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "70e4666a50dcdbf0c553f37dd639b293",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Ground"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            -0.8500000238418579
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            30.0,
+            1.0,
+            31.700000762939453
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 7
+          },
+          "Materials": [
+            {
+              "guid": "b8d71ec809d30fe6760ab3d9f52eeed4",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "51fbeea76406979cd6fd678752aad5d4",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Ground collider"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.5,
+            -0.8500000238418579
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            30.0,
+            1.0,
+            31.700000762939453
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "75219849459d0a79054ce1f66459b93e",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Wall west"
+        },
+        "Transform": {
+          "Position": [
+            -15.5,
+            1.5,
+            -0.8500000238418579
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            3.0,
+            31.700000762939453
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "e9e7769e9e415daa5237d2b5084c9cd3",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Wall east"
+        },
+        "Transform": {
+          "Position": [
+            15.5,
+            1.5,
+            -0.8500000238418579
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            3.0,
+            31.700000762939453
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "cd9b70b5cd5815e8a89c9db7da17d563",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Wall south"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            1.5,
+            15.5
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            32.0,
+            3.0,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "d9618fe953699320c08bccc2ab548a58",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Wall north left"
+        },
+        "Transform": {
+          "Position": [
+            -9.0,
+            1.5,
+            -17.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            12.0,
+            3.0,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "3ccbcc86afc7ef179c6282a6a6cadacd",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Wall north right"
+        },
+        "Transform": {
+          "Position": [
+            9.0,
+            1.5,
+            -17.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            12.0,
+            3.0,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "cd750ce2ba7cbe9b54cc9ba2442e30f3",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Pillar 1"
+        },
+        "Transform": {
+          "Position": [
+            -8.0,
+            2.5,
+            6.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            5.0,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "0ae9d3890747a4fca8d4b16df65be2db",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Pillar 2"
+        },
+        "Transform": {
+          "Position": [
+            8.0,
+            2.5,
+            6.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            5.0,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "0d747ec11592fc26a94e13cbf41633db",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Pillar 3"
+        },
+        "Transform": {
+          "Position": [
+            -8.0,
+            2.5,
+            -6.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            5.0,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "bbbc79a2271732c30fe9cdbbc33ad5ad",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Pillar 4"
+        },
+        "Transform": {
+          "Position": [
+            8.0,
+            2.5,
+            -6.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            5.0,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "e766748194d66d516e3e8e7b2507862f",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Crate 1"
+        },
+        "Transform": {
+          "Position": [
+            -3.0,
+            0.4000000059604645,
+            9.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.800000011920929,
+            0.800000011920929,
+            0.800000011920929
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "8d0e171d4fbf5131dfdfb8283f04653d",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Crate 2"
+        },
+        "Transform": {
+          "Position": [
+            3.4000000953674316,
+            0.4000000059604645,
+            9.600000381469727
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.800000011920929,
+            0.800000011920929,
+            0.800000011920929
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "67d8f04175234340cfd156c2805e5bd0",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Crate 3"
+        },
+        "Transform": {
+          "Position": [
+            11.0,
+            0.4000000059604645,
+            2.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.800000011920929,
+            0.800000011920929,
+            0.800000011920929
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "44c31041ab5da3479aafb3db266f88e3",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Crate 4"
+        },
+        "Transform": {
+          "Position": [
+            -12.0,
+            0.4000000059604645,
+            -12.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.800000011920929,
+            0.800000011920929,
+            0.800000011920929
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "1a9056c004a339d769f79fd809c851e5",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Torch 1"
+        },
+        "Transform": {
+          "Position": [
+            -12.0,
+            2.200000047683716,
+            10.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.3499999940395355,
+            0.3499999940395355,
+            0.3499999940395355
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.6000000238418579,
+            0.25,
+            1.0
+          ],
+          "Intensity": 16.0,
+          "Range": 11.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": false
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ef12378f9af6b7a21d98d184ebf87a1e",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Torch 2"
+        },
+        "Transform": {
+          "Position": [
+            12.0,
+            2.200000047683716,
+            10.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.3499999940395355,
+            0.3499999940395355,
+            0.3499999940395355
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.6000000238418579,
+            0.25,
+            1.0
+          ],
+          "Intensity": 16.0,
+          "Range": 11.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": false
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bf15b4fab864a417a7f0e83855f77620",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Torch 3"
+        },
+        "Transform": {
+          "Position": [
+            -12.0,
+            2.200000047683716,
+            -14.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.3499999940395355,
+            0.3499999940395355,
+            0.3499999940395355
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.6000000238418579,
+            0.25,
+            1.0
+          ],
+          "Intensity": 16.0,
+          "Range": 11.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": false
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1850b5d4b1db8a7d76793e7823ae4343",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Torch 4"
+        },
+        "Transform": {
+          "Position": [
+            12.0,
+            2.200000047683716,
+            -14.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.3499999940395355,
+            0.3499999940395355,
+            0.3499999940395355
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.6000000238418579,
+            0.25,
+            1.0
+          ],
+          "Intensity": 16.0,
+          "Range": 11.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": false
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5c1b403048f8992215c7fd1f506af0da",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Banner W1"
+        },
+        "Transform": {
+          "Position": [
+            -14.899999618530273,
+            2.0,
+            9.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.10000000149011612,
+            2.200000047683716,
+            1.100000023841858
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "58075876f470282582e3b934625334ad",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Banner W2"
+        },
+        "Transform": {
+          "Position": [
+            -14.899999618530273,
+            2.0,
+            -2.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.10000000149011612,
+            2.200000047683716,
+            1.100000023841858
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5514b6b8f92484b49ca4ce751e106630",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Banner W3"
+        },
+        "Transform": {
+          "Position": [
+            -14.899999618530273,
+            2.0,
+            -10.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.10000000149011612,
+            2.200000047683716,
+            1.100000023841858
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e58d8e66705d30d9b38ee21eb146b393",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Banner E1"
+        },
+        "Transform": {
+          "Position": [
+            14.899999618530273,
+            2.0,
+            9.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.10000000149011612,
+            2.200000047683716,
+            1.100000023841858
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "37e24ca964eef2387a43ac3104b1e21a",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Banner E2"
+        },
+        "Transform": {
+          "Position": [
+            14.899999618530273,
+            2.0,
+            -2.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.10000000149011612,
+            2.200000047683716,
+            1.100000023841858
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "87eb2b7f1b7fa0f8ca240c6f2c550328",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Banner E3"
+        },
+        "Transform": {
+          "Position": [
+            14.899999618530273,
+            2.0,
+            -10.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.10000000149011612,
+            2.200000047683716,
+            1.100000023841858
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d55bfa85d9c058d6df80b65a1d17fde1",
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe",
+      "components": {
+        "Name": {
+          "Value": "Courtyard gate"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            3.0,
+            -16.200000762939453
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            6.0,
+            6.0,
+            0.6000000238418579
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "4f81c13e8bae1551a55cce909d08399b",
+              "localId": 0
+            }
+          ]
+        },
+        "RigidBody": {
+          "Motion": "Kinematic",
+          "MassOverride": 0.0,
+          "LinearDamping": 0.05000000074505806,
+          "AngularDamping": 0.05000000074505806,
+          "GravityFactor": 1.0,
+          "ContinuousCollision": false,
+          "AllowSleeping": true,
+          "ReportContacts": false,
+          "LockPositionX": false,
+          "LockPositionY": false,
+          "LockPositionZ": false,
+          "LockRotationX": false,
+          "LockRotationY": false,
+          "LockRotationZ": false
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "script:c763b9eb8c73c351dd367e470faabbb5": {
+          "drop": 7.0,
+          "group": "courtyard",
+          "needs_arena": false,
+          "speed": 4.0
+        }
+      }
+    },
+    {
+      "id": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "1f131129d7879ca20fcb6100b0433d45",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge post A"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.15000000596046448,
+            -17.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            4.0,
+            0.30000001192092896,
+            0.6000000238418579
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "7dc6039f7c529727dcb13468f874aaea",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge link 0"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.15000000596046448,
+            -17.799999237060547
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            4.0,
+            0.30000001192092896,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 10.0,
+          "LinearDamping": 0.30000001192092896,
+          "AngularDamping": 0.5,
+          "GravityFactor": 1.0,
+          "ContinuousCollision": false,
+          "AllowSleeping": true,
+          "ReportContacts": false,
+          "LockPositionX": false,
+          "LockPositionY": false,
+          "LockPositionZ": false,
+          "LockRotationX": false,
+          "LockRotationY": false,
+          "LockRotationZ": false
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "Joint": {
+          "Type": "Hinge",
+          "Connected": "1f131129d7879ca20fcb6100b0433d45",
+          "CollideConnected": false,
+          "AnchorA": [
+            0.0,
+            0.0,
+            0.5
+          ],
+          "AnchorB": [
+            0.0,
+            0.0,
+            -0.30000001192092896
+          ],
+          "Axis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "NormalAxis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "LimitMin": 0.0,
+          "LimitMax": 0.0,
+          "SwingHalfAngle": 45.0,
+          "TwistHalfAngle": 45.0,
+          "SpringFrequency": 0.0,
+          "SpringDamping": 0.0,
+          "MotorMode": "Off",
+          "MotorTarget": 0.0,
+          "MotorMaxForce": 0.0,
+          "BreakForce": 12000.0,
+          "BreakTorque": 0.0
+        },
+        "script:ce32257d4b696dd2bd98194d5eb14986": {}
+      }
+    },
+    {
+      "id": "1ad5baba5a7f15c456ade4942d529d5f",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge link 1"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.15000000596046448,
+            -18.799999237060547
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            4.0,
+            0.30000001192092896,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 10.0,
+          "LinearDamping": 0.30000001192092896,
+          "AngularDamping": 0.5,
+          "GravityFactor": 1.0,
+          "ContinuousCollision": false,
+          "AllowSleeping": true,
+          "ReportContacts": false,
+          "LockPositionX": false,
+          "LockPositionY": false,
+          "LockPositionZ": false,
+          "LockRotationX": false,
+          "LockRotationY": false,
+          "LockRotationZ": false
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "Joint": {
+          "Type": "Hinge",
+          "Connected": "7dc6039f7c529727dcb13468f874aaea",
+          "CollideConnected": false,
+          "AnchorA": [
+            0.0,
+            0.0,
+            0.5
+          ],
+          "AnchorB": [
+            0.0,
+            0.0,
+            -0.5
+          ],
+          "Axis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "NormalAxis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "LimitMin": 0.0,
+          "LimitMax": 0.0,
+          "SwingHalfAngle": 45.0,
+          "TwistHalfAngle": 45.0,
+          "SpringFrequency": 0.0,
+          "SpringDamping": 0.0,
+          "MotorMode": "Off",
+          "MotorTarget": 0.0,
+          "MotorMaxForce": 0.0,
+          "BreakForce": 12000.0,
+          "BreakTorque": 0.0
+        },
+        "script:ce32257d4b696dd2bd98194d5eb14986": {}
+      }
+    },
+    {
+      "id": "d5b29407c0b1a226e232d34980831367",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge link 2"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.15000000596046448,
+            -19.799999237060547
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            4.0,
+            0.30000001192092896,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 10.0,
+          "LinearDamping": 0.30000001192092896,
+          "AngularDamping": 0.5,
+          "GravityFactor": 1.0,
+          "ContinuousCollision": false,
+          "AllowSleeping": true,
+          "ReportContacts": false,
+          "LockPositionX": false,
+          "LockPositionY": false,
+          "LockPositionZ": false,
+          "LockRotationX": false,
+          "LockRotationY": false,
+          "LockRotationZ": false
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "Joint": {
+          "Type": "Hinge",
+          "Connected": "1ad5baba5a7f15c456ade4942d529d5f",
+          "CollideConnected": false,
+          "AnchorA": [
+            0.0,
+            0.0,
+            0.5
+          ],
+          "AnchorB": [
+            0.0,
+            0.0,
+            -0.5
+          ],
+          "Axis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "NormalAxis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "LimitMin": 0.0,
+          "LimitMax": 0.0,
+          "SwingHalfAngle": 45.0,
+          "TwistHalfAngle": 45.0,
+          "SpringFrequency": 0.0,
+          "SpringDamping": 0.0,
+          "MotorMode": "Off",
+          "MotorTarget": 0.0,
+          "MotorMaxForce": 0.0,
+          "BreakForce": 12000.0,
+          "BreakTorque": 0.0
+        },
+        "script:ce32257d4b696dd2bd98194d5eb14986": {}
+      }
+    },
+    {
+      "id": "f52fd6336f19e6a70a615ffcae817c1a",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge link 3"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.15000000596046448,
+            -20.799999237060547
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            4.0,
+            0.30000001192092896,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 10.0,
+          "LinearDamping": 0.30000001192092896,
+          "AngularDamping": 0.5,
+          "GravityFactor": 1.0,
+          "ContinuousCollision": false,
+          "AllowSleeping": true,
+          "ReportContacts": false,
+          "LockPositionX": false,
+          "LockPositionY": false,
+          "LockPositionZ": false,
+          "LockRotationX": false,
+          "LockRotationY": false,
+          "LockRotationZ": false
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "Joint": {
+          "Type": "Hinge",
+          "Connected": "d5b29407c0b1a226e232d34980831367",
+          "CollideConnected": false,
+          "AnchorA": [
+            0.0,
+            0.0,
+            0.5
+          ],
+          "AnchorB": [
+            0.0,
+            0.0,
+            -0.5
+          ],
+          "Axis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "NormalAxis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "LimitMin": 0.0,
+          "LimitMax": 0.0,
+          "SwingHalfAngle": 45.0,
+          "TwistHalfAngle": 45.0,
+          "SpringFrequency": 0.0,
+          "SpringDamping": 0.0,
+          "MotorMode": "Off",
+          "MotorTarget": 0.0,
+          "MotorMaxForce": 0.0,
+          "BreakForce": 12000.0,
+          "BreakTorque": 0.0
+        },
+        "script:ce32257d4b696dd2bd98194d5eb14986": {}
+      }
+    },
+    {
+      "id": "633286fcf4c6838cb33a7baec923e701",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge link 4"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.15000000596046448,
+            -21.799999237060547
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            4.0,
+            0.30000001192092896,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 10.0,
+          "LinearDamping": 0.30000001192092896,
+          "AngularDamping": 0.5,
+          "GravityFactor": 1.0,
+          "ContinuousCollision": false,
+          "AllowSleeping": true,
+          "ReportContacts": false,
+          "LockPositionX": false,
+          "LockPositionY": false,
+          "LockPositionZ": false,
+          "LockRotationX": false,
+          "LockRotationY": false,
+          "LockRotationZ": false
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "Joint": {
+          "Type": "Hinge",
+          "Connected": "f52fd6336f19e6a70a615ffcae817c1a",
+          "CollideConnected": false,
+          "AnchorA": [
+            0.0,
+            0.0,
+            0.5
+          ],
+          "AnchorB": [
+            0.0,
+            0.0,
+            -0.5
+          ],
+          "Axis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "NormalAxis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "LimitMin": 0.0,
+          "LimitMax": 0.0,
+          "SwingHalfAngle": 45.0,
+          "TwistHalfAngle": 45.0,
+          "SpringFrequency": 0.0,
+          "SpringDamping": 0.0,
+          "MotorMode": "Off",
+          "MotorTarget": 0.0,
+          "MotorMaxForce": 0.0,
+          "BreakForce": 12000.0,
+          "BreakTorque": 0.0
+        },
+        "script:ce32257d4b696dd2bd98194d5eb14986": {}
+      }
+    },
+    {
+      "id": "90606d90eec2f6b7f20c83f96c261299",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge link 5"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.15000000596046448,
+            -22.799999237060547
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            4.0,
+            0.30000001192092896,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 10.0,
+          "LinearDamping": 0.30000001192092896,
+          "AngularDamping": 0.5,
+          "GravityFactor": 1.0,
+          "ContinuousCollision": false,
+          "AllowSleeping": true,
+          "ReportContacts": false,
+          "LockPositionX": false,
+          "LockPositionY": false,
+          "LockPositionZ": false,
+          "LockRotationX": false,
+          "LockRotationY": false,
+          "LockRotationZ": false
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "Joint": {
+          "Type": "Hinge",
+          "Connected": "633286fcf4c6838cb33a7baec923e701",
+          "CollideConnected": false,
+          "AnchorA": [
+            0.0,
+            0.0,
+            0.5
+          ],
+          "AnchorB": [
+            0.0,
+            0.0,
+            -0.5
+          ],
+          "Axis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "NormalAxis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "LimitMin": 0.0,
+          "LimitMax": 0.0,
+          "SwingHalfAngle": 45.0,
+          "TwistHalfAngle": 45.0,
+          "SpringFrequency": 0.0,
+          "SpringDamping": 0.0,
+          "MotorMode": "Off",
+          "MotorTarget": 0.0,
+          "MotorMaxForce": 0.0,
+          "BreakForce": 12000.0,
+          "BreakTorque": 0.0
+        },
+        "script:ce32257d4b696dd2bd98194d5eb14986": {}
+      }
+    },
+    {
+      "id": "40802f22adcaa7ed855844f3098d3626",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge link 6"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.15000000596046448,
+            -23.799999237060547
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            4.0,
+            0.30000001192092896,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 10.0,
+          "LinearDamping": 0.30000001192092896,
+          "AngularDamping": 0.5,
+          "GravityFactor": 1.0,
+          "ContinuousCollision": false,
+          "AllowSleeping": true,
+          "ReportContacts": false,
+          "LockPositionX": false,
+          "LockPositionY": false,
+          "LockPositionZ": false,
+          "LockRotationX": false,
+          "LockRotationY": false,
+          "LockRotationZ": false
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "Joint": {
+          "Type": "Hinge",
+          "Connected": "90606d90eec2f6b7f20c83f96c261299",
+          "CollideConnected": false,
+          "AnchorA": [
+            0.0,
+            0.0,
+            0.5
+          ],
+          "AnchorB": [
+            0.0,
+            0.0,
+            -0.5
+          ],
+          "Axis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "NormalAxis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "LimitMin": 0.0,
+          "LimitMax": 0.0,
+          "SwingHalfAngle": 45.0,
+          "TwistHalfAngle": 45.0,
+          "SpringFrequency": 0.0,
+          "SpringDamping": 0.0,
+          "MotorMode": "Off",
+          "MotorTarget": 0.0,
+          "MotorMaxForce": 0.0,
+          "BreakForce": 12000.0,
+          "BreakTorque": 0.0
+        },
+        "script:ce32257d4b696dd2bd98194d5eb14986": {}
+      }
+    },
+    {
+      "id": "a99bfee6a26905efb3ff617b816e4055",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge link 7"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.15000000596046448,
+            -24.799999237060547
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            4.0,
+            0.30000001192092896,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        },
+        "RigidBody": {
+          "Motion": "Dynamic",
+          "MassOverride": 10.0,
+          "LinearDamping": 0.30000001192092896,
+          "AngularDamping": 0.5,
+          "GravityFactor": 1.0,
+          "ContinuousCollision": false,
+          "AllowSleeping": true,
+          "ReportContacts": false,
+          "LockPositionX": false,
+          "LockPositionY": false,
+          "LockPositionZ": false,
+          "LockRotationX": false,
+          "LockRotationY": false,
+          "LockRotationZ": false
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "Joint": {
+          "Type": "Hinge",
+          "Connected": "40802f22adcaa7ed855844f3098d3626",
+          "CollideConnected": false,
+          "AnchorA": [
+            0.0,
+            0.0,
+            0.5
+          ],
+          "AnchorB": [
+            0.0,
+            0.0,
+            -0.5
+          ],
+          "Axis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "NormalAxis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "LimitMin": 0.0,
+          "LimitMax": 0.0,
+          "SwingHalfAngle": 45.0,
+          "TwistHalfAngle": 45.0,
+          "SpringFrequency": 0.0,
+          "SpringDamping": 0.0,
+          "MotorMode": "Off",
+          "MotorTarget": 0.0,
+          "MotorMaxForce": 0.0,
+          "BreakForce": 12000.0,
+          "BreakTorque": 0.0
+        },
+        "script:ce32257d4b696dd2bd98194d5eb14986": {}
+      }
+    },
+    {
+      "id": "476b77d9f841019c22f5f639fa234bf1",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge post B"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.15000000596046448,
+            -25.600000381469727
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            4.0,
+            0.30000001192092896,
+            0.6000000238418579
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "Joint": {
+          "Type": "Hinge",
+          "Connected": "a99bfee6a26905efb3ff617b816e4055",
+          "CollideConnected": false,
+          "AnchorA": [
+            0.0,
+            0.0,
+            0.30000001192092896
+          ],
+          "AnchorB": [
+            0.0,
+            0.0,
+            -0.5
+          ],
+          "Axis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "NormalAxis": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "LimitMin": 0.0,
+          "LimitMax": 0.0,
+          "SwingHalfAngle": 45.0,
+          "TwistHalfAngle": 45.0,
+          "SpringFrequency": 0.0,
+          "SpringDamping": 0.0,
+          "MotorMode": "Off",
+          "MotorTarget": 0.0,
+          "MotorMaxForce": 0.0,
+          "BreakForce": 0.0,
+          "BreakTorque": 0.0
+        }
+      }
+    },
+    {
+      "id": "8b310f00d893429ab627ce5e1bf649eb",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge rail L"
+        },
+        "Transform": {
+          "Position": [
+            -2.1500000953674316,
+            0.5,
+            -21.299999237060547
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.15000000596046448,
+            1.0,
+            9.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "38aaa9886f4a472aeb5bcd10a93f944b",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge rail R"
+        },
+        "Transform": {
+          "Position": [
+            2.1500000953674316,
+            0.5,
+            -21.299999237060547
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.15000000596046448,
+            1.0,
+            9.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "abc197f358b973f884fcf2ee6a999b64",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge lantern L1"
+        },
+        "Transform": {
+          "Position": [
+            -2.1500000953674316,
+            1.25,
+            -18.5
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.6000000238418579,
+            0.30000001192092896,
+            1.0
+          ],
+          "Intensity": 10.0,
+          "Range": 6.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": false
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2c422f2cb998d5ce94f1ea5a416b0b27",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge lantern R1"
+        },
+        "Transform": {
+          "Position": [
+            2.1500000953674316,
+            1.25,
+            -18.5
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.6000000238418579,
+            0.30000001192092896,
+            1.0
+          ],
+          "Intensity": 10.0,
+          "Range": 6.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": false
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d39ac740ac7a2741adda4402a580eccb",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge lantern L2"
+        },
+        "Transform": {
+          "Position": [
+            -2.1500000953674316,
+            1.25,
+            -24.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.6000000238418579,
+            0.30000001192092896,
+            1.0
+          ],
+          "Intensity": 10.0,
+          "Range": 6.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": false
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dfbab7dc42a0d47b93e5f935cc69066c",
+      "parent": "daaa1d8f742133ce0d122bf019b6b4d3",
+      "components": {
+        "Name": {
+          "Value": "Bridge lantern R2"
+        },
+        "Transform": {
+          "Position": [
+            2.1500000953674316,
+            1.25,
+            -24.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.6000000238418579,
+            0.30000001192092896,
+            1.0
+          ],
+          "Intensity": 10.0,
+          "Range": 6.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": false
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Far side"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "c3269257c0e427119a03c711bedfa639",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Landing"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.5,
+            -29.450000762939453
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            8.0,
+            1.0,
+            7.099999904632568
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "8f8df118c4cf2e803024a64d42fdb97f",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Approach"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.5,
+            -60.77447509765625
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            8.0,
+            1.0,
+            23.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "ac823a99d1307a64a7169d0006455da5",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Sliding platform"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -0.15000000596046448,
+            -40.21343231201172
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            4.0,
+            0.30000001192092896,
+            4.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "0502310d9e1378628f0d4ece89b5b301",
+              "localId": 0
+            }
+          ]
+        },
+        "RigidBody": {
+          "Motion": "Kinematic",
+          "MassOverride": 0.0,
+          "LinearDamping": 0.05000000074505806,
+          "AngularDamping": 0.05000000074505806,
+          "GravityFactor": 1.0,
+          "ContinuousCollision": false,
+          "AllowSleeping": true,
+          "ReportContacts": false,
+          "LockPositionX": false,
+          "LockPositionY": false,
+          "LockPositionZ": false,
+          "LockRotationX": false,
+          "LockRotationY": false,
+          "LockRotationZ": false
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "script:3a610844eab257530c528320c6807b4f": {
+          "amplitude": 4.676000118255615,
+          "speed": 0.8999999761581421
+        }
+      }
+    },
+    {
+      "id": "850f06dd0921666614d0bb7c3996698e",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Landing rail L"
+        },
+        "Transform": {
+          "Position": [
+            -4.150000095367432,
+            0.5,
+            -29.450000762939453
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.30000001192092896,
+            1.0,
+            7.099999904632568
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "6e968cd6f46b423c700fe68b17ad2b22",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Approach rail L"
+        },
+        "Transform": {
+          "Position": [
+            -4.150000095367432,
+            0.5,
+            -60.24745178222656
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.30000001192092896,
+            1.0,
+            23.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "b93ab7ef45af03f5913668126bd5391a",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Landing rail R"
+        },
+        "Transform": {
+          "Position": [
+            4.150000095367432,
+            0.5,
+            -29.450000762939453
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.30000001192092896,
+            1.0,
+            7.099999904632568
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "3972e9e3a621cee5c252fc01c37b1e6c",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Approach rail R"
+        },
+        "Transform": {
+          "Position": [
+            4.150000095367432,
+            0.5,
+            -60.82386779785156
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.30000001192092896,
+            1.0,
+            23.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "b4e4518584f3af1fc2eb504b042b72ba",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Gate door"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            3.0,
+            -62.524452209472656
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            8.0,
+            6.0,
+            0.6000000238418579
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "4f81c13e8bae1551a55cce909d08399b",
+              "localId": 0
+            }
+          ]
+        },
+        "RigidBody": {
+          "Motion": "Kinematic",
+          "MassOverride": 0.0,
+          "LinearDamping": 0.05000000074505806,
+          "AngularDamping": 0.05000000074505806,
+          "GravityFactor": 1.0,
+          "ContinuousCollision": false,
+          "AllowSleeping": true,
+          "ReportContacts": false,
+          "LockPositionX": false,
+          "LockPositionY": false,
+          "LockPositionZ": false,
+          "LockRotationX": false,
+          "LockRotationY": false,
+          "LockRotationZ": false
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "script:c763b9eb8c73c351dd367e470faabbb5": {
+          "drop": 7.0,
+          "group": "approach",
+          "needs_arena": true,
+          "speed": 4.0
+        }
+      }
+    },
+    {
+      "id": "553bc3ea3f8482185befdd2455f561ea",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Gate pillar L"
+        },
+        "Transform": {
+          "Position": [
+            -4.400000095367432,
+            2.5,
+            -62.62345886230469
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.2000000476837158,
+            5.0,
+            1.2000000476837158
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "bfabfc2db3bf49c38f23b602f22764a6",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Gate pillar R"
+        },
+        "Transform": {
+          "Position": [
+            4.400000095367432,
+            2.5,
+            -62.7406120300293
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.2000000476837158,
+            5.0,
+            1.2000000476837158
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": false,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        }
+      }
+    },
+    {
+      "id": "9c94bd880998d6353a016bc3ca711c6b",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Gate"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            2.0,
+            -43.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            8.0,
+            4.0,
+            3.0
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": true,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "script:ffaa1eb00873a43b6d40729952f272d1": {
+          "group": "approach",
+          "scene": "assets/game/scenes/boss_arena.wscene"
+        }
+      }
+    },
+    {
+      "id": "afbbd5835b58e68d7832ce57cc9243d1",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Gate lamp"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            4.0,
+            -45.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            0.5,
+            0.800000011920929,
+            1.0,
+            1.0
+          ],
+          "Intensity": 25.0,
+          "Range": 12.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "3601341888678577d371966dd31480f6",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Beacon"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            4.900000095367432,
+            -69.17610931396484
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.4000000059604645,
+            0.4000000059604645,
+            0.4000000059604645
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "53523290ebbfd6b271eb22805a4c9cbb",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c03492b40581b4a4296893c2a6b9e022",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Gate flame L"
+        },
+        "Transform": {
+          "Position": [
+            -4.400000095367432,
+            5.5,
+            -62.24469757080078
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.5,
+            0.20000000298023224,
+            1.0
+          ],
+          "Intensity": 26.0,
+          "Range": 10.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": false
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "86b409174c851e83ef8c71632e2cf340",
+      "parent": "0fd2f25b584d31e13a8a394db7c632cf",
+      "components": {
+        "Name": {
+          "Value": "Gate flame R"
+        },
+        "Transform": {
+          "Position": [
+            4.400000095367432,
+            5.5,
+            -61.80155563354492
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1.0,
+            0.5,
+            0.20000000298023224,
+            1.0
+          ],
+          "Intensity": 26.0,
+          "Range": 10.0,
+          "InnerAngle": 20.0,
+          "OuterAngle": 30.0,
+          "CastsShadows": false
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "8357daf66889d53b38d2344e5caaab05",
+      "components": {
+        "Name": {
+          "Value": "Checkpoints"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "5008900925a8863ca14efa2a8c2daddc",
+      "parent": "8357daf66889d53b38d2344e5caaab05",
+      "components": {
+        "Name": {
+          "Value": "Checkpoint 2"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.10000000149011612,
+            -29.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            6.0,
+            3.0,
+            3.0
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": true,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "script:ac0114e3e1c2e22a2ba1390ec0d4a5d7": {}
+      }
+    },
+    {
+      "id": "72766399a86e3793b4e93eaa2df0d997",
+      "parent": "8357daf66889d53b38d2344e5caaab05",
+      "components": {
+        "Name": {
+          "Value": "Checkpoint 3"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.10000000149011612,
+            -41.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            6.0,
+            3.0,
+            2.0
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": true,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "script:ac0114e3e1c2e22a2ba1390ec0d4a5d7": {}
+      }
+    },
+    {
+      "id": "596c81903e8e8247fbdda996fd6596ed",
+      "components": {
+        "Name": {
+          "Value": "Zones"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "51b64d55e590c2d3c5e32778efe88bce",
+      "parent": "596c81903e8e8247fbdda996fd6596ed",
+      "components": {
+        "Name": {
+          "Value": "Zone courtyard"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            3.0,
+            -0.8500000238418579
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            30.0,
+            6.0,
+            31.700000762939453
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": true,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "script:e3fd15b31b7fdb8f2a11ec595e0b1d98": {
+          "zone": "courtyard"
+        }
+      }
+    },
+    {
+      "id": "7e01e854c3ac7e37c0b3b40c9c180921",
+      "parent": "596c81903e8e8247fbdda996fd6596ed",
+      "components": {
+        "Name": {
+          "Value": "Zone bridge"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            3.0,
+            -21.5
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            6.0,
+            6.0,
+            9.0
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": true,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "script:e3fd15b31b7fdb8f2a11ec595e0b1d98": {
+          "zone": "bridge"
+        }
+      }
+    },
+    {
+      "id": "83e49e49252c85cb8891a77c3eb837b7",
+      "parent": "596c81903e8e8247fbdda996fd6596ed",
+      "components": {
+        "Name": {
+          "Value": "Zone approach"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            3.0,
+            -43.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            8.0,
+            6.0,
+            34.0
+          ]
+        },
+        "Collider": {
+          "Shape": "Box",
+          "Size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "Offset": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RotationEuler": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "IsTrigger": true,
+          "Layer": 0,
+          "Material": null,
+          "Mesh": null
+        },
+        "script:e3fd15b31b7fdb8f2a11ec595e0b1d98": {
+          "zone": "approach"
+        }
+      }
+    },
+    {
+      "id": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectiles"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "script:61047bb16de1496e126b5fb82fade1a4": {
+          "count": 12,
+          "damage": 25.0,
+          "life": 2.5,
+          "owner": "player",
+          "prefix": "Projectile",
+          "size": 0.3499999940395355,
+          "speed": 24.0
+        }
+      }
+    },
+    {
+      "id": "e82fea0d9228e9a0acce26bbf87c1a6f",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 1"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b64a3ad351a569876eeae6b23e89adeb",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 2"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3858de4d4e537ba6299553aac49a6803",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 3"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ebd24f4295d291fbbf746129e2229f41",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 4"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3ced53bdf33a48797411991711ac95b0",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 5"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "59dbcb4ab77a27182d59685acc2f7017",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 6"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "71ecef0faeff8a79daf1bacc7f902679",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 7"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ea801a4c493023f46174bc51e9fca486",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 8"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e7fe343d2141481f4e64f80d8f444d14",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 9"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "13328fe03922136401a3ee4778be252f",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 10"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7a0bfacf1851457a77c1aa19f82145da",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 11"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2852de1c3e6f4ee14feffe0162f719ce",
+      "parent": "7116f766052e289c61b74197373fc834",
+      "components": {
+        "Name": {
+          "Value": "Projectile 12"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9d242d34eb0befa5ffd5b6c55d572c25",
+      "components": {
+        "Name": {
+          "Value": "Fireballs"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "script:61047bb16de1496e126b5fb82fade1a4": {
+          "count": 10,
+          "damage": 14.0,
+          "life": 3.5,
+          "owner": "boss",
+          "prefix": "Fireball",
+          "size": 0.699999988079071,
+          "speed": 13.0
+        }
+      }
+    },
+    {
+      "id": "2d72f22e07f390d67236de0bd022ccb4",
+      "parent": "9d242d34eb0befa5ffd5b6c55d572c25",
+      "components": {
+        "Name": {
+          "Value": "Fireball 1"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e55fa03a7cbd6803ea9097e460705c8e",
+      "parent": "9d242d34eb0befa5ffd5b6c55d572c25",
+      "components": {
+        "Name": {
+          "Value": "Fireball 2"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "17a7471798eb90e05bfd703c91392941",
+      "parent": "9d242d34eb0befa5ffd5b6c55d572c25",
+      "components": {
+        "Name": {
+          "Value": "Fireball 3"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b3ac94151284076286c866c159e46ce1",
+      "parent": "9d242d34eb0befa5ffd5b6c55d572c25",
+      "components": {
+        "Name": {
+          "Value": "Fireball 4"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3fd6c2e0c8d640275d6e1eb1cc75d35d",
+      "parent": "9d242d34eb0befa5ffd5b6c55d572c25",
+      "components": {
+        "Name": {
+          "Value": "Fireball 5"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "45c2f1ce60e48276230f515dc191ab41",
+      "parent": "9d242d34eb0befa5ffd5b6c55d572c25",
+      "components": {
+        "Name": {
+          "Value": "Fireball 6"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "85f7a475ad89e54efe32b5982acb5993",
+      "parent": "9d242d34eb0befa5ffd5b6c55d572c25",
+      "components": {
+        "Name": {
+          "Value": "Fireball 7"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fe2674a371d9792af6688b76cd14673d",
+      "parent": "9d242d34eb0befa5ffd5b6c55d572c25",
+      "components": {
+        "Name": {
+          "Value": "Fireball 8"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "491b1c92c05d49724eb3c1e69ee98352",
+      "parent": "9d242d34eb0befa5ffd5b6c55d572c25",
+      "components": {
+        "Name": {
+          "Value": "Fireball 9"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "90cd590d71ed704098120cacf727ea33",
+      "parent": "9d242d34eb0befa5ffd5b6c55d572c25",
+      "components": {
+        "Name": {
+          "Value": "Fireball 10"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "045521ac7e504c83365c877685d0a9e5",
+      "components": {
+        "Name": {
+          "Value": "Hearts"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "script:633d2044f186d2b0851fcbda4881f1e7": {
+          "amount": 25.0,
+          "count": 6,
+          "kind": "health",
+          "life": 20.0,
+          "pickup_radius": 1.399999976158142,
+          "prefix": "Heart",
+          "size": 0.4000000059604645
+        }
+      }
+    },
+    {
+      "id": "53832daa201778906cff450a1bedffde",
+      "parent": "045521ac7e504c83365c877685d0a9e5",
+      "components": {
+        "Name": {
+          "Value": "Heart 1"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "08a69d31b9aecf73937d55dc3c5ddb19",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "25db6852a9c555a01f79efb0c5852c05",
+      "parent": "045521ac7e504c83365c877685d0a9e5",
+      "components": {
+        "Name": {
+          "Value": "Heart 2"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "08a69d31b9aecf73937d55dc3c5ddb19",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "15bf2a561646b21038a8a456a517a669",
+      "parent": "045521ac7e504c83365c877685d0a9e5",
+      "components": {
+        "Name": {
+          "Value": "Heart 3"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "08a69d31b9aecf73937d55dc3c5ddb19",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3e57b7a2accb7b4483947f965943caf6",
+      "parent": "045521ac7e504c83365c877685d0a9e5",
+      "components": {
+        "Name": {
+          "Value": "Heart 4"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "08a69d31b9aecf73937d55dc3c5ddb19",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3210a11d54b88231c8912736eab0ddf2",
+      "parent": "045521ac7e504c83365c877685d0a9e5",
+      "components": {
+        "Name": {
+          "Value": "Heart 5"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "08a69d31b9aecf73937d55dc3c5ddb19",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a80f70d98963a69c4b6c7b5ec1c2dfe3",
+      "parent": "045521ac7e504c83365c877685d0a9e5",
+      "components": {
+        "Name": {
+          "Value": "Heart 6"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "08a69d31b9aecf73937d55dc3c5ddb19",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6f9b877c6f574031ae7c8b8b348df028",
+      "components": {
+        "Name": {
+          "Value": "Orbs"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "script:633d2044f186d2b0851fcbda4881f1e7": {
+          "amount": 40.0,
+          "count": 6,
+          "kind": "resource",
+          "life": 20.0,
+          "pickup_radius": 1.399999976158142,
+          "prefix": "Orb",
+          "size": 0.4000000059604645
+        }
+      }
+    },
+    {
+      "id": "dfcd5854c9ffa109cb232544749b9f82",
+      "parent": "6f9b877c6f574031ae7c8b8b348df028",
+      "components": {
+        "Name": {
+          "Value": "Orb 1"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "0502310d9e1378628f0d4ece89b5b301",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "466ac924b4d8f05749d74db09dd5fa01",
+      "parent": "6f9b877c6f574031ae7c8b8b348df028",
+      "components": {
+        "Name": {
+          "Value": "Orb 2"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "0502310d9e1378628f0d4ece89b5b301",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c782d9c3d98203dd1e81d6182f0df135",
+      "parent": "6f9b877c6f574031ae7c8b8b348df028",
+      "components": {
+        "Name": {
+          "Value": "Orb 3"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "0502310d9e1378628f0d4ece89b5b301",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "06fa7059643d90e67ff7ff4d514caa93",
+      "parent": "6f9b877c6f574031ae7c8b8b348df028",
+      "components": {
+        "Name": {
+          "Value": "Orb 4"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "0502310d9e1378628f0d4ece89b5b301",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1adc60a0bbb5caac0d7130804ed7be0c",
+      "parent": "6f9b877c6f574031ae7c8b8b348df028",
+      "components": {
+        "Name": {
+          "Value": "Orb 5"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "0502310d9e1378628f0d4ece89b5b301",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e8d919673030782423dbdfffceda6848",
+      "parent": "6f9b877c6f574031ae7c8b8b348df028",
+      "components": {
+        "Name": {
+          "Value": "Orb 6"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            -200.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "0502310d9e1378628f0d4ece89b5b301",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0a497d74467d05ca33d649561c5178aa",
+      "components": {
+        "Name": {
+          "Value": "Enemy 1"
+        },
+        "Transform": {
+          "Position": [
+            -6.0,
+            0.10000000149011612,
+            2.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "CharacterController": {
+          "Radius": 0.5,
+          "Height": 1.7999999523162842,
+          "Offset": [
+            0.0,
+            0.8999999761581421,
+            0.0
+          ],
+          "StepHeight": 0.3499999940395355,
+          "MaxSlopeAngle": 45.0,
+          "Mass": 70.0,
+          "PushStrength": 100.0,
+          "GravityFactor": 1.0,
+          "Layer": 0
+        },
+        "script:da12ed173a427584205cba432cd50040": {
+          "aggro": 12.0,
+          "bar": 1,
+          "bar_height": 2.4000000953674316,
+          "boss": false,
+          "clip_attack": "MonsterArmature|Bite_Front",
+          "clip_death": "MonsterArmature|Death",
+          "clip_idle": "MonsterArmature|Idle",
+          "clip_move": "MonsterArmature|Walk",
+          "damage": 8.0,
+          "dormant": false,
+          "group": "courtyard",
+          "max_hp": 50.0,
+          "model_scale": 1.0,
+          "reach": 1.7999999523162842,
+          "speed": 4.199999809265137
+        }
+      }
+    },
+    {
+      "id": "13a1d565ca011fa3712fe6dadaad9aca",
+      "parent": "0a497d74467d05ca33d649561c5178aa",
+      "components": {
+        "Name": {
+          "Value": "Enemy 1 model"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "a1bf9c7eb011dbcf68fdc51c1a0dc8e6",
+            "localId": 0
+          }
+        },
+        "Animator": {
+          "Skeleton": {
+            "guid": "2dd3d4f158b471f3cdbbecd1318c0631",
+            "localId": 0
+          },
+          "Clips": [
+            {
+              "guid": "5ee0b7db0abea8047366153c7199ca4b",
+              "localId": 0
+            },
+            {
+              "guid": "1c037bb970e27ade08a9206010fa0950",
+              "localId": 0
+            },
+            {
+              "guid": "27d9e4ea8fa9b463e918dc7c55387c9a",
+              "localId": 0
+            },
+            {
+              "guid": "e9baaf8ef9dd11f69bb521fe82e8978b",
+              "localId": 0
+            },
+            {
+              "guid": "396fe690a443c7660379c537df23c826",
+              "localId": 0
+            },
+            {
+              "guid": "9ab33ab9d2c9a0d9fb219942a2f41252",
+              "localId": 0
+            },
+            {
+              "guid": "d5d5a1597c00791ce16822a61959138d",
+              "localId": 0
+            },
+            {
+              "guid": "44408cd764f7d0977b970bd089aca83d",
+              "localId": 0
+            },
+            {
+              "guid": "37ec0d1269e7ac38b01378cc2de4e740",
+              "localId": 0
+            },
+            {
+              "guid": "fb417452354c3f2fdf88efed13ac91d6",
+              "localId": 0
+            }
+          ],
+          "Clip": {
+            "guid": "5ee0b7db0abea8047366153c7199ca4b",
+            "localId": 0
+          },
+          "PlayOnStart": true,
+          "Speed": 1.0,
+          "Enabled": true,
+          "BoundsPadding": 0.0,
+          "Graph": null
+        }
+      }
+    },
+    {
+      "id": "357206200a23ca980eac883f010a4dad",
+      "components": {
+        "Name": {
+          "Value": "Enemy 2"
+        },
+        "Transform": {
+          "Position": [
+            7.0,
+            0.10000000149011612,
+            -3.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "CharacterController": {
+          "Radius": 0.5,
+          "Height": 1.7999999523162842,
+          "Offset": [
+            0.0,
+            0.8999999761581421,
+            0.0
+          ],
+          "StepHeight": 0.3499999940395355,
+          "MaxSlopeAngle": 45.0,
+          "Mass": 70.0,
+          "PushStrength": 100.0,
+          "GravityFactor": 1.0,
+          "Layer": 0
+        },
+        "script:da12ed173a427584205cba432cd50040": {
+          "aggro": 12.0,
+          "bar": 2,
+          "bar_height": 2.4000000953674316,
+          "boss": false,
+          "clip_attack": "MonsterArmature|Bite_Front",
+          "clip_death": "MonsterArmature|Death",
+          "clip_idle": "MonsterArmature|Idle",
+          "clip_move": "MonsterArmature|Walk",
+          "damage": 8.0,
+          "dormant": false,
+          "group": "courtyard",
+          "max_hp": 50.0,
+          "model_scale": 1.0,
+          "reach": 1.7999999523162842,
+          "speed": 4.199999809265137
+        }
+      }
+    },
+    {
+      "id": "ef2cbd219b611b865ea2db8160b74263",
+      "parent": "357206200a23ca980eac883f010a4dad",
+      "components": {
+        "Name": {
+          "Value": "Enemy 2 model"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "a1bf9c7eb011dbcf68fdc51c1a0dc8e6",
+            "localId": 0
+          }
+        },
+        "Animator": {
+          "Skeleton": {
+            "guid": "2dd3d4f158b471f3cdbbecd1318c0631",
+            "localId": 0
+          },
+          "Clips": [
+            {
+              "guid": "5ee0b7db0abea8047366153c7199ca4b",
+              "localId": 0
+            },
+            {
+              "guid": "1c037bb970e27ade08a9206010fa0950",
+              "localId": 0
+            },
+            {
+              "guid": "27d9e4ea8fa9b463e918dc7c55387c9a",
+              "localId": 0
+            },
+            {
+              "guid": "e9baaf8ef9dd11f69bb521fe82e8978b",
+              "localId": 0
+            },
+            {
+              "guid": "396fe690a443c7660379c537df23c826",
+              "localId": 0
+            },
+            {
+              "guid": "9ab33ab9d2c9a0d9fb219942a2f41252",
+              "localId": 0
+            },
+            {
+              "guid": "d5d5a1597c00791ce16822a61959138d",
+              "localId": 0
+            },
+            {
+              "guid": "44408cd764f7d0977b970bd089aca83d",
+              "localId": 0
+            },
+            {
+              "guid": "37ec0d1269e7ac38b01378cc2de4e740",
+              "localId": 0
+            },
+            {
+              "guid": "fb417452354c3f2fdf88efed13ac91d6",
+              "localId": 0
+            }
+          ],
+          "Clip": {
+            "guid": "5ee0b7db0abea8047366153c7199ca4b",
+            "localId": 0
+          },
+          "PlayOnStart": true,
+          "Speed": 1.0,
+          "Enabled": true,
+          "BoundsPadding": 0.0,
+          "Graph": null
+        }
+      }
+    },
+    {
+      "id": "3dd90e7ac68798bc919f77541e86ec60",
+      "components": {
+        "Name": {
+          "Value": "Enemy 3"
+        },
+        "Transform": {
+          "Position": [
+            -7.0,
+            0.10000000149011612,
+            -8.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "CharacterController": {
+          "Radius": 0.5,
+          "Height": 1.7999999523162842,
+          "Offset": [
+            0.0,
+            0.8999999761581421,
+            0.0
+          ],
+          "StepHeight": 0.3499999940395355,
+          "MaxSlopeAngle": 45.0,
+          "Mass": 70.0,
+          "PushStrength": 100.0,
+          "GravityFactor": 1.0,
+          "Layer": 0
+        },
+        "script:da12ed173a427584205cba432cd50040": {
+          "aggro": 11.0,
+          "bar": 3,
+          "bar_height": 2.4000000953674316,
+          "boss": false,
+          "clip_attack": "MonsterArmature|Bite_Front",
+          "clip_death": "MonsterArmature|Death",
+          "clip_idle": "MonsterArmature|Idle",
+          "clip_move": "MonsterArmature|Walk",
+          "damage": 14.0,
+          "dormant": false,
+          "group": "courtyard",
+          "max_hp": 90.0,
+          "model_scale": 1.0,
+          "reach": 2.0,
+          "speed": 2.4000000953674316
+        }
+      }
+    },
+    {
+      "id": "2ee322bdae09fefcb002b44c3f54448d",
+      "parent": "3dd90e7ac68798bc919f77541e86ec60",
+      "components": {
+        "Name": {
+          "Value": "Enemy 3 model"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "5325b6b87c760cc0b5bfce74a5e9728b",
+            "localId": 0
+          }
+        },
+        "Animator": {
+          "Skeleton": {
+            "guid": "d9cfa6060c051c325a4236c04266a9c2",
+            "localId": 0
+          },
+          "Clips": [
+            {
+              "guid": "815af492f165530db4e9d1da42af5eae",
+              "localId": 0
+            },
+            {
+              "guid": "b44a2c50fc03b97fa8d4983379a05f34",
+              "localId": 0
+            },
+            {
+              "guid": "2604067497098618e90ed62c239f4a9f",
+              "localId": 0
+            },
+            {
+              "guid": "7c518e3f7fd609213c0e833b29ef41cc",
+              "localId": 0
+            },
+            {
+              "guid": "252abb10d022a711c2f24a5e8926d8e5",
+              "localId": 0
+            },
+            {
+              "guid": "292b0597485b247c7702ce3e9e690dd2",
+              "localId": 0
+            },
+            {
+              "guid": "86dfbbb649eefffbb354f6af7890514c",
+              "localId": 0
+            },
+            {
+              "guid": "cb880bcdaec8f1420c5e09434712379e",
+              "localId": 0
+            },
+            {
+              "guid": "1811b1fd0206e119671a62a1cb1de95d",
+              "localId": 0
+            },
+            {
+              "guid": "9f018bf6eeff5a3390a60435dafcbdc1",
+              "localId": 0
+            }
+          ],
+          "Clip": {
+            "guid": "815af492f165530db4e9d1da42af5eae",
+            "localId": 0
+          },
+          "PlayOnStart": true,
+          "Speed": 1.0,
+          "Enabled": true,
+          "BoundsPadding": 0.0,
+          "Graph": null
+        }
+      }
+    },
+    {
+      "id": "a6a3986d0a0fbf9ecb4dffb748d29ffe",
+      "components": {
+        "Name": {
+          "Value": "Enemy 4"
+        },
+        "Transform": {
+          "Position": [
+            6.0,
+            0.10000000149011612,
+            -10.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "CharacterController": {
+          "Radius": 0.5,
+          "Height": 1.7999999523162842,
+          "Offset": [
+            0.0,
+            0.8999999761581421,
+            0.0
+          ],
+          "StepHeight": 0.3499999940395355,
+          "MaxSlopeAngle": 45.0,
+          "Mass": 70.0,
+          "PushStrength": 100.0,
+          "GravityFactor": 1.0,
+          "Layer": 0
+        },
+        "script:da12ed173a427584205cba432cd50040": {
+          "aggro": 11.0,
+          "bar": 4,
+          "bar_height": 2.4000000953674316,
+          "boss": false,
+          "clip_attack": "MonsterArmature|Bite_Front",
+          "clip_death": "MonsterArmature|Death",
+          "clip_idle": "MonsterArmature|Idle",
+          "clip_move": "MonsterArmature|Walk",
+          "damage": 14.0,
+          "dormant": false,
+          "group": "courtyard",
+          "max_hp": 90.0,
+          "model_scale": 1.0,
+          "reach": 2.0,
+          "speed": 2.4000000953674316
+        }
+      }
+    },
+    {
+      "id": "6bf64a008bfc7bd29fecc6de7da69b9a",
+      "parent": "a6a3986d0a0fbf9ecb4dffb748d29ffe",
+      "components": {
+        "Name": {
+          "Value": "Enemy 4 model"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "5325b6b87c760cc0b5bfce74a5e9728b",
+            "localId": 0
+          }
+        },
+        "Animator": {
+          "Skeleton": {
+            "guid": "d9cfa6060c051c325a4236c04266a9c2",
+            "localId": 0
+          },
+          "Clips": [
+            {
+              "guid": "815af492f165530db4e9d1da42af5eae",
+              "localId": 0
+            },
+            {
+              "guid": "b44a2c50fc03b97fa8d4983379a05f34",
+              "localId": 0
+            },
+            {
+              "guid": "2604067497098618e90ed62c239f4a9f",
+              "localId": 0
+            },
+            {
+              "guid": "7c518e3f7fd609213c0e833b29ef41cc",
+              "localId": 0
+            },
+            {
+              "guid": "252abb10d022a711c2f24a5e8926d8e5",
+              "localId": 0
+            },
+            {
+              "guid": "292b0597485b247c7702ce3e9e690dd2",
+              "localId": 0
+            },
+            {
+              "guid": "86dfbbb649eefffbb354f6af7890514c",
+              "localId": 0
+            },
+            {
+              "guid": "cb880bcdaec8f1420c5e09434712379e",
+              "localId": 0
+            },
+            {
+              "guid": "1811b1fd0206e119671a62a1cb1de95d",
+              "localId": 0
+            },
+            {
+              "guid": "9f018bf6eeff5a3390a60435dafcbdc1",
+              "localId": 0
+            }
+          ],
+          "Clip": {
+            "guid": "815af492f165530db4e9d1da42af5eae",
+            "localId": 0
+          },
+          "PlayOnStart": true,
+          "Speed": 1.0,
+          "Enabled": true,
+          "BoundsPadding": 0.0,
+          "Graph": null
+        }
+      }
+    },
+    {
+      "id": "0a2ac6868971f06b915badc46ebe82a9",
+      "components": {
+        "Name": {
+          "Value": "Enemy 5"
+        },
+        "Transform": {
+          "Position": [
+            -2.0,
+            0.10000000149011612,
+            -58.421104431152344
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "CharacterController": {
+          "Radius": 0.5,
+          "Height": 1.7999999523162842,
+          "Offset": [
+            0.0,
+            0.8999999761581421,
+            0.0
+          ],
+          "StepHeight": 0.3499999940395355,
+          "MaxSlopeAngle": 45.0,
+          "Mass": 70.0,
+          "PushStrength": 100.0,
+          "GravityFactor": 1.0,
+          "Layer": 0
+        },
+        "script:da12ed173a427584205cba432cd50040": {
+          "aggro": 12.0,
+          "bar": 5,
+          "bar_height": 2.4000000953674316,
+          "boss": false,
+          "clip_attack": "MonsterArmature|Bite_Front",
+          "clip_death": "MonsterArmature|Death",
+          "clip_idle": "MonsterArmature|Idle",
+          "clip_move": "MonsterArmature|Walk",
+          "damage": 8.0,
+          "dormant": false,
+          "group": "approach",
+          "max_hp": 50.0,
+          "model_scale": 1.0,
+          "reach": 1.7999999523162842,
+          "speed": 4.199999809265137
+        }
+      }
+    },
+    {
+      "id": "7a1cc03d299adb4ed28d35704cc80ed5",
+      "parent": "0a2ac6868971f06b915badc46ebe82a9",
+      "components": {
+        "Name": {
+          "Value": "Enemy 5 model"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "a1bf9c7eb011dbcf68fdc51c1a0dc8e6",
+            "localId": 0
+          }
+        },
+        "Animator": {
+          "Skeleton": {
+            "guid": "2dd3d4f158b471f3cdbbecd1318c0631",
+            "localId": 0
+          },
+          "Clips": [
+            {
+              "guid": "5ee0b7db0abea8047366153c7199ca4b",
+              "localId": 0
+            },
+            {
+              "guid": "1c037bb970e27ade08a9206010fa0950",
+              "localId": 0
+            },
+            {
+              "guid": "27d9e4ea8fa9b463e918dc7c55387c9a",
+              "localId": 0
+            },
+            {
+              "guid": "e9baaf8ef9dd11f69bb521fe82e8978b",
+              "localId": 0
+            },
+            {
+              "guid": "396fe690a443c7660379c537df23c826",
+              "localId": 0
+            },
+            {
+              "guid": "9ab33ab9d2c9a0d9fb219942a2f41252",
+              "localId": 0
+            },
+            {
+              "guid": "d5d5a1597c00791ce16822a61959138d",
+              "localId": 0
+            },
+            {
+              "guid": "44408cd764f7d0977b970bd089aca83d",
+              "localId": 0
+            },
+            {
+              "guid": "37ec0d1269e7ac38b01378cc2de4e740",
+              "localId": 0
+            },
+            {
+              "guid": "fb417452354c3f2fdf88efed13ac91d6",
+              "localId": 0
+            }
+          ],
+          "Clip": {
+            "guid": "5ee0b7db0abea8047366153c7199ca4b",
+            "localId": 0
+          },
+          "PlayOnStart": true,
+          "Speed": 1.0,
+          "Enabled": true,
+          "BoundsPadding": 0.0,
+          "Graph": null
+        }
+      }
+    },
+    {
+      "id": "ef003d542338776d205c4f729970932c",
+      "components": {
+        "Name": {
+          "Value": "Enemy 6"
+        },
+        "Transform": {
+          "Position": [
+            2.0,
+            0.10000000149011612,
+            -58.9006462097168
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "CharacterController": {
+          "Radius": 0.5,
+          "Height": 1.7999999523162842,
+          "Offset": [
+            0.0,
+            0.8999999761581421,
+            0.0
+          ],
+          "StepHeight": 0.3499999940395355,
+          "MaxSlopeAngle": 45.0,
+          "Mass": 70.0,
+          "PushStrength": 100.0,
+          "GravityFactor": 1.0,
+          "Layer": 0
+        },
+        "script:da12ed173a427584205cba432cd50040": {
+          "aggro": 11.0,
+          "bar": 6,
+          "bar_height": 2.4000000953674316,
+          "boss": false,
+          "clip_attack": "MonsterArmature|Bite_Front",
+          "clip_death": "MonsterArmature|Death",
+          "clip_idle": "MonsterArmature|Idle",
+          "clip_move": "MonsterArmature|Walk",
+          "damage": 14.0,
+          "dormant": false,
+          "group": "approach",
+          "max_hp": 90.0,
+          "model_scale": 1.0,
+          "reach": 2.0,
+          "speed": 2.4000000953674316
+        }
+      }
+    },
+    {
+      "id": "2c4d6774d75936b73276151645eaa7d6",
+      "parent": "ef003d542338776d205c4f729970932c",
+      "components": {
+        "Name": {
+          "Value": "Enemy 6 model"
+        },
+        "Transform": {
+          "Position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "Rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "Scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "5325b6b87c760cc0b5bfce74a5e9728b",
+            "localId": 0
+          }
+        },
+        "Animator": {
+          "Skeleton": {
+            "guid": "d9cfa6060c051c325a4236c04266a9c2",
+            "localId": 0
+          },
+          "Clips": [
+            {
+              "guid": "815af492f165530db4e9d1da42af5eae",
+              "localId": 0
+            },
+            {
+              "guid": "b44a2c50fc03b97fa8d4983379a05f34",
+              "localId": 0
+            },
+            {
+              "guid": "2604067497098618e90ed62c239f4a9f",
+              "localId": 0
+            },
+            {
+              "guid": "7c518e3f7fd609213c0e833b29ef41cc",
+              "localId": 0
+            },
+            {
+              "guid": "252abb10d022a711c2f24a5e8926d8e5",
+              "localId": 0
+            },
+            {
+              "guid": "292b0597485b247c7702ce3e9e690dd2",
+              "localId": 0
+            },
+            {
+              "guid": "86dfbbb649eefffbb354f6af7890514c",
+              "localId": 0
+            },
+            {
+              "guid": "cb880bcdaec8f1420c5e09434712379e",
+              "localId": 0
+            },
+            {
+              "guid": "1811b1fd0206e119671a62a1cb1de95d",
+              "localId": 0
+            },
+            {
+              "guid": "9f018bf6eeff5a3390a60435dafcbdc1",
+              "localId": 0
+            }
+          ],
+          "Clip": {
+            "guid": "815af492f165530db4e9d1da42af5eae",
+            "localId": 0
+          },
+          "PlayOnStart": true,
+          "Speed": 1.0,
+          "Enabled": true,
+          "BoundsPadding": 0.0,
+          "Graph": null
+        }
+      }
+    }
+  ],
+  "settings": {
+    "source": "file",
+    "environment": {
+      "guid": "22b9ea5527874a7e50f0de24b422dfae",
+      "localId": 0
+    },
+    "rotation": 120.0,
+    "ambient": 0.550000011920929,
+    "exposure": {
+      "auto": true,
+      "compensation": -0.30000001192092896,
+      "minEv": -3.0,
+      "maxEv": 3.0,
+      "adaptSpeed": 2.0
+    },
+    "bloom": {
+      "enabled": true,
+      "threshold": 0.8999999761581421,
+      "intensity": 0.14000000059604645
+    },
+    "tonemap": {
+      "contrast": 1.0800000429153442,
+      "saturation": 1.149999976158142,
+      "temperature": 0.11999999731779099,
+      "vignette": 0.3799999952316284
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1.2000000476837158,
+      "power": 1.600000023841858
+    }
+  }
+}

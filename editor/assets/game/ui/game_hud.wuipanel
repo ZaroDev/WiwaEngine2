@@ -1,0 +1,1735 @@
+{
+  "version": 1,
+  "referenceResolution": [
+    1920,
+    1080
+  ],
+  "match": 0.5,
+  "nextId": 62,
+  "widgets": [
+    {
+      "id": 2,
+      "kind": "VStack",
+      "Name": "Hud",
+      "OffsetMin": [
+        24,
+        24
+      ],
+      "OffsetMax": [
+        424,
+        190
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.62
+      ],
+      "Spacing": 6,
+      "Padding": [
+        14,
+        10,
+        14,
+        12
+      ]
+    },
+    {
+      "id": 3,
+      "kind": "Text",
+      "Name": "HeroName",
+      "parent": 2,
+      "OffsetMax": [
+        372,
+        38
+      ],
+      "Text": "Warrior",
+      "Font": {
+        "guid": "9a864d5349d63ea8c2fbb4fad1646e13",
+        "localId": 0
+      },
+      "FontSize": 32,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ]
+    },
+    {
+      "id": 4,
+      "kind": "Text",
+      "Name": "HpText",
+      "parent": 2,
+      "OffsetMax": [
+        372,
+        26
+      ],
+      "Text": "Health",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 20,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 5,
+      "kind": "Bar",
+      "Name": "Hp",
+      "parent": 2,
+      "OffsetMax": [
+        372,
+        16
+      ],
+      "Value": 1.0,
+      "Color": [
+        0.77,
+        0.29,
+        0.18,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.55
+      ]
+    },
+    {
+      "id": 6,
+      "kind": "Text",
+      "Name": "ResourceText",
+      "parent": 2,
+      "OffsetMax": [
+        372,
+        26
+      ],
+      "Text": "Stamina",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 20,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 7,
+      "kind": "Bar",
+      "Name": "Resource",
+      "parent": 2,
+      "OffsetMax": [
+        372,
+        12
+      ],
+      "Value": 1.0,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.55
+      ]
+    },
+    {
+      "id": 8,
+      "kind": "Text",
+      "Name": "Objective",
+      "AnchorMin": [
+        0.5,
+        0
+      ],
+      "AnchorMax": [
+        0.5,
+        0
+      ],
+      "OffsetMin": [
+        -500,
+        24
+      ],
+      "OffsetMax": [
+        500,
+        66
+      ],
+      "Text": "",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ],
+      "Outline": 0.2,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": 9,
+      "kind": "VStack",
+      "Name": "Boss",
+      "AnchorMin": [
+        0.5,
+        1
+      ],
+      "AnchorMax": [
+        0.5,
+        1
+      ],
+      "OffsetMin": [
+        -300,
+        -104
+      ],
+      "OffsetMax": [
+        300,
+        -30
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.7
+      ],
+      "Spacing": 6,
+      "Padding": [
+        10,
+        8,
+        10,
+        8
+      ],
+      "Visible": false
+    },
+    {
+      "id": 10,
+      "kind": "Text",
+      "Name": "BossName",
+      "parent": 9,
+      "OffsetMax": [
+        580,
+        36
+      ],
+      "Text": "The Yellow Dragon",
+      "Font": {
+        "guid": "9a864d5349d63ea8c2fbb4fad1646e13",
+        "localId": 0
+      },
+      "FontSize": 30,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ],
+      "Align": "Center"
+    },
+    {
+      "id": 11,
+      "kind": "Bar",
+      "Name": "BossBar",
+      "parent": 9,
+      "OffsetMax": [
+        580,
+        20
+      ],
+      "Value": 1.0,
+      "Color": [
+        0.77,
+        0.29,
+        0.18,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.6
+      ]
+    },
+    {
+      "id": 12,
+      "kind": "Bar",
+      "Name": "Bar1",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        90,
+        8
+      ],
+      "Value": 1.0,
+      "Color": [
+        0.77,
+        0.29,
+        0.18,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.7
+      ],
+      "Visible": false
+    },
+    {
+      "id": 13,
+      "kind": "Bar",
+      "Name": "Bar2",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        90,
+        8
+      ],
+      "Value": 1.0,
+      "Color": [
+        0.77,
+        0.29,
+        0.18,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.7
+      ],
+      "Visible": false
+    },
+    {
+      "id": 14,
+      "kind": "Bar",
+      "Name": "Bar3",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        90,
+        8
+      ],
+      "Value": 1.0,
+      "Color": [
+        0.77,
+        0.29,
+        0.18,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.7
+      ],
+      "Visible": false
+    },
+    {
+      "id": 15,
+      "kind": "Bar",
+      "Name": "Bar4",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        90,
+        8
+      ],
+      "Value": 1.0,
+      "Color": [
+        0.77,
+        0.29,
+        0.18,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.7
+      ],
+      "Visible": false
+    },
+    {
+      "id": 16,
+      "kind": "Bar",
+      "Name": "Bar5",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        90,
+        8
+      ],
+      "Value": 1.0,
+      "Color": [
+        0.77,
+        0.29,
+        0.18,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.7
+      ],
+      "Visible": false
+    },
+    {
+      "id": 17,
+      "kind": "Bar",
+      "Name": "Bar6",
+      "Pivot": [
+        0.5,
+        1
+      ],
+      "OffsetMax": [
+        90,
+        8
+      ],
+      "Value": 1.0,
+      "Color": [
+        0.77,
+        0.29,
+        0.18,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.7
+      ],
+      "Visible": false
+    },
+    {
+      "id": 18,
+      "kind": "VStack",
+      "Name": "Loading",
+      "AnchorMin": [
+        0.5,
+        0.5
+      ],
+      "AnchorMax": [
+        0.5,
+        0.5
+      ],
+      "OffsetMin": [
+        -250,
+        120
+      ],
+      "OffsetMax": [
+        250,
+        190
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.7
+      ],
+      "Spacing": 6,
+      "Padding": [
+        10,
+        8,
+        10,
+        8
+      ],
+      "Visible": false
+    },
+    {
+      "id": 19,
+      "kind": "Text",
+      "Name": "LoadText",
+      "parent": 18,
+      "OffsetMax": [
+        480,
+        28
+      ],
+      "Text": "The gate is opening",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ],
+      "Align": "Center"
+    },
+    {
+      "id": 20,
+      "kind": "Bar",
+      "Name": "LoadBar",
+      "parent": 18,
+      "OffsetMax": [
+        480,
+        16
+      ],
+      "Value": 0.0,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "BackgroundColor": [
+        0,
+        0,
+        0,
+        0.55
+      ]
+    },
+    {
+      "id": 21,
+      "kind": "Panel",
+      "Name": "Pause",
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "Visible": false,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 22,
+      "kind": "Panel",
+      "Name": "Band1",
+      "parent": 21,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0.46,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.28
+      ]
+    },
+    {
+      "id": 23,
+      "kind": "Panel",
+      "Name": "Band2",
+      "parent": 21,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0.34,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.28
+      ]
+    },
+    {
+      "id": 24,
+      "kind": "Panel",
+      "Name": "Band3",
+      "parent": 21,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0.22,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Color": [
+        0.09,
+        0.07,
+        0.125,
+        0.28
+      ]
+    },
+    {
+      "id": 25,
+      "kind": "VStack",
+      "Name": "Box",
+      "parent": 21,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        0
+      ],
+      "OffsetMin": [
+        96,
+        150
+      ],
+      "OffsetMax": [
+        620,
+        900
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "Spacing": 10
+    },
+    {
+      "id": 26,
+      "kind": "Text",
+      "Name": "Title",
+      "parent": 25,
+      "OffsetMax": [
+        520,
+        80
+      ],
+      "Text": "Paused",
+      "Font": {
+        "guid": "9a864d5349d63ea8c2fbb4fad1646e13",
+        "localId": 0
+      },
+      "FontSize": 64,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Wrap": true,
+      "Outline": 0.12,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        0.8
+      ]
+    },
+    {
+      "id": 27,
+      "kind": "Button",
+      "Name": "Resume",
+      "parent": 25,
+      "OffsetMax": [
+        460,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 28,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 27,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 29,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 27,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        24,
+        11
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Resume",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 30,
+      "Align": "Left",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 30,
+      "kind": "Button",
+      "Name": "Options",
+      "parent": 25,
+      "OffsetMax": [
+        460,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 31,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 30,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 32,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 30,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        24,
+        11
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Options",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 30,
+      "Align": "Left",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 33,
+      "kind": "Button",
+      "Name": "Restart",
+      "parent": 25,
+      "OffsetMax": [
+        460,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 34,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 33,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 35,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 33,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        24,
+        11
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Restart level",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 30,
+      "Align": "Left",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 36,
+      "kind": "Button",
+      "Name": "MainMenu",
+      "parent": 25,
+      "OffsetMax": [
+        460,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 37,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 36,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 38,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 36,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        24,
+        11
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Main menu",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 30,
+      "Align": "Left",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 39,
+      "kind": "Panel",
+      "Name": "Dead",
+      "Color": [
+        0.12,
+        0.02,
+        0.02,
+        0.6
+      ],
+      "Visible": false,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 40,
+      "kind": "VStack",
+      "Name": "Box",
+      "parent": 39,
+      "AnchorMin": [
+        0.5,
+        0.5
+      ],
+      "AnchorMax": [
+        0.5,
+        0.5
+      ],
+      "OffsetMin": [
+        -320,
+        -240
+      ],
+      "OffsetMax": [
+        320,
+        240
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "Spacing": 10,
+      "ChildAlign": "Center"
+    },
+    {
+      "id": 41,
+      "kind": "Text",
+      "Name": "Title",
+      "parent": 40,
+      "OffsetMax": [
+        640,
+        140
+      ],
+      "Text": "You died",
+      "Font": {
+        "guid": "9a864d5349d63ea8c2fbb4fad1646e13",
+        "localId": 0
+      },
+      "FontSize": 120,
+      "Color": [
+        0.77,
+        0.29,
+        0.18,
+        1
+      ],
+      "Align": "Center",
+      "Outline": 0.12,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        0.8
+      ]
+    },
+    {
+      "id": 42,
+      "kind": "Text",
+      "Name": "Sub",
+      "parent": 40,
+      "OffsetMax": [
+        640,
+        44
+      ],
+      "Text": "Your last checkpoint is waiting.",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 24,
+      "Color": [
+        0.66,
+        0.6,
+        0.74,
+        1
+      ],
+      "Align": "Center"
+    },
+    {
+      "id": 43,
+      "kind": "Button",
+      "Name": "Respawn",
+      "parent": 40,
+      "OffsetMax": [
+        440,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 44,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 43,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 45,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 43,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        12
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Respawn at checkpoint",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 46,
+      "kind": "Button",
+      "Name": "Restart",
+      "parent": 40,
+      "OffsetMax": [
+        440,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 47,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 46,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 48,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 46,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        12
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Restart level",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 49,
+      "kind": "Button",
+      "Name": "MainMenu",
+      "parent": 40,
+      "OffsetMax": [
+        440,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 50,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 49,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 51,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 49,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        12
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Main menu",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 52,
+      "kind": "Panel",
+      "Name": "Won",
+      "Color": [
+        0,
+        0,
+        0,
+        0.5
+      ],
+      "Visible": false,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": 53,
+      "kind": "VStack",
+      "Name": "Box",
+      "parent": 52,
+      "AnchorMin": [
+        0.5,
+        0.5
+      ],
+      "AnchorMax": [
+        0.5,
+        0.5
+      ],
+      "OffsetMin": [
+        -320,
+        -240
+      ],
+      "OffsetMax": [
+        320,
+        240
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "Spacing": 10,
+      "ChildAlign": "Center"
+    },
+    {
+      "id": 54,
+      "kind": "Text",
+      "Name": "Title",
+      "parent": 53,
+      "OffsetMax": [
+        640,
+        140
+      ],
+      "Text": "Victory",
+      "Font": {
+        "guid": "9a864d5349d63ea8c2fbb4fad1646e13",
+        "localId": 0
+      },
+      "FontSize": 120,
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Align": "Center",
+      "Outline": 0.12,
+      "OutlineColor": [
+        0,
+        0,
+        0,
+        0.8
+      ]
+    },
+    {
+      "id": 55,
+      "kind": "Text",
+      "Name": "Sub",
+      "parent": 53,
+      "OffsetMax": [
+        640,
+        44
+      ],
+      "Text": "The dragon is slain.",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 24,
+      "Color": [
+        0.66,
+        0.6,
+        0.74,
+        1
+      ],
+      "Align": "Center"
+    },
+    {
+      "id": 56,
+      "kind": "Button",
+      "Name": "Restart",
+      "parent": 53,
+      "OffsetMax": [
+        440,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 57,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 56,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 58,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 56,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        12
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Play again",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    },
+    {
+      "id": 59,
+      "kind": "Button",
+      "Name": "MainMenu",
+      "parent": 53,
+      "OffsetMax": [
+        440,
+        56
+      ],
+      "Color": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "HoverColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.16
+      ],
+      "PressedColor": [
+        0.85,
+        0.66,
+        0.34,
+        0.32
+      ]
+    },
+    {
+      "id": 60,
+      "kind": "Panel",
+      "Name": "Accent",
+      "parent": 59,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        0,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        6
+      ],
+      "OffsetMax": [
+        5,
+        -6
+      ],
+      "Color": [
+        0.85,
+        0.66,
+        0.34,
+        1
+      ],
+      "Visible": false
+    },
+    {
+      "id": 61,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 59,
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        12
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Main menu",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 28,
+      "Align": "Center",
+      "Color": [
+        0.93,
+        0.89,
+        0.81,
+        1
+      ]
+    }
+  ]
+}

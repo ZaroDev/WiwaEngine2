@@ -27,6 +27,7 @@ No test framework (the user decided a suite isn't needed). Smoke commands: run t
 | `--input-smoke` / `--input-panel-smoke` | editor | input, actions, rebinding, `.winput`, Lua API / Input panel for 130 frames |
 | `--anim-smoke` / `--anim-panel-smoke` | editor | skeleton import, pose math and nodes, Animator module, sockets, extraction, Lua API, animation graphs (file, state machine, blend spaces, layers, edit model) / Animation panel for 130 frames and the Graph editor on the demo warrior's graph |
 | `--play-smoke` / `--demo-smoke` | editor | play mode / the demo scene end to end |
+| `--game-smoke` | editor | the demo game (`assets/game`): a Lua self test plays the whole loop, win and restart included |
 | `--render-test` | any | GPU pixel checks in `engine/src/renderer/test/*_checks.cpp`, run on the render thread |
 | `--render-smoke <frames>` | any | render N frames then exit (1 if a validation message or error was logged) |
 | `--scene-smoke-load` | game | load the `--scene` (or the pak's default scene) and quit |
@@ -61,6 +62,7 @@ Rules that cut across areas:
 | Game UI | [ui.md](docs/superpowers/specs/ui.md) | `engine/src/ui`, `editor/src/ui` |
 | Project settings, Settings page | [project-settings.md](docs/superpowers/specs/project-settings.md) | `engine/src/core/project_settings.*`, `editor/src/settings` |
 | Editor, play mode, gizmos, performance stats | [editor.md](docs/superpowers/specs/editor.md) | `editor/src` |
+| Demo game (Warrior's Crossing; generated, run `gen_demo_scene.py` first) | [game.md](docs/superpowers/specs/game.md) | `scripts/gen_game.py`, `scripts/game_scripts`, `editor/assets/game` |
 
 Animation in one line (the warrior of the demo plays `Warrior_animation/warrior.wgraph`, written by `scripts/gen_demo_graph.py`, run before `gen_demo_scene.py`): `AnimationModule` (after the scripts) evaluates a tree of pose nodes per `Animator` into a joint palette; palettes ride the scene delta to the render thread, which keeps the previous palette like `PrevWorld`, and vertex shaders skin through their own last binding set (`t22`/`t23`). The demo hall (`editor/assets/scenes/demo.wscene`) is written by `scripts/gen_demo_scene.py`, with CC0 FBX characters (the warrior's footstep events live in its `.wanim` clips, extracted from the model once, `<Model>_animation/`; the scene points at the GUIDs and legacy sub-asset ids in the models' `.meta` files, which redirect to the extracted assets, so the `.meta` files and the extracted files are force-added although `.meta` files are ignored).
 

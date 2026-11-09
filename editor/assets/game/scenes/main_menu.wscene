@@ -1,0 +1,2241 @@
+{
+  "name": "Main menu",
+  "settings": {
+    "source": "file",
+    "environment": {
+      "guid": "22b9ea5527874a7e50f0de24b422dfae",
+      "localId": 0
+    },
+    "background": "sky",
+    "ambient": 0.55,
+    "rotation": 120,
+    "scripts": [],
+    "exposure": {
+      "auto": true,
+      "compensation": -0.3,
+      "minEv": -3,
+      "maxEv": 3,
+      "adaptSpeed": 2
+    },
+    "bloom": {
+      "enabled": true,
+      "threshold": 0.9,
+      "knee": 0.5,
+      "intensity": 0.14
+    },
+    "tonemap": {
+      "operator": "aces",
+      "contrast": 1.08,
+      "saturation": 1.15,
+      "temperature": 0.12,
+      "vignette": 0.38
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1.2,
+      "power": 1.6
+    },
+    "motionBlur": {
+      "enabled": false
+    }
+  },
+  "entities": [
+    {
+      "id": "14c13bb5133352ea35142ebd0ed6e343",
+      "components": {
+        "Name": {
+          "Value": "Camera"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            2.6,
+            8.6
+          ],
+          "Rotation": [
+            -0.11268204862752143,
+            0.0952296421902379,
+            0.010850047211292799,
+            0.9889976479450985
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Camera": {
+          "Projection": "Perspective",
+          "FovY": 55,
+          "Near": 0.1,
+          "Far": 400,
+          "OrthoSize": 10,
+          "Primary": true
+        },
+        "script:cddcf1b66ba079dbfa60d55af7ccd143": {}
+      }
+    },
+    {
+      "id": "3bb5728b02cd528cc2adac9795552518",
+      "components": {
+        "Name": {
+          "Value": "Sun"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            20,
+            0
+          ],
+          "Rotation": [
+            -0.19537308163656977,
+            0.3345461825966352,
+            0.07110998629257217,
+            0.9191580824489982
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Directional",
+          "Color": [
+            1,
+            0.74,
+            0.48,
+            1
+          ],
+          "Intensity": 3.4,
+          "Range": 10,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": true
+        }
+      }
+    },
+    {
+      "id": "95c5fa72b498af999e9d9cb1aa344879",
+      "components": {
+        "Name": {
+          "Value": "Menu"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "UICanvas": {
+          "Panel": {
+            "guid": "3696b8559c3e22787aef1deefc4cf484",
+            "localId": 0
+          },
+          "SortOrder": 0,
+          "Visible": true
+        }
+      }
+    },
+    {
+      "id": "2e8391e14660b2da37708d20df16710e",
+      "components": {
+        "Name": {
+          "Value": "Options"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "UICanvas": {
+          "Panel": {
+            "guid": "4bc61883f7b4048ca01223c62aa30865",
+            "localId": 0
+          },
+          "SortOrder": 10,
+          "Visible": true
+        }
+      }
+    },
+    {
+      "id": "513a21a8c8ceb22b41e2a26b7f760cc0",
+      "components": {
+        "Name": {
+          "Value": "MenuState"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "script:f380b0d6335d49a0d0d9658e0121f0a8": {}
+      }
+    },
+    {
+      "id": "ec1ee9bb8150242bbe2db7150ad2545f",
+      "components": {
+        "Name": {
+          "Value": "SmokeSignal"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "script:7e05233dc3346760b7f0c56e787c1595": {}
+      }
+    },
+    {
+      "id": "7c0f12d5608f6b344c84ba0ccc78ccf3",
+      "components": {
+        "Name": {
+          "Value": "Stage Warrior"
+        },
+        "Transform": {
+          "Position": [
+            -1.4,
+            0,
+            2.0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "b898dc0290fb5347a780ef8c57719cc0",
+            "localId": 0
+          }
+        },
+        "script:19c89e6f6649e4e7b71c19e85fc65cc7": {
+          "clip": "CharacterArmature|Idle"
+        }
+      }
+    },
+    {
+      "id": "da6b4e1d57ae16f35ad0f6df96d49062",
+      "components": {
+        "Name": {
+          "Value": "Stage Wizard"
+        },
+        "Transform": {
+          "Position": [
+            1.4,
+            0,
+            2.0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "97a52376805e5e2b05c209ff8e1825ef",
+            "localId": 0
+          }
+        },
+        "script:19c89e6f6649e4e7b71c19e85fc65cc7": {
+          "clip": "CharacterArmature|Idle"
+        }
+      }
+    },
+    {
+      "id": "ca6093e614c965d78ac8fd05a5248e1e",
+      "components": {
+        "Name": {
+          "Value": "Stage rug"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0.02,
+            2
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4.8,
+            0.04,
+            3.4
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "661a65244a6fd399c48027b3e1b4e48a",
+      "components": {
+        "Name": {
+          "Value": "Stage key light"
+        },
+        "Transform": {
+          "Position": [
+            -3,
+            3.2,
+            6
+          ],
+          "Rotation": [
+            -0.1947952366610763,
+            -0.30973238715394297,
+            -0.06498860749681237,
+            0.928384158103584
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Spot",
+          "Color": [
+            1,
+            0.78,
+            0.5,
+            1
+          ],
+          "Intensity": 90,
+          "Range": 16,
+          "InnerAngle": 18,
+          "OuterAngle": 36,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "fd753a9761ca54d167b5681cc5587b9c",
+      "components": {
+        "Name": {
+          "Value": "Stage rim light"
+        },
+        "Transform": {
+          "Position": [
+            2.6,
+            2.6,
+            -1.2
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            0.45,
+            0.55,
+            1,
+            1
+          ],
+          "Intensity": 28,
+          "Range": 9,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "7dffc8abcf19e3179db02d76f791f25d",
+      "components": {
+        "Name": {
+          "Value": "Stage pillar L"
+        },
+        "Transform": {
+          "Position": [
+            -3.9,
+            0.55,
+            0.8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.5,
+            1.1,
+            0.5
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "4f81c13e8bae1551a55cce909d08399b",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7d0ce8602e4e932b63c58b02954a5015",
+      "components": {
+        "Name": {
+          "Value": "Stage flame L"
+        },
+        "Transform": {
+          "Position": [
+            -3.9,
+            1.3,
+            0.8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.4,
+            0.4,
+            0.4
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.55,
+            0.25,
+            1
+          ],
+          "Intensity": 24,
+          "Range": 9,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "f72fecaa408bffd6159267ecfeb62c61",
+      "components": {
+        "Name": {
+          "Value": "Stage pillar R"
+        },
+        "Transform": {
+          "Position": [
+            3.9,
+            0.55,
+            0.8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.5,
+            1.1,
+            0.5
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "4f81c13e8bae1551a55cce909d08399b",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0c99f8e09852fb8d27b76c0546ef9d95",
+      "components": {
+        "Name": {
+          "Value": "Stage flame R"
+        },
+        "Transform": {
+          "Position": [
+            3.9,
+            1.3,
+            0.8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.4,
+            0.4,
+            0.4
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.55,
+            0.25,
+            1
+          ],
+          "Intensity": 24,
+          "Range": 9,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "70e4666a50dcdbf0c553f37dd639b293",
+      "components": {
+        "Name": {
+          "Value": "Ground"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            6.5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            26,
+            1,
+            17
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 7
+          },
+          "Materials": [
+            {
+              "guid": "b8d71ec809d30fe6760ab3d9f52eeed4",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "134888339d7b9dc81091b0e8c08aa2f5",
+      "components": {
+        "Name": {
+          "Value": "Wall W"
+        },
+        "Transform": {
+          "Position": [
+            -12.5,
+            1.5,
+            4
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            3,
+            15
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5c1b403048f8992215c7fd1f506af0da",
+      "components": {
+        "Name": {
+          "Value": "Banner W1"
+        },
+        "Transform": {
+          "Position": [
+            -11.95,
+            2.0,
+            9
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.1,
+            2.2,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "58075876f470282582e3b934625334ad",
+      "components": {
+        "Name": {
+          "Value": "Banner W2"
+        },
+        "Transform": {
+          "Position": [
+            -11.95,
+            2.0,
+            3
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.1,
+            2.2,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5514b6b8f92484b49ca4ce751e106630",
+      "components": {
+        "Name": {
+          "Value": "Banner W3"
+        },
+        "Transform": {
+          "Position": [
+            -11.95,
+            2.0,
+            -3
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.1,
+            2.2,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cafed10143628595005c4287c4c43cf7",
+      "components": {
+        "Name": {
+          "Value": "Wall E"
+        },
+        "Transform": {
+          "Position": [
+            12.5,
+            1.5,
+            4
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            3,
+            15
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e58d8e66705d30d9b38ee21eb146b393",
+      "components": {
+        "Name": {
+          "Value": "Banner E1"
+        },
+        "Transform": {
+          "Position": [
+            11.95,
+            2.0,
+            9
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.1,
+            2.2,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "37e24ca964eef2387a43ac3104b1e21a",
+      "components": {
+        "Name": {
+          "Value": "Banner E2"
+        },
+        "Transform": {
+          "Position": [
+            11.95,
+            2.0,
+            3
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.1,
+            2.2,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "87eb2b7f1b7fa0f8ca240c6f2c550328",
+      "components": {
+        "Name": {
+          "Value": "Banner E3"
+        },
+        "Transform": {
+          "Position": [
+            11.95,
+            2.0,
+            -3
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.1,
+            2.2,
+            1.1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ee18ad673e749433fc6e09b4407145a5",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cd750ce2ba7cbe9b54cc9ba2442e30f3",
+      "components": {
+        "Name": {
+          "Value": "Pillar 1"
+        },
+        "Transform": {
+          "Position": [
+            -8,
+            2.5,
+            6
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            5,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1a9056c004a339d769f79fd809c851e5",
+      "components": {
+        "Name": {
+          "Value": "Torch 1"
+        },
+        "Transform": {
+          "Position": [
+            -8,
+            5.3,
+            6
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.35,
+            0.35,
+            0.35
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.6,
+            0.25,
+            1
+          ],
+          "Intensity": 18,
+          "Range": 11,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "0ae9d3890747a4fca8d4b16df65be2db",
+      "components": {
+        "Name": {
+          "Value": "Pillar 2"
+        },
+        "Transform": {
+          "Position": [
+            8,
+            2.5,
+            6
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            5,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ef12378f9af6b7a21d98d184ebf87a1e",
+      "components": {
+        "Name": {
+          "Value": "Torch 2"
+        },
+        "Transform": {
+          "Position": [
+            8,
+            5.3,
+            6
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.35,
+            0.35,
+            0.35
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.6,
+            0.25,
+            1
+          ],
+          "Intensity": 18,
+          "Range": 11,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "0d747ec11592fc26a94e13cbf41633db",
+      "components": {
+        "Name": {
+          "Value": "Pillar 3"
+        },
+        "Transform": {
+          "Position": [
+            -8,
+            2.5,
+            -1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            5,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bf15b4fab864a417a7f0e83855f77620",
+      "components": {
+        "Name": {
+          "Value": "Torch 3"
+        },
+        "Transform": {
+          "Position": [
+            -8,
+            5.3,
+            -1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.35,
+            0.35,
+            0.35
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.6,
+            0.25,
+            1
+          ],
+          "Intensity": 18,
+          "Range": 11,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "bbbc79a2271732c30fe9cdbbc33ad5ad",
+      "components": {
+        "Name": {
+          "Value": "Pillar 4"
+        },
+        "Transform": {
+          "Position": [
+            8,
+            2.5,
+            -1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            5,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1850b5d4b1db8a7d76793e7823ae4343",
+      "components": {
+        "Name": {
+          "Value": "Torch 4"
+        },
+        "Transform": {
+          "Position": [
+            8,
+            5.3,
+            -1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.35,
+            0.35,
+            0.35
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.6,
+            0.25,
+            1
+          ],
+          "Intensity": 18,
+          "Range": 11,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "1f131129d7879ca20fcb6100b0433d45",
+      "components": {
+        "Name": {
+          "Value": "Bridge post A"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.15,
+            -2.3
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4,
+            0.3,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "05fb9a97421e2a2ef8183c084a5d931b",
+      "components": {
+        "Name": {
+          "Value": "Plank 0"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.15,
+            -3.1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4,
+            0.3,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "775245d6afa10f8b8eba745ca254fb58",
+      "components": {
+        "Name": {
+          "Value": "Plank 1"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.15,
+            -4.1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4,
+            0.3,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fd0733509a487080d9df709b3cc15320",
+      "components": {
+        "Name": {
+          "Value": "Plank 2"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.15,
+            -5.1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4,
+            0.3,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dbd07c1de36589bcfb9340b9d95d1fdc",
+      "components": {
+        "Name": {
+          "Value": "Plank 3"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.15,
+            -6.1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4,
+            0.3,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "8ec8a8d7031186016c8d4d0494c6ee94",
+      "components": {
+        "Name": {
+          "Value": "Plank 4"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.15,
+            -7.1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4,
+            0.3,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e44e8c1c9ad7ed2ed750b9cbe5420f5e",
+      "components": {
+        "Name": {
+          "Value": "Plank 5"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.15,
+            -8.1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4,
+            0.3,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "10d33b4931dd0908bbe9beccc2611110",
+      "components": {
+        "Name": {
+          "Value": "Plank 6"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.15,
+            -9.1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4,
+            0.3,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0741ca640a0af68502e91600ca4c9389",
+      "components": {
+        "Name": {
+          "Value": "Plank 7"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.15,
+            -10.1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4,
+            0.3,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "476b77d9f841019c22f5f639fa234bf1",
+      "components": {
+        "Name": {
+          "Value": "Bridge post B"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.15,
+            -11.7
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4,
+            0.3,
+            0.6
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "8b310f00d893429ab627ce5e1bf649eb",
+      "components": {
+        "Name": {
+          "Value": "Bridge rail L"
+        },
+        "Transform": {
+          "Position": [
+            -2.15,
+            0.5,
+            -7
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.15,
+            1.0,
+            9.4
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7c9d63761b4419be1998e8add972a59c",
+      "components": {
+        "Name": {
+          "Value": "Bridge lantern L"
+        },
+        "Transform": {
+          "Position": [
+            -2.15,
+            1.25,
+            -4
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.3,
+            0.3,
+            0.3
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.6,
+            0.3,
+            1
+          ],
+          "Intensity": 10,
+          "Range": 6,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "38aaa9886f4a472aeb5bcd10a93f944b",
+      "components": {
+        "Name": {
+          "Value": "Bridge rail R"
+        },
+        "Transform": {
+          "Position": [
+            2.15,
+            0.5,
+            -7
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.15,
+            1.0,
+            9.4
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5c0113505d8fd04485cebc9eab4591b4",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bc2782e33d4daed19c6c131e341abe5c",
+      "components": {
+        "Name": {
+          "Value": "Bridge lantern R"
+        },
+        "Transform": {
+          "Position": [
+            2.15,
+            1.25,
+            -4
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.3,
+            0.3,
+            0.3
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.6,
+            0.3,
+            1
+          ],
+          "Intensity": 10,
+          "Range": 6,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "c6d409cf21609bfc0875533a346a0168",
+      "components": {
+        "Name": {
+          "Value": "Far landing"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -0.5,
+            -18
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            14,
+            1,
+            12
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "553bc3ea3f8482185befdd2455f561ea",
+      "components": {
+        "Name": {
+          "Value": "Gate pillar L"
+        },
+        "Transform": {
+          "Position": [
+            -4.4,
+            2.5,
+            -22
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.2,
+            5,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c03492b40581b4a4296893c2a6b9e022",
+      "components": {
+        "Name": {
+          "Value": "Gate flame L"
+        },
+        "Transform": {
+          "Position": [
+            -4.4,
+            5.5,
+            -22
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.5,
+            0.2,
+            1
+          ],
+          "Intensity": 26,
+          "Range": 10,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "bfabfc2db3bf49c38f23b602f22764a6",
+      "components": {
+        "Name": {
+          "Value": "Gate pillar R"
+        },
+        "Transform": {
+          "Position": [
+            4.4,
+            2.5,
+            -22
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1.2,
+            5,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "86b409174c851e83ef8c71632e2cf340",
+      "components": {
+        "Name": {
+          "Value": "Gate flame R"
+        },
+        "Transform": {
+          "Position": [
+            4.4,
+            5.5,
+            -22
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.5,
+            0.5,
+            0.5
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.5,
+            0.2,
+            1
+          ],
+          "Intensity": 26,
+          "Range": 10,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "e365dc54199a3533ed63d2134e9acf2c",
+      "components": {
+        "Name": {
+          "Value": "Gate lintel"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            5.4,
+            -22
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            10.4,
+            0.8,
+            1.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "ec5a279ea9f0f230fc7830872070d144",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5ca04d75dd9fb50140894dfa041e8235",
+      "components": {
+        "Name": {
+          "Value": "Dragon"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            5.8,
+            -22
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "68f72c40414ce82d082c2d2978019b40",
+            "localId": 0
+          }
+        },
+        "script:19c89e6f6649e4e7b71c19e85fc65cc7": {
+          "clip": "MonsterArmature|Flying",
+          "size": 2.2
+        }
+      }
+    },
+    {
+      "id": "c994771540569d290b42f0b314134d77",
+      "components": {
+        "Name": {
+          "Value": "Dragon glow"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            7,
+            -26
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.3,
+            0.15,
+            1
+          ],
+          "Intensity": 60,
+          "Range": 22,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        }
+      }
+    },
+    {
+      "id": "f55e738a354ebd81703b5e82d376f0b6",
+      "components": {
+        "Name": {
+          "Value": "Chasm floor"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            -12,
+            -10
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            90,
+            1,
+            70
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "cfc2ceb061382a5d7fe315ae263183ff",
+              "localId": 0
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
