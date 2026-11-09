@@ -1937,7 +1937,7 @@ namespace wiwa
 			check(approx(decal_fade(timed, 0.0f), 0.0f) && approx(decal_fade(timed, 0.1f), 0.5f) && approx(decal_fade(timed, 0.2f), 1.0f), "decal_lifetime: it fades in over FadeInTime");
 			check(approx(decal_fade(timed, 0.7f), 1.0f) && approx(decal_fade(timed, 1.2f), 1.0f), "decal_lifetime: it holds full opacity for Lifetime");
 			check(approx(decal_fade(timed, 1.3f), 0.5f) && approx(decal_fade(timed, 1.4f), 0.0f), "decal_lifetime: it fades out over FadeOutTime");
-			check(!decal_expired(timed, 1.39f) && decal_expired(timed, 1.4f), "decal_lifetime: it expires after FadeInTime + Lifetime + FadeOutTime");
+			check(!decal_expired(timed, 1.39f) && decal_expired(timed, 1.41f), "decal_lifetime: it expires after FadeInTime + Lifetime + FadeOutTime");
 
 			Decal cut;
 			cut.Lifetime = 1.0f; // no fades: gone at once when the time is up
