@@ -19,6 +19,7 @@ namespace wiwa
 		PhysicsMaterial, // .wphysmat
 		InputMap,        // .winput
 		AnimationGraph,  // .wgraph
+		ParticleEffect,  // .wfx
 	};
 
 	// What the Create menu calls it, the name it starts with, and the extension the file gets ("" for a folder).

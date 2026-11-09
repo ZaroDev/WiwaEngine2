@@ -14,6 +14,7 @@
 #include <ui/ui_widget.h>
 #include "asset_data.h"
 #include "asset_types.h"
+#include "particle_effect.h"
 
 // The .wasset file: a header (magic, format version, type, guid, dependencies, payload size) followed by a typed
 // binary payload. Every read is bounds-checked: a truncated or corrupt blob gives std::nullopt, never a crash.
@@ -142,6 +143,8 @@ namespace wiwa
 	void archive(BinaryArchive& ar, InputMapData& v);
 	// A version, then the .wgraph JSON text (native_anim_files.h is the one description of it).
 	void archive(BinaryArchive& ar, AnimationGraphData& v);
+	// A version, then the .wfx JSON text (particle_effect.h is the one description of it); reading bakes the curves again.
+	void archive(BinaryArchive& ar, ParticleEffectData& v);
 
 	template<typename T>
 	constexpr AssetType asset_type_of();
@@ -163,6 +166,7 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<CookedShapeData>() { return AssetType::PhysicsShape; }
 	template<> constexpr AssetType asset_type_of<InputMapData>() { return AssetType::InputMap; }
 	template<> constexpr AssetType asset_type_of<AnimationGraphData>() { return AssetType::AnimationGraph; }
+	template<> constexpr AssetType asset_type_of<ParticleEffectData>() { return AssetType::ParticleEffect; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)

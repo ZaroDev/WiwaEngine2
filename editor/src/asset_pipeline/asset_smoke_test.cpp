@@ -100,6 +100,7 @@ namespace wiwa
 			case AssetType::PhysicsShape: { auto h = manager.load<CookedShapeData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::InputMap: { auto h = manager.load<InputMapData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::AnimationGraph: { auto h = manager.load<AnimationGraphData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::ParticleEffect: { auto h = manager.load<ParticleEffectData>(ref); return [h]() { return h.state(); }; }
 			default: return []() { return LoadState::Failed; };
 			}
 		}
@@ -228,6 +229,101 @@ namespace wiwa
 				truncatedAccepted = truncatedAccepted || deserialize<BuildInfo>(std::span<const std::byte>(bytes.data(), length)).has_value();
 			}
 			check(!truncatedAccepted, "a truncated build info is rejected");
+		}
+
+		// A particle effect (.wfx, particle_effect.h): the cooked payload and the file text round-trip, curves and the gradient are baked, bad files are
+		// refused with a reason, and the rules of an effect that can be played hold.
+		{
+			ParticleEffectData effect;
+			effect.Name = "smoke";
+			ParticleEmitterData flame;
+			flame.Name = "Flame";
+			flame.Material = AssetRef{ AssetGuid::generate(), 3 };
+			flame.SheetColumns = 4;
+			flame.SheetRows = 2;
+			flame.Blend = ParticleBlend::Additive;
+			flame.Rate = ParticleValue::range(5.0f, 9.0f);
+			flame.Bursts = { ParticleBurst{ 0.5f, 20 } };
+			flame.SizeOverLife = ParticleValue::curve({ { 0.0f, 0.0f }, { 0.5f, 1.0f }, { 1.0f, 0.25f } });
+			flame.ColorOverLife = { ParticleColorKey{ 0.0f, glm::vec4(1.0f, 1.0f, 0.0f, 1.0f) }, ParticleColorKey{ 1.0f, glm::vec4(1.0f, 0.0f, 0.0f, 0.0f) } };
+			flame.bake();
+			ParticleEmitterData trail;
+			trail.Name = "Trail";
+			trail.Renderer = ParticleRenderer::Ribbon;
+			trail.RibbonSegments = 24;
+			trail.Collision = ParticleCollision::Depth;
+			trail.Response = ParticleCollisionResponse::Stick;
+			trail.Gravity = glm::vec3(0.0f, -9.8f, 0.0f);
+			trail.bake();
+			effect.Emitters = { flame, trail };
+
+			const std::vector<std::byte> bytes = serialize(effect);
+			std::optional<ParticleEffectData> back = deserialize<ParticleEffectData>(bytes);
+			check(back && *back == effect, "a particle effect round-trips through the cooked format");
+			check(asset_type_of<ParticleEffectData>() == AssetType::ParticleEffect && AssetType::ParticleEffect < AssetType::Last, "the particle effect type is registered before Last");
+			if (back && back->Emitters.size() == 2)
+			{
+				const ParticleValue& size = back->Emitters[0].SizeOverLife;
+				check(std::abs(size.evaluate(0.0f)) < 1e-5f && std::abs(size.evaluate(1.0f) - 0.25f) < 1e-5f && std::abs(size.evaluate(0.5f) - 1.0f) < 0.05f, "a curve is baked into its table and read back at the keys");
+				check(back->Emitters[0].ColorSamples.front() == glm::vec4(1.0f, 1.0f, 0.0f, 1.0f) && back->Emitters[0].ColorSamples.back() == glm::vec4(1.0f, 0.0f, 0.0f, 0.0f), "the color gradient is baked");
+				check(back->Emitters[1].ColorSamples.front() == glm::vec4(1.0f), "an emitter without a gradient bakes white");
+				check(std::abs(back->Emitters[0].Rate.evaluate(0.5f) - 7.0f) < 1e-5f && back->Emitters[1].Rate.evaluate(0.0f) == 10.0f, "a range and a constant evaluate as written");
+			}
+
+			bool truncatedAccepted = false;
+			for (size_t length = 0; length < bytes.size(); length++)
+			{
+				truncatedAccepted = truncatedAccepted || deserialize<ParticleEffectData>(std::span<const std::byte>(bytes.data(), length)).has_value();
+			}
+			check(!truncatedAccepted, "a truncated particle effect payload is rejected");
+
+			std::string problem;
+			const std::string text = write_particle_file(effect);
+			const std::optional<ParticleEffectData> fromText = read_particle_file(text, problem);
+			check(fromText && *fromText == effect && write_particle_file(*fromText) == text, "the .wfx text round-trips and is stable");
+			check(particle_effect_valid(effect, problem), "the effect is valid");
+
+			check(!read_particle_file("{ not json", problem) && !problem.empty(), "text that is not JSON is refused with a reason");
+			check(!read_particle_file("{ \"version\": 99, \"emitters\": [] }", problem) && problem.find("version") != std::string::npos, "an unknown version is refused");
+			check(!read_particle_file("{ \"version\": 1, \"emitters\": [ { \"renderer\": \"sideways\" } ] }", problem) && problem.find("renderer") != std::string::npos, "an unknown renderer name is refused and named");
+			check(!read_particle_file("{ \"version\": 1, \"emitters\": [ { \"spawn\": { \"rate\": \"fast\" } } ] }", problem) && problem.find("rate") != std::string::npos, "a value that is not a number, range or curve is refused");
+			check(!read_particle_file("{ \"version\": 1, \"emitters\": [ { \"maxParticles\": -5 } ] }", problem), "a negative count is refused");
+			const std::optional<ParticleEffectData> empty = read_particle_file("{ \"version\": 1, \"emitters\": [] }", problem);
+			check(empty && empty->Emitters.empty() && particle_effect_valid(*empty, problem), "an effect with no emitter is valid (it draws nothing)");
+
+			ParticleEffectData many = effect;
+			many.Emitters.clear();
+			for (u32 i = 0; i <= PARTICLE_MAX_EMITTERS; i++)
+			{
+				ParticleEmitterData e;
+				e.Name = "E" + std::to_string(i);
+				many.Emitters.push_back(e);
+			}
+			check(!particle_effect_valid(many, problem) && problem.find("at most") != std::string::npos, "more than eight emitters are refused");
+			many.Emitters.pop_back();
+			check(particle_effect_valid(many, problem), "eight emitters are fine");
+
+			const auto refused = [&](const char* why, auto&& change)
+			{
+				ParticleEffectData broken = effect;
+				change(broken.Emitters[0]);
+				const bool refusedNow = !particle_effect_valid(broken, problem) && !problem.empty();
+				check(refusedNow, why);
+			};
+			refused("a duplicate emitter name is refused", [](ParticleEmitterData& e) { e.Name = "Trail"; });
+			refused("a lifetime of zero is refused", [](ParticleEmitterData& e) { e.Lifetime = ParticleValue::constant(0.0f); });
+			refused("a range that runs backwards is refused", [](ParticleEmitterData& e) { e.StartSpeed = ParticleValue::range(3.0f, 1.0f); });
+			refused("curve keys that do not rise are refused", [](ParticleEmitterData& e) { e.SizeOverLife = ParticleValue::curve({ { 0.5f, 1.0f }, { 0.2f, 0.0f } }); });
+			refused("a curve with no key is refused", [](ParticleEmitterData& e) { e.AlphaOverLife = ParticleValue::curve({}); });
+			refused("no particles allowed is refused", [](ParticleEmitterData& e) { e.MaxParticles = 0; });
+			refused("too many particles is refused", [](ParticleEmitterData& e) { e.MaxParticles = PARTICLE_LIMIT_MAX_PARTICLES + 1; });
+			refused("a sheet without cells is refused", [](ParticleEmitterData& e) { e.SheetColumns = 0; });
+			refused("a gradient out of order is refused", [](ParticleEmitterData& e) { e.ColorOverLife = { ParticleColorKey{ 0.8f, glm::vec4(1.0f) }, ParticleColorKey{ 0.2f, glm::vec4(1.0f) } }; });
+			refused("a duration of zero is refused", [](ParticleEmitterData& e) { e.Duration = 0.0f; });
+			refused("a NaN in a color is refused", [](ParticleEmitterData& e) { e.StartColor.x = std::numeric_limits<float>::quiet_NaN(); });
+			ParticleEffectData shortRibbon = effect;
+			shortRibbon.Emitters[1].RibbonSegments = 1;
+			check(!particle_effect_valid(shortRibbon, problem), "a ribbon of one segment is refused");
 		}
 
 		// The build settings survive a round trip; a missing file, a damaged one and a bad guid are told apart.

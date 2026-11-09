@@ -23,4 +23,5 @@ namespace wiwa
 	Scope<IImporter> create_clip_file_importer();     // .wanim
 	Scope<IImporter> create_mesh_file_importer();     // .wmesh
 	Scope<IImporter> create_graph_file_importer();    // .wgraph
+	Scope<IImporter> create_particle_file_importer(); // .wfx
 }

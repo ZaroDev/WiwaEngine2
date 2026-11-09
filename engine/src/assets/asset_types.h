@@ -25,6 +25,7 @@ namespace wiwa
 		PhysicsShape,
 		InputMap,
 		AnimationGraph,
+		ParticleEffect,
 
 		Last
 	};
@@ -51,6 +52,7 @@ namespace wiwa
 		case AssetType::PhysicsShape: return "PhysicsShape";
 		case AssetType::InputMap: return "InputMap";
 		case AssetType::AnimationGraph: return "AnimationGraph";
+		case AssetType::ParticleEffect: return "ParticleEffect";
 		default: return "None";
 		}
 	}
