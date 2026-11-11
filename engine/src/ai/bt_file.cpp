@@ -110,7 +110,8 @@ namespace wiwa
 			error = "not a JSON object";
 			return std::nullopt;
 		}
-		if (root.value("version", 0) != WBT_VERSION)
+		const auto version = root.find("version");
+		if (version == root.end() || !version->is_number_integer() || version->get<i64>() != WBT_VERSION)
 		{
 			error = "\"version\" must be " + std::to_string(WBT_VERSION);
 			return std::nullopt;
@@ -270,6 +271,15 @@ namespace wiwa
 				const bool present = it != node.Params.end();
 				if (!present)
 				{
+					if (param.Kind == BtParamKind::Value)
+					{
+						const auto named = node.Params.find(param.KeyParam);
+						const BtKeyDesc* named_key = named != node.Params.end() && named->is_string() ? doc.find_key(named->get<std::string>()) : nullptr;
+						if (named_key != nullptr && named_key->Type == BtValueType::Entity)
+						{
+							continue; // an entity key's value is none when it is not given
+						}
+					}
 					if (param.Required)
 					{
 						problem("missing parameter \"" + param.Name + "\"");
@@ -340,7 +350,7 @@ namespace wiwa
 				{
 					problem("\"value\" does not fit the " + std::string(bt_value_type_name(key->Type)) + " key \"" + key->Key + "\"");
 				}
-				if (valueParam == node.Params.end() && !op.empty() && op != "true" && op != "false" && node.Type != "SetBlackboard")
+				if (valueParam == node.Params.end() && !op.empty() && op != "true" && op != "false" && node.Type != "SetBlackboard" && key->Type != BtValueType::Entity)
 				{
 					problem("a comparison needs a \"value\"");
 				}

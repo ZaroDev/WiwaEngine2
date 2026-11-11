@@ -49,6 +49,14 @@ namespace wiwa
 		{
 			return false;
 		}
+		for (const BtProblem& problem : validate_bt(*doc))
+		{
+			if (problem.Message.find("part of a cycle") != std::string::npos)
+			{
+				error = "the tree has a node that is its own ancestor (node " + problem.NodeId + "): fix the file by hand";
+				return false;
+			}
+		}
 		m_File = file;
 		m_Model = std::make_unique<BtEditModel>(std::move(*doc));
 		m_Selected.clear();
@@ -135,7 +143,7 @@ namespace wiwa
 
 	bool BehaviorTreeEditor::text_field(const char* id, const std::string& current, std::string& result, float width)
 	{
-		const std::string key = id;
+		const std::string key = std::to_string(ImGui::GetID(id)); // the id stack included: two fields with one label are two fields
 		if (m_EditKey != key)
 		{
 			std::snprintf(m_EditBuffer, sizeof(m_EditBuffer), "%s", current.c_str());
@@ -363,7 +371,16 @@ namespace wiwa
 					{
 						if (ImGui::Selectable(key.c_str(), key == shown))
 						{
+							m_Model->begin_gesture();
 							m_Model->set_param(id, param.Name, key);
+							// a value to go with it: the key's zero, so that the node is valid as soon as the key is chosen
+							const BtKeyDesc* chosen = m_Model->doc().find_key(key);
+							if (chosen != nullptr && spec_of(*spec, "value") != nullptr && !node.Params.contains("value") && chosen->Type != BtValueType::Entity)
+							{
+								const Json zero[] = { Json(false), Json(0), Json(0.0), Json::array({ 0, 0, 0 }), Json(""), Json() };
+								m_Model->set_param(id, "value", zero[static_cast<int>(chosen->Type)]);
+							}
+							m_Model->end_gesture();
 						}
 					}
 					ImGui::EndCombo();
@@ -426,7 +443,7 @@ namespace wiwa
 					break;
 				}
 				case BtValueType::Entity:
-					ImGui::TextDisabled("none (an entity is chosen at run time)");
+					ImGui::TextDisabled("none (leave it empty)");
 					break;
 				}
 				break;

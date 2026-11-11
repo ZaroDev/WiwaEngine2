@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <random>
 #include <vector>
 
@@ -57,6 +58,9 @@ namespace wiwa
 	{
 	public:
 		BtInstance(Ref<const CompiledTree> tree, entt::entity self, u32 seed = 0);
+		~BtInstance() { *m_Alive = false; }
+		BtInstance(const BtInstance&) = delete;
+		BtInstance& operator=(const BtInstance&) = delete;
 
 		// One tick of the whole tree from the root. Nodes that said Running continue where they were.
 		BtStatus tick(BtServices& services, float dt, double time);
@@ -83,6 +87,8 @@ namespace wiwa
 			return true;
 		}
 		entt::entity self() const { return m_Self; }
+		// Lives as long as the instance and says so when it is gone (the Lua blackboard handles check it: a script may keep `bb`).
+		std::weak_ptr<bool> alive_token() const { return m_Alive; }
 		// The node whose MoveTo last sent the entity somewhere (NO_OWNER: none). A branch that is cut after another one has started its own walk (a reactive
 		// selector aborts the old branch after the new one has run) must not stop that walk: only the owner's abort does.
 		static constexpr u32 NO_OWNER = 0xFFFFFFFFu;
@@ -107,5 +113,6 @@ namespace wiwa
 		float m_Dt = 0.0f;
 		double m_Time = 0.0;
 		u32 m_MoveOwner = NO_OWNER;
+		std::shared_ptr<bool> m_Alive = std::make_shared<bool>(true);
 	};
 }

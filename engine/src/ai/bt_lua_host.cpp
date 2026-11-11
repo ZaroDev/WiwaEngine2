@@ -26,6 +26,7 @@ namespace wiwa
 		{
 			Blackboard* Board = nullptr;
 			ScriptContext* Context = nullptr;
+			std::weak_ptr<bool> Alive{};
 		};
 
 		LuaBlackboard& board_of(const sol::object& self)
@@ -34,7 +35,13 @@ namespace wiwa
 			{
 				throw sol::error("call blackboard methods with a colon: bb:get(key)");
 			}
-			return self.as<LuaBlackboard&>();
+			LuaBlackboard& board = self.as<LuaBlackboard&>();
+			const std::shared_ptr<bool> alive = board.Alive.lock();
+			if (!alive || !*alive || board.Board == nullptr)
+			{
+				throw sol::error("the blackboard is gone: its controller has stopped (do not keep bb between calls)");
+			}
+			return board;
 		}
 
 		sol::object bt_value_to_lua_impl(sol::state_view lua, ScriptContext* context, const BtValue& value)
@@ -184,7 +191,7 @@ namespace wiwa
 						throw sol::error("the key \"" + name + "\" is " + bt_value_type_name(*type) + ": expected " + why);
 					}
 					std::string error;
-					if (!board.Board->set(name, converted, &error))
+					if (!board.Board->set(name, converted, &error) && !board.Board->set_dynamic(name, converted))
 					{
 						throw sol::error(error);
 					}
@@ -215,7 +222,7 @@ namespace wiwa
 	sol::object BtLuaHost::blackboard_for(BtInstance& instance)
 	{
 		sol::state_view lua(m_Runtime.state().lua_state());
-		return sol::make_object(lua, LuaBlackboard{ &instance.blackboard(), &m_Context });
+		return sol::make_object(lua, LuaBlackboard{ &instance.blackboard(), &m_Context, instance.alive_token() });
 	}
 
 	BtStatus BtLuaHost::handle(BtLeafCall& call)

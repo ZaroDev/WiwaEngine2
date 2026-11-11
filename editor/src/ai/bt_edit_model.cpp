@@ -52,7 +52,10 @@ namespace wiwa
 		{
 			if (node.Id.size() > 1 && node.Id[0] == 'n' && std::all_of(node.Id.begin() + 1, node.Id.end(), [](unsigned char c) { return std::isdigit(c) != 0; }))
 			{
-				m_NextId = std::max(m_NextId, static_cast<u32>(std::stoul(node.Id.substr(1))) + 1);
+				if (node.Id.size() <= 10)
+				{
+					m_NextId = std::max(m_NextId, static_cast<u32>(std::min<unsigned long long>(std::stoull(node.Id.substr(1)), 0xFFFFFFF0ull)) + 1);
+				}
 			}
 		}
 	}

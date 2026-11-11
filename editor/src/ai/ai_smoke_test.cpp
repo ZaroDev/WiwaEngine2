@@ -762,6 +762,24 @@ namespace wiwa
 				check(status == SUCCESS && glm::distance(f.position(), glm::vec3(8.0f, 0.0f, 0.0f)) < 0.6f, "moveto_switch: and it arrives at the new target");
 			}
 
+			// A reactive selector whose first MoveTo fails every tick must not stop the walk of the second one (review finding).
+			{
+				MoveFixture f(0.0f);
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Blackboard = { key("target", BtValueType::Entity) };
+				doc.Nodes = { node("s", "Selector", { "a", "b" }, { { "reactive", true } }), move_node("a", "key:target"), move_node("b", Json::array({ 8, 0, 0 })) };
+				BtInstance instance(compiled(check, doc), f.Agent);
+				bool stayed = true;
+				BtStatus status = RUNNING;
+				for (int i = 0; i < 1200 && status == RUNNING; i++)
+				{
+					status = f.frame(instance);
+					stayed = stayed && (i < 2 || status != RUNNING || glm::distance(f.position(), glm::vec3(8.0f, 0.0f, 0.0f)) < 1.0f || f.Nav.state(f.Agent) == NavAgentState::Moving);
+				}
+				check(stayed && status == SUCCESS && glm::distance(f.position(), glm::vec3(8.0f, 0.0f, 0.0f)) < 0.6f, "moveto_failing_sibling: a MoveTo that fails every tick does not stop the walk of the branch that runs (stayed " + std::to_string(stayed) + ", status " + std::to_string(static_cast<int>(status)) + ", at " + std::to_string(f.position().x) + "," + std::to_string(f.position().z) + ")");
+			}
+
 			// No agent, no navmesh.
 			{
 				MoveFixture f(0.0f);
@@ -846,6 +864,45 @@ namespace wiwa
 			const entt::entity entity = scene.create(name);
 			scene.registry().emplace<AIController>(entity).Tree = tree;
 			return entity;
+		}
+
+		void review_fixes(Check& check)
+		{
+			// An entity key needs no value: none is the default (review finding: it could not be authored).
+			{
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Blackboard = { key("target", BtValueType::Entity) };
+				doc.Nodes = { node("s", "Sequence", { "empty", "set", "has" }), node("empty", "CheckBlackboard", {}, { { "key", "target" }, { "op", "==" } }),
+					node("set", "SetBlackboard", {}, { { "key", "target" } }), node("has", "CheckBlackboard", {}, { { "key", "target" }, { "op", "!=" } }) };
+				check(!bt_has_errors(validate_bt(doc)), "entity_value: comparing and setting an entity key without a value is valid");
+				std::string error;
+				Ref<const CompiledTree> tree = compile_bt(doc, error);
+				BtServices services;
+				BtInstance instance(tree, entt::entity{ 1 });
+				check(tree != nullptr && instance.tick(services, 0.1f, 0.0) == FAILURE, "entity_value: an empty key equals none, so the sequence reaches the last check and fails (the key is none again)");
+				BehaviorTreeDoc second = doc;
+				second.Nodes = { node("s", "Sequence", { "has" }), node("has", "CheckBlackboard", {}, { { "key", "target" }, { "op", "!=" } }) };
+				BtInstance another(compiled(check, second), entt::entity{ 1 });
+				check(another.tick(services, 0.1f, 0.0) == FAILURE, "entity_value: an empty entity key is not != none");
+				another.blackboard().set("target", EntityGuid::derive(EntityGuid{ 3, 4 }, 5));
+				check(another.tick(services, 0.1f, 0.1) == SUCCESS, "entity_value: a set one is");
+			}
+
+			// JSON of the wrong type does not throw.
+			{
+				std::string error;
+				check(!read_bt_file("{ \"version\": \"1\", \"root\": \"a\", \"nodes\": [] }", error).has_value() && !error.empty(), "json_version: a version that is not a number is refused, not thrown");
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Nodes = { node("s", "Sequence", { "a" }), node("a", "LuaAction", {}, { { "script", FAKE_SCRIPT }, { "reactive", 5 } }) };
+				check(compile_bt(doc, error) != nullptr, "json_reactive: a Lua leaf property called reactive with a number does not throw in the compiler");
+				BehaviorTreeDoc big;
+				big.Root = "n99999999999999999999";
+				big.Nodes = { node("n99999999999999999999", "Wait") };
+				BtEditModel model(big);
+				check(!model.add_node("Wait", "n99999999999999999999").empty() || true, "json_ids: an id with a huge number does not throw in the edit model");
+			}
 		}
 
 		void controllers(Check& check)
@@ -1076,6 +1133,22 @@ namespace wiwa
 				on_tick = function(self, bb, dt) self.n = (self.n or 0) + 1; if self.n >= 3 then return "success" end; return "running" end,
 				on_abort = function(self, bb) record("abort") end })lua";
 
+			// A script that keeps bb gets an error, not a freed pointer, once its controller is gone.
+			{
+				LuaLeafHarness h;
+				h.Runtime.sandbox()["stash"] = h.Runtime.state().create_table();
+				const AssetRef keeper = h.script("keeper", "return BtAction:extend{ on_tick = function(self, bb) stash.bb = bb return 'running' end }");
+				{
+					BtInstance instance(compiled(check, h.tree(keeper)), h.Entity);
+					h.tick(instance);
+					instance.abort(h.Services, h.Time);
+				}
+				sol::environment env(h.Runtime.state(), sol::create, h.Runtime.sandbox());
+				sol::protected_function_result result = h.Runtime.state().safe_script("local ok, err = pcall(function() return stash.bb:get('count') end) return tostring(ok) .. ':' .. tostring(err)", env, sol::script_pass_on_error);
+				const std::string text = result.valid() ? h.Runtime.state()["tostring"](result.get<sol::object>()).get<std::string>() : std::string("invalid");
+				check(text.find("false") == 0 && text.find("gone") != std::string::npos, "lua_kept_bb: using a kept bb after its controller is gone is a Lua error (" + text + ")");
+			}
+
 			// Status mapping, start once per run, abort once, properties from the params.
 			{
 				LuaLeafHarness h;
@@ -1219,7 +1292,7 @@ namespace wiwa
 			std::vector<std::string> Events{};
 			AssetRef Tree{ AssetGuid::generate(), 0 };
 
-			explicit LuaAiHarness(bool withModule = true)
+			explicit LuaAiHarness(bool withModule = true, bool autoStart = false)
 			{
 				Runtime.sandbox().set_function("record", [this](const std::string& event) { Events.push_back(event); });
 				const AssetRef leafScript = Source.add("assets/scripts/running.lua", "return BtAction:extend{ on_tick = function() return 'running' end, on_abort = function() record('abort') end }");
@@ -1232,10 +1305,13 @@ namespace wiwa
 				TheScene->registry().emplace<AIController>(ai).Tree = Tree;
 				TheScene->create("Bare");
 				TheScene->create("Other");
-				Module.set_auto_start(false);
+				Module.set_auto_start(autoStart);
 				Module.attach_lua(Runtime, Instances.context());
 				Module.register_tree(Tree, doc);
-				Module.start_world(TheScene);
+				if (!autoStart)
+				{
+					Module.start_world(TheScene);
+				}
 				Instances.start(TheScene);
 				if (withModule)
 				{
@@ -1299,6 +1375,17 @@ namespace wiwa
 				// A destroyed entity.
 				const std::string gone = "local e = create_entity('Temp') local k = AI.controller(find_entity('AI')) destroy_entity(find_entity('AI')) return pcall(function() return k:get('count') end)";
 				check(h.run(gone).find("false") != std::string::npos, "lua_ai_gone: a handle of an entity that is gone is an error, not a crash");
+			}
+
+			// A script asks in on_init, before the module has ticked or made a world: the call makes the world (review finding).
+			{
+				LuaAiHarness h(true, true);
+				check(h.Module.world_scene() == nullptr, "lua_ai_early: no world yet");
+				check(h.run("local c = AI.controller(find_entity('AI')) return c:get('count')") == "3" && h.Module.world_scene() == h.TheScene, "lua_ai_early: AI.controller works before the module's first tick, and makes the world");
+				check(h.run("AI.emit_noise(vec3(1,2,3), 1, 'x') return 'ok'") == "ok" && h.Module.noises().size() == 1, "lua_ai_early: and so does AI.emit_noise");
+				h.Instances.context().GamePlaying = false;
+				Ref<Scene> other = CreateRef<Scene>();
+				check(!h.Module.ensure_world(other, false) && h.Module.world_scene() == h.TheScene, "lua_ai_early: a paused game does not move the world");
 			}
 
 			// No module.
@@ -1870,6 +1957,7 @@ namespace wiwa
 		runtime_nodes(check);
 		engine_leaves(check);
 		controllers(check);
+		review_fixes(check);
 		lua_leaves(check);
 		lua_ai(check);
 		perception(check);

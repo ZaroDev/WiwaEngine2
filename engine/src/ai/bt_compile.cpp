@@ -77,7 +77,7 @@ namespace wiwa
 
 			const auto number = [&](const char* name, double fallback) { const auto it = node->Params.find(name); return it != node->Params.end() && it->is_number() ? it->get<double>() : fallback; };
 			const auto text = [&](const char* name) { const auto it = node->Params.find(name); return it != node->Params.end() && it->is_string() ? it->get<std::string>() : std::string(); };
-			out.Reactive = node->Params.value("reactive", false);
+			out.Reactive = node->Params.contains("reactive") && node->Params["reactive"].is_boolean() && node->Params["reactive"].get<bool>();
 			out.SuccessAll = text("success") != "one";
 			out.FailureOne = text("failure") != "all";
 			out.Count = static_cast<i32>(number("count", 0.0));
@@ -90,6 +90,10 @@ namespace wiwa
 			if (const BtKeyDesc* key = doc.find_key(out.Key); key != nullptr && node->Params.contains("value"))
 			{
 				out.Literal = bt_value_from_json(key->Type, node->Params["value"]);
+			}
+			else if (key != nullptr && key->Type == BtValueType::Entity)
+			{
+				out.Literal = BtValue(EntityGuid{}); // an entity key without a value means none
 			}
 			tree->Nodes.push_back(std::move(out));
 		}

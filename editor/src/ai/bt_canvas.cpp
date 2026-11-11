@@ -137,7 +137,7 @@ namespace wiwa
 		if (node.Type == "PlayAnimation") return text("clip");
 		if (node.Type == "Repeat") { std::snprintf(buffer, sizeof(buffer), number("count") > 0 ? "%d times" : "for ever", static_cast<int>(number("count"))); return buffer; }
 		if (node.Type == "Cooldown") { std::snprintf(buffer, sizeof(buffer), "%.1f s", number("seconds")); return buffer; }
-		if ((node.Type == "Sequence" || node.Type == "Selector") && node.Params.value("reactive", false)) return "reactive";
+		if ((node.Type == "Sequence" || node.Type == "Selector") && node.Params.contains("reactive") && node.Params["reactive"].is_boolean() && node.Params["reactive"].get<bool>()) return "reactive";
 		if (node.Type == "Log") return text("message");
 		return {};
 	}
@@ -339,10 +339,17 @@ namespace wiwa
 			}
 			else if (node != nullptr)
 			{
+				const std::string nodeId = node->Id; // a copy: adding a node can move the document's nodes
 				if (room(*node) != 0 && ImGui::BeginMenu("Add child"))
 				{
-					type_menu(node->Id, false);
+					type_menu(nodeId, false);
 					ImGui::EndMenu();
+				}
+				node = model.doc().find(nodeId);
+				if (node == nullptr)
+				{
+					ImGui::EndPopup();
+					return;
 				}
 				const bool isRoot = node->Id == model.doc().Root;
 				const BtNodeDesc* owner = nullptr;
@@ -440,17 +447,10 @@ namespace wiwa
 
 	void BtCanvas::DelLink(::GraphEditor::LinkIndex link)
 	{
-		if (link < m_LinkChild.size())
-		{
-			const BtNodeDesc* parent = m_Model->doc().find(m_LinkChild[link].first);
-			if (parent != nullptr && m_LinkChild[link].second < parent->Children.size())
-			{
-				Op op;
-				op.What = Op::Kind::Remove;
-				op.Node = parent->Children[m_LinkChild[link].second];
-				m_Ops.push_back(op);
-			}
-		}
+		// The widget picks a link up when the user drags a connected input, and calls this before AddLink when the node is dropped on another parent:
+		// removing the child here would delete a subtree for a re-link (and leave the widget with a stale node index). Moving a node is AddLink; removing
+		// one is the context menu.
+		(void)link;
 	}
 
 	void BtCanvas::CustomDraw(ImDrawList* drawList, ImRect rectangle, ::GraphEditor::NodeIndex node)

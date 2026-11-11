@@ -67,6 +67,9 @@ namespace wiwa
 		// can use the blackboard in the frame the scene starts). Null when the entity has no enabled controller, its tree is unset, still loading or
 		// invalid, or no world runs.
 		BtInstance* acquire(entt::entity entity);
+		// Makes the world for `scene` now when the module follows the active scene, the game plays and the world is another one (or none): a script
+		// asks in on_init, before the module's first tick, and in the frame a scene is replaced. True when a world for that scene runs.
+		bool ensure_world(const Ref<Scene>& scene, bool playing);
 		// Aborts what the controller runs and puts its blackboard back to the declared defaults and overrides. False without an instance.
 		bool restart(entt::entity entity);
 

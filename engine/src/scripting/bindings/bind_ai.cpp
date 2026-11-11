@@ -44,6 +44,7 @@ namespace wiwa
 			{
 				throw sol::error("the entity no longer exists");
 			}
+			ai_of(context).ensure_world(context.ActiveSceneRef, context.GamePlaying);
 			BtInstance* instance = ai_of(context).acquire(entity);
 			if (instance == nullptr)
 			{
@@ -156,6 +157,7 @@ namespace wiwa
 				{
 					throw sol::error("AI.emit_noise: the kind must be a string");
 				}
+				ai_of(context).ensure_world(context.ActiveSceneRef, context.GamePlaying);
 				ai_of(context).emit_noise(where, static_cast<float>(loudness.as<double>()), kind.get_type() == sol::type::string ? kind.as<std::string>() : std::string());
 			});
 

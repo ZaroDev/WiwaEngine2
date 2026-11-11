@@ -330,6 +330,15 @@ namespace wiwa
 		return controller.Instance.get();
 	}
 
+	bool AIModule::ensure_world(const Ref<Scene>& scene, bool playing)
+	{
+		if (m_AutoStart && playing && scene != nullptr && world_scene() != scene)
+		{
+			start_world(scene);
+		}
+		return scene != nullptr && world_scene() == scene;
+	}
+
 	BtInstance* AIModule::acquire(entt::entity entity)
 	{
 		const Ref<Scene> scene = world_scene();

@@ -13,6 +13,16 @@ namespace wiwa
 	{
 		bool finite(const glm::vec3& v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
 
+		// Stops the agent only if this node started the walk it is on: another branch may have sent it elsewhere since (a reactive switch).
+		void stop_if_owner(BtLeafCall& call, NavModule& nav)
+		{
+			if (call.Instance->move_owner() == call.NodeIndex)
+			{
+				nav.stop(call.Self);
+				call.Instance->set_move_owner(BtInstance::NO_OWNER);
+			}
+		}
+
 		void fail(BtLeafCall& call, const std::string& why)
 		{
 			if (call.Instance->warn_once(call.NodeIndex))
@@ -112,7 +122,7 @@ namespace wiwa
 			std::string why;
 			if (!resolve_target(call, hooks, target, follows, why))
 			{
-				nav->stop(call.Self);
+				stop_if_owner(call, *nav);
 				fail(call, why);
 				return BtStatus::Failure;
 			}
@@ -122,7 +132,7 @@ namespace wiwa
 			const glm::vec3 position(hooks.TheScene->registry().get<WorldTransform>(call.Self).Matrix[3]);
 			if (stopping > 0.0 && glm::distance(position, target) <= stopping)
 			{
-				nav->stop(call.Self);
+				stop_if_owner(call, *nav);
 				return BtStatus::Success;
 			}
 
@@ -130,7 +140,7 @@ namespace wiwa
 			{
 				if (!nav->set_destination(call.Self, target))
 				{
-					nav->stop(call.Self);
+					stop_if_owner(call, *nav);
 					fail(call, "no route leads to the target");
 					return BtStatus::Failure;
 				}
@@ -156,7 +166,7 @@ namespace wiwa
 			}
 			if (stopping > 0.0 && nav->remaining_distance(call.Self) > 0.0f && nav->remaining_distance(call.Self) <= stopping)
 			{
-				nav->stop(call.Self);
+				stop_if_owner(call, *nav);
 				return BtStatus::Success;
 			}
 			return BtStatus::Running;
