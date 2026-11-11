@@ -7,17 +7,23 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <sstream>
 
 #include <nav/nav_data.h>
 #include <nav/nav_mesh_asset.h>
 #include <nav/nav_module.h>
 #include <nav/nav_query.h>
+#include <scripting/script_component.h>
+#include <scripting/script_instances.h>
+#include <scripting/script_runtime.h>
+#include <scripting/script_source.h>
 #include <nav/nav_project_settings.h>
 #include <scene/components.h>
 #include <scene/reflection/component_registry.h>
 #include <scene/scene.h>
 #include <scene/scene_clone.h>
 #include <scene/scene_components.h>
+#include "../asset_pipeline/lua_stubs.h"
 #include "../asset_pipeline/nav_bake.h"
 #include "../asset_pipeline/nav_settings_file.h"
 
@@ -633,6 +639,174 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// One script, "Walker", whose hooks record what the agent's events did.
+		class WalkerScript final : public IScriptSource
+		{
+		public:
+			WalkerScript()
+			{
+				m_Script.Asset = AssetRef{ AssetGuid::generate(), 0 };
+				m_Script.Path = "assets/scripts/walker.lua";
+				m_Script.Source = "return Script:extend{ on_nav_arrived = function(self) record('arrived') end, on_nav_failed = function(self) record('failed') end }";
+			}
+
+			AssetRef asset() const { return m_Script.Asset; }
+
+			virtual std::optional<LoadedScript> find_by_path(std::string_view path) override { return path == m_Script.Path ? std::optional<LoadedScript>(m_Script) : std::nullopt; }
+			virtual std::optional<LoadedScript> find_by_asset(AssetRef ref) override { return ref == m_Script.Asset ? std::optional<LoadedScript>(m_Script) : std::nullopt; }
+
+		private:
+			LoadedScript m_Script{};
+		};
+
+		// A Lua runtime with the Nav API bound to a module, and a scene with the agent Walker (carrying the script) and a bare entity.
+		struct LuaNavHarness
+		{
+			WalkerScript Source;
+			ScriptRuntime Runtime{ Source };
+			NavModule Module;
+			Ref<Scene> TheScene = CreateRef<Scene>();
+			ScriptInstances Instances{ Runtime };
+			sol::environment Env{ Runtime.state(), sol::create, Runtime.sandbox() };
+			std::vector<std::string> Events;
+			std::string LoadError{};
+
+			LuaNavHarness(const NavMeshData* mesh, bool withModule = true)
+			{
+				Runtime.sandbox().set_function("record", [this](const std::string& event) { Events.push_back(event); });
+				ScriptClass* walker = Runtime.load(Source.asset(), LoadError);
+				if (walker != nullptr)
+				{
+					register_script_component(*walker);
+				}
+
+				const entt::entity walkerEntity = add_agent(*TheScene, glm::vec3(-8.0f, 0.0f, 0.0f));
+				TheScene->registry().get<Name>(walkerEntity).Value = "Walker";
+				TheScene->create("Bare");
+				if (walker != nullptr)
+				{
+					ComponentRegistry::get().find(script_component_name(Source.asset().Guid))->Add(TheScene->registry(), walkerEntity);
+				}
+
+				Module.set_auto_start(false);
+				if (withModule)
+				{
+					Instances.context().Nav = &Module;
+				}
+				if (mesh != nullptr)
+				{
+					Module.start_world_with_mesh(TheScene, *mesh);
+				}
+				else
+				{
+					Module.start_world(TheScene);
+				}
+				Instances.start(TheScene);
+			}
+
+			// A frame: the scripts, then the navigation (the engine's order).
+			void frames(int count)
+			{
+				for (int i = 0; i < count; i++)
+				{
+					Instances.update(1.0f / 60.0f);
+					Module.tick(nullptr, true, 1.0f / 60.0f);
+				}
+			}
+
+			std::string run(const std::string& chunk, std::string* error = nullptr)
+			{
+				sol::protected_function_result result = Runtime.state().safe_script(chunk, Env, sol::script_pass_on_error);
+				if (!result.valid())
+				{
+					sol::error failure = result;
+					if (error) *error = failure.what();
+					return {};
+				}
+				if (error) error->clear();
+				return result.get_type() == sol::type::none ? std::string() : Runtime.state()["tostring"](result.get<sol::object>()).get<std::string>();
+			}
+
+			bool fails(const std::string& chunk, const std::string& mention)
+			{
+				std::string error;
+				run(chunk, &error);
+				return !error.empty() && error.find(mention) != std::string::npos;
+			}
+
+			size_t count(const std::string& event) const { return static_cast<size_t>(std::count(Events.begin(), Events.end(), event)); }
+		};
+
+		void lua_nav(Check& check)
+		{
+			const NavMeshData wall = baked(check, wall_fixture(3.0f));
+			{
+				LuaNavHarness h(&wall);
+				check(h.LoadError.empty(), "lua_harness: the walker script loads (" + h.LoadError + ")");
+				check(h.run("return Nav.has_navmesh()") == "true", "lua_has_navmesh: the navmesh of the world is there");
+				check(h.run("local r = Nav.find_path(vec3(-8,0,0), vec3(8,0,0)); return r.status .. ':' .. (#r.points >= 3 and 'bends' or 'straight') .. ':' .. (r.length > 17 and 'long' or 'short')") == "complete:bends:long", "lua_find_path: a path round the wall, with its points and length");
+				check(h.run("return Nav.find_path(vec3(-8,0,0), vec3(500,0,500)).status") == "failed", "lua_find_path_off_mesh: a target far from the mesh is failed");
+				check(h.run("return Nav.nearest_point(vec3(3,0.5,3)) ~= nil and Nav.nearest_point(vec3(500,0,500)) == nil") == "true", "lua_nearest_point: a vector near the mesh, nil far from it");
+				check(h.run("local hit, p = Nav.raycast(vec3(-8,0,0), vec3(8,0,0)); return tostring(hit) .. ':' .. ((p ~= nil and p.x < -0.3 and p.x > -1.7) and 'wall' or 'none')") == "true:wall", "lua_raycast: the wall stops the line, and the point is where");
+				check(h.run("local hit, p = Nav.raycast(vec3(-8,0,0), vec3(-8,0,6)); return tostring(hit) .. ':' .. tostring(p)") == "false:nil", "lua_raycast_clear: a clear line is false, nil");
+				check(h.run("return Nav.random_point(vec3(-8,0,0), 3) ~= nil") == "true", "lua_random_point: a random point near a point of the mesh");
+
+				check(h.fails("Nav.find_path(vec3(0/0,0,0), vec3(1,0,0))", "finite"), "lua_nan: a NaN vector is an error that says finite");
+				check(h.fails("Nav.nearest_point(vec3(1,1/0,1))", "finite"), "lua_inf: an infinite vector is an error");
+				check(h.fails("Nav.agent(find_entity('Bare'))", "NavAgent"), "lua_no_agent: an entity without a NavAgent is an error that names the component");
+				check(h.fails("Nav.find_path(5, 6)", "vec3") && h.fails("Nav.agent(5)", "entity") && h.fails("Nav.random_point(vec3(0,0,0), {})", "number") && h.fails("Nav.agent(find_entity('Walker')):warp('x')", "vec3"), "lua_bad_args: a number, a table or a string where a vector, an entity or a number goes is a Lua error, not a crash");
+
+				// The agent walks, the handle tells, and the script hears.
+				check(h.run("return Nav.agent(find_entity('Walker')):set_destination(vec3(8,0,0))") == "true", "lua_agent_set_destination: a destination on the mesh starts the walk");
+				check(h.run("return Nav.agent(find_entity('Walker')):state()") == "moving", "lua_agent_state: the state is moving");
+				h.frames(900);
+				check(h.run("return Nav.agent(find_entity('Walker')):state()") == "arrived", "lua_agent_state: the agent arrived");
+				check(h.count("arrived") == 1 && h.count("failed") == 0, "lua_nav_arrived: on_nav_arrived runs once for the entity");
+				check(h.run("return Nav.agent(find_entity('Walker')):remaining_distance()") == "0.0" || h.run("return Nav.agent(find_entity('Walker')):remaining_distance()") == "0", "lua_agent_remaining: nothing remains");
+
+				check(h.run("return Nav.agent(find_entity('Walker')):set_destination(vec3(500,0,500))") == "false" && h.run("return Nav.agent(find_entity('Walker')):state()") == "no_path", "lua_agent_off_mesh: an unreachable destination is false and no_path");
+				check(h.fails("Nav.agent(find_entity('Walker')):set_destination(vec3(0/0,0,0))", "finite"), "lua_agent_nan: a NaN destination is an error");
+				check(h.run("return Nav.agent(find_entity('Walker')):warp(vec3(-8,0,0))") == "true" && h.run("return Nav.agent(find_entity('Walker')):velocity().x") != "", "lua_agent_warp: warp and velocity");
+			}
+
+			// A walk that cannot finish tells the script.
+			{
+				const NavMeshData cut = baked(check, wall_fixture(10.0f));
+				LuaNavHarness h(&cut);
+				h.run("Nav.agent(find_entity('Walker')):set_destination(vec3(8,0,0))");
+				h.frames(900);
+				check(h.count("failed") == 1 && h.count("arrived") == 0, "lua_nav_failed: on_nav_failed runs once when the route ends short");
+			}
+
+			// No navmesh: the queries say so, nothing crashes.
+			{
+				LuaNavHarness h(nullptr);
+				check(h.run("return Nav.has_navmesh()") == "false", "lua_no_navmesh: there is none");
+				check(h.run("return Nav.find_path(vec3(0,0,0), vec3(1,0,0)).status .. ':' .. #Nav.find_path(vec3(0,0,0), vec3(1,0,0)).points") == "failed:0", "lua_no_navmesh: a path is failed, empty");
+				check(h.run("return tostring(Nav.nearest_point(vec3(0,0,0))) .. ':' .. tostring((Nav.raycast(vec3(0,0,0), vec3(1,0,0)))) .. ':' .. tostring(Nav.random_point(vec3(0,0,0), 2))") == "nil:false:nil", "lua_no_navmesh: nearest, raycast and random are nil, false, nil");
+				check(h.run("return Nav.agent(find_entity('Walker')):set_destination(vec3(1,0,0))") == "false", "lua_no_navmesh: a destination is false");
+			}
+
+			// Without the module the calls are Lua errors.
+			{
+				LuaNavHarness h(nullptr, false);
+				check(h.fails("return Nav.has_navmesh()", "navigation module"), "lua_no_module: without a navigation module the call is a Lua error");
+			}
+
+			// The static stub declares the API.
+			{
+				std::ifstream file("engine/lua/wiwa.lua", std::ios::binary);
+				std::stringstream text;
+				text << file.rdbuf();
+				const std::string stub = text.str();
+				check(declared_globals(stub).contains("Nav") && stub.find("function Nav.find_path(") != std::string::npos && stub.find("function NavAgentHandle:set_destination(") != std::string::npos && stub.find("on_nav_arrived") != std::string::npos,
+					"lua_stubs_have_nav: the static stub declares Nav, the agent handle and the hooks");
+			}
+		}
+	}
+
 	bool run_nav_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -644,6 +818,7 @@ namespace wiwa
 		bake(check);
 		queries(check);
 		agents(check);
+		lua_nav(check);
 
 		if (check.Failures == 0)
 		{

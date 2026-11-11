@@ -92,6 +92,13 @@ or `debug`.
   without an entity plays globally. `Audio.stop(handle)`, `Audio.stop_entity(e)`, `Audio.stop_all()`, `Audio.set_rtpc(name, value [, entity])`,
   `Audio.set_switch(group, state [, entity])`, `Audio.set_state(group, state)`, `Audio.load_bank(load_asset("assets/audio/Music.bnk"))`,
   `Audio.backend()` (`"Null"`, `"Wwise"` or `"MiniAudio"`). Banks the project lists in Settings, Audio are loaded at start. Sound only plays while the game clock plays.
+- **Navigation:** queries against the baked navmesh of the scene that plays (a `NavMeshVolume` with a `.wnav`, see the Navigation panel); without one they answer
+  failed / `nil` / `false`. `Nav.find_path(from, to [, area_mask])` is `{ status = "complete" | "partial" | "failed", length, points = { vec3... } }` (partial: the walk
+  ends where it comes closest), `Nav.nearest_point(p [, extents])`, `Nav.raycast(a, b)` (`hit, point`: the line leaves the mesh), `Nav.random_point(centre, radius)`,
+  `Nav.has_navmesh()`. A vector that is not made of finite numbers is a Lua error. `Nav.agent(entity)` is the handle of the entity's `NavAgent` (an error without one):
+  `:set_destination(v)` (false when there is no route), `:stop()`, `:warp(v)`, `:state()` (`"idle"`, `"moving"`, `"arrived"`, `"no_path"`), `:remaining_distance()`,
+  `:velocity()`. A script on the entity gets `on_nav_arrived(self)` and `on_nav_failed(self)` at the start of the update after the agent arrived or lost its way. Agents only
+  walk while the game clock plays.
 - **UI:** `UI.panel(entity)`, widgets by path, `widget:on(event, fn)`, `UI.input` (see "UI" below).
 
 ## UI

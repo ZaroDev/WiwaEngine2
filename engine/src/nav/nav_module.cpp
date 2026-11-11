@@ -92,13 +92,19 @@ namespace wiwa
 		AssetRef chosen{};
 		entt::entity chosenEntity = entt::null;
 		u32 enabled = 0;
+		std::vector<entt::entity> volumes;
 		for (auto [entity, volume] : registry.view<NavMeshVolume>().each())
 		{
-			if (!volume.Enabled)
+			if (volume.Enabled)
 			{
-				continue;
+				volumes.push_back(entity);
 			}
-			enabled++;
+		}
+		std::sort(volumes.begin(), volumes.end(), [](entt::entity a, entt::entity b) { return entt::to_integral(a) < entt::to_integral(b); }); // the order they were made in
+		enabled = static_cast<u32>(volumes.size());
+		for (const entt::entity entity : volumes)
+		{
+			const NavMeshVolume& volume = registry.get<NavMeshVolume>(entity);
 			if (chosenEntity == entt::null && volume.NavMesh.valid())
 			{
 				chosen = volume.NavMesh;

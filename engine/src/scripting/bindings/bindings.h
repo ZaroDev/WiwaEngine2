@@ -40,6 +40,9 @@ namespace wiwa
 	// UI.panel(entity), panels and their widgets (properties, on / off), UI.input.
 	void bind_ui(ScriptRuntime& runtime, ScriptContext& context);
 
+	// Nav.agent(entity) and its handle (set_destination, stop, warp, state, remaining_distance, velocity), Nav.find_path / nearest_point / raycast / random_point.
+	void bind_nav(ScriptRuntime& runtime, ScriptContext& context);
+
 	// Animation.animator(entity), the animator handle (play, crossfade, stop, layer, on, off, joint_world, ...) and layer handles.
 	void bind_animation(ScriptRuntime& runtime, ScriptContext& context);
 

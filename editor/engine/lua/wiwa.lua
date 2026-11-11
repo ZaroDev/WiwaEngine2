@@ -749,6 +749,63 @@ function Audio.load_bank(bank) end
 ---@return string
 function Audio.backend() end
 
+--- The NavAgent of an entity (Nav.agent): it walks the navmesh to a destination while the game plays.
+---@class NavAgentHandle
+local NavAgentHandle = {}
+--- Starts a walk to the point of the navmesh nearest to the destination. False when there is no navmesh, none near the destination, or no route even part of the way (a route that stops short is walked to its end and the state then becomes "no_path").
+---@param destination vec3
+---@return boolean
+function NavAgentHandle:set_destination(destination) end
+function NavAgentHandle:stop() end
+--- Puts the agent at the point of the navmesh nearest to the position. False if the navmesh is not near it.
+---@param position vec3
+---@return boolean
+function NavAgentHandle:warp(position) end
+---@return "idle"|"moving"|"arrived"|"no_path"
+function NavAgentHandle:state() end
+--- Straight distance to the destination; 0 when the agent is not moving.
+---@return number
+function NavAgentHandle:remaining_distance() end
+---@return vec3
+function NavAgentHandle:velocity() end
+
+---@class NavPath
+---@field status "complete"|"partial"|"failed"
+---@field length number
+---@field points vec3[]
+
+--- Navigation: queries against the navmesh of the scene that plays (baked in the Navigation panel). Without a navmesh the queries answer "failed" / nil / false. Vectors that are not finite numbers are errors.
+Nav = {}
+--- The agent of an entity; an error when it has no NavAgent component.
+---@param entity Entity
+---@return NavAgentHandle
+function Nav.agent(entity) end
+--- The straight path between the navmesh points nearest to the two positions. Partial: the walk ends where it comes closest to the target.
+---@param from vec3
+---@param to vec3
+---@param area_mask? integer  bit set of the areas that may be used (default all)
+---@return NavPath
+function Nav.find_path(from, to, area_mask) end
+--- The point of the navmesh nearest to the point within the extents (default 2 x 4 x 2 m), or nil.
+---@param point vec3
+---@param extents? vec3
+---@return vec3?
+function Nav.nearest_point(point, extents) end
+--- Whether the line from a to b leaves the navmesh (a wall or an edge) before b, and where.
+---@param a vec3
+---@param b vec3
+---@return boolean hit
+---@return vec3? point
+function Nav.raycast(a, b) end
+--- A random point of the navmesh within the radius of the centre (which must be on it), or nil.
+---@param centre vec3
+---@param radius number
+---@return vec3?
+function Nav.random_point(centre, radius) end
+--- Whether the scene that plays has its navmesh loaded.
+---@return boolean
+function Nav.has_navmesh() end
+
 time = {}
 --- Seconds of the update that is running.
 ---@return number
@@ -877,6 +934,10 @@ function ScriptClass:on_trigger_exit(other) end
 --- A joint of this entity went over its break force or torque and is gone. `other` is the entity it was connected to, nil for the world.
 ---@param other Entity?
 function ScriptClass:on_joint_break(other) end
+--- This entity's NavAgent reached its destination (heard at the start of the next update).
+function ScriptClass:on_nav_arrived() end
+--- This entity's NavAgent found no path, or its route stopped short of the destination.
+function ScriptClass:on_nav_failed() end
 ---@param definition? ScriptDefinition
 ---@return ScriptClass
 function ScriptClass:extend(definition) end

@@ -3,6 +3,7 @@
 
 #include <animation/animation_module.h>
 #include <audio/audio_module.h>
+#include <nav/nav_module.h>
 #include <ui/ui_module.h>
 
 #include <algorithm>
@@ -35,6 +36,7 @@ namespace wiwa
 		context.Input = Engine::get().get_module<InputModule>();
 		context.Animation = Engine::get().get_module<AnimationModule>();
 		context.Audio = Engine::get().get_module<AudioModule>();
+		context.Nav = Engine::get().get_module<NavModule>();
 		context.RequestQuit = []() { Engine::get().request_quit(); };
 		if (RenderModule* renderer = Engine::get().get_module<RenderModule>())
 		{

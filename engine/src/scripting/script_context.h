@@ -15,6 +15,7 @@ namespace wiwa
 	class AssetManager;
 	class DebugDraw;
 	class InputModule;
+	class NavModule;
 	class PhysicsModule;
 	class SceneModule;
 	class UiHandlerTable;
@@ -33,6 +34,7 @@ namespace wiwa
 		PhysicsModule* Physics = nullptr; // null where there is no such module (a test): the physics calls are Lua errors
 		InputModule* Input = nullptr;   // null where there is no such module (a test): the input calls are Lua errors
 		AnimationModule* Animation = nullptr; // null where there is no such module (a test): Animation.animator then finds nothing
+		NavModule* Nav = nullptr;       // null where there is no such module (a test): the Nav calls are Lua errors
 		AudioModule* Audio = nullptr;   // null where there is no such module (a test): the Audio calls are Lua errors
 		AnimHandlerTable* AnimHandlers = nullptr; // the Lua functions that listen to clip events, owned by the script instances
 		Ref<Scene> ActiveSceneRef{};    // the same scene as ActiveScene, for the calls that need to share it
