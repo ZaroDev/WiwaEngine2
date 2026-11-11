@@ -14,6 +14,7 @@
 #include <ai/bt_instance.h>
 #include <ai/ai_module.h>
 #include <ai/perception.h>
+#include "bt_edit_model.h"
 #include "../asset_pipeline/lua_stubs.h"
 #include <ai/bt_leaves_engine.h>
 #include <ai/bt_lua_host.h>
@@ -1589,6 +1590,170 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		std::vector<std::string> child_ids(const BtEditModel& model, const std::string& id)
+		{
+			const BtNodeDesc* node = model.doc().find(id);
+			return node != nullptr ? node->Children : std::vector<std::string>();
+		}
+
+		void edit_model(Check& check)
+		{
+			BtEditModel model{ BehaviorTreeDoc{} };
+			std::vector<BehaviorTreeDoc> states{ model.doc() };
+			const auto remember = [&]() { states.push_back(model.doc()); };
+
+			// Building a tree.
+			const std::string root = model.add_node("Selector", "");
+			check(!root.empty() && model.doc().Root == root && model.doc().Nodes.size() == 1, "edit_root: the first node of an empty tree is the root");
+			remember();
+			check(model.add_node("Sequence", "").empty() && !model.error().empty(), "edit_root: a second root is refused with a reason");
+			const std::string sequence = model.add_node("Sequence", root);
+			remember();
+			const std::string wait = model.add_node("Wait", sequence);
+			remember();
+			const std::string log = model.add_node("Log", sequence, 0);
+			remember();
+			const std::string inverter = model.add_node("Inverter", root, 0);
+			remember();
+			const std::string check_node = model.add_node("CheckBlackboard", inverter);
+			remember();
+			check(child_ids(model, sequence) == std::vector<std::string>{ log, wait } && child_ids(model, root) == std::vector<std::string>{ inverter, sequence }, "edit_add: nodes go at the index asked for");
+			check(model.doc().find(wait)->Params["seconds"] == 1.0 && model.doc().find(model.add_node("MoveTo", root)) != nullptr, "edit_add: a new node has useful default parameters");
+			remember();
+
+			// Refusals leave nothing behind.
+			const size_t before = model.doc().Nodes.size();
+			check(model.add_node("Dance", root).empty() && model.add_node("Wait", wait).empty() && model.add_node("Wait", inverter).empty() && model.add_node("Wait", "ghost").empty(), "edit_refuse: an unknown type, a leaf parent, a second child of a decorator and a missing parent are refused");
+			check(!model.remove_node(root) && !model.remove_node("ghost") && !model.move_node(root, sequence) && !model.move_node(sequence, sequence) && !model.move_node(root, inverter), "edit_refuse: the root cannot be removed or moved, nothing moves into itself");
+			check(!model.move_node(sequence, wait) && !model.move_node(sequence, inverter == sequence ? root : "ghost"), "edit_refuse: a move under a leaf or a missing node is refused");
+			check(model.doc().Nodes.size() == before && model.doc() == states.back(), "edit_refuse: a refused call changes nothing");
+
+			// Ids are never reused.
+			const std::string temp = model.add_node("Wait", sequence);
+			model.remove_node(temp);
+			const std::string again = model.add_node("Wait", sequence);
+			check(!temp.empty() && again != temp, "edit_ids: an id is not reused after the node is removed");
+			model.remove_node(again);
+			model.undo();
+			model.undo();
+			check(model.doc().find(temp) == nullptr, "edit_ids: undo back before the node");
+			const std::string third = model.add_node("Wait", sequence);
+			check(third != temp && third != again, "edit_ids: nor after an undo");
+			model.undo();
+			// undo everything this block made, back to the remembered state
+			while (model.doc() != states.back() && model.can_undo())
+			{
+				model.undo();
+			}
+			check(model.doc() == states.back(), "edit_ids: the document is back where it was");
+
+			// Moving.
+			check(model.move_node(wait, sequence, 0) && child_ids(model, sequence) == std::vector<std::string>{ wait, log }, "edit_move: a node moves within its parent");
+			remember();
+			check(model.move_node(wait, root, 0) && child_ids(model, root).front() == wait && child_ids(model, sequence) == std::vector<std::string>{ log }, "edit_move: a node moves to another parent");
+			remember();
+			const size_t beforeNoop = states.size();
+			check(model.move_node(wait, root, 0) && model.doc() == states.back(), "edit_move: moving to where it is changes nothing");
+			(void)beforeNoop;
+
+			// Parameters and names, and no-ops make no step.
+			check(model.set_param(wait, "seconds", 2.5) && model.doc().find(wait)->Params["seconds"] == 2.5, "edit_param: a parameter is set");
+			remember();
+			model.undo();
+			model.redo();
+			check(model.doc() == states.back(), "edit_undo: undo then redo is exact");
+			check(model.set_param(wait, "seconds", 2.5) && model.set_param(wait, "ghost", Json()) && model.rename_node(wait, model.doc().find(wait)->Name), "edit_noop: setting what is there makes no step");
+			check(model.doc() == states.back(), "edit_noop: and the document is as it was");
+			check(model.rename_node(wait, "Pause") && model.doc().find(wait)->Name == "Pause" && model.set_param(wait, "seconds", Json()) && model.doc().find(wait)->Params.contains("seconds") == false, "edit_param: rename, and null removes a parameter");
+
+			// Undo and redo through everything.
+			int undone = 0;
+			while (model.can_undo())
+			{
+				model.undo();
+				undone++;
+			}
+			check(model.doc() == states.front() && undone > 5, "edit_undo: undo goes all the way back to the empty tree");
+			while (model.can_redo())
+			{
+				model.redo();
+			}
+			check(model.doc().Nodes.size() > 5 && !model.can_redo(), "edit_undo: redo goes forward again");
+
+			// A gesture is one step.
+			{
+				BtEditModel gesture{ BehaviorTreeDoc{} };
+				const std::string r = gesture.add_node("Sequence", "");
+				const BehaviorTreeDoc start = gesture.doc();
+				gesture.begin_gesture();
+				gesture.begin_gesture();
+				gesture.add_node("Wait", r);
+				gesture.add_node("Wait", r);
+				gesture.end_gesture();
+				gesture.add_node("Wait", r);
+				gesture.end_gesture();
+				const size_t made = gesture.doc().Nodes.size();
+				const bool undid = gesture.undo();
+				check(made == 4 && undid && gesture.doc() == start, "edit_gesture: nested gestures are one undo step");
+				gesture.begin_gesture();
+				gesture.end_gesture();
+				check(gesture.can_undo(), "edit_gesture: an empty gesture leaves the history alone");
+			}
+
+			// Blackboard keys.
+			{
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Blackboard = { key("alert", BtValueType::Bool, false), key("target", BtValueType::Entity), key("spot", BtValueType::Vec3) };
+				doc.Nodes = { node("s", "Sequence", { "g", "m", "c" }), node("g", "Guard", { "w" }, { { "key", "alert" }, { "op", "true" } }), node("w", "Wait", {}, { { "seconds", 1.0 } }),
+					node("m", "MoveTo", {}, { { "target", "key:target" } }), node("c", "CheckBlackboard", {}, { { "key", "alert" }, { "op", "==" }, { "value", true } }) };
+				BtEditModel keys(doc);
+				check(!bt_has_errors(keys.problems()), "edit_keys: the starting tree is valid");
+				check(keys.add_key("count", BtValueType::Int, 3) && !keys.add_key("count", BtValueType::Int) && !keys.add_key("", BtValueType::Int) && !keys.add_key("bad", BtValueType::Vec3, Json::array({ 1, 2 })), "edit_keys: add, a duplicate, an empty name and a default that does not fit");
+				check(keys.set_key_default("count", 5) && !keys.set_key_default("count", "x") && !keys.set_key_default("ghost", 1), "edit_keys: a default is set if it fits");
+				check(keys.rename_key("alert", "danger") && keys.doc().find("g")->Params["key"] == "danger" && keys.doc().find("c")->Params["key"] == "danger" && !bt_has_errors(keys.problems()), "edit_keys: renaming rewrites every parameter that used the key");
+				check(keys.rename_key("target", "enemy") && keys.doc().find("m")->Params["target"] == "key:enemy" && !bt_has_errors(keys.problems()), "edit_keys: and the target of a MoveTo");
+				check(!keys.rename_key("danger", "enemy") && !keys.rename_key("danger", "") && !keys.rename_key("ghost", "x"), "edit_keys: a rename onto another key, to nothing or of nothing is refused");
+				check(!keys.retype_key("danger", BtValueType::Int) && keys.error().find("g") != std::string::npos && keys.error().find("c") != std::string::npos, "edit_keys: retyping a key in use is refused naming the nodes");
+				check(!keys.remove_key("danger") && keys.doc().find_key("danger") != nullptr, "edit_keys: removing a key in use is refused");
+				const BehaviorTreeDoc beforeForce = keys.doc();
+				check(keys.retype_key("danger", BtValueType::Int, true) && !keys.doc().find("g")->Params.contains("key") && !keys.doc().find("c")->Params.contains("value"), "edit_keys: force retypes and clears what named the key");
+				keys.undo();
+				check(keys.doc() == beforeForce, "edit_keys: and it is one undo step");
+				check(keys.remove_key("danger", true) && keys.doc().find_key("danger") == nullptr && has_problem(keys.problems(), "g", "missing parameter"), "edit_keys: force removes it, and the nodes show the problem");
+				check(keys.remove_key("count") && keys.retype_key("spot", BtValueType::Float) && keys.doc().find_key("spot")->Type == BtValueType::Float, "edit_keys: an unused key retypes and removes freely");
+			}
+
+			// Problems and saving.
+			{
+				BtEditModel saved{ BehaviorTreeDoc{} };
+				const std::string r = saved.add_node("Sequence", "");
+				saved.add_node("Wait", r);
+				const std::filesystem::path file = std::filesystem::temp_directory_path() / "wiwa_bt_edit_model.wbt";
+				std::error_code removed;
+				std::filesystem::remove(file, removed);
+				check(saved.dirty() && saved.save(file) && !saved.dirty(), "edit_save: a valid tree saves and is clean");
+				std::ifstream stream(file, std::ios::binary);
+				std::stringstream text;
+				text << stream.rdbuf();
+				std::string error;
+				const std::optional<BehaviorTreeDoc> back = read_bt_file(text.str(), error);
+				check(back && *back == saved.doc(), "edit_save: the file reads back as the document (" + error + ")");
+				saved.add_node("Log", r);
+				check(saved.dirty(), "edit_save: a change makes it dirty");
+				saved.undo();
+				check(!saved.dirty(), "edit_save: undoing back to what was saved is clean again");
+				saved.add_node("MoveTo", r);
+				saved.set_param(saved.doc().Nodes.back().Id, "target", "key:ghost");
+				check(has_problem(saved.problems(), saved.doc().Nodes.back().Id, "vec3 or entity key") && !saved.save(file) && !saved.error().empty(), "edit_save: a tree with an error is not saved, the reason is given");
+				std::filesystem::remove(file, removed);
+				check(saved.problems().size() == validate_bt(saved.doc()).size(), "edit_problems: problems() is validate_bt");
+			}
+		}
+	}
+
 	bool run_ai_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -1603,6 +1768,7 @@ namespace wiwa
 		lua_leaves(check);
 		lua_ai(check);
 		perception(check);
+		edit_model(check);
 
 		if (check.Failures == 0)
 		{
