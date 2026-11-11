@@ -15,6 +15,7 @@
 #include "physics/physics_smoke_test.h"
 #include "input/input_smoke_test.h"
 #include "audio/audio_smoke_test.h"
+#include "nav/nav_smoke_test.h"
 #include "animation/anim_smoke_test.h"
 
 class Editor final : public wiwa::Engine
@@ -127,6 +128,13 @@ protected:
 				m_CommandThread = std::thread([this, assets]()
 				{
 					m_CommandResult = wiwa::run_audio_smoke_test(*assets) ? 0 : 1;
+				});
+			}
+			else if (m_Args[i] == "--nav-smoke")
+			{
+				m_CommandThread = std::thread([this, assets]()
+				{
+					m_CommandResult = wiwa::run_nav_smoke_test(*assets) ? 0 : 1;
 				});
 			}
 			else if (m_Args[i] == "--anim-smoke")

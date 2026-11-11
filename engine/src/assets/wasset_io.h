@@ -11,6 +11,7 @@
 #include <physics/cooked_shape.h>
 #include <input/action_types.h>
 #include <physics/physics_material_asset.h>
+#include <nav/nav_mesh_asset.h>
 #include <ui/ui_widget.h>
 #include "asset_data.h"
 #include "asset_types.h"
@@ -151,6 +152,8 @@ namespace wiwa
 	void archive(BinaryArchive& ar, SoundBankData& v);
 	// A version, the clip name, then the encoded bytes. Refuses another version, an empty name or empty bytes and trailing bytes.
 	void archive(BinaryArchive& ar, AudioClipData& v);
+	// Magic, a version, then the Detour tiles (nav/nav_mesh_asset.h is the one description of the format).
+	void archive(BinaryArchive& ar, NavMeshData& v);
 
 	template<typename T>
 	constexpr AssetType asset_type_of();
@@ -175,6 +178,7 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<ParticleEffectData>() { return AssetType::ParticleEffect; }
 	template<> constexpr AssetType asset_type_of<SoundBankData>() { return AssetType::SoundBank; }
 	template<> constexpr AssetType asset_type_of<AudioClipData>() { return AssetType::AudioClip; }
+	template<> constexpr AssetType asset_type_of<NavMeshData>() { return AssetType::NavMesh; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)

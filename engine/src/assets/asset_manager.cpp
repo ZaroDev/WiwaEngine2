@@ -46,6 +46,7 @@ namespace wiwa
 			case AssetType::ParticleEffect: return make_asset<ParticleEffectData>(payload);
 			case AssetType::SoundBank: return make_asset<SoundBankData>(payload);
 			case AssetType::AudioClip: return make_asset<AudioClipData>(payload);
+			case AssetType::NavMesh: return make_asset<NavMeshData>(payload);
 			default: return nullptr;
 			}
 		}

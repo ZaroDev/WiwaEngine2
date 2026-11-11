@@ -103,6 +103,7 @@ namespace wiwa
 			case AssetType::ParticleEffect: { auto h = manager.load<ParticleEffectData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::SoundBank: { auto h = manager.load<SoundBankData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::AudioClip: { auto h = manager.load<AudioClipData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::NavMesh: { auto h = manager.load<NavMeshData>(ref); return [h]() { return h.state(); }; }
 			default: return []() { return LoadState::Failed; };
 			}
 		}

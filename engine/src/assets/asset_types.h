@@ -28,6 +28,7 @@ namespace wiwa
 		ParticleEffect,
 		SoundBank,
 		AudioClip,
+		NavMesh,
 
 		Last
 	};
@@ -57,6 +58,7 @@ namespace wiwa
 		case AssetType::ParticleEffect: return "ParticleEffect";
 		case AssetType::SoundBank: return "SoundBank";
 		case AssetType::AudioClip: return "AudioClip";
+		case AssetType::NavMesh: return "NavMesh";
 		default: return "None";
 		}
 	}
