@@ -130,6 +130,8 @@ namespace wiwa
 	void archive(BinaryArchive& ar, SceneData& v);
 	// The components of one entity or prefab node, at most SCENE_MAX_COMPONENTS_PER_ENTITY of them.
 	void archive_component_list(BinaryArchive& ar, std::vector<ComponentRecord>& list);
+	// The overrides of a prefab instance, at most SCENE_MAX_OVERRIDES of them.
+	void archive_override_list(BinaryArchive& ar, std::vector<PrefabOverride>& list);
 	void archive(BinaryArchive& ar, ScriptData& v);
 	void archive(BinaryArchive& ar, SurfaceShaderData& v);
 	void archive(BinaryArchive& ar, FontData& v);

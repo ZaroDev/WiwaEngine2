@@ -586,7 +586,7 @@ namespace wiwa
 			plain.Nodes = { make_node("A", -1), make_node("B", 0) };
 			assign_stable_ids(plain.Nodes);
 			std::vector<std::byte> old = serialize(plain);
-			old.resize(old.size() - 2 * sizeof(u64)); // the empty component list of each node
+			old.resize(old.size() - 2 * sizeof(u64) - sizeof(u32)); // the empty component list of each node, and the count of nested instances after them
 			std::optional<PrefabData> loadedOld = deserialize<PrefabData>(old);
 			check(loadedOld && loadedOld->Nodes.size() == 2 && loadedOld->Nodes[0].Components.empty(), "node_components: a prefab without the component section still loads");
 
@@ -640,6 +640,23 @@ namespace wiwa
 
 		void check_prefab(Check& check)
 		{
+			// compose_node_id: stable, asymmetric, never a reserved value
+			{
+				bool reserved = false;
+				for (u64 i = 0; i < 100; i++)
+				{
+					for (u64 j = 0; j < 100; j++)
+					{
+						const u64 id = compose_node_id(i, j);
+						reserved = reserved || id == 0 || id == ADDED_CHILD_NODE;
+					}
+				}
+				const u64 edge = compose_node_id(~0ull, ~0ull);
+				check(!reserved && edge != 0 && edge != ADDED_CHILD_NODE && compose_node_id(0, 0) != 0, "compose_node_id is never 0 or ADDED_CHILD_NODE");
+				check(compose_node_id(3, 5) != compose_node_id(5, 3), "compose_node_id depends on which id is the outer one");
+				check(compose_node_id(3, 5) == compose_node_id(3, 5), "compose_node_id is deterministic");
+			}
+
 			const AssetRef meshRef{ AssetGuid::generate(), 1 };
 			const AssetRef prefabRef{ AssetGuid::generate(), 0 };
 

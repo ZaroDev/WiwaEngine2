@@ -222,6 +222,11 @@ namespace wiwa
 		bounded_list(ar, list, SCENE_MAX_COMPONENTS_PER_ENTITY, 16, [&](ComponentRecord& component) { archive_component(ar, component); });
 	}
 
+	void archive_override_list(BinaryArchive& ar, std::vector<PrefabOverride>& list)
+	{
+		bounded_list(ar, list, SCENE_MAX_OVERRIDES, 8, [&](PrefabOverride& override) { archive_override(ar, override, 0); });
+	}
+
 	void archive(BinaryArchive& ar, SceneData& v)
 	{
 		ar.string(v.Name);

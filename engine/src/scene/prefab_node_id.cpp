@@ -26,6 +26,26 @@ namespace wiwa
 		return hash == 0 ? 1 : hash;
 	}
 
+	u64 compose_node_id(u64 outer, u64 inner)
+	{
+		u64 hash = 0xCBF29CE484222325ull;
+		for (const u64 part : { outer, inner })
+		{
+			for (u32 shift = 0; shift < 64; shift += 8)
+			{
+				hash ^= (part >> shift) & 0xFFull;
+				hash *= 0x100000001B3ull;
+			}
+			hash ^= 0x9Eull; // separates the two parts, so (a, b) and (b, a) differ
+			hash *= 0x100000001B3ull;
+		}
+		if (hash == 0)
+		{
+			return 1;
+		}
+		return hash == ~0ull ? ~0ull - 1 : hash;
+	}
+
 	void assign_stable_ids(std::vector<PrefabNode>& nodes)
 	{
 		const size_t count = nodes.size();

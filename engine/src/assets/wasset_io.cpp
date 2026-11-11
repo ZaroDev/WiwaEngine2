@@ -543,6 +543,48 @@ namespace wiwa
 			}
 		}
 
+		// Nested instances came after the components: older payloads end before this section. Always written.
+		if (!(ar.reading() && ar.ok() && ar.remaining() == 0))
+		{
+			u32 instances = 0;
+			if (!ar.reading())
+			{
+				for (const PrefabNode& n : v.Nodes)
+				{
+					instances += n.Instance ? 1u : 0u;
+				}
+			}
+			ar.value(instances);
+			if (ar.reading() && (!ar.ok() || instances > v.Nodes.size()))
+			{
+				ar.fail();
+				return;
+			}
+
+			u32 next = 0;
+			for (u32 i = 0; i < instances; i++)
+			{
+				u32 index = 0;
+				if (!ar.reading())
+				{
+					while (!v.Nodes[next].Instance)
+					{
+						next++;
+					}
+					index = next++;
+				}
+				ar.value(index);
+				if (ar.reading() && index >= v.Nodes.size())
+				{
+					ar.fail();
+					return;
+				}
+				PrefabNodeInstance& instance = ar.reading() ? v.Nodes[index].Instance.emplace() : *v.Nodes[index].Instance;
+				ar.value(instance.Prefab);
+				archive_override_list(ar, instance.Overrides);
+			}
+		}
+
 		if (ar.reading() && ar.ok())
 		{
 			for (const PrefabNode& n : v.Nodes)

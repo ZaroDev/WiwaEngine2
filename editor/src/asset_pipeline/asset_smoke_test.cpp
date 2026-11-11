@@ -259,6 +259,41 @@ namespace wiwa
 			trail.bake();
 			effect.Emitters = { flame, trail };
 
+			// a prefab node that holds an instance of another prefab round-trips; a payload from before instances existed loads with none
+			{
+				PrefabData outer;
+				outer.Name = "outer";
+				outer.Nodes.resize(2);
+				outer.Nodes[0].Name = "Root";
+				outer.Nodes[0].StableId = 11;
+				outer.Nodes[1].Name = "Slot";
+				outer.Nodes[1].Parent = 0;
+				outer.Nodes[1].StableId = 22;
+				PrefabNodeInstance instance;
+				instance.Prefab = AssetRef{ AssetGuid::generate(), 0 };
+				PrefabOverride set;
+				set.Kind = OverrideKind::SetField;
+				set.NodeId = 7;
+				set.Component = "Transform";
+				set.Field = "Position";
+				set.Value = FieldValue(glm::vec3(1.0f, 2.0f, 3.0f));
+				instance.Overrides.push_back(set);
+				outer.Nodes[1].Instance = instance;
+
+				const std::vector<std::byte> prefabBytes = serialize(outer);
+				std::optional<PrefabData> prefabBack = deserialize<PrefabData>(prefabBytes);
+				check(prefabBack && prefabBack->Nodes.size() == 2 && !prefabBack->Nodes[0].Instance && prefabBack->Nodes[1].Instance
+					&& prefabBack->Nodes[1].Instance->Prefab == instance.Prefab && prefabBack->Nodes[1].Instance->Overrides.size() == 1
+					&& prefabBack->Nodes[1].Instance->Overrides[0].NodeId == 7, "a prefab node's nested instance and its overrides round-trip through the cooked format");
+
+				PrefabData flat = outer;
+				flat.Nodes[1].Instance.reset();
+				std::vector<std::byte> legacy = serialize(flat);
+				legacy.resize(legacy.size() - sizeof(u32)); // the instance count is the last thing written: what is left is the old layout
+				std::optional<PrefabData> legacyBack = deserialize<PrefabData>(legacy);
+				check(legacyBack && legacyBack->Nodes.size() == 2 && !legacyBack->Nodes[0].Instance && !legacyBack->Nodes[1].Instance, "a prefab payload written before nested instances loads with none");
+			}
+
 			const std::vector<std::byte> bytes = serialize(effect);
 			std::optional<ParticleEffectData> back = deserialize<ParticleEffectData>(bytes);
 			check(back && *back == effect, "a particle effect round-trips through the cooked format");

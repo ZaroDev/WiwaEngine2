@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -422,6 +423,14 @@ namespace wiwa
 		std::vector<std::byte> Bytes{};
 	};
 
+	// A node that is the root of an instance of another prefab: the inner prefab's nodes are its children (see scene/prefab_expander.h).
+	// The overrides address the inner prefab's nodes by their own ids (0 is this node).
+	struct PrefabNodeInstance
+	{
+		AssetRef Prefab{};
+		std::vector<PrefabOverride> Overrides{};
+	};
+
 	struct PrefabNode
 	{
 		std::string Name{};
@@ -436,6 +445,7 @@ namespace wiwa
 		// Every other reflected component of the node, for prefabs made from scene entities (a model's nodes have none). A component
 		// named here replaces the one the fields above would give the node.
 		std::vector<ComponentRecord> Components{};
+		std::optional<PrefabNodeInstance> Instance{}; // set when this node is the root of an instance of another prefab
 	};
 
 	// The hierarchy of an imported model; it points to the meshes, skeletons and clips by reference.
