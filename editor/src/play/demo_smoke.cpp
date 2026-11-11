@@ -9,6 +9,7 @@
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <input/input_module.h>
+#include <scene/particle_runtime.h>
 #include <scene/reflection/component_registry.h>
 #include <scripting/script_module.h>
 #include <scripting/script_names.h>
@@ -91,6 +92,29 @@ namespace wiwa
 		m_Fox.PlacedDecals = std::max(m_Fox.PlacedDecals, placed);
 		m_Fox.MostFootprints = std::max(m_Fox.MostFootprints, footprints);
 
+		// the particle effects of the demo: the systems the scene places (playing), the dust of the warrior's footsteps and the sparks the script of the station spawns
+		u32 placedEffects = 0;
+		u32 dust = 0;
+		u32 sparks = 0;
+		for (const auto [entity, system, name] : play.registry().view<ParticleSystem, Name>().each())
+		{
+			if (name.Value == "Footstep dust")
+			{
+				dust++;
+			}
+			else if (name.Value == "Impact sparks")
+			{
+				sparks++;
+			}
+			else if (const ParticleRuntime* runtime = play.registry().try_get<ParticleRuntime>(entity); runtime != nullptr && runtime->Playing)
+			{
+				placedEffects++;
+			}
+		}
+		m_Fox.PlayingEffects = std::max(m_Fox.PlayingEffects, placedEffects);
+		m_Fox.MostDust = std::max(m_Fox.MostDust, dust);
+		m_Fox.MostSparks = std::max(m_Fox.MostSparks, sparks);
+
 		m_Fox.WarriorMeshes = 0;
 		m_Fox.WarriorMeshesReceiving = 0;
 		for (const auto [entity, renderer, hierarchy] : play.registry().view<MeshRenderer, Hierarchy>().each())
@@ -171,6 +195,18 @@ namespace wiwa
 		if (m_Fox.WarriorMeshes == 0 || m_Fox.WarriorMeshesReceiving != 0)
 		{
 			return "decal_footprints.lua did not turn off ReceivesDecals on the meshes of the warrior (" + std::to_string(m_Fox.WarriorMeshesReceiving) + " of " + std::to_string(m_Fox.WarriorMeshes) + " still receive)";
+		}
+		if (m_Fox.PlayingEffects < 3)
+		{
+			return "the demo scene's particle effects are not playing (a campfire, a spark fountain and the rune motes; found " + std::to_string(m_Fox.PlayingEffects) + ")";
+		}
+		if (m_Fox.MostDust == 0)
+		{
+			return "the footsteps of the warrior spawned no dust (vfx_footsteps.lua, Vfx.spawn)";
+		}
+		if (m_Fox.MostSparks == 0)
+		{
+			return "vfx_demo.lua spawned no impact sparks (Vfx.spawn)";
 		}
 		return {};
 	}

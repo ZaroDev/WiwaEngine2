@@ -105,6 +105,10 @@ namespace wiwa
 			u32 MostFootprints = 0;
 			u32 WarriorMeshes = 0;
 			u32 WarriorMeshesReceiving = 0;
+			// particle effects (vfx.md): the playing systems the scene places, the most dust puffs and impact sparks alive at once
+			u32 PlayingEffects = 0;
+			u32 MostDust = 0;
+			u32 MostSparks = 0;
 		};
 		FoxWatch m_Fox{};
 

@@ -28,7 +28,7 @@ function DecalFootprints:on_init()
 end
 
 function DecalFootprints:step()
-  local p = self.entity.transform.position
+  local p = self.transform.position
   local side = self.left and -0.18 or 0.18
   self.left = not self.left
   Decal.spawn{ material = self.material, position = vec3(p.x + side, 0.02, p.z), normal = vec3(0, 1, 0), size = vec3(0.3, 0.5, 0.4),

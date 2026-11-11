@@ -2607,7 +2607,8 @@
           "period": 0.4,
           "attack_every": 0.15
         },
-        "script:d8a5ea9d582c060e9a710d8e4cdd516d": {}
+        "script:d8a5ea9d582c060e9a710d8e4cdd516d": {},
+        "script:94d6fcb426fdc1ae57cfb6db7a6db865": {}
       },
       "parent": "6ba23329d0330f39b465064e43191155"
     },
@@ -5237,6 +5238,474 @@
       "parent": "9304d396d8c34da1e4a0c808ceb7dffd"
     },
     {
+      "id": "47cbbe6fddae2c1128773928e0d99b56",
+      "components": {
+        "Name": {
+          "Value": "Label 1"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            6.5,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
+    },
+    {
+      "id": "74e764b0d3bb9694efc111a594c7bfb4",
+      "components": {
+        "Name": {
+          "Value": "Label 2"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            4.5,
+            -16
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
+    },
+    {
+      "id": "12d11813456518368a059c1d9dc2c4bb",
+      "components": {
+        "Name": {
+          "Value": "Label 3"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            3.6,
+            9
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
+    },
+    {
+      "id": "d11fc692da627b552e00b48a11f4a63b",
+      "components": {
+        "Name": {
+          "Value": "Label 4"
+        },
+        "Transform": {
+          "Position": [
+            11,
+            3,
+            1.5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
+    },
+    {
+      "id": "1d26f52c9983562ffd6f5a448aaa8266",
+      "components": {
+        "Name": {
+          "Value": "Label 5"
+        },
+        "Transform": {
+          "Position": [
+            -11,
+            6.5,
+            8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
+    },
+    {
+      "id": "6602dc1cf238b559b2ce19ccf6d1fd84",
+      "components": {
+        "Name": {
+          "Value": "Label 6"
+        },
+        "Transform": {
+          "Position": [
+            24,
+            4,
+            1
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
+    },
+    {
+      "id": "71aee876f9944b67ebb4413696a61160",
+      "components": {
+        "Name": {
+          "Value": "Label 7"
+        },
+        "Transform": {
+          "Position": [
+            2,
+            2.6,
+            6
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
+    },
+    {
+      "id": "5e80f7e97a6ebdcc6b10663c6d59f633",
+      "components": {
+        "Name": {
+          "Value": "VFX station"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
+    },
+    {
+      "id": "b53f3bd616639e89bffadd6165c02d53",
+      "components": {
+        "Name": {
+          "Value": "Campfire log 1"
+        },
+        "Transform": {
+          "Position": [
+            16,
+            0.1,
+            -9
+          ],
+          "Rotation": [
+            0.0,
+            0.25881904510252074,
+            0.0,
+            0.9659258262890683
+          ],
+          "Scale": [
+            0.9,
+            0.2,
+            0.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "5e80f7e97a6ebdcc6b10663c6d59f633"
+    },
+    {
+      "id": "e871bad0211ddb21623604defb9429a2",
+      "components": {
+        "Name": {
+          "Value": "Campfire log 2"
+        },
+        "Transform": {
+          "Position": [
+            16,
+            0.1,
+            -9
+          ],
+          "Rotation": [
+            -0.0,
+            -0.3420201433256687,
+            -0.0,
+            0.9396926207859084
+          ],
+          "Scale": [
+            0.9,
+            0.2,
+            0.2
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "5e80f7e97a6ebdcc6b10663c6d59f633"
+    },
+    {
+      "id": "3b1b583d0370160892166938f7441e6f",
+      "components": {
+        "Name": {
+          "Value": "Campfire"
+        },
+        "Transform": {
+          "Position": [
+            16,
+            0.25,
+            -9
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "ParticleSystem": {
+          "Effect": {
+            "guid": "b940caf06f5dbaddb71b7093ef8f64f5",
+            "localId": 0
+          }
+        }
+      },
+      "parent": "5e80f7e97a6ebdcc6b10663c6d59f633"
+    },
+    {
+      "id": "00ebb304eefcb684f4c62f61be2e438d",
+      "components": {
+        "Name": {
+          "Value": "Campfire light"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0.6,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "Kind": "Point",
+          "Color": [
+            1,
+            0.55,
+            0.2,
+            1
+          ],
+          "Intensity": 14,
+          "Range": 8,
+          "InnerAngle": 20,
+          "OuterAngle": 30,
+          "CastsShadows": false
+        },
+        "script:0fb6e48033e145da77cf2941d09aabdd": {
+          "amplitude": 4,
+          "speed": 9
+        }
+      },
+      "parent": "3b1b583d0370160892166938f7441e6f"
+    },
+    {
+      "id": "7519cf439045799641e908ad24a43f91",
+      "components": {
+        "Name": {
+          "Value": "Spark fountain"
+        },
+        "Transform": {
+          "Position": [
+            20,
+            0.3,
+            -9
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "ParticleSystem": {
+          "Effect": {
+            "guid": "649f8cb826edb0bb845ab3b263640720",
+            "localId": 0
+          }
+        }
+      },
+      "parent": "5e80f7e97a6ebdcc6b10663c6d59f633"
+    },
+    {
+      "id": "5edf69a053d0b29c2cfea61a39561dcd",
+      "components": {
+        "Name": {
+          "Value": "Impact sparks emitter"
+        },
+        "Transform": {
+          "Position": [
+            24,
+            0.6,
+            -9
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "script:e84aa6674bfab57dac352fc65dc6c144": {
+          "interval": 2.5
+        }
+      },
+      "parent": "5e80f7e97a6ebdcc6b10663c6d59f633"
+    },
+    {
+      "id": "ade38c84a2051baa83776dd6cf9b93a5",
+      "components": {
+        "Name": {
+          "Value": "Rune motes"
+        },
+        "Transform": {
+          "Position": [
+            -3,
+            0.35,
+            6.5
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "ParticleSystem": {
+          "Effect": {
+            "guid": "4bacd01c7d77168a0c46d3a0d7485b6b",
+            "localId": 0
+          }
+        }
+      },
+      "parent": "09b39221b781276df96dc195f7b0323c"
+    },
+    {
       "id": "09b39221b781276df96dc195f7b0323c",
       "components": {
         "Name": {
@@ -5496,195 +5965,6 @@
         }
       },
       "parent": "09b39221b781276df96dc195f7b0323c"
-    },
-    {
-      "id": "47cbbe6fddae2c1128773928e0d99b56",
-      "components": {
-        "Name": {
-          "Value": "Label 1"
-        },
-        "Transform": {
-          "Position": [
-            0,
-            6.5,
-            0
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        }
-      },
-      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
-    },
-    {
-      "id": "74e764b0d3bb9694efc111a594c7bfb4",
-      "components": {
-        "Name": {
-          "Value": "Label 2"
-        },
-        "Transform": {
-          "Position": [
-            0,
-            4.5,
-            -16
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        }
-      },
-      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
-    },
-    {
-      "id": "12d11813456518368a059c1d9dc2c4bb",
-      "components": {
-        "Name": {
-          "Value": "Label 3"
-        },
-        "Transform": {
-          "Position": [
-            0,
-            3.6,
-            9
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        }
-      },
-      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
-    },
-    {
-      "id": "d11fc692da627b552e00b48a11f4a63b",
-      "components": {
-        "Name": {
-          "Value": "Label 4"
-        },
-        "Transform": {
-          "Position": [
-            11,
-            3,
-            1.5
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        }
-      },
-      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
-    },
-    {
-      "id": "1d26f52c9983562ffd6f5a448aaa8266",
-      "components": {
-        "Name": {
-          "Value": "Label 5"
-        },
-        "Transform": {
-          "Position": [
-            -11,
-            6.5,
-            8
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        }
-      },
-      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
-    },
-    {
-      "id": "6602dc1cf238b559b2ce19ccf6d1fd84",
-      "components": {
-        "Name": {
-          "Value": "Label 6"
-        },
-        "Transform": {
-          "Position": [
-            24,
-            4,
-            1
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        }
-      },
-      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
-    },
-    {
-      "id": "71aee876f9944b67ebb4413696a61160",
-      "components": {
-        "Name": {
-          "Value": "Label 7"
-        },
-        "Transform": {
-          "Position": [
-            2,
-            2.6,
-            6
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        }
-      },
-      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
     }
   ]
 }

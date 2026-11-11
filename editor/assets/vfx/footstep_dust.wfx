@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "name": "Footstep dust",
+  "emitters": [
+    {
+      "name": "Dust",
+      "renderer": "sprite",
+      "material": {
+        "guid": "e2725f04de6f2ce00523c0da8bbc8c25",
+        "localId": 0
+      },
+      "blend": "alpha",
+      "align": "camera",
+      "softDistance": 0.3,
+      "intensity": 1.0,
+      "maxParticles": 64,
+      "sorted": true,
+      "sheet": [
+        2,
+        2
+      ],
+      "spawn": {
+        "looping": false,
+        "duration": 0.2,
+        "rate": 0,
+        "bursts": [
+          {
+            "time": 0,
+            "count": 5
+          }
+        ],
+        "shape": "sphere",
+        "shapeSize": [
+          0.06,
+          0,
+          0
+        ]
+      },
+      "start": {
+        "lifetime": [
+          0.5,
+          0.9
+        ],
+        "speed": [
+          0.25,
+          0.6
+        ],
+        "size": [
+          0.12,
+          0.2
+        ],
+        "rotation": [
+          0,
+          360
+        ],
+        "color": [
+          0.55,
+          0.5,
+          0.42,
+          0.45
+        ]
+      },
+      "forces": {
+        "gravity": [
+          0,
+          0.2,
+          0
+        ],
+        "drag": 1.5
+      },
+      "overLife": {
+        "size": {
+          "curve": [
+            [
+              0,
+              0.6
+            ],
+            [
+              1,
+              2.0
+            ]
+          ]
+        },
+        "alpha": {
+          "curve": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ]
+        },
+        "frame": {
+          "curve": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ]
+          ]
+        }
+      }
+    }
+  ]
+}
