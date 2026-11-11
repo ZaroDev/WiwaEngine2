@@ -29,6 +29,10 @@
 #include "settings/audio_section.h"
 #include "settings/nav_section.h"
 #include "panels/navigation_panel.h"
+#include "ai/bt_editor.h"
+#include "ai/bt_edit_model.h"
+#include <fstream>
+#include <sstream>
 #include <asset_pipeline/nav_settings_file.h>
 #include <nav/nav_module.h>
 #include "ui/ui_editor_panel.h"
@@ -164,6 +168,7 @@ void EditorModule::init()
 		m_VfxEditorSmokeRequested = m_VfxEditorSmokeRequested || argument == "--vfx-editor-smoke";
 		m_AudioPanelSmoke = m_AudioPanelSmoke || argument == "--audio-panel-smoke";
 		m_NavPanelSmoke = m_NavPanelSmoke || argument == "--nav-panel-smoke";
+		m_AiPanelSmoke = m_AiPanelSmoke || argument == "--ai-panel-smoke";
 		if (argument == "--demo-smoke")
 		{
 			m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
@@ -933,6 +938,66 @@ void EditorModule::update(float deltaTime)
 			wiwa::Engine::get().set_exit_code(done ? 0 : 1);
 			wiwa::Engine::get().request_quit();
 			m_NavBakeOut.clear();
+		}
+	}
+
+	if (m_AiPanelSmoke && m_AssetEditor != nullptr)
+	{
+		if (m_Frame == 5)
+		{
+			m_AssetEditor->set_open(true); // the saved layout of an earlier run may have closed it
+		}
+		if (m_Frame == 10)
+		{
+			m_AiPanelFile = std::filesystem::temp_directory_path() / "wiwa_ai_panel_smoke.wbt";
+			wiwa::BtEditModel seed{ wiwa::BehaviorTreeDoc{} };
+			const std::string root = seed.add_node("Sequence", "");
+			seed.add_node("Wait", root);
+			std::string error;
+			if (!seed.save(m_AiPanelFile))
+			{
+				m_AiPanelFailure = "cannot write the smoke tree: " + seed.error();
+			}
+			m_AssetEditor->open_file(m_AiPanelFile);
+		}
+		wiwa::BehaviorTreeEditor* editor = dynamic_cast<wiwa::BehaviorTreeEditor*>(m_AssetEditor->editor());
+		if (m_Frame == 40 && editor != nullptr && editor->model() != nullptr)
+		{
+			// what the canvas menus and the tool pane do, through the model
+			wiwa::BtEditModel& model = *editor->model();
+			const std::string root = model.doc().Root;
+			const std::string log = model.add_node("Log", root);
+			model.set_param(log, "message", "hello");
+			model.add_key("alert", wiwa::BtValueType::Bool);
+			const std::string guard = model.add_node("Guard", root, 0);
+			model.set_param(guard, "key", "alert");
+			model.set_param(guard, "op", "true");
+			model.add_node("Wait", guard);
+			editor->select(log);
+		}
+		if (m_Frame == 70 && editor != nullptr && editor->model() != nullptr)
+		{
+			m_AssetEditor->save(); // the toolbar's Save: the panel then knows the file change is its own (a refusal shows as last_error)
+		}
+		if (m_Frame == 130)
+		{
+			std::string problems;
+			bool saved = false;
+			if (editor != nullptr && editor->model() != nullptr)
+			{
+				std::ifstream stream(m_AiPanelFile, std::ios::binary);
+				std::stringstream text;
+				text << stream.rdbuf();
+				std::string error;
+				const std::optional<wiwa::BehaviorTreeDoc> back = wiwa::read_bt_file(text.str(), error);
+				saved = back && *back == editor->model()->doc() && !editor->dirty() && editor->model()->doc().Nodes.size() == 5;
+			}
+			const bool passed = m_AiPanelFailure.empty() && editor != nullptr && m_AssetEditor->open_kind() == "Behaviour tree" && m_AssetEditor->frames_with_editor() >= 100 && m_AssetEditor->last_error().empty() && saved && editor->frames_drawn() >= 100;
+			WI_INFO("Editor", "AI panel smoke test {0} (editor frames {1}, tree editor frames {2}, kind '{3}', saved and reloaded equal {4}, error \"{5}\", {6})", passed ? "passed" : "FAILED", m_AssetEditor->frames_with_editor(), editor != nullptr ? editor->frames_drawn() : 0u, m_AssetEditor->open_kind(), saved, m_AssetEditor->last_error(), m_AiPanelFailure);
+			std::error_code removed;
+			std::filesystem::remove(m_AiPanelFile, removed);
+			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			wiwa::Engine::get().request_quit();
 		}
 	}
 

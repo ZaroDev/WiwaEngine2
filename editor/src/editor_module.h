@@ -140,6 +140,9 @@ private:
 	entt::entity m_NavPanelVolume{ entt::null };
 	std::filesystem::path m_NavBakeOut{};              // --nav-bake <file>: bake the first volume of the scene that is loaded at start to this .wnav and exit
 	bool m_NavBakeStarted = false;
+	bool m_AiPanelSmoke = false;                      // --ai-panel-smoke: open a behaviour tree in the Asset Editor for a while with ImGui asserts on, edit it through the model, save it
+	std::filesystem::path m_AiPanelFile{};
+	std::string m_AiPanelFailure{};
 	bool m_NavPanelSmoke = false;                     // --nav-panel-smoke: draw the Navigation panel for a while, make a volume through it, check it
 	Scope<wiwa::SkeletonIndex> m_SkeletonIndex{};   // which meshes and clips name each skeleton, kept up to date in the background
 	Scope<wiwa::EditorState> m_EditorState{};       // Library/editor_state.json

@@ -9,6 +9,7 @@
 #include <asset_pipeline/asset_database.h>
 
 #include "clip_editor.h"
+#include "../ai/bt_editor.h"
 #include "graph_editor.h"
 #include "vfx_editor.h"
 #include "mesh_editor.h"
@@ -37,7 +38,7 @@ AssetEditorPanel::~AssetEditorPanel()
 bool AssetEditorPanel::can_open(const std::filesystem::path& file)
 {
 	const std::filesystem::path extension = file.extension();
-	return extension == ".wskel" || extension == ".wmesh" || extension == ".wanim" || extension == ".wgraph" || extension == ".wfx";
+	return extension == ".wskel" || extension == ".wmesh" || extension == ".wanim" || extension == ".wgraph" || extension == ".wfx" || extension == ".wbt";
 }
 
 bool AssetEditorPanel::open_asset(const wiwa::AssetRef& ref)
@@ -87,6 +88,10 @@ bool AssetEditorPanel::load_now(const std::filesystem::path& file)
 	else if (file.extension() == ".wfx")
 	{
 		editor = std::make_unique<wiwa::VfxEditor>(host);
+	}
+	else if (file.extension() == ".wbt")
+	{
+		editor = std::make_unique<wiwa::BehaviorTreeEditor>(host);
 	}
 	else
 	{
