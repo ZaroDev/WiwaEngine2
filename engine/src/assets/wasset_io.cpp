@@ -1,5 +1,7 @@
 #include <pch.h>
 #include "wasset_io.h"
+
+#include <ai/bt_file.h>
 #include "native_anim_files.h"
 
 #include <fstream>
@@ -677,6 +679,27 @@ namespace wiwa
 				return;
 			}
 			v = std::move(*parsed);
+		}
+	}
+
+	void archive(BinaryArchive& ar, BehaviorTreeData& v)
+	{
+		u32 version = 1;
+		ar.value(version);
+		if (ar.reading() && ar.ok() && version != 1)
+		{
+			ar.fail();
+			return;
+		}
+
+		ar.string(v.Text);
+		if (ar.reading() && ar.ok())
+		{
+			std::string error;
+			if (v.Text.empty() || ar.remaining() != 0 || !read_bt_file(v.Text, error))
+			{
+				ar.fail();
+			}
 		}
 	}
 

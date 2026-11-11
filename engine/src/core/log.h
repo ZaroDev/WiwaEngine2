@@ -133,3 +133,4 @@ inline OStream& operator<<(OStream& os, glm::qua<T, Q> quaternion)
 
 #define WI_PHYSICS_LOG(level, ...) WI_LOG(level, "Physics", __VA_ARGS__)
 #define WI_NAV_LOG(level, ...) WI_LOG(level, "Nav", __VA_ARGS__)
+#define WI_AI_LOG(level, ...) WI_LOG(level, "AI", __VA_ARGS__)

@@ -1,6 +1,8 @@
 #include <editor_common.h>
 #include "asset_templates.h"
 
+#include <ai/bt_file.h>
+
 #include <fstream>
 
 #include <scene/scene_data.h>
@@ -34,6 +36,24 @@ namespace wiwa
 			layer.States.push_back(std::move(state));
 			graph.Layers.push_back(std::move(layer));
 			return graph;
+		}
+
+		// A Sequence with a Wait: valid, does nothing, and shows the editor what a tree is.
+		BehaviorTreeDoc default_behavior_tree()
+		{
+			BehaviorTreeDoc doc;
+			doc.Root = "n1";
+			BtNodeDesc sequence;
+			sequence.Id = "n1";
+			sequence.Type = "Sequence";
+			sequence.Name = "Root";
+			sequence.Children = { "n2" };
+			BtNodeDesc wait;
+			wait.Id = "n2";
+			wait.Type = "Wait";
+			wait.Params = nlohmann::json{ { "seconds", 1.0 } };
+			doc.Nodes = { sequence, wait };
+			return doc;
 		}
 
 		// One emitter of sparks: an additive sprite, thirty a second, thrown up and pulled down, fading out.
@@ -218,6 +238,7 @@ namespace wiwa
 		case CreateKind::InputMap: return "Input Map";
 		case CreateKind::AnimationGraph: return "Animation graph";
 		case CreateKind::ParticleEffect: return "Particle effect";
+		case CreateKind::BehaviorTree: return "Behaviour tree";
 		}
 		return "";
 	}
@@ -238,6 +259,7 @@ namespace wiwa
 		case CreateKind::InputMap: return "New input map";
 		case CreateKind::AnimationGraph: return "New animation graph";
 		case CreateKind::ParticleEffect: return "New particle effect";
+		case CreateKind::BehaviorTree: return "New behaviour tree";
 		}
 		return "";
 	}
@@ -258,6 +280,7 @@ namespace wiwa
 		case CreateKind::InputMap: return ".winput";
 		case CreateKind::AnimationGraph: return ".wgraph";
 		case CreateKind::ParticleEffect: return ".wfx";
+		case CreateKind::BehaviorTree: return ".wbt";
 		}
 		return "";
 	}
@@ -369,6 +392,9 @@ namespace wiwa
 			break;
 		case CreateKind::ParticleEffect:
 			written = write_text(path, write_particle_file(default_particle_effect(name)));
+			break;
+		case CreateKind::BehaviorTree:
+			written = write_text(path, write_bt_file(default_behavior_tree()));
 			break;
 		}
 

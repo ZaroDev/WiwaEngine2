@@ -406,6 +406,12 @@ namespace wiwa
 		std::vector<GraphLayer> Layers{};
 	};
 
+	// A behaviour tree (.wbt): the JSON text, which ai/bt_file.h reads and validates and ai/bt_compile.h compiles.
+	struct BehaviorTreeData
+	{
+		std::string Text{};
+	};
+
 	// A soundbank the audio backend loads from memory (Wwise: a .bnk), with the metadata of its contents when SoundbanksInfo.json was next to it.
 	struct SoundBankData
 	{

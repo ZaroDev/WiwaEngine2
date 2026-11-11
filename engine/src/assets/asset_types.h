@@ -29,6 +29,7 @@ namespace wiwa
 		SoundBank,
 		AudioClip,
 		NavMesh,
+		BehaviorTree,
 
 		Last
 	};
@@ -59,6 +60,7 @@ namespace wiwa
 		case AssetType::SoundBank: return "SoundBank";
 		case AssetType::AudioClip: return "AudioClip";
 		case AssetType::NavMesh: return "NavMesh";
+		case AssetType::BehaviorTree: return "BehaviorTree";
 		default: return "None";
 		}
 	}
