@@ -10,6 +10,7 @@
 
 #include <nav/nav_data.h>
 #include <nav/nav_mesh_asset.h>
+#include <nav/nav_module.h>
 #include <nav/nav_query.h>
 #include <nav/nav_project_settings.h>
 #include <scene/components.h>
@@ -435,6 +436,203 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		NavMeshData baked(Check& check, const NavBakeInput& input)
+		{
+			const NavBakeResult result = bake_navmesh(input);
+			check(result.Ok, "agents: the fixture bakes (" + result.Error + ")");
+			return result.Mesh;
+		}
+
+		entt::entity add_agent(Scene& scene, glm::vec3 position)
+		{
+			const entt::entity entity = scene.create("Agent");
+			scene.registry().get<Transform>(entity).Position = position;
+			scene.registry().emplace<NavAgent>(entity);
+			scene.update_world_transforms();
+			return entity;
+		}
+
+		void run_frames(NavModule& module, int frames)
+		{
+			for (int i = 0; i < frames; i++)
+			{
+				module.tick(nullptr, true, 1.0f / 60.0f);
+			}
+		}
+
+		glm::vec3 position_of(Scene& scene, entt::entity entity) { return scene.registry().get<Transform>(entity).Position; }
+
+		void agents(Check& check)
+		{
+			const glm::vec3 west{ -8.0f, 0.0f, 0.0f };
+			const glm::vec3 east{ 8.0f, 0.0f, 0.0f };
+
+			// An agent walks round a wall to the other side and arrives.
+			{
+				const NavMeshData mesh = baked(check, wall_fixture(3.0f));
+				NavModule module;
+				module.set_auto_start(false);
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity agent = add_agent(*scene, west);
+				std::vector<NavAgentState> events;
+				module.add_listener([&](entt::entity, NavAgentState state) { events.push_back(state); });
+
+				check(module.start_world_with_mesh(scene, mesh) && module.has_navmesh(), "agent_world: a world starts with the mesh");
+				run_frames(module, 2);
+				check(module.active_agent_count() == 1, "agent_registered: the component becomes a crowd agent");
+				check(module.set_destination(agent, east) && module.state(agent) == NavAgentState::Moving, "agent_destination: a destination on the mesh starts the walk");
+
+				bool insideWall = false;
+				float farthest = 0.0f;
+				for (int i = 0; i < 1200 && module.state(agent) == NavAgentState::Moving; i++)
+				{
+					run_frames(module, 1);
+					const glm::vec3 p = position_of(*scene, agent);
+					insideWall = insideWall || (std::abs(p.x) < 0.45f && std::abs(p.z) < 3.0f);
+					farthest = std::max(farthest, p.x);
+				}
+				check(module.state(agent) == NavAgentState::Arrived, "agent_reaches_target: the agent arrives");
+				check(glm::distance(position_of(*scene, agent), east) < 0.5f && farthest > 7.0f, "agent_reaches_target: it stands at the target");
+				check(!insideWall, "agent_reaches_target: it never walks through the wall");
+				check(events.size() == 1 && events[0] == NavAgentState::Arrived, "agent_events: one Arrived event is sent");
+				run_frames(module, 60); // it brakes after the arrival
+				check(glm::length(module.velocity(agent)) < 0.1f && module.remaining_distance(agent) == 0.0f && glm::distance(position_of(*scene, agent), east) < 0.5f, "agent_arrived_still: an arrived agent stops and stays at the target");
+
+				// Off the mesh: no walk.
+				check(!module.set_destination(agent, { 500.0f, 0.0f, 500.0f }) && module.state(agent) == NavAgentState::NoPath, "agent_off_mesh: a destination far from the mesh is refused, the state is NoPath");
+
+				// Warp, stop.
+				check(module.warp(agent, west) && glm::distance(position_of(*scene, agent), west) < 0.5f, "agent_warp: a warp puts the agent at the point");
+				module.set_destination(agent, east);
+				run_frames(module, 30);
+				module.stop(agent);
+				check(module.state(agent) == NavAgentState::Idle, "agent_stop: a stopped agent is Idle");
+				run_frames(module, 60); // it brakes
+				const glm::vec3 stopped = position_of(*scene, agent);
+				run_frames(module, 60);
+				check(glm::distance(position_of(*scene, agent), stopped) < 0.1f && stopped.x < 6.0f, "agent_stop: a stopped agent stays put, short of the target");
+			}
+
+			// A wall across the whole floor: the walk goes as far as it can and ends NoPath.
+			{
+				const NavMeshData mesh = baked(check, wall_fixture(10.0f));
+				NavModule module;
+				module.set_auto_start(false);
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity agent = add_agent(*scene, west);
+				std::vector<NavAgentState> events;
+				module.add_listener([&](entt::entity, NavAgentState state) { events.push_back(state); });
+				module.start_world_with_mesh(scene, mesh);
+				run_frames(module, 2);
+				module.set_destination(agent, east);
+				run_frames(module, 900);
+				check(module.state(agent) == NavAgentState::NoPath, "agent_blocked_no_path: an unreachable destination ends in NoPath");
+				check(position_of(*scene, agent).x < -0.4f, "agent_blocked_no_path: the agent stays on its side of the wall");
+				check(!events.empty() && events.back() == NavAgentState::NoPath, "agent_blocked_no_path: a NoPath event is sent");
+			}
+
+			// An entity or a component that goes takes its agent with it; a clone that stops leaves nothing behind.
+			{
+				const NavMeshData mesh = baked(check, wall_fixture(3.0f));
+				NavModule module;
+				module.set_auto_start(false);
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity gone = add_agent(*scene, west);
+				const entt::entity stays = add_agent(*scene, glm::vec3(-8.0f, 0.0f, 4.0f));
+				const entt::entity component = add_agent(*scene, glm::vec3(-8.0f, 0.0f, -4.0f));
+				module.start_world_with_mesh(scene, mesh);
+				run_frames(module, 2);
+				module.set_destination(gone, east);
+				module.set_destination(stays, east);
+				run_frames(module, 30);
+				check(module.active_agent_count() == 3, "agent_destroyed_cleans_up: three agents walk");
+				scene->destroy(gone);
+				scene->registry().remove<NavAgent>(component);
+				run_frames(module, 2);
+				check(module.active_agent_count() == 1 && module.state(gone) == NavAgentState::Idle, "agent_destroyed_cleans_up: a destroyed entity and a removed component leave the crowd");
+				module.stop_world();
+				check(module.active_agent_count() == 0 && !module.has_navmesh() && module.world_scene() == nullptr, "agent_stop_world: stopping the world leaves no agents and no mesh");
+				(void)stays;
+
+				// The Editor Play shape: a clone runs, then goes.
+				Ref<Scene> copy = clone_scene(*scene);
+				module.start_world_with_mesh(copy, mesh);
+				run_frames(module, 5);
+				check(module.active_agent_count() == 1, "nav_clone_stop_cleans_up: the clone agent is in the crowd");
+				copy.reset();
+				run_frames(module, 1);
+				check(module.world_scene() == nullptr && module.active_agent_count() == 0, "nav_clone_stop_cleans_up: a clone that is gone takes its world with it");
+			}
+
+			// Auto start follows the active scene while the game plays.
+			{
+				const NavMeshData mesh = baked(check, wall_fixture(3.0f));
+				NavModule module; // auto start is on, but a world with a mesh is the checks' to start
+				Ref<Scene> scene = CreateRef<Scene>();
+				add_agent(*scene, west);
+				module.start_world_with_mesh(scene, mesh);
+				module.tick(scene, true, 1.0f / 60.0f);
+				check(module.world_scene() == scene && module.has_navmesh(), "auto_start: the world of the active scene stays");
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(module.world_scene() == nullptr && !module.has_navmesh(), "auto_start: another active scene ends the world");
+			}
+
+			// A parent that moved and turned, and DriveTransform off.
+			{
+				const NavMeshData mesh = baked(check, floor_fixture(false));
+				NavModule module;
+				module.set_auto_start(false);
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity parent = scene->create("Parent");
+				scene->registry().get<Transform>(parent).Position = glm::vec3(2.0f, 0.0f, 0.0f);
+				const entt::entity child = scene->create("Child", parent);
+				scene->registry().emplace<NavAgent>(child);
+				scene->registry().get<Transform>(child).Position = glm::vec3(-4.0f, 0.0f, 0.0f); // the world point (-2, 0, 0)
+				const entt::entity driven = add_agent(*scene, west);
+				scene->registry().get<NavAgent>(driven).DriveTransform = false;
+				scene->update_world_transforms();
+				module.start_world_with_mesh(scene, mesh);
+				run_frames(module, 2);
+				module.set_destination(child, glm::vec3(2.0f, 0.0f, 5.0f)); // local (0, 0, 5)
+				module.set_destination(driven, east);
+				run_frames(module, 600);
+				check(glm::distance(position_of(*scene, child), glm::vec3(0.0f, 0.0f, 5.0f)) < 0.6f, "agent_parented: a child of a moved parent ends at the destination (local " + std::to_string(position_of(*scene, child).x) + ", " + std::to_string(position_of(*scene, child).z) + ")");
+				check(glm::distance(position_of(*scene, driven), west) < 0.01f && module.state(driven) == NavAgentState::Arrived, "agent_drive_off: DriveTransform off leaves the transform alone, the walk still runs");
+			}
+
+			// No volume: nothing to walk on, and it says so without crashing.
+			{
+				NavModule module;
+				module.set_auto_start(false);
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity agent = add_agent(*scene, west);
+				check(module.start_world(scene) && !module.has_navmesh() && !module.loading(), "nav_no_volume: a scene without a volume has no mesh");
+				run_frames(module, 3);
+				check(!module.set_destination(agent, east) && module.state(agent) == NavAgentState::Idle && module.active_agent_count() == 0, "nav_no_volume: a destination fails cleanly");
+				check(module.query() == nullptr, "nav_no_volume: there is no query");
+				check(!module.start_world(nullptr), "nav_no_volume: no scene, no world");
+			}
+
+			// Two enabled volumes: the first wins, the other is counted.
+			{
+				NavModule module;
+				module.set_auto_start(false);
+				Ref<Scene> scene = CreateRef<Scene>();
+				for (int i = 0; i < 2; i++)
+				{
+					const entt::entity volume = scene->create(i == 0 ? "First" : "Second");
+					NavMeshVolume& component = scene->registry().emplace<NavMeshVolume>(volume);
+					component.NavMesh.Guid = AssetGuid{ 0x1111u, 0x2222u + static_cast<u64>(i) };
+				}
+				check(module.start_world(scene) && module.ignored_volumes() == 1, "nav_two_volumes_first_wins: the second enabled volume is ignored");
+				module.stop_world();
+				check(!module.loading(), "nav_two_volumes_first_wins: stopping drops the load");
+			}
+		}
+	}
+
 	bool run_nav_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -445,6 +643,7 @@ namespace wiwa
 		settings(check);
 		bake(check);
 		queries(check);
+		agents(check);
 
 		if (check.Failures == 0)
 		{

@@ -36,7 +36,7 @@ Other flags: `--debug-draw` (game: a game starts with debug draw off), `--scene 
 
 ## Architecture in one page
 
-Modules (`IModule`, registered in `Engine`, [engine.cpp](engine/src/core/engine.cpp)), by update priority: `AssetManager` -100, `AssetPipelineModule` (editor) -90, `SceneModule` -80, `RenderModule` -50, `InputModule` -30, `PhysicsModule` -20, `UiModule` -10, `ScriptingModule` 0, `AnimationModule` 10, `AudioModule` 20, plus `Window` and the editor's `EditorModule`. Reach a module with `Engine::get_module`, except from the render and physics threads, which must never call it.
+Modules (`IModule`, registered in `Engine`, [engine.cpp](engine/src/core/engine.cpp)), by update priority: `AssetManager` -100, `AssetPipelineModule` (editor) -90, `SceneModule` -80, `RenderModule` -50, `InputModule` -30, `PhysicsModule` -20, `UiModule` -10, `ScriptingModule` 0, `NavModule` 5, `AnimationModule` 10, `AudioModule` 20, plus `Window` and the editor's `EditorModule`. Reach a module with `Engine::get_module`, except from the render and physics threads, which must never call it.
 
 Rules that cut across areas:
 
