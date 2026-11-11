@@ -8,7 +8,9 @@
 #include <iterator>
 #include <limits>
 
+#include <nav/nav_data.h>
 #include <nav/nav_mesh_asset.h>
+#include <nav/nav_query.h>
 #include <nav/nav_project_settings.h>
 #include <scene/components.h>
 #include <scene/reflection/component_registry.h>
@@ -306,6 +308,133 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// A floor of 20 x 20 m with a wall (1 m thick, 2 m high) across the middle, half a length of halfZ either side of z = 0.
+		NavBakeInput wall_fixture(float halfZ)
+		{
+			NavBakeInput input = floor_fixture(false);
+			add_box(input, { -0.5f, 0.0f, -halfZ }, { 0.5f, 2.0f, halfZ });
+			return input;
+		}
+
+		// A flat quad on the floor plane, facing up.
+		void add_floor(NavBakeInput& input, float x0, float x1, float z0, float z1, NavArea area)
+		{
+			add_quad(input, { x0, 0, z0 }, { x0, 0, z1 }, { x1, 0, z1 }, { x1, 0, z0 }, { 0, 1, 0 }, static_cast<u8>(area));
+		}
+
+		Scope<NavData> data_of(Check& check, const NavBakeInput& input, const char* what)
+		{
+			const NavBakeResult result = bake_navmesh(input);
+			check(result.Ok, std::string(what) + ": the fixture bakes (" + result.Error + ")");
+			std::string error;
+			Scope<NavData> data = result.Ok ? NavData::create(result.Mesh, error) : nullptr;
+			check(data != nullptr, std::string(what) + ": the fixture loads (" + error + ")");
+			return data;
+		}
+
+		void queries(Check& check)
+		{
+			const NavFilter filter;
+			const glm::vec3 west{ -8.0f, 0.0f, 0.0f };
+			const glm::vec3 east{ 8.0f, 0.0f, 0.0f };
+
+			// A wall of 6 m across the way: the walk goes around its end.
+			const Scope<NavData> wall = data_of(check, wall_fixture(3.0f), "path_around_wall");
+			if (wall)
+			{
+				const NavQuery query(*wall);
+				const NavPath path = query.find_path(west, east, filter);
+				check(path.Status == NavPathStatus::Complete && path.Corners.size() >= 3, "path_around_wall: the route is complete and bends");
+				check(!path.Corners.empty() && glm::distance(path.Corners.front(), west) < 0.5f && glm::distance(path.Corners.back(), east) < 0.5f, "path_around_wall: it starts and ends at the points asked");
+				check(path.Length > 17.0f && path.Length < 19.5f, "path_around_wall: it is longer than the straight line, by the detour (length " + std::to_string(path.Length) + ")");
+
+				glm::vec3 hit{ 0.0f };
+				check(query.raycast(west, east, filter, &hit) && hit.x > -1.6f && hit.x < -0.4f, "raycast_hits_wall: the line is stopped at the wall");
+				check(!query.raycast(west, glm::vec3(-8.0f, 0.0f, 6.0f), filter), "raycast_clear: a line along open floor is clear");
+				check(query.is_walkable(west, filter) && !query.is_walkable({ 0.0f, 0.0f, 0.0f }, filter) && !query.is_walkable({ 500.0f, 0.0f, 500.0f }, filter), "walkable: open floor is, the wall and far away are not");
+
+				const std::optional<glm::vec3> nearest = query.nearest_point({ 3.0f, 0.7f, 3.0f }, { 1.0f, 2.0f, 1.0f }, filter);
+				check(nearest && std::abs(nearest->y) < 0.3f && glm::distance(glm::vec2(nearest->x, nearest->z), glm::vec2(3.0f, 3.0f)) < 0.5f, "nearest_point: a point above the floor snaps down to it");
+				check(!query.nearest_point({ 500.0f, 0.0f, 500.0f }, { 1.0f, 2.0f, 1.0f }, filter).has_value(), "nearest_point: nothing within reach gives no point");
+
+				NavQuery::seed_random(1234);
+				int given = 0;
+				int closeBy = 0;
+				int onMesh = 0;
+				for (int i = 0; i < 20; i++)
+				{
+					const std::optional<glm::vec3> point = query.random_point_around(west, 3.0f, filter);
+					if (point)
+					{
+						given++;
+						closeBy += glm::distance(glm::vec2(point->x, point->z), glm::vec2(west.x, west.z)) <= 3.3f ? 1 : 0;
+						onMesh += query.nearest_point(*point, { 0.1f, 0.5f, 0.1f }, filter).has_value() ? 1 : 0;
+					}
+				}
+				check(given == 20 && closeBy == 20 && onMesh == 20, "random_point: random points are on the mesh within the radius (given " + std::to_string(given) + ", near " + std::to_string(closeBy) + ", on mesh " + std::to_string(onMesh) + " of 20)");
+
+				// Points that are not numbers, or not near the mesh, never crash and never give a route.
+				const float nan = std::numeric_limits<float>::quiet_NaN();
+				check(query.find_path({ nan, 0, 0 }, east, filter).Status == NavPathStatus::Failed, "query_invalid: a NaN start fails");
+				check(query.find_path(west, { 0, std::numeric_limits<float>::infinity(), 0 }, filter).Status == NavPathStatus::Failed, "query_invalid: an infinite target fails");
+				check(query.find_path(west, { 500.0f, 0.0f, 500.0f }, filter).Status == NavPathStatus::Failed, "query_invalid: a target far off the mesh fails");
+				check(query.find_path(west, east, filter, { -1.0f, 1.0f, 1.0f }).Status == NavPathStatus::Failed, "query_invalid: negative extents fail");
+				check(!query.nearest_point({ nan, 0, 0 }, { 1, 1, 1 }, filter).has_value() && !query.raycast({ nan, 0, 0 }, east, filter) && !query.random_point_around({ nan, 0, 0 }, 2.0f, filter).has_value(), "query_invalid: NaN gives no point, no hit");
+			}
+
+			// Without the wall the route is straight.
+			const Scope<NavData> open = data_of(check, floor_fixture(false), "path_straight");
+			if (open)
+			{
+				const NavQuery query(*open);
+				const NavPath path = query.find_path(west, east, filter);
+				check(path.Status == NavPathStatus::Complete && path.Corners.size() == 2 && std::abs(path.Length - 16.0f) < 0.3f, "path_straight_when_clear: an open floor gives a straight line (length " + std::to_string(path.Length) + ")");
+			}
+
+			// A wall across the whole floor cuts it in two.
+			const Scope<NavData> cut = data_of(check, wall_fixture(10.0f), "path_blocked");
+			if (cut)
+			{
+				const NavQuery query(*cut);
+				check(query.find_path(west, east, filter).Status != NavPathStatus::Complete, "path_blocked: a wall across the floor leaves no complete route");
+			}
+
+			// A mud strip across the direct line, an open way round it: a costly mud sends the walk round, a cheap one does not.
+			NavBakeInput mud;
+			add_floor(mud, -10, -1, -10, 10, NavArea::Walkable);
+			add_floor(mud, -1, 1, -10, 5, NavArea::Mud);
+			add_floor(mud, -1, 1, 5, 10, NavArea::Walkable);
+			add_floor(mud, 1, 10, -10, 10, NavArea::Walkable);
+			mud.BoundsMin = { -10.0f, -1.0f, -10.0f };
+			mud.BoundsMax = { 10.0f, 4.0f, 10.0f };
+			mud.Build.CellSize = 0.25f;
+			const Scope<NavData> mudData = data_of(check, mud, "area_cost");
+			if (mudData)
+			{
+				const NavQuery query(*mudData);
+				NavFilter cheap;
+				NavFilter costly;
+				costly.AreaCost[static_cast<size_t>(NavArea::Mud)] = 10.0f;
+				const NavPath through = query.find_path(west, east, cheap);
+				const NavPath around = query.find_path(west, east, costly);
+				check(through.Status == NavPathStatus::Complete && through.Length < 16.6f, "area_cost: with an equal cost the walk crosses the mud (length " + std::to_string(through.Length) + ")");
+				check(around.Status == NavPathStatus::Complete && around.Length > 18.0f, "area_cost: with a high mud cost the walk goes round (length " + std::to_string(around.Length) + ")");
+
+				NavFilter noMud;
+				noMud.AreaMask = ~nav_area_flag(NavArea::Mud);
+				const NavPath avoided = query.find_path(west, east, noMud);
+				check(avoided.Status == NavPathStatus::Complete && avoided.Length > 18.0f, "area_mask: an agent that may not enter mud goes round");
+			}
+
+			// A tile that Detour refuses fails the load with a reason.
+			std::string error;
+			check(NavData::create(sample_mesh(), error) == nullptr && !error.empty(), "load_rejects_bad_blob: a tile of garbage bytes is refused with a reason");
+			check(NavData::create(NavMeshData{}, error) == nullptr, "load_rejects_bad_blob: an empty mesh is refused");
+		}
+	}
+
 	bool run_nav_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -315,6 +444,7 @@ namespace wiwa
 		components(check);
 		settings(check);
 		bake(check);
+		queries(check);
 
 		if (check.Failures == 0)
 		{
