@@ -84,9 +84,10 @@ namespace wiwa
 			NavModule* nav = hooks.Nav;
 			if (call.Phase == BtLeafPhase::Abort)
 			{
-				if (nav != nullptr)
+				if (nav != nullptr && call.Instance->move_owner() == call.NodeIndex)
 				{
 					nav->stop(call.Self);
+					call.Instance->set_move_owner(BtInstance::NO_OWNER);
 				}
 				return BtStatus::Failure;
 			}
@@ -134,6 +135,7 @@ namespace wiwa
 					return BtStatus::Failure;
 				}
 				state.Anchor = target;
+				call.Instance->set_move_owner(call.NodeIndex);
 				return BtStatus::Running;
 			}
 

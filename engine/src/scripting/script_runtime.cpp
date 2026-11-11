@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "script_runtime.h"
 
+#include <ai/bt_lua_host.h>
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -104,6 +106,7 @@ namespace wiwa
 		m_Sandbox["pcall"] = prelude.get<sol::object>(1);
 		m_Sandbox["xpcall"] = prelude.get<sol::object>(2);
 		m_Get = prelude.get<sol::protected_function>(3);
+		define_bt_lua_bases(*this); // BtAction / BtCondition: every runtime knows them, the script importer's too
 
 		m_Sandbox.set_function("require", [this](sol::this_state state, const std::string& path) -> sol::object
 			{

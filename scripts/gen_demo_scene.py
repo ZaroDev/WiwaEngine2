@@ -1276,6 +1276,41 @@ return NavPatrol
 """
 
 
+SCRIPTS["heard_check.lua"] = """-- A behaviour tree condition leaf (LuaCondition): succeeds while the guard's blackboard holds a noise it has not gone to look at yet (heard_kind is set
+-- by the Perceiver when it hears AI.emit_noise; the tree clears it after the visit).
+return BtCondition:extend{
+  on_tick = function(self, bb, dt)
+    if bb:get("heard_kind") ~= "" then return "success" end
+    return "failure"
+  end,
+}
+"""
+
+
+SCRIPTS["noise_maker.lua"] = """-- Makes a noise at its own position every few seconds (AI.emit_noise): the guards of the behaviour tree demo that hear it go and look.
+local NoiseMaker = Script:extend{
+  properties = {
+    interval = { type = "float", default = 3.0, min = 0.5, max = 30 },
+    loudness = { type = "float", default = 1.0, min = 0.1, max = 10 },
+  },
+}
+
+function NoiseMaker:on_init()
+  self.t = 1.0
+end
+
+function NoiseMaker:on_update(dt)
+  self.t = self.t - dt
+  if self.t <= 0 then
+    self.t = self.interval
+    AI.emit_noise(self.transform.position, self.loudness, "crash")
+  end
+end
+
+return NoiseMaker
+"""
+
+
 def build_scripts():
 	ids = {}
 	for rel, text in SCRIPTS.items():
@@ -1682,6 +1717,76 @@ def patch_scene_with_nav(g):
 	write_json("scenes/demo.wscene", scene)
 
 
+# -------------------------------------------------------------------------------------------------------------- behaviour trees
+
+AI_TREE_FILE = "ai/guard.wbt"
+
+
+def guard_tree():
+	"""The guard of the navigation station (docs/superpowers/specs/behavior-trees.md): a reactive Selector that chases what it sees, goes to look at a noise
+	it heard (a Lua condition leaf says whether there is one), and otherwise patrols between two points. Perception fills target (seen_target),
+	can_see_target, last_seen_position, heard_position and heard_kind of its blackboard."""
+	cx = NAV_CENTER
+	def node(nid, kind, children=(), **params):
+		return {"id": nid, "type": kind, "name": "", "params": params, "children": list(children)}
+	nodes = [
+		node("root", "Selector", ["chase", "investigate", "patrol"], reactive=True),
+		node("chase", "Guard", ["follow"], key="can_see_target", op="true"),
+		node("follow", "MoveTo", target="key:seen_target", stoppingDistance=1.5),
+		node("investigate", "Sequence", ["heard", "go_noise", "look", "forget"]),
+		node("heard", "LuaCondition", script=guid("asset:scripts/heard_check.lua")),
+		node("go_noise", "MoveTo", target="key:heard_position", stoppingDistance=1.0),
+		node("look", "Wait", seconds=2.0),
+		node("forget", "SetBlackboard", key="heard_kind", value=""),
+		node("patrol", "Sequence", ["to_a", "wait_a", "to_b", "wait_b"]),
+		node("to_a", "MoveTo", target=[cx + 10, 0, -6]),
+		node("wait_a", "Wait", seconds=1.0),
+		node("to_b", "MoveTo", target=[cx + 10, 0, 6]),
+		node("wait_b", "Wait", seconds=1.0),
+	]
+	blackboard = [
+		{"key": "seen_target", "type": "entity", "default": None},
+		{"key": "can_see_target", "type": "bool", "default": False},
+		{"key": "last_seen_position", "type": "vec3", "default": [0, 0, 0]},
+		{"key": "heard_position", "type": "vec3", "default": [0, 0, 0]},
+		{"key": "heard_kind", "type": "string", "default": ""},
+	]
+	return {"version": 1, "root": "root", "blackboard": blackboard, "nodes": nodes}
+
+
+def write_ai_assets():
+	"""The guard's tree and its asset record (fixed guid, so the scene can refer to it before the editor has imported it)."""
+	write_json(AI_TREE_FILE, guard_tree())
+	return write_meta(AI_TREE_FILE, "BehaviorTreeImporter", 1)
+
+
+def add_ai(s, g):
+	"""The behaviour tree demo, in the navigation station: a guard (NavAgent, Perceiver, AIController) that patrols, chases the thief it sees across the
+	arena and looks at the noise a noise maker makes. editor/src/play/demo_smoke.cpp checks it (the thief's place and the names here)."""
+	cx = NAV_CENTER
+	cylinder = lambda colour: {"MeshRenderer": {"Mesh": ref(g["shapes"], MESH["cylinder"]), "Materials": [ref(g["mat"][colour])]}}
+	s.add("Guard", "Navigation station", pos=(cx + 10, 0, 8), NavAgent={"Speed": 4.5, "Acceleration": 20},
+		Perceiver={"SightRange": 12, "SightAngle": 120, "HearingRadius": 15, "Team": "guards", "Interval": 0.2},
+		AIController={"Tree": ref(guid("asset:" + AI_TREE_FILE))})
+	s.add("Guard body", "Guard", pos=(0, 0.9, 0), scale=(0.8, 1.8, 0.8), **cylinder("toon_red"))
+	s.add("Thief", "Navigation station", pos=(cx + 10, 0, -10), Perceivable={"Team": "thieves", "Kind": "thief", "AimOffset": [0, 1, 0]})
+	s.add("Thief body", "Thief", pos=(0, 0.9, 0), scale=(0.7, 1.8, 0.7), **cylinder("toon_yellow"))
+	s.add("Noise maker", "Navigation station", pos=(cx + 13, 0.5, 0), **{"script:" + g["scripts"]["noise_maker"]: {"interval": 3.0}},
+		MeshRenderer={"Mesh": ref(g["shapes"], MESH["sphere"]), "Materials": [ref(g["mat"]["marker"])]}, **{})
+
+
+def patch_scene_with_ai(g):
+	"""--ai-only: adds the behaviour tree demo to the scene that is already written (no downloads, no other .meta files touched)."""
+	path = ASSETS / "scenes/demo.wscene"
+	scene = json.loads(path.read_text(encoding="utf-8"))
+	fresh = Scene()
+	fresh.ids["Navigation station"] = guid("entity:Navigation station")
+	add_ai(fresh, g)
+	ours = set(e["id"] for e in fresh.entities)
+	scene["entities"] = [e for e in scene["entities"] if e["id"] not in ours] + fresh.entities
+	write_json("scenes/demo.wscene", scene)
+
+
 def patch_scene_with_nested(g):
 	"""--nested-only: adds the lamp pair (a prefab that holds prefabs) to the scene that is already written, without downloading anything."""
 	path = ASSETS / "scenes/demo.wscene"
@@ -1982,6 +2087,7 @@ def build_scene(g):
 	# --- station 8: particle effects -------------------------------------------------------------------------
 	add_vfx(s, g)
 	add_navigation(s, g)
+	add_ai(s, g)
 
 	# --- station labels (world-anchored text in the HUD) -----------------------------------------------------
 	labels = []
@@ -2049,6 +2155,19 @@ def build_lamp(g):
 
 
 def main():
+	if "--ai-only" in sys.argv:
+		# adds only the behaviour tree demo (the guard's tree and the two scripts it uses, the guard, the thief and the noise maker) to the scene that is
+		# already written, without downloading anything and without touching the .meta files of anything else
+		for name in ("heard_check.lua", "noise_maker.lua"):
+			write("scripts/" + name, SCRIPTS[name])
+		scripts = {name[:-4]: write_meta("scripts/" + name, "ScriptImporter", 1) for name in ("heard_check.lua", "noise_maker.lua")}
+		write_ai_assets()
+		g = {"shapes": guid("asset:models/shapes/shapes.glb"), "scripts": scripts,
+			"mat": {name: guid("asset:materials/%s.wmat" % name) for name in ("toon_red", "toon_yellow", "marker")}}
+		patch_scene_with_ai(g)
+		print("added the behaviour tree demo to the demo scene")
+		return
+
 	if "--nav-only" in sys.argv:
 		# adds only the navigation station to the scene that is already written (its script, its navmesh asset record and nav.wsettings too), without
 		# downloading anything and without touching the .meta files of anything else: the navmesh itself is baked by the editor afterwards (--nav-bake)
@@ -2122,6 +2241,7 @@ def main():
 	write_meta("scenes/demo.wscene", "SceneImporter", 5, fixed_guid=SCENE_GUID)
 
 	write_nav_settings()
+	write_ai_assets()
 	# the project's default input map is the demo's
 	(ROOT / "editor" / "input.wsettings").write_text(json.dumps({"defaultMap": input_map}, indent=2) + "\n", encoding="utf-8", newline="\n")
 	print("wrote %d entities, %d materials, %d scripts" % (len(scene.entities), len(g["mat"]), len(g["scripts"])))

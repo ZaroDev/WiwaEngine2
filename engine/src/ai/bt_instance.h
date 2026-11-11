@@ -83,6 +83,11 @@ namespace wiwa
 			return true;
 		}
 		entt::entity self() const { return m_Self; }
+		// The node whose MoveTo last sent the entity somewhere (NO_OWNER: none). A branch that is cut after another one has started its own walk (a reactive
+		// selector aborts the old branch after the new one has run) must not stop that walk: only the owner's abort does.
+		static constexpr u32 NO_OWNER = 0xFFFFFFFFu;
+		u32 move_owner() const { return m_MoveOwner; }
+		void set_move_owner(u32 node) { m_MoveOwner = node; }
 		// A random number in [low, high] from the instance's generator (Wait, Lua leaves that ask).
 		double random(double low, double high);
 
@@ -101,5 +106,6 @@ namespace wiwa
 		BtServices* m_Services = nullptr;
 		float m_Dt = 0.0f;
 		double m_Time = 0.0;
+		u32 m_MoveOwner = NO_OWNER;
 	};
 }

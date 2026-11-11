@@ -46,6 +46,9 @@ namespace wiwa
 		std::string check_fox() const;
 		void sample_audio(Scene& play);
 		std::string check_audio() const;
+		void sample_ai(Scene& play);
+		std::string check_ai() const;
+		bool ai_done() const;
 		void sample_nav(Scene& play);
 		std::string check_nav() const;
 		bool nav_arrived() const;
@@ -142,6 +145,17 @@ namespace wiwa
 			float Closest[3] = { 1e9f, 1e9f, 1e9f }; // how near each agent came to its goal
 		};
 		NavWatch m_Nav{};
+
+		// the behaviour tree demo (behavior-trees.md): a guard patrols, sees the thief across the arena and chases it, and hears the noise maker. The names and the
+		// thief's place mirror add_ai in scripts/gen_demo_scene.py.
+		struct AiWatch
+		{
+			bool HasController = false;   // the AIModule made an instance for the guard
+			bool Saw = false;             // can_see_target was true with the thief in seen_target
+			bool Heard = false;           // heard_kind held "crash"
+			float Closest = 1e9f;         // how near the guard came to the thief
+		};
+		AiWatch m_Ai{};
 		std::chrono::steady_clock::time_point m_NavDeadline{};
 
 		// the Physics phase: the joints demo (door, cart, pendulum, bridge, breaking box) and the character demo (a patrolling character, a sliding

@@ -737,6 +737,31 @@ namespace wiwa
 				check(status == SUCCESS && left > 2.0f && left < 3.6f, "moveto_stopping_distance: Success within the stopping distance (" + std::to_string(left) + " m left)");
 			}
 
+			// A reactive switch between two walks: the branch that is cut after the new one started must not stop the new walk.
+			{
+				MoveFixture f(0.0f);
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Blackboard = { key("alert", BtValueType::Bool, false) };
+				doc.Nodes = { node("s", "Selector", { "g", "slow" }, { { "reactive", true } }), node("g", "Guard", { "east" }, { { "key", "alert" }, { "op", "true" } }),
+					move_node("east", Json::array({ 8, 0, 0 })), move_node("slow", Json::array({ -8, 0, 8 })) };
+				BtInstance instance(compiled(check, doc), f.Agent);
+				for (int i = 0; i < 20; i++)
+				{
+					f.frame(instance);
+				}
+				check(f.Nav.state(f.Agent) == NavAgentState::Moving, "moveto_switch: the agent walks the low priority way");
+				instance.blackboard().set("alert", true);
+				f.frame(instance);
+				check(f.Nav.state(f.Agent) == NavAgentState::Moving, "moveto_switch: after the higher priority branch took over the agent is still walking, the cut branch did not stop it");
+				BtStatus status = RUNNING;
+				for (int i = 0; i < 1200 && status == RUNNING; i++)
+				{
+					status = f.frame(instance);
+				}
+				check(status == SUCCESS && glm::distance(f.position(), glm::vec3(8.0f, 0.0f, 0.0f)) < 0.6f, "moveto_switch: and it arrives at the new target");
+			}
+
 			// No agent, no navmesh.
 			{
 				MoveFixture f(0.0f);

@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "root": "root",
+  "blackboard": [
+    {
+      "key": "seen_target",
+      "type": "entity",
+      "default": null
+    },
+    {
+      "key": "can_see_target",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "key": "last_seen_position",
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "key": "heard_position",
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "key": "heard_kind",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "nodes": [
+    {
+      "id": "root",
+      "type": "Selector",
+      "name": "",
+      "params": {
+        "reactive": true
+      },
+      "children": [
+        "chase",
+        "investigate",
+        "patrol"
+      ]
+    },
+    {
+      "id": "chase",
+      "type": "Guard",
+      "name": "",
+      "params": {
+        "key": "can_see_target",
+        "op": "true"
+      },
+      "children": [
+        "follow"
+      ]
+    },
+    {
+      "id": "follow",
+      "type": "MoveTo",
+      "name": "",
+      "params": {
+        "target": "key:seen_target",
+        "stoppingDistance": 1.5
+      },
+      "children": []
+    },
+    {
+      "id": "investigate",
+      "type": "Sequence",
+      "name": "",
+      "params": {},
+      "children": [
+        "heard",
+        "go_noise",
+        "look",
+        "forget"
+      ]
+    },
+    {
+      "id": "heard",
+      "type": "LuaCondition",
+      "name": "",
+      "params": {
+        "script": "56fe7f4c09a40ed6a04266669c727824"
+      },
+      "children": []
+    },
+    {
+      "id": "go_noise",
+      "type": "MoveTo",
+      "name": "",
+      "params": {
+        "target": "key:heard_position",
+        "stoppingDistance": 1.0
+      },
+      "children": []
+    },
+    {
+      "id": "look",
+      "type": "Wait",
+      "name": "",
+      "params": {
+        "seconds": 2.0
+      },
+      "children": []
+    },
+    {
+      "id": "forget",
+      "type": "SetBlackboard",
+      "name": "",
+      "params": {
+        "key": "heard_kind",
+        "value": ""
+      },
+      "children": []
+    },
+    {
+      "id": "patrol",
+      "type": "Sequence",
+      "name": "",
+      "params": {},
+      "children": [
+        "to_a",
+        "wait_a",
+        "to_b",
+        "wait_b"
+      ]
+    },
+    {
+      "id": "to_a",
+      "type": "MoveTo",
+      "name": "",
+      "params": {
+        "target": [
+          -20,
+          0,
+          -6
+        ]
+      },
+      "children": []
+    },
+    {
+      "id": "wait_a",
+      "type": "Wait",
+      "name": "",
+      "params": {
+        "seconds": 1.0
+      },
+      "children": []
+    },
+    {
+      "id": "to_b",
+      "type": "MoveTo",
+      "name": "",
+      "params": {
+        "target": [
+          -20,
+          0,
+          6
+        ]
+      },
+      "children": []
+    },
+    {
+      "id": "wait_b",
+      "type": "Wait",
+      "name": "",
+      "params": {
+        "seconds": 1.0
+      },
+      "children": []
+    }
+  ]
+}

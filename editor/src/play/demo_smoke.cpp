@@ -11,6 +11,7 @@
 #include <audio/null_backend.h>
 #include <core/engine.h>
 #include <input/input_module.h>
+#include <ai/ai_module.h>
 #include <nav/nav_module.h>
 #include <scene/particle_runtime.h>
 #include <scene/reflection/component_registry.h>
@@ -281,6 +282,64 @@ namespace wiwa
 		return {};
 	}
 
+	void DemoSmoke::sample_ai(Scene& play)
+	{
+		AIModule* ai = Engine::get().get_module<AIModule>();
+		const entt::entity guard = find_named(play, "Guard");
+		const entt::entity thief = find_named(play, "Thief");
+		if (ai == nullptr || guard == entt::null || thief == entt::null)
+		{
+			return;
+		}
+		const BtInstance* instance = ai->instance_of(guard);
+		if (instance == nullptr)
+		{
+			return;
+		}
+		m_Ai.HasController = true;
+		const Blackboard& board = instance->blackboard();
+		const std::optional<BtValue> sees = board.get("can_see_target");
+		const std::optional<BtValue> seen = board.get("seen_target");
+		if (sees && seen && std::get<bool>(*sees) && play.registry().all_of<Id>(thief) && std::get<EntityGuid>(*seen) == play.registry().get<Id>(thief).Guid)
+		{
+			m_Ai.Saw = true;
+		}
+		if (const std::optional<BtValue> heard = board.get("heard_kind"); heard && std::get<std::string>(*heard) == "crash")
+		{
+			m_Ai.Heard = true;
+		}
+		if (play.registry().all_of<WorldTransform>(guard) && play.registry().all_of<WorldTransform>(thief))
+		{
+			m_Ai.Closest = std::min(m_Ai.Closest, glm::distance(glm::vec3(play.registry().get<WorldTransform>(guard).Matrix[3]), glm::vec3(play.registry().get<WorldTransform>(thief).Matrix[3])));
+		}
+	}
+
+	bool DemoSmoke::ai_done() const
+	{
+		return m_Ai.HasController && m_Ai.Saw && m_Ai.Heard && m_Ai.Closest < 3.0f;
+	}
+
+	std::string DemoSmoke::check_ai() const
+	{
+		if (!m_Ai.HasController)
+		{
+			return "the AIModule never made a behaviour tree instance for the Guard of the navigation station (its guard.wbt, AIController and the imported tree)";
+		}
+		if (!m_Ai.Saw)
+		{
+			return "the Guard never saw the Thief (a Perceiver sight pass should have put it in seen_target with can_see_target true)";
+		}
+		if (!m_Ai.Heard)
+		{
+			return "the Guard never heard the noise maker (heard_kind \"crash\": AI.emit_noise in noise_maker.lua, the Perceiver hearing)";
+		}
+		if (!(m_Ai.Closest < 3.0f))
+		{
+			return "the Guard saw the Thief but never came within 3 m of it (closest " + std::to_string(m_Ai.Closest) + " m): the chase branch, MoveTo or the navmesh";
+		}
+		return {};
+	}
+
 	void DemoSmoke::sample_nav(Scene& play)
 	{
 		NavModule* nav = Engine::get().get_module<NavModule>();
@@ -436,6 +495,7 @@ namespace wiwa
 			sample_fox(play);
 			sample_audio(play);
 			sample_nav(play);
+			sample_ai(play);
 
 			// 150 frames, and the agents get up to 25 seconds (frames are far shorter than the game's seconds here) to cross the arena: the navmesh loads a few
 			// frames after the play starts
@@ -443,7 +503,7 @@ namespace wiwa
 			{
 				m_NavDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(25);
 			}
-			if (++m_RunFrames < 150 || (!nav_arrived() && std::chrono::steady_clock::now() < m_NavDeadline))
+			if (++m_RunFrames < 150 || ((!nav_arrived() || !ai_done()) && std::chrono::steady_clock::now() < m_NavDeadline))
 			{
 				return false;
 			}
@@ -454,6 +514,12 @@ namespace wiwa
 				failure = navigation;
 				return true;
 			}
+			if (const std::string intelligence = check_ai(); !intelligence.empty())
+			{
+				failure = intelligence;
+				return true;
+			}
+			WI_INFO("Editor", "Demo smoke: behaviour trees ok (the guard saw the thief and heard the noise, closest {0:.2f} m)", m_Ai.Closest);
 			WI_INFO("Editor", "Demo smoke: navigation ok (the agents came within {0:.2f}, {1:.2f} and {2:.2f} m of their goals)", m_Nav.Closest[0], m_Nav.Closest[1], m_Nav.Closest[2]);
 
 			if (const std::string fox = check_fox(); !fox.empty())
