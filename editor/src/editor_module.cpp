@@ -170,6 +170,17 @@ void EditorModule::init()
 		}
 	}
 
+	{
+		const std::vector<std::string>& arguments = wiwa::Engine::get().get_arguments();
+		for (size_t i = 0; i + 1 < arguments.size(); i++)
+		{
+			if (arguments[i] == "--nav-bake")
+			{
+				m_NavBakeOut = arguments[i + 1];
+			}
+		}
+	}
+
 	Ref<HierarchyPanel> hierarchy = CreateRef<HierarchyPanel>(*m_SceneEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 	m_Hierarchy = hierarchy.get(); // owned by m_Panels
 	m_Panels.push_back(hierarchy);
@@ -874,6 +885,54 @@ void EditorModule::update(float deltaTime)
 			WI_INFO("Editor", "Audio panel smoke test {0} (frames {1}, auditioned {2}, silent after stop {3})", passed ? "passed" : "FAILED", m_AudioPanel->frames_drawn(), m_AudioPanelAuditioned, silent);
 			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
 			wiwa::Engine::get().request_quit();
+		}
+	}
+
+	// --nav-bake: once the scene of the command line has loaded and the assets are cooked, bake its first volume to the file asked for, and exit with the result.
+	if (!m_NavBakeOut.empty() && m_NavPanel != nullptr)
+	{
+		wiwa::NavEditModel& model = m_NavPanel->model();
+		const Ref<wiwa::JobProgress> scan = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().scan_progress();
+		if (!m_NavBakeStarted && m_Frame > 10 && scan && scan->finished() && m_SceneEditor->get_scene() != nullptr && !m_SceneEditor->is_opening() && !m_SceneEditor->has_pending())
+		{
+			entt::entity volume = entt::null;
+			for (const entt::entity entity : m_SceneEditor->scene().registry().view<wiwa::NavMeshVolume>())
+			{
+				if (m_SceneEditor->scene().registry().get<wiwa::NavMeshVolume>(entity).Enabled && (volume == entt::null || entt::to_integral(entity) < entt::to_integral(volume)))
+				{
+					volume = entity;
+				}
+			}
+			if (volume == entt::null && m_Frame < 1800)
+			{
+				volume = entt::null; // the scene of the command line may not have replaced the empty startup scene yet: look again next frame
+			}
+			else
+			{
+				m_NavBakeStarted = true;
+			}
+			if (m_NavBakeStarted && (volume == entt::null || !model.start_bake(m_SceneEditor->scene(), volume, m_NavBakeOut)))
+			{
+				WI_ERROR("Editor", "Nav bake: {0}", volume == entt::null ? std::string("the scene has no enabled NavMeshVolume") : model.error());
+				wiwa::Engine::get().set_exit_code(1);
+				wiwa::Engine::get().request_quit();
+			}
+		}
+		if (m_NavBakeStarted && model.state() != wiwa::NavEditModel::BakeState::Running && model.state() != wiwa::NavEditModel::BakeState::Idle)
+		{
+			model.poll();
+			const bool done = model.state() == wiwa::NavEditModel::BakeState::Done;
+			if (done)
+			{
+				WI_INFO("Editor", "Nav bake done: {0} ({1} polygons)", m_NavBakeOut.string(), model.last().PolyCount);
+			}
+			else
+			{
+				WI_ERROR("Editor", "Nav bake FAILED: {0}", model.error());
+			}
+			wiwa::Engine::get().set_exit_code(done ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+			m_NavBakeOut.clear();
 		}
 	}
 

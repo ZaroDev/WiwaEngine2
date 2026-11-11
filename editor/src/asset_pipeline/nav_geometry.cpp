@@ -27,6 +27,21 @@ namespace wiwa
 			return static_cast<u8>(NavArea::Walkable);
 		}
 
+		// A mesh of an agent (the entity has a NavAgent, or an ancestor does) is not ground: it walks on it.
+		bool belongs_to_agent(entt::registry& registry, entt::entity entity)
+		{
+			for (entt::entity current = entity; current != entt::null && registry.valid(current);)
+			{
+				if (registry.all_of<NavAgent>(current))
+				{
+					return true;
+				}
+				const Hierarchy* hierarchy = registry.try_get<Hierarchy>(current);
+				current = hierarchy != nullptr ? hierarchy->Parent : entt::null;
+			}
+			return false;
+		}
+
 		bool boxes_touch(const glm::vec3& minA, const glm::vec3& maxA, const glm::vec3& minB, const glm::vec3& maxB)
 		{
 			return minA.x <= maxB.x && maxA.x >= minB.x && minA.y <= maxB.y && maxA.y >= minB.y && minA.z <= maxB.z && maxA.z >= minB.z;
@@ -76,7 +91,7 @@ namespace wiwa
 
 		for (auto [entity, renderer, world] : registry.view<MeshRenderer, WorldTransform>().each())
 		{
-			if (!renderer.Mesh.valid())
+			if (!renderer.Mesh.valid() || belongs_to_agent(registry, entity))
 			{
 				continue;
 			}

@@ -11,6 +11,7 @@
 #include <audio/null_backend.h>
 #include <core/engine.h>
 #include <input/input_module.h>
+#include <nav/nav_module.h>
 #include <scene/particle_runtime.h>
 #include <scene/reflection/component_registry.h>
 #include <scripting/script_module.h>
@@ -280,6 +281,56 @@ namespace wiwa
 		return {};
 	}
 
+	void DemoSmoke::sample_nav(Scene& play)
+	{
+		NavModule* nav = Engine::get().get_module<NavModule>();
+		if (nav == nullptr)
+		{
+			return;
+		}
+		m_Nav.HasMesh = m_Nav.HasMesh || nav->has_navmesh();
+
+		u32 found = 0;
+		for (int i = 0; i < 3; i++)
+		{
+			const entt::entity agent = find_named(play, "Nav agent " + std::to_string(i + 1));
+			if (agent == entt::null || !play.registry().all_of<NavAgent, WorldTransform>(agent))
+			{
+				continue;
+			}
+			found++;
+			const glm::vec3 goal(-34.0f + 4.0f * static_cast<float>(i), 0.0f, -8.0f);
+			const glm::vec3 position(play.registry().get<WorldTransform>(agent).Matrix[3]);
+			m_Nav.Closest[i] = std::min(m_Nav.Closest[i], glm::distance(position, goal));
+		}
+		m_Nav.Agents = std::max(m_Nav.Agents, found);
+	}
+
+	bool DemoSmoke::nav_arrived() const
+	{
+		return m_Nav.Agents == 3 && m_Nav.Closest[0] < 1.2f && m_Nav.Closest[1] < 1.2f && m_Nav.Closest[2] < 1.2f;
+	}
+
+	std::string DemoSmoke::check_nav() const
+	{
+		if (m_Nav.Agents != 3)
+		{
+			return "the navigation station's three agents (Nav agent 1..3 with a NavAgent) are not in the scene";
+		}
+		if (!m_Nav.HasMesh)
+		{
+			return "the navigation module never had a navmesh for the demo scene (bake it: wiwa_editor --scene assets/scenes/demo.wscene --nav-bake <the volume's .wnav>, see scripts/gen_demo_scene.py)";
+		}
+		for (int i = 0; i < 3; i++)
+		{
+			if (!(m_Nav.Closest[i] < 1.2f))
+			{
+				return "Nav agent " + std::to_string(i + 1) + " never got within 1.2 m of its goal on the other side of the wall (closest " + std::to_string(m_Nav.Closest[i]) + " m): nav_patrol.lua, the NavAgent or the baked navmesh";
+			}
+		}
+		return {};
+	}
+
 	bool DemoSmoke::wait(u32 frames, const char* what, std::string& failure)
 	{
 		if (m_PhaseFrames == 0)
@@ -384,11 +435,26 @@ namespace wiwa
 
 			sample_fox(play);
 			sample_audio(play);
+			sample_nav(play);
 
-			if (++m_RunFrames < 150)
+			// 150 frames, and the agents get up to 25 seconds (frames are far shorter than the game's seconds here) to cross the arena: the navmesh loads a few
+			// frames after the play starts
+			if (m_RunFrames == 0)
+			{
+				m_NavDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(25);
+			}
+			if (++m_RunFrames < 150 || (!nav_arrived() && std::chrono::steady_clock::now() < m_NavDeadline))
 			{
 				return false;
 			}
+
+			// first: the navigation demo does not depend on the other stations
+			if (const std::string navigation = check_nav(); !navigation.empty())
+			{
+				failure = navigation;
+				return true;
+			}
+			WI_INFO("Editor", "Demo smoke: navigation ok (the agents came within {0:.2f}, {1:.2f} and {2:.2f} m of their goals)", m_Nav.Closest[0], m_Nav.Closest[1], m_Nav.Closest[2]);
 
 			if (const std::string fox = check_fox(); !fox.empty())
 			{

@@ -945,6 +945,18 @@ namespace wiwa
 			check(model.is_stale(*scene, volume, stored) == std::optional<bool>(true), "model_stale: other settings make the bake stale");
 			scene->registry().get<NavMeshVolume>(volume).AgentRadius = 0.4f;
 
+			// The mesh of an agent is not ground: a wall that belongs to an agent (or to a child of one) does not take part in the bake.
+			{
+				const entt::entity agentBody = scene->create("Agent");
+				scene->registry().emplace<NavAgent>(agentBody);
+				const entt::entity agentWall = scene->create("Agent wall", agentBody);
+				scene->registry().emplace<MeshRenderer>(agentWall).Mesh = wallMesh;
+				const NavSnapshot withAgent = capture_nav_snapshot(*scene, volume);
+				check(withAgent.Items.size() == 2, "model_agent_geometry: the meshes of an agent are left out of the snapshot (" + std::to_string(withAgent.Items.size()) + " meshes)");
+				scene->destroy(agentWall);
+				scene->destroy(agentBody);
+			}
+
 			// A volume with nothing in it fails and leaves the file alone.
 			scene->registry().get<Transform>(volume).Position = glm::vec3(500.0f, 1.5f, 500.0f);
 			check(model.start_bake(*scene, volume, file) && wait_for_bake(model) && model.state() == NavEditModel::BakeState::Failed && !model.error().empty(), "model_failure_keeps_asset: a volume without geometry fails with a reason");

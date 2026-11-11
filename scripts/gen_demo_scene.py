@@ -1237,6 +1237,45 @@ return DecalFootprints
 """
 
 
+SCRIPTS["nav_patrol.lua"] = """-- Walks the entity's NavAgent between two points of the navmesh, for ever: Nav.agent(...):set_destination, and on_nav_arrived sends it to the other point.
+-- The agent has to try again until the navmesh of the scene has loaded (set_destination is false before there is a world).
+local NavPatrol = Script:extend{
+  properties = {
+    a = { type = "vec3", default = { 0, 0, 0 } },
+    b = { type = "vec3", default = { 0, 0, 5 } },
+  },
+}
+
+function NavPatrol:on_init()
+  self.agent = Nav.agent(self.entity)
+  self.to_b = true
+  self.started = false
+end
+
+function NavPatrol:target()
+  local p = self.to_b and self.b or self.a
+  return vec3(p.x, p.y, p.z)
+end
+
+function NavPatrol:on_update(dt)
+  if not self.started and self.agent:set_destination(self:target()) then
+    self.started = true
+  end
+end
+
+function NavPatrol:on_nav_arrived()
+  self.to_b = not self.to_b
+  self.agent:set_destination(self:target())
+end
+
+function NavPatrol:on_nav_failed()
+  log_warning("NavPatrol", "no route to the next point")
+end
+
+return NavPatrol
+"""
+
+
 def build_scripts():
 	ids = {}
 	for rel, text in SCRIPTS.items():
@@ -1595,6 +1634,54 @@ def add_vfx(s, g):
 	s.add("Rune motes", "Decals station", pos=(-3, 0.35, 6.5), **system("rune_motes"))
 
 
+# ------------------------------------------------------------------------------------------------------------ navigation
+
+NAV_CENTER = -30  # x of the navigation station: west of the hall, where nothing else stands
+NAV_FILE = "navmeshes/Navmesh_volume_%s.wnav" % guid("entity:Navmesh volume")[:8]  # where the editor's bake puts it (NavigationPanel::bake)
+NAV_GOALS = [(NAV_CENTER - 4 + 4 * i, -8) for i in range(3)]  # (x, z) of where the agents go; editor/src/play/demo_smoke.cpp checks them
+
+
+def add_navigation(s, g):
+	"""The navigation station (docs/superpowers/specs/navigation.md): a wall across an arena with an open way round each end, mud over the west way (the cost
+	is in editor/nav.wsettings), and three agents that walk from the north side to the south side and back, round the wall, with nav_patrol.lua. The navmesh
+	is baked by the editor from this scene (wiwa_editor --scene assets/scenes/demo.wscene --nav-bake <file>) into NAV_FILE; the volume refers to it."""
+	cx = NAV_CENTER
+	s.add("Navigation station", "World")
+	s.add("Navmesh volume", "Navigation station", pos=(cx, 2.5, 0), NavMeshVolume={"NavMesh": ref(guid("asset:" + NAV_FILE)), "Size": [24, 7, 24]})
+	crate = {"MeshRenderer": {"Mesh": ref(g["shapes"], MESH["cube"]), "Materials": [ref(g["mat"]["crate"])]}}
+	s.add("Nav wall", "Navigation station", pos=(cx, 1, 0), scale=(16, 2, 1), **crate)
+	s.add("Nav mud", "Navigation station", pos=(cx - 10, 0.05, 0), scale=(4, 0.1, 6), NavAreaTag={"Area": "Mud"},
+		MeshRenderer={"Mesh": ref(g["shapes"], MESH["cube"]), "Materials": [ref(g["mat"]["marker"])]})
+	for i, (gx, gz) in enumerate(NAV_GOALS):
+		colour = ("neon_cyan", "neon_magenta", "neon_orange")[i]
+		name = "Nav agent %d" % (i + 1)
+		props = {"a": [gx, 0, 8], "b": [gx, 0, gz]}
+		s.add(name, "Navigation station", pos=(gx, 0, 8), NavAgent={"Speed": 7, "Acceleration": 30}, **{"script:" + g["scripts"]["nav_patrol"]: props})
+		s.add(name + " body", name, pos=(0, 0.9, 0), scale=(0.7, 1.8, 0.7),
+			MeshRenderer={"Mesh": ref(g["shapes"], MESH["cylinder"]), "Materials": [ref(g["mat"][colour])]})
+
+
+def write_nav_settings():
+	"""The project's navigation settings: walking through mud costs 8 times as much, which sends the agents of the navigation station round it."""
+	(ROOT / "editor" / "nav.wsettings").write_text(json.dumps({"areaCost": {"Mud": 8.0}}, indent=2) + "\n", encoding="utf-8", newline="\n")
+	# the record of the navmesh asset, so that the guid the volume refers to is the one the baked file gets (the file itself comes from --nav-bake)
+	(ASSETS / NAV_FILE).parent.mkdir(parents=True, exist_ok=True)
+	write_meta(NAV_FILE, "NavMeshImporter", 1)
+	print("bake the navmesh with: wiwa_editor --scene assets/scenes/demo.wscene --nav-bake assets/" + NAV_FILE)
+
+
+def patch_scene_with_nav(g):
+	"""--nav-only: adds the navigation station to the scene that is already written (no downloads, no other .meta files touched)."""
+	path = ASSETS / "scenes/demo.wscene"
+	scene = json.loads(path.read_text(encoding="utf-8"))
+	fresh = Scene()
+	fresh.ids["World"] = guid("entity:World")
+	add_navigation(fresh, g)
+	ours = set(e["id"] for e in fresh.entities)
+	scene["entities"] = [e for e in scene["entities"] if e["id"] not in ours] + fresh.entities
+	write_json("scenes/demo.wscene", scene)
+
+
 def patch_scene_with_nested(g):
 	"""--nested-only: adds the lamp pair (a prefab that holds prefabs) to the scene that is already written, without downloading anything."""
 	path = ASSETS / "scenes/demo.wscene"
@@ -1894,6 +1981,7 @@ def build_scene(g):
 
 	# --- station 8: particle effects -------------------------------------------------------------------------
 	add_vfx(s, g)
+	add_navigation(s, g)
 
 	# --- station labels (world-anchored text in the HUD) -----------------------------------------------------
 	labels = []
@@ -1961,6 +2049,18 @@ def build_lamp(g):
 
 
 def main():
+	if "--nav-only" in sys.argv:
+		# adds only the navigation station to the scene that is already written (its script, its navmesh asset record and nav.wsettings too), without
+		# downloading anything and without touching the .meta files of anything else: the navmesh itself is baked by the editor afterwards (--nav-bake)
+		write("scripts/nav_patrol.lua", SCRIPTS["nav_patrol.lua"])
+		g = {"shapes": guid("asset:models/shapes/shapes.glb"), "mat": {"crate": guid("asset:materials/crate.wmat"), "marker": guid("asset:materials/marker.wmat"),
+			"neon_cyan": guid("asset:materials/neon_cyan.wmat"), "neon_magenta": guid("asset:materials/neon_magenta.wmat"), "neon_orange": guid("asset:materials/neon_orange.wmat")},
+			"scripts": {"nav_patrol": write_meta("scripts/nav_patrol.lua", "ScriptImporter", 1)}}
+		write_nav_settings()
+		patch_scene_with_nav(g)
+		print("added the navigation station to the demo scene")
+		return
+
 	if "--nested-only" in sys.argv:
 		# adds only the lamp pair to the scene that is already written (and its prefab), without downloading anything or touching other .meta files
 		g = {"lamp": guid("asset:prefabs/street_lamp.wprefab")}
@@ -2021,6 +2121,7 @@ def main():
 	write_json("scenes/demo.wscene", {"name": "Demo hall", "settings": scene_settings(g), "entities": scene.entities})
 	write_meta("scenes/demo.wscene", "SceneImporter", 5, fixed_guid=SCENE_GUID)
 
+	write_nav_settings()
 	# the project's default input map is the demo's
 	(ROOT / "editor" / "input.wsettings").write_text(json.dumps({"defaultMap": input_map}, indent=2) + "\n", encoding="utf-8", newline="\n")
 	print("wrote %d entities, %d materials, %d scripts" % (len(scene.entities), len(g["mat"]), len(g["scripts"])))

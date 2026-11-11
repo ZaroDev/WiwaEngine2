@@ -46,6 +46,9 @@ namespace wiwa
 		std::string check_fox() const;
 		void sample_audio(Scene& play);
 		std::string check_audio() const;
+		void sample_nav(Scene& play);
+		std::string check_nav() const;
+		bool nav_arrived() const;
 		std::string finish_checks();
 		bool sample_physics(Scene& play, std::string& failure);
 
@@ -129,6 +132,17 @@ namespace wiwa
 			bool NullBackend = true;
 		};
 		AudioWatch m_Audio{};
+
+		// the navigation demo (navigation.md): three agents walk round a wall to goals on the far side with nav_patrol.lua, over the navmesh the editor baked from
+		// the scene (--nav-bake). The goals mirror NAV_GOALS in scripts/gen_demo_scene.py.
+		struct NavWatch
+		{
+			bool HasMesh = false;              // the navigation module has the scene's navmesh
+			u32 Agents = 0;                    // the "Nav agent N" entities found, with a NavAgent
+			float Closest[3] = { 1e9f, 1e9f, 1e9f }; // how near each agent came to its goal
+		};
+		NavWatch m_Nav{};
+		std::chrono::steady_clock::time_point m_NavDeadline{};
 
 		// the Physics phase: the joints demo (door, cart, pendulum, bridge, breaking box) and the character demo (a patrolling character, a sliding
 		// platform) of the scene while it plays

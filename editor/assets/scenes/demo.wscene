@@ -5540,6 +5540,398 @@
           "value": 40.0
         }
       ]
+    },
+    {
+      "id": "5323dc27f77199564ffdd444a3478a09",
+      "components": {
+        "Name": {
+          "Value": "Navigation station"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
+    },
+    {
+      "id": "232e859f12bacb027cf2e131e60af47d",
+      "components": {
+        "Name": {
+          "Value": "Navmesh volume"
+        },
+        "Transform": {
+          "Position": [
+            -30,
+            2.5,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "NavMeshVolume": {
+          "NavMesh": {
+            "guid": "c73ca1f856ed83ce784e4e42860e87d4",
+            "localId": 0
+          },
+          "Size": [
+            24,
+            7,
+            24
+          ]
+        }
+      },
+      "parent": "5323dc27f77199564ffdd444a3478a09"
+    },
+    {
+      "id": "94a977faf372e09550494d5b7e1304b7",
+      "components": {
+        "Name": {
+          "Value": "Nav wall"
+        },
+        "Transform": {
+          "Position": [
+            -30,
+            1,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            16,
+            2,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "93a03687cf6be2ecf74e8563c448380e",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "5323dc27f77199564ffdd444a3478a09"
+    },
+    {
+      "id": "5c7cf93690d94a1e34206d0bb210eae9",
+      "components": {
+        "Name": {
+          "Value": "Nav mud"
+        },
+        "Transform": {
+          "Position": [
+            -40,
+            0.05,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            4,
+            0.1,
+            6
+          ]
+        },
+        "NavAreaTag": {
+          "Area": "Mud"
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5528c04a45437a475f688dd0f274fb72",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "5323dc27f77199564ffdd444a3478a09"
+    },
+    {
+      "id": "41ab8f1e0300ccf92d38332e7d6ed60e",
+      "components": {
+        "Name": {
+          "Value": "Nav agent 1"
+        },
+        "Transform": {
+          "Position": [
+            -34,
+            0,
+            8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "NavAgent": {
+          "Speed": 7,
+          "Acceleration": 30
+        },
+        "script:3910b40efc3968eb76c3ec23e3b828ae": {
+          "a": [
+            -34,
+            0,
+            8
+          ],
+          "b": [
+            -34,
+            0,
+            -8
+          ]
+        }
+      },
+      "parent": "5323dc27f77199564ffdd444a3478a09"
+    },
+    {
+      "id": "887b50c270005011e0c814353debe635",
+      "components": {
+        "Name": {
+          "Value": "Nav agent 1 body"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0.9,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.7,
+            1.8,
+            0.7
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 3
+          },
+          "Materials": [
+            {
+              "guid": "04e2aeea597c277403c168318ffa9481",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "41ab8f1e0300ccf92d38332e7d6ed60e"
+    },
+    {
+      "id": "1ab830ed9bd9412e492f0630eb202ea5",
+      "components": {
+        "Name": {
+          "Value": "Nav agent 2"
+        },
+        "Transform": {
+          "Position": [
+            -30,
+            0,
+            8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "NavAgent": {
+          "Speed": 7,
+          "Acceleration": 30
+        },
+        "script:3910b40efc3968eb76c3ec23e3b828ae": {
+          "a": [
+            -30,
+            0,
+            8
+          ],
+          "b": [
+            -30,
+            0,
+            -8
+          ]
+        }
+      },
+      "parent": "5323dc27f77199564ffdd444a3478a09"
+    },
+    {
+      "id": "f99f3da24171a6c5c94d0a287eaa2ce6",
+      "components": {
+        "Name": {
+          "Value": "Nav agent 2 body"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0.9,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.7,
+            1.8,
+            0.7
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 3
+          },
+          "Materials": [
+            {
+              "guid": "ac4097be2350d07730253d7bbe9bc475",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "1ab830ed9bd9412e492f0630eb202ea5"
+    },
+    {
+      "id": "df7fa31c3a21da30d2769a9971c52f14",
+      "components": {
+        "Name": {
+          "Value": "Nav agent 3"
+        },
+        "Transform": {
+          "Position": [
+            -26,
+            0,
+            8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "NavAgent": {
+          "Speed": 7,
+          "Acceleration": 30
+        },
+        "script:3910b40efc3968eb76c3ec23e3b828ae": {
+          "a": [
+            -26,
+            0,
+            8
+          ],
+          "b": [
+            -26,
+            0,
+            -8
+          ]
+        }
+      },
+      "parent": "5323dc27f77199564ffdd444a3478a09"
+    },
+    {
+      "id": "5dcc4f56940679f44138a6a8a0ce7fbd",
+      "components": {
+        "Name": {
+          "Value": "Nav agent 3 body"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0.9,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.7,
+            1.8,
+            0.7
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 3
+          },
+          "Materials": [
+            {
+              "guid": "bce9e105abad3f9db4d0ba66ff3fed76",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "df7fa31c3a21da30d2769a9971c52f14"
     }
   ]
 }
