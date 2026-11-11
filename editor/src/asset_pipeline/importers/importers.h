@@ -24,4 +24,6 @@ namespace wiwa
 	Scope<IImporter> create_mesh_file_importer();     // .wmesh
 	Scope<IImporter> create_graph_file_importer();    // .wgraph
 	Scope<IImporter> create_particle_file_importer(); // .wfx
+	Scope<IImporter> create_sound_bank_importer();    // .bnk
+	Scope<IImporter> create_audio_clip_importer();    // .wav .mp3 .flac .ogg
 }

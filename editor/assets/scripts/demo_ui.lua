@@ -23,6 +23,7 @@ function DemoUi:setup()
   self.level = self.slider.value
 
   panel:find("Controls/ToggleLight"):on("click", function(me)
+    Audio.post("UI_Click")
     me.on = not me.on
     me:apply_light()
   end)

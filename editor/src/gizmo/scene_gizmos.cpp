@@ -26,6 +26,7 @@ namespace wiwa
 		const glm::vec4 DECAL_COLOR(1.0f, 0.5f, 0.45f, 1.0f);
 		const glm::vec4 PARTICLE_COLOR(1.0f, 0.75f, 0.3f, 1.0f);
 		const glm::vec4 BOUNDS_COLOR(0.5f, 1.0f, 0.5f, 1.0f);
+		const glm::vec4 AUDIO_COLOR(0.85f, 0.55f, 1.0f, 1.0f);
 		const glm::vec4 GRID_COLOR(0.6f, 0.6f, 0.6f, 0.6f);
 		constexpr i32 GRID_HALF_COUNT = 50;     // lines on each side of the camera, per level
 
@@ -246,6 +247,28 @@ namespace wiwa
 				shown.Far = std::min(camera.Far, std::max(camera.Near * 2.0f, DISPLAY_FAR));
 				const RenderCamera render = make_render_camera(shown, world.Matrix, DISPLAY_ASPECT);
 				draw.frustum(render.Projection * render.View, CAMERA_COLOR, DebugDepth::Tested, 1.0f);
+			}
+		}
+
+		if (settings.Audio)
+		{
+			for (auto [entity, emitter, world, id] : registry.view<AudioEmitter, WorldTransform, Id>().each())
+			{
+				const glm::vec3 position(world.Matrix[3]);
+				if (!finite(position))
+				{
+					continue;
+				}
+
+				marker(position, AUDIO_COLOR);
+				draw.pick_icon(id.Guid, position, ICON_PIXELS);
+				if (entity == selected && m_AudioRadius)
+				{
+					if (const float radius = m_AudioRadius(emitter); radius > 0.0f && finite(glm::vec3(radius)))
+					{
+						draw.sphere(position, radius, AUDIO_COLOR, DebugDepth::Tested, 1.0f);
+					}
+				}
 			}
 		}
 

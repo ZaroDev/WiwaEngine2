@@ -33,6 +33,10 @@ namespace wiwa
 	// down / pressed / released / value / vector), push_map / pop_map, and the rebinding calls (bindings, rebind, reset, listen, save_bindings).
 	void bind_input(ScriptRuntime& runtime, ScriptContext& context);
 
+	// Audio.post(event [, entity]) (an AudioHandle, or nil when the event did not start), stop, stop_entity, stop_all, set_rtpc, set_switch, set_state,
+	// load_bank, backend.
+	void bind_audio(ScriptRuntime& runtime, ScriptContext& context);
+
 	// UI.panel(entity), panels and their widgets (properties, on / off), UI.input.
 	void bind_ui(ScriptRuntime& runtime, ScriptContext& context);
 

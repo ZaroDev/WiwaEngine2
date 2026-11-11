@@ -25,6 +25,7 @@ No test framework (the user decided a suite isn't needed). Smoke commands: run t
 | `--ui-smoke` / `--ui-editor-smoke` | editor | game UI (files, layout, interaction, edit model) / UI Editor panel for 130 frames |
 | `--physics-smoke` / `--physics-panel-smoke` | editor | Jolt behaviour, queries, dispatch, repeatability / Physics panel for 130 frames |
 | `--input-smoke` / `--input-panel-smoke` | editor | input, actions, rebinding, `.winput`, Lua API / Input panel for 130 frames |
+| `--audio-smoke` / `--audio-panel-smoke` | editor | audio module on the Null backend, soundbank asset and metadata, emitters and play-mode sync, settings, Lua API, event browser model, audition (and the Wwise backend in a `WWISESDK` build, with banks in `editor/assets/audio`) / Audio panel for 130 frames |
 | `--anim-smoke` / `--anim-panel-smoke` | editor | skeleton import, pose math and nodes, Animator module, sockets, extraction, Lua API, animation graphs (file, state machine, blend spaces, layers, edit model) / Animation panel for 130 frames and the Graph editor on the demo warrior's graph |
 | `--play-smoke` / `--demo-smoke` | editor | play mode / the demo scene end to end |
 | `--render-test` | any | GPU pixel checks in `engine/src/renderer/test/*_checks.cpp`, run on the render thread |
@@ -35,7 +36,7 @@ Other flags: `--debug-draw` (game: a game starts with debug draw off), `--scene 
 
 ## Architecture in one page
 
-Modules (`IModule`, registered in `Engine`, [engine.cpp](engine/src/core/engine.cpp)), by update priority: `AssetManager` -100, `AssetPipelineModule` (editor) -90, `SceneModule` -80, `RenderModule` -50, `InputModule` -30, `PhysicsModule` -20, `UiModule` -10, `ScriptingModule` 0, `AnimationModule` 10, plus `Window` and the editor's `EditorModule`. Reach a module with `Engine::get_module`, except from the render and physics threads, which must never call it.
+Modules (`IModule`, registered in `Engine`, [engine.cpp](engine/src/core/engine.cpp)), by update priority: `AssetManager` -100, `AssetPipelineModule` (editor) -90, `SceneModule` -80, `RenderModule` -50, `InputModule` -30, `PhysicsModule` -20, `UiModule` -10, `ScriptingModule` 0, `AnimationModule` 10, `AudioModule` 20, plus `Window` and the editor's `EditorModule`. Reach a module with `Engine::get_module`, except from the render and physics threads, which must never call it.
 
 Rules that cut across areas:
 
@@ -57,6 +58,7 @@ Rules that cut across areas:
 | Animation (skeletons, GPU skinning, `Animator`, animation graphs `.wgraph`, Lua `Animation`) | [animation.md](docs/superpowers/specs/animation.md) | `engine/src/animation`, `editor/src/animation` |
 | Offscreen views (previews, 3D UI widgets, readback; `ViewHost`, `ViewImage`) | [views.md](docs/superpowers/specs/views.md) | `engine/src/renderer/view`, `engine/src/scene/preview_scene.*` |
 | Asset Editor, asset thumbnails (skeleton/mesh editors, sockets, joint rename) | [editor.md](docs/superpowers/specs/editor.md) | `editor/src/asset_editor` |
+| Audio (Wwise behind a vendor-neutral backend, soundbanks, emitters) | [audio.md](docs/superpowers/specs/audio.md) | `engine/src/audio`, `engine/src/audio/wwise` (`AK::` stays inside it), `editor/src/audio` |
 | Input | [input.md](docs/superpowers/specs/input.md) | `engine/src/input` |
 | Game UI | [ui.md](docs/superpowers/specs/ui.md) | `engine/src/ui`, `editor/src/ui` |
 | Project settings, Settings page | [project-settings.md](docs/superpowers/specs/project-settings.md) | `engine/src/core/project_settings.*`, `editor/src/settings` |

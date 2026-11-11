@@ -139,6 +139,14 @@ namespace wiwa
 			WI_FIELD_META(BoundsPadding, FieldMeta::range(0.0f, 100.0f)),
 			WI_FIELD_META(Graph, FieldMeta::asset(AssetType::AnimationGraph))));
 
+		registry.register_component(WI_COMPONENT(AudioListener,
+			WI_FIELD(Active)));
+
+		registry.register_component(WI_COMPONENT(AudioEmitter,
+			WI_FIELD_META(Event, FieldMeta::audio_event()),
+			WI_FIELD(PlayOnStart),
+			WI_FIELD_META(AttenuationScale, FieldMeta::range(0.01f, 100.0f))));
+
 		registry.register_component(WI_COMPONENT(AnimationSocket,
 			WI_FIELD(Joint),
 			WI_FIELD(OffsetPosition),

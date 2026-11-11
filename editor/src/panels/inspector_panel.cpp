@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "inspector_panel.h"
+#include "audio_event_picker.h"
 
 #include <imgui.h>
 
@@ -550,6 +551,16 @@ bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& 
 	}
 	case FieldType::String:
 	{
+		if (field.Meta.AudioEvent)
+		{
+			std::string event = std::get<std::string>(current);
+			if (draw_audio_event_picker(label, event))
+			{
+				value = event;
+				changed = true;
+			}
+			break;
+		}
 		char buffer[256];
 		const std::string& text = std::get<std::string>(current);
 		std::snprintf(buffer, sizeof(buffer), "%s", text.c_str());

@@ -81,6 +81,71 @@
       }
     },
     {
+      "id": "2b2ea28f17483091bdb1cb9346ecfadf",
+      "components": {
+        "Name": {
+          "Value": "Audio listener"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "AudioListener": {
+          "Active": true
+        }
+      },
+      "parent": "14c13bb5133352ea35142ebd0ed6e343"
+    },
+    {
+      "id": "5aa74478dcbcb4e3ce61cd354e97860a",
+      "components": {
+        "Name": {
+          "Value": "Audio demo"
+        },
+        "Transform": {
+          "Position": [
+            -3,
+            1.5,
+            3
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "AudioEmitter": {
+          "Event": "Amb_Hall_loop",
+          "PlayOnStart": true,
+          "AttenuationScale": 4.0
+        },
+        "script:f11faf2bcf90ee87065a9a4fe2c65d96": {
+          "event": "Beacon_Blip",
+          "every": 4
+        }
+      }
+    },
+    {
       "id": "3bb5728b02cd528cc2adac9795552518",
       "components": {
         "Name": {
@@ -2603,12 +2668,15 @@
           },
           "PlayOnStart": false
         },
+        "AudioEmitter": {
+          "Event": "",
+          "PlayOnStart": false,
+          "AttenuationScale": 1.0
+        },
         "script:68ea71680c291c59f52eb202fa969b38": {
           "period": 0.4,
           "attack_every": 0.15
-        },
-        "script:d8a5ea9d582c060e9a710d8e4cdd516d": {},
-        "script:94d6fcb426fdc1ae57cfb6db7a6db865": {}
+        }
       },
       "parent": "6ba23329d0330f39b465064e43191155"
     },
@@ -3391,6 +3459,11 @@
         },
         "RigidBody": {
           "Motion": "Dynamic"
+        },
+        "AudioEmitter": {
+          "Event": "",
+          "PlayOnStart": false,
+          "AttenuationScale": 1.0
         },
         "script:b6dd26765e0383a2af156820cb6ef850": {
           "interval": 3,
@@ -5425,546 +5498,6 @@
         }
       },
       "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
-    },
-    {
-      "id": "5e80f7e97a6ebdcc6b10663c6d59f633",
-      "components": {
-        "Name": {
-          "Value": "VFX station"
-        },
-        "Transform": {
-          "Position": [
-            0,
-            0,
-            0
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        }
-      },
-      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
-    },
-    {
-      "id": "b53f3bd616639e89bffadd6165c02d53",
-      "components": {
-        "Name": {
-          "Value": "Campfire log 1"
-        },
-        "Transform": {
-          "Position": [
-            16,
-            0.1,
-            -9
-          ],
-          "Rotation": [
-            0.0,
-            0.25881904510252074,
-            0.0,
-            0.9659258262890683
-          ],
-          "Scale": [
-            0.9,
-            0.2,
-            0.2
-          ]
-        },
-        "MeshRenderer": {
-          "Mesh": {
-            "guid": "2ddd013f2460aee0ad4411267438b9e3",
-            "localId": 1
-          },
-          "Materials": [
-            {
-              "guid": "93a03687cf6be2ecf74e8563c448380e",
-              "localId": 0
-            }
-          ]
-        }
-      },
-      "parent": "5e80f7e97a6ebdcc6b10663c6d59f633"
-    },
-    {
-      "id": "e871bad0211ddb21623604defb9429a2",
-      "components": {
-        "Name": {
-          "Value": "Campfire log 2"
-        },
-        "Transform": {
-          "Position": [
-            16,
-            0.1,
-            -9
-          ],
-          "Rotation": [
-            -0.0,
-            -0.3420201433256687,
-            -0.0,
-            0.9396926207859084
-          ],
-          "Scale": [
-            0.9,
-            0.2,
-            0.2
-          ]
-        },
-        "MeshRenderer": {
-          "Mesh": {
-            "guid": "2ddd013f2460aee0ad4411267438b9e3",
-            "localId": 1
-          },
-          "Materials": [
-            {
-              "guid": "93a03687cf6be2ecf74e8563c448380e",
-              "localId": 0
-            }
-          ]
-        }
-      },
-      "parent": "5e80f7e97a6ebdcc6b10663c6d59f633"
-    },
-    {
-      "id": "3b1b583d0370160892166938f7441e6f",
-      "components": {
-        "Name": {
-          "Value": "Campfire"
-        },
-        "Transform": {
-          "Position": [
-            16,
-            0.25,
-            -9
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "ParticleSystem": {
-          "Effect": {
-            "guid": "b940caf06f5dbaddb71b7093ef8f64f5",
-            "localId": 0
-          }
-        }
-      },
-      "parent": "5e80f7e97a6ebdcc6b10663c6d59f633"
-    },
-    {
-      "id": "00ebb304eefcb684f4c62f61be2e438d",
-      "components": {
-        "Name": {
-          "Value": "Campfire light"
-        },
-        "Transform": {
-          "Position": [
-            0,
-            0.6,
-            0
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "Light": {
-          "Kind": "Point",
-          "Color": [
-            1,
-            0.55,
-            0.2,
-            1
-          ],
-          "Intensity": 14,
-          "Range": 8,
-          "InnerAngle": 20,
-          "OuterAngle": 30,
-          "CastsShadows": false
-        },
-        "script:0fb6e48033e145da77cf2941d09aabdd": {
-          "amplitude": 4,
-          "speed": 9
-        }
-      },
-      "parent": "3b1b583d0370160892166938f7441e6f"
-    },
-    {
-      "id": "7519cf439045799641e908ad24a43f91",
-      "components": {
-        "Name": {
-          "Value": "Spark fountain"
-        },
-        "Transform": {
-          "Position": [
-            20,
-            0.3,
-            -9
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "ParticleSystem": {
-          "Effect": {
-            "guid": "649f8cb826edb0bb845ab3b263640720",
-            "localId": 0
-          }
-        }
-      },
-      "parent": "5e80f7e97a6ebdcc6b10663c6d59f633"
-    },
-    {
-      "id": "5edf69a053d0b29c2cfea61a39561dcd",
-      "components": {
-        "Name": {
-          "Value": "Impact sparks emitter"
-        },
-        "Transform": {
-          "Position": [
-            24,
-            0.6,
-            -9
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "script:e84aa6674bfab57dac352fc65dc6c144": {
-          "interval": 2.5
-        }
-      },
-      "parent": "5e80f7e97a6ebdcc6b10663c6d59f633"
-    },
-    {
-      "id": "ade38c84a2051baa83776dd6cf9b93a5",
-      "components": {
-        "Name": {
-          "Value": "Rune motes"
-        },
-        "Transform": {
-          "Position": [
-            -3,
-            0.35,
-            6.5
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "ParticleSystem": {
-          "Effect": {
-            "guid": "4bacd01c7d77168a0c46d3a0d7485b6b",
-            "localId": 0
-          }
-        }
-      },
-      "parent": "09b39221b781276df96dc195f7b0323c"
-    },
-    {
-      "id": "09b39221b781276df96dc195f7b0323c",
-      "components": {
-        "Name": {
-          "Value": "Decals station"
-        },
-        "Transform": {
-          "Position": [
-            0,
-            0,
-            0
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        }
-      },
-      "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
-    },
-    {
-      "id": "c25c50a6730c6fad3ea82810c4a9dfd5",
-      "components": {
-        "Name": {
-          "Value": "Decal rune circle"
-        },
-        "Transform": {
-          "Position": [
-            -3,
-            0.3,
-            6.5
-          ],
-          "Rotation": [
-            -0.696364240320019,
-            0.12278780396897285,
-            0.12278780396897285,
-            0.696364240320019
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "Decal": {
-          "Material": {
-            "guid": "5cd857300da6e8de1c1f5543f0b3e783",
-            "localId": 0
-          },
-          "Size": [
-            4.2,
-            4.2,
-            1.0
-          ],
-          "SortOrder": 1
-        }
-      },
-      "parent": "09b39221b781276df96dc195f7b0323c"
-    },
-    {
-      "id": "56c4c46600be0f9d5e7f3e80018a2e2e",
-      "components": {
-        "Name": {
-          "Value": "Decal bullet hole 1"
-        },
-        "Transform": {
-          "Position": [
-            -6.2,
-            1.4,
-            -3.5
-          ],
-          "Rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "Decal": {
-          "Material": {
-            "guid": "05b0301c4d225f8932e2e2e34440a7fd",
-            "localId": 0
-          },
-          "Size": [
-            0.4,
-            0.4,
-            0.5
-          ],
-          "SortOrder": 2
-        }
-      },
-      "parent": "09b39221b781276df96dc195f7b0323c"
-    },
-    {
-      "id": "8f8a821e93c25802f40c147cb380a772",
-      "components": {
-        "Name": {
-          "Value": "Decal bullet hole 2"
-        },
-        "Transform": {
-          "Position": [
-            -5.85,
-            2.1,
-            -3.5
-          ],
-          "Rotation": [
-            0.0,
-            0.0,
-            0.31730465640509214,
-            0.9483236552061993
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "Decal": {
-          "Material": {
-            "guid": "05b0301c4d225f8932e2e2e34440a7fd",
-            "localId": 0
-          },
-          "Size": [
-            0.4,
-            0.4,
-            0.5
-          ],
-          "SortOrder": 3
-        }
-      },
-      "parent": "09b39221b781276df96dc195f7b0323c"
-    },
-    {
-      "id": "c682740c2d03b4621c1c37c4381e1047",
-      "components": {
-        "Name": {
-          "Value": "Decal bullet hole 3"
-        },
-        "Transform": {
-          "Position": [
-            -6.1,
-            3.0,
-            -3.5
-          ],
-          "Rotation": [
-            0.0,
-            0.0,
-            0.6018150231520483,
-            0.7986355100472928
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "Decal": {
-          "Material": {
-            "guid": "05b0301c4d225f8932e2e2e34440a7fd",
-            "localId": 0
-          },
-          "Size": [
-            0.4,
-            0.4,
-            0.5
-          ],
-          "SortOrder": 4
-        }
-      },
-      "parent": "09b39221b781276df96dc195f7b0323c"
-    },
-    {
-      "id": "e777a36ec4e56e48ef593d45dd795078",
-      "components": {
-        "Name": {
-          "Value": "Decal bullet hole 4"
-        },
-        "Transform": {
-          "Position": [
-            -5.7,
-            3.7,
-            -3.5
-          ],
-          "Rotation": [
-            0.0,
-            0.0,
-            0.8241261886220157,
-            0.5664062369248328
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "Decal": {
-          "Material": {
-            "guid": "05b0301c4d225f8932e2e2e34440a7fd",
-            "localId": 0
-          },
-          "Size": [
-            0.4,
-            0.4,
-            0.5
-          ],
-          "SortOrder": 5
-        }
-      },
-      "parent": "09b39221b781276df96dc195f7b0323c"
-    },
-    {
-      "id": "e1da8d893d807436f6a8d366d7ad447f",
-      "components": {
-        "Name": {
-          "Value": "Decal scorch mark"
-        },
-        "Transform": {
-          "Position": [
-            3.5,
-            0.2,
-            -3.2
-          ],
-          "Rotation": [
-            -0.7071067811865476,
-            -0.0,
-            -0.0,
-            0.7071067811865476
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "Decal": {
-          "Material": {
-            "guid": "85f4384689fa6392c95e80f1381df775",
-            "localId": 0
-          },
-          "Size": [
-            3.4,
-            3.4,
-            2.0
-          ],
-          "SortOrder": 0
-        }
-      },
-      "parent": "09b39221b781276df96dc195f7b0323c"
     }
   ]
 }

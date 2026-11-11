@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <audio/audio_bank_info.h>
 #include <math/math.h>
 #include <scene/scene_data.h>
 #include "asset_guid.h"
@@ -402,6 +403,23 @@ namespace wiwa
 		AssetRef Skeleton{};
 		std::vector<GraphParameter> Parameters{};
 		std::vector<GraphLayer> Layers{};
+	};
+
+	// A soundbank the audio backend loads from memory (Wwise: a .bnk), with the metadata of its contents when SoundbanksInfo.json was next to it.
+	struct SoundBankData
+	{
+		std::string Name{};          // the bank's short name, as the backend knows it ("Init", "Test")
+		std::vector<std::byte> Bytes{};
+		AudioBankInfo Info{};
+		bool HasInfo = false;
+	};
+
+	// A sound file (wav, mp3 or flac) as it was imported: the encoded bytes, which the MiniAudio backend decodes while it plays (streaming from memory,
+	// so a long clip is never decoded whole).
+	struct AudioClipData
+	{
+		std::string Name{};          // the file name without extension: what an event is called
+		std::vector<std::byte> Bytes{};
 	};
 
 	struct PrefabNode

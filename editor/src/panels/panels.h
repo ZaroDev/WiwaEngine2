@@ -1,5 +1,6 @@
 #pragma once
 #include "asset_browser_panel.h"
+#include "audio_panel.h"
 #include "build_settings_panel.h"
 #include "material_panel.h"
 #include "input_panel.h"

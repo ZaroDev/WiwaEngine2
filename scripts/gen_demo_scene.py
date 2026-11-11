@@ -64,12 +64,12 @@ def write_meta(rel, importer, version, settings=None, sub_assets=None, fixed_gui
 	return g
 
 
-def download(url, name):
+def download(url, name, agent="wiwa2-demo-generator"):
 	CACHE.mkdir(parents=True, exist_ok=True)
 	path = CACHE / name
 	if not path.exists():
 		print("downloading", url)
-		request = urllib.request.Request(url, headers={"User-Agent": "wiwa2-demo-generator"})
+		request = urllib.request.Request(url, headers={"User-Agent": agent})
 		with urllib.request.urlopen(request, timeout=180) as response:
 			path.write_bytes(response.read())
 	return path
@@ -219,6 +219,37 @@ CHARS_URL = "https://opengameart.org/sites/default/files/rpg_characters_-_nov_20
 MONSTERS_URL = "https://opengameart.org/sites/default/files/cute_animated_monsters_-_aug_2020.zip"
 HDRI_URL = "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloppenheim_06_puresky_1k.hdr"
 TEXTURES = {"bricks": "Bricks059", "paving": "PavingStones070", "metal": "Metal032"}
+# Sounds, all CC0: events are the file names (docs/superpowers/specs/audio.md, MiniAudio backend). Kenney's packs through their Godot mirrors, pinned to a commit.
+KENNEY_UI = "https://raw.githubusercontent.com/Calinou/kenney-interface-sounds/4596a49eaf5a533948d49a47467f606bcdea70ff/addons/kenney_interface_sounds/"
+KENNEY_IMPACT = "https://raw.githubusercontent.com/Boyquotes/kenney-impact-sounds-for-godot/999dd1684873f8b020a3aa5b26e713da21688924/addons/kenney%20impact%20sounds/"
+OGA_WIND = "https://opengameart.org/sites/default/files/Birds%20and%20Wind%20-%20Ambient_0.ogg"
+AUDIO = (  # (event / file name in the project, source url, cache name)
+	("Amb_Hall_loop.ogg", OGA_WIND, "oga_birds_and_wind_ambient.ogg"),  # the "_loop" ending makes the MiniAudio backend loop it
+	("Beacon_Blip.wav", KENNEY_UI + "bong_001.wav", "kenney_bong_001.wav"),
+	("UI_Click.wav", KENNEY_UI + "click_001.wav", "kenney_click_001.wav"),
+	("Footstep_1.ogg", KENNEY_IMPACT + "footstep_concrete_000.ogg", "kenney_footstep_concrete_000.ogg"),
+	("Footstep_2.ogg", KENNEY_IMPACT + "footstep_concrete_001.ogg", "kenney_footstep_concrete_001.ogg"),
+	("Footstep_3.ogg", KENNEY_IMPACT + "footstep_concrete_002.ogg", "kenney_footstep_concrete_002.ogg"),
+	("Impact_Soft.ogg", KENNEY_IMPACT + "impact_soft_medium_000.ogg", "kenney_impact_soft_medium_000.ogg"),
+)
+AUDIO_LICENSE = """The sounds in this folder are all CC0 1.0 (public domain):
+
+- Beacon_Blip.wav (bong_001), UI_Click.wav (click_001): Kenney, "Interface Sounds", https://kenney.nl/assets/interface-sounds
+- Footstep_1..3.ogg (footstep_concrete_000..002), Impact_Soft.ogg (impact_soft_medium_000): Kenney, "Impact Sounds", https://kenney.nl/assets/impact-sounds
+- Amb_Hall_loop.ogg ("Birds and Wind - Ambient.ogg"): Spring Spring, "Birds and Wind - Ambient, Birds, Wind and Synth", https://opengameart.org/content/birds-and-wind-ambient-birds-wind-and-synth
+  (bird sounds in it by isaiah658, syncopika and pauliuw, public domain)
+
+They are copied under the names the demo scripts post as events. scripts/gen_demo_scene.py downloads them.
+"""
+
+
+def import_audio():
+	for name, url, cache in AUDIO:
+		write("audio/clips/" + name, download(url, cache, "Mozilla/5.0").read_bytes(), binary=True)
+		write_meta("audio/clips/" + name, "AudioClipImporter", 1)
+	write("audio/clips/LICENSE.txt", AUDIO_LICENSE)
+
+
 FONT_URL = "https://github.com/google/fonts/raw/main/ofl/lato/Lato-Regular.ttf"
 FONT_LICENSE_URL = "https://github.com/google/fonts/raw/main/ofl/lato/OFL.txt"
 
@@ -570,6 +601,33 @@ end
 return CameraRig
 """
 
+SCRIPTS["audio_demo.lua"] = """-- Audio (see "Audio" in docs/scripting.md): the entity has an AudioEmitter, so it has a voice: it hums the ambience (PlayOnStart, heard across the hall) and
+-- this script blips from the beacon every few seconds. The sounds are assets/audio/*.ogg and .wav (CC0, see its LICENSE.txt); the project plays them
+-- with the MiniAudio backend (Settings, Audio). Another backend, or none (Null), takes the same calls.
+local AudioDemo = Script:extend{
+  properties = {
+    event = { type = "string", default = "Beacon_Blip" },
+    every = { type = "float", default = 4, min = 0.5, max = 60 },
+  },
+}
+
+function AudioDemo:on_init()
+  self.t = 0
+  Audio.set_rtpc("Volume", 0.8)
+  self.last = Audio.post(self.event, self.entity)
+end
+
+function AudioDemo:on_update(dt)
+  self.t = self.t + dt
+  if self.t >= self.every then
+    self.t = 0
+    self.last = Audio.post(self.event, self.entity)
+  end
+end
+
+return AudioDemo
+"""
+
 SCRIPTS["scene_overlay.lua"] = """-- A scene-level script (listed in the scene settings, no entity): logs and draws debug shapes around the stations.
 local SceneOverlay = Script:extend{
   properties = {},
@@ -616,6 +674,7 @@ function DemoUi:setup()
   self.level = self.slider.value
 
   panel:find("Controls/ToggleLight"):on("click", function(me)
+    Audio.post("UI_Click")
     me.on = not me.on
     me:apply_light()
   end)
@@ -675,7 +734,7 @@ function InputDemo:setup()
   self.move = panel:find("InputInfo/Move")
   self.jump = panel:find("InputInfo/JumpKey")
   self.rebind_label = panel:find("InputInfo/RebindJump/Label")
-  panel:find("InputInfo/RebindJump"):on("click", function(me) me:start_rebind() end)
+  panel:find("InputInfo/RebindJump"):on("click", function(me) Audio.post("UI_Click") me:start_rebind() end)
   self.ready = true
 end
 
@@ -931,6 +990,7 @@ end
 function Hopper:on_collision_enter(other, contact)
   if contact.impulse > 30 then
     debug_draw.sphere(contact.point, 0.25, vec4(1, 0.5, 0, 1), 0.4)
+    Audio.post("Impact_Soft", self.entity)
   end
 end
 
@@ -1045,6 +1105,8 @@ function AnimationGraphDemo:on_init()
   end
   self.anim:on("footstep", function(me, event)
     me.steps = me.steps + 1
+    -- the entity has an AudioEmitter (its Event is empty): the step is heard from where the warrior is
+    Audio.post("Footstep_" .. (me.steps % 3 + 1), me.entity)
   end)
 end
 
@@ -1657,6 +1719,8 @@ def build_scene(g):
 	# --- the camera, the sun, the HUD -----------------------------------------------------------------------
 	s.add("Camera", pos=(0, 4.5, 17), rot=qaxis((1, 0, 0), -8),
 		Camera={"Projection": "Perspective", "FovY": 55, "Near": 0.1, "Far": 400, "OrthoSize": 10, "Primary": True}, **script("camera_rig"))
+	s.add("Audio listener", "Camera", AudioListener={"Active": True})
+	s.add("Audio demo", pos=(-3, 1.5, 3), AudioEmitter={"Event": "Amb_Hall_loop", "PlayOnStart": True, "AttenuationScale": 4.0}, **script("audio_demo", event="Beacon_Blip", every=4))
 	s.add("Sun", pos=(0, 20, 0), rot=euler(-45, 35, 0), **light("Directional", (1, 0.96, 0.9, 1), 3.5, shadows=True))
 	s.add("Hud", UICanvas={"Panel": ref(g["ui"]), "SortOrder": 0, "Visible": True}, **script("demo_ui"))
 	s.add("Demo light", pos=(-5, 3, 6), **light("Point", (0.6, 0.8, 1, 1), 2, rng=14))
@@ -1719,6 +1783,7 @@ def build_scene(g):
 	s.add("Warrior (animated)", "Animation station", pos=(0, 0, 9), PrefabInstance={"Prefab": ref(g["models"]["Warrior"][0])},
 		Animator={"Skeleton": ref(g["models"]["Warrior"][0], 1), "Graph": ref(guid("asset:models/characters/Warrior_animation/warrior.wgraph")), "PlayOnStart": False},
 		**merge(script("animation_graph_demo", period=0.4, attack_every=0.15), script("decal_footprints"), script("vfx_footsteps")))
+		AudioEmitter={"Event": "", "PlayOnStart": False, "AttenuationScale": 1.0}, **script("animation_graph_demo", period=0.4, attack_every=0.15))
 	s.add("Warrior head socket", "Warrior (animated)", AnimationSocket={"Joint": "Head", "OffsetPosition": [0, 0.3, 0], "OffsetRotation": IDENTITY})
 	s.add("Warrior head ornament", "Warrior head socket", scale=(0.18, 0.18, 0.18), **mesh("sphere", "gold"))
 	lineup = (("Wizard", -2.5, 11), ("Ranger", 2.5, 11), ("Cleric", -5, 12), ("Yeti", 5, 12), ("Panda", -7.5, 12.5), ("YellowDragon", 7.5, 12.5))
@@ -1734,7 +1799,7 @@ def build_scene(g):
 	s.add("Side wall 3", "Physics demo", pos=(11.2, 0.6, 3), scale=(7, 1.2, 0.2), **merge(mesh("cube", "plain"), {"Collider": BOX}))
 	for i, (x, y, z) in enumerate(((13.6, 0.4, 1.0), (13.6, 0.4, 2.0), (13.6, 1.25, 1.5), (12.7, 0.4, 1.5))):
 		s.add("Crate %d" % (i + 1), "Physics demo", pos=(x, y, z), scale=(0.8, 0.8, 0.8), **merge(mesh("cube", "crate"), {"Collider": BOX}, body(ReportContacts=(i == 0))))
-	s.add("Hopper", "Physics demo", pos=(8.9, 3.2, 1.5), scale=(0.8, 0.8, 0.8), **merge(mesh("sphere", "plastic_red"), {"Collider": BALL}, body(), script("physics_hopper", interval=3, speed=6)))
+	s.add("Hopper", "Physics demo", pos=(8.9, 3.2, 1.5), scale=(0.8, 0.8, 0.8), **merge(mesh("sphere", "plastic_red"), {"Collider": BALL}, body(), {"AudioEmitter": {"Event": "", "PlayOnStart": False, "AttenuationScale": 1.0}}, script("physics_hopper", interval=3, speed=6)))
 	for i, (x, y, z) in enumerate(((8.6, 5, 1), (9.2, 7, 2), (9.6, 9, 1.5))):
 		s.add("Bouncy ball %d" % (i + 1), "Physics demo", pos=(x, y, z), scale=(0.6, 0.6, 0.6),
 			**merge(mesh("sphere", "gold"), {"Collider": dict(BALL, Material=ref(g["bouncy"]))}, body()))
@@ -1859,6 +1924,8 @@ def main():
 	write("fonts/Lato-Regular.ttf", download(FONT_URL, "Lato-Regular.ttf").read_bytes(), binary=True)
 	write("fonts/OFL-Lato.txt", download(FONT_LICENSE_URL, "OFL-Lato.txt").read_bytes(), binary=True)
 	font = write_meta("fonts/Lato-Regular.ttf", "FontImporter", 1, {"pixelSize": 48, "sdfRange": 8, "charset": "latin1"})
+
+	import_audio()
 
 	write_json("physics/bouncy.wphysmat", {"friction": 0.4, "restitution": 0.75, "restitutionCombine": "Max"})
 	g["bouncy"] = write_meta("physics/bouncy.wphysmat", "PhysicsMaterialImporter", 1)

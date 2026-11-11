@@ -6,6 +6,7 @@
 
 #include <assets/asset_catalog.h>
 #include <assets/build_info.h>
+#include <audio/audio_project_settings.h>
 #include <assets/pak_format.h>
 #include <input/input_project_settings.h>
 #include <physics/physics_project_settings.h>
@@ -94,7 +95,7 @@ namespace wiwa
 		}
 	}
 
-	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile, const std::filesystem::path& inputSettingsFile, const std::filesystem::path& projectSettingsFile)
+	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile, const std::filesystem::path& inputSettingsFile, const std::filesystem::path& projectSettingsFile, const std::filesystem::path& audioSettingsFile)
 	{
 		JobProgress local;
 		if (progress == nullptr)
@@ -145,6 +146,7 @@ namespace wiwa
 
 				PackCandidate candidate;
 				candidate.Guid = assetHeader ? assetHeader->Guid : *named;
+				candidate.IsAudioClip = assetHeader && assetHeader->Type == AssetType::AudioClip;
 				if (assetHeader)
 				{
 					candidate.Dependencies = assetHeader->Dependencies;
@@ -168,6 +170,31 @@ namespace wiwa
 					std::find(effective.AlwaysInclude.begin(), effective.AlwaysInclude.end(), inputSettings.DefaultMap.Guid) == effective.AlwaysInclude.end())
 				{
 					effective.AlwaysInclude.push_back(inputSettings.DefaultMap.Guid);
+				}
+
+				// Nor does any scene refer to the soundbanks the audio settings load.
+				AudioProjectSettings audioSettings;
+				std::string audioError;
+				if (load_audio_settings(audioSettingsFile, audioSettings, audioError))
+				{
+					// The MiniAudio backend plays clips by name, so no scene refers to them: every clip goes in.
+					if (audioSettings.Backend == AudioBackendKind::MiniAudio)
+					{
+						for (const PackCandidate& candidate : candidates)
+						{
+							if (candidate.IsAudioClip && std::find(effective.AlwaysInclude.begin(), effective.AlwaysInclude.end(), candidate.Guid) == effective.AlwaysInclude.end())
+							{
+								effective.AlwaysInclude.push_back(candidate.Guid);
+							}
+						}
+					}
+					for (const AssetRef& bank : audioSettings.Banks)
+					{
+						if (std::find(effective.AlwaysInclude.begin(), effective.AlwaysInclude.end(), bank.Guid) == effective.AlwaysInclude.end())
+						{
+							effective.AlwaysInclude.push_back(bank.Guid);
+						}
+					}
 				}
 			}
 			const std::unordered_set<AssetGuid> selected = select_pack_set(candidates, effective, missing, database.redirect_map());
@@ -387,6 +414,26 @@ namespace wiwa
 				else
 				{
 					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", inputSettingsFile.string(), inputError);
+					ok = false;
+				}
+			}
+		}
+
+		// The project's audio settings (backend, soundbanks), if the editor has saved any.
+		{
+			std::error_code exists;
+			if (std::filesystem::exists(audioSettingsFile, exists))
+			{
+				AudioProjectSettings audioSettings;
+				std::string audioError;
+				if (load_audio_settings(audioSettingsFile, audioSettings, audioError))
+				{
+					ok = add_blob(AUDIO_SETTINGS_GUID, 0, serialize(audioSettings), "audio settings") && ok;
+					log_extra(AUDIO_SETTINGS_GUID, shown_path(audioSettingsFile.generic_string()));
+				}
+				else
+				{
+					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", audioSettingsFile.string(), audioError);
 					ok = false;
 				}
 			}

@@ -60,6 +60,9 @@ project "wiwa_editor"
 		-- "ImGuizmo"
 	}
 
+	WwiseDefines()
+	WwiseLinks()
+
 	debugdir "%{wks.location}/editor"
 
 	filter "system:windows"

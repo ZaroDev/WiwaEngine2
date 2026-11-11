@@ -643,6 +643,40 @@ namespace wiwa
 		u32 version = static_cast<u32>(WFX_VERSION);
 		ar.value(version);
 		if (ar.reading() && ar.ok() && version != static_cast<u32>(WFX_VERSION))
+	namespace
+	{
+		void archive_name_groups(BinaryArchive& ar, std::vector<AudioNameGroup>& groups)
+		{
+			ar.list(groups, [&](AudioNameGroup& group)
+			{
+				ar.string(group.Name);
+				ar.list(group.Values, [&](std::string& value) { ar.string(value); });
+			});
+		}
+
+		void archive_bank_info(BinaryArchive& ar, AudioBankInfo& info)
+		{
+			ar.list(info.Events, [&](AudioEventInfo& event)
+			{
+				ar.string(event.Name);
+				ar.value(event.MaxAttenuation);
+				ar.value(event.DurationMs);
+				u8 looping = event.Looping ? 1 : 0;
+				ar.value(looping);
+				event.Looping = looping != 0;
+			});
+			ar.list(info.Rtpcs, [&](std::string& name) { ar.string(name); });
+			archive_name_groups(ar, info.Switches);
+			archive_name_groups(ar, info.States);
+			ar.list(info.Buses, [&](std::string& name) { ar.string(name); });
+		}
+	}
+
+	void archive(BinaryArchive& ar, SoundBankData& v)
+	{
+		u32 version = 1;
+		ar.value(version);
+		if (ar.reading() && ar.ok() && version != 1)
 		{
 			ar.fail();
 			return;
@@ -665,6 +699,37 @@ namespace wiwa
 				return;
 			}
 			v = std::move(*parsed);
+		ar.string(v.Name);
+		ar.pod_vector(v.Bytes);
+		u8 hasInfo = v.HasInfo ? 1 : 0;
+		ar.value(hasInfo);
+		v.HasInfo = hasInfo != 0;
+		if (v.HasInfo)
+		{
+			archive_bank_info(ar, v.Info);
+		}
+
+		if (ar.reading() && ar.ok() && (v.Name.empty() || v.Bytes.empty() || ar.remaining() != 0))
+		{
+			ar.fail();
+		}
+	}
+
+	void archive(BinaryArchive& ar, AudioClipData& v)
+	{
+		u32 version = 1;
+		ar.value(version);
+		if (ar.reading() && ar.ok() && version != 1)
+		{
+			ar.fail();
+			return;
+		}
+
+		ar.string(v.Name);
+		ar.pod_vector(v.Bytes);
+		if (ar.reading() && ar.ok() && (v.Name.empty() || v.Bytes.empty() || ar.remaining() != 0))
+		{
+			ar.fail();
 		}
 	}
 }

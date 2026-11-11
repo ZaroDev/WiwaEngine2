@@ -44,6 +44,7 @@ namespace wiwa
 		flag(json, "cameras", settings.Cameras);
 		flag(json, "decals", settings.Decals);
 		flag(json, "particles", settings.Particles);
+		flag(json, "audio", settings.Audio);
 		flag(json, "bounds", settings.Bounds);
 		flag(json, "grid", settings.Grid);
 		flag(json, "axes", settings.Axes);
@@ -83,6 +84,7 @@ namespace wiwa
 		json["cameras"] = Cameras;
 		json["decals"] = Decals;
 		json["particles"] = Particles;
+		json["audio"] = Audio;
 		json["bounds"] = Bounds;
 		json["grid"] = Grid;
 		json["axes"] = Axes;

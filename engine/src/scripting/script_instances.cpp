@@ -32,6 +32,7 @@ namespace wiwa
 		bind_physics(m_Runtime, m_Context);
 		bind_input(m_Runtime, m_Context);
 		bind_animation(m_Runtime, m_Context);
+		bind_audio(m_Runtime, m_Context);
 		bind_settings(m_Runtime, m_Context);
 	}
 

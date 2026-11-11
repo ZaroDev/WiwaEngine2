@@ -261,6 +261,20 @@ namespace wiwa
 		glm::vec3 OffsetScale{ 1.0f };
 	};
 
+	// Hears the scene: the first active listener (else the primary camera) is where sound is heard from.
+	struct AudioListener
+	{
+		bool Active = true;
+	};
+
+	// Plays audio events from its entity's position while the game plays.
+	struct AudioEmitter
+	{
+		std::string Event{};              // the vendor's event name (Wwise: Play_Footstep); empty plays nothing
+		bool PlayOnStart = false;         // posts Event once when the emitter starts to exist in a playing scene
+		float AttenuationScale = 1.0f;    // scales the event's attenuation distances
+	};
+
 	// What a ViewHost's preview is drawn with (the profiles of renderer/view/view_types.h; the values match).
 	enum class ViewHostProfile : u32 { Full, Preview, Thumbnail };
 

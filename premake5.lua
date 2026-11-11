@@ -19,6 +19,9 @@ workspace "Wiwa2"
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
 VULKAN_SDK = os.getenv("VULKAN_SDK")
+-- The Wwise SDK is optional: with WWISESDK set the Wwise audio backend is built (WI_AUDIO_WWISE); without it only the Null backend exists.
+-- This is a feature toggle, not an editor-vs-game decision.
+WWISESDK = os.getenv("WWISESDK")
 
 IncludeDirs = {}
 IncludeDirs["VulkanSDK"] = "%{VULKAN_SDK}/Include"
@@ -45,7 +48,7 @@ IncludeDirs["Optick"] = "%{wks.location}/Wiwa/vendor/Optick/include"
 IncludeDirs["assimp"] = "%{wks.location}/Wiwa/vendor/assimp/include"
 IncludeDirs["ImGuizmo"] = "%{wks.location}/Wiwa/vendor/imguizmo"
 IncludeDirs["GLI"] = "%{wks.location}/Wiwa/vendor/gli/gli"
-IncludeDirs["Wwise"] = "%{wks.location}/Wiwa/vendor/Wwise/include"
+IncludeDirs["WwiseSDK"] = "%{WWISESDK}/include"
 IncludeDirs["IconFontCppHeaders"] = "%{wks.location}/WiwaEditor/vendor/IconFontCppHeaders"
 IncludeDirs["bullet"] = "%{wks.location}/Wiwa/vendor/bullet/include"
 IncludeDirs["ozz"] = "%{wks.location}/Wiwa/vendor/ozz/include"
@@ -54,10 +57,10 @@ IncludeDirs["OpenCV"] = "%{wks.location}/Wiwa/vendor/opencv-4.7.0/include"
 IncludeDirs["sol2"] = "%{wks.location}/engine/vendor/sol2/include"
 IncludeDirs["lua"] = "%{wks.location}/engine/vendor/lua"
 IncludeDirs["Jolt"] = "%{wks.location}/engine/vendor/JoltPhysics"
+IncludeDirs["miniaudio"] = "%{wks.location}/engine/vendor/miniaudio"
 
 LibraryDirs = {}
 LibraryDirs["VulkanSDK"] = "%{VULKAN_SDK}/Lib"
-LibraryDirs["Wwise"] = "%{wks.location}/engine/vendor/Wwise/lib/x64_vc170/Debug(StaticCRT)/lib/"
 LibraryDirs["bullet"] = "%{wks.location}/engine/vendor/bullet/lib/"
 LibraryDirs["recastnavigation"] = "%{wks.location}/engine/vendor/recastnavigation/lib"
 LibraryDirs["OpenCV"] = "%{wks.location}/engine/vendor/opencv-4.7.0/lib/"
@@ -65,12 +68,6 @@ LibraryDirs["OpenCV"] = "%{wks.location}/engine/vendor/opencv-4.7.0/lib/"
 
 
 Library = {}
-Library["Wwise_SE"] = "%{LibraryDirs.Wwise}/AkSoundEngine.lib"
-Library["Wwise_MMgr"] = "%{LibraryDirs.Wwise}/AkMemoryMgr.lib"
-Library["Wwise_SMgr"] = "%{LibraryDirs.Wwise}/AkStreamMgr.lib"
-Library["Wwise_ME"] = "%{LibraryDirs.Wwise}/AkMusicEngine.lib"
-Library["Wwise_SA"] = "%{LibraryDirs.Wwise}/AkSpatialAudio.lib"
-Library["Wwise_CC"] = "%{LibraryDirs.Wwise}/CommunicationCentral.lib"
 Library["bullet_collision_release"] = "%{LibraryDirs.bullet}/BulletCollision_vs2010_x64_release.lib"
 Library["bullet_dynamics_release"] = "%{LibraryDirs.bullet}/BulletDynamics_vs2010_x64_release.lib"
 Library["bullet_linear_math_release"] = "%{LibraryDirs.bullet}/LinearMath_vs2010_x64_release.lib"
@@ -123,6 +120,33 @@ Library["opencv_video_debug"] = "%{LibraryDirs.OpenCV}/opencv_video470d.lib"
 Library["opencv_videoio_debug"] = "%{LibraryDirs.OpenCV}/opencv_videoio470d.lib"
 Library["opencv_ts470_debug"] = "%{LibraryDirs.OpenCV}/opencv_ts470d.lib"
 
+
+-- Wwise: the compile definition and include path for every project that sees the Wwise backend (the engine, and the editor and game for the
+-- checks and startup that name it).
+function WwiseDefines()
+	if WWISESDK then
+		defines { "WI_AUDIO_WWISE" }
+		includedirs { "%{WWISESDK}/include" }
+	end
+end
+
+-- Wwise static libraries for the executables (the engine is a static library). The dynamic-CRT SDK folders match staticruntime "Off".
+function WwiseLinks()
+	if WWISESDK then
+		filter "configurations:Debug"
+			libdirs { "%{WWISESDK}/x64_vc170/Debug/lib" }
+		filter "configurations:not Debug"
+			libdirs { "%{WWISESDK}/x64_vc170/Release/lib" }
+		filter {}
+		links
+		{
+			-- the core of the sound engine and the Vorbis codec banks use by default; a project that uses effect or source plug-ins adds their
+			-- libraries here and their factory headers in engine/src/audio/wwise/wwise_backend.cpp
+			"AkSoundEngine", "AkMemoryMgr", "AkStreamMgr", "AkSpatialAudio", "AkVorbisDecoder",
+			"ws2_32", "dsound", "dxguid", "xinput", "winmm"
+		}
+	end
+end
 
 -- Jolt compile definitions: identical for the Jolt lib and for every project that includes Jolt headers (a mismatch is an ODR bug).
 -- JPH_OBJECT_STREAM is deliberately not defined and cross-platform determinism is off.
