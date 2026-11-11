@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -27,6 +28,11 @@ namespace wiwa
 	class ImGuiRenderPass;
 	class UiRenderPass;
 	class RenderWorld;
+
+	// `--render-test` runs checks that live in the wiwa_tests project: it installs them here before the engine starts. The runner is called once on the render
+	// thread when every pass can render, and returns true when all the checks passed. With none installed, --render-test fails.
+	using RenderCheckRunner = std::function<bool(RenderWorld&)>;
+	void set_render_check_runner(RenderCheckRunner runner);
 
 	// What the main thread keeps for one offscreen view (views.md): the handle's settings and the extractor that mirrors the view's scene.
 	struct ViewRecord

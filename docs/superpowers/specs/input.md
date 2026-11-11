@@ -1,6 +1,6 @@
 # Input
 
-Code: `engine/src/input`, Lua `scripting/bindings/bind_input.cpp`, editor `editor/src/input` (`InputEditModel`, smoke) and `editor/src/panels/input_panel.*`, importer `importers/input_map_importer.cpp`. Verified by `--input-smoke` and `--input-panel-smoke`. Lua API: `docs/scripting.md`.
+Code: `engine/src/input`, Lua `scripting/bindings/bind_input.cpp`, editor `editor/src/input` (`InputEditModel`; the smoke is `tests/src/input`) and `editor/src/panels/input_panel.*`, importer `importers/input_map_importer.cpp`. Verified by `--input-smoke` and `--input-panel-smoke`. Lua API: `docs/scripting.md`.
 
 `InputModule` (priority -30) is main-thread only; render and physics threads never touch it. It sits after the window (it listens to it) and before the render module (whose ImGui backend chains onto the same GLFW callbacks), and before UI (-10) and scripts (0). Nothing in it depends on editor code. Out of scope: rumble/haptics (GLFW has none), touch, motion sensors, text input/IME (ImGui owns text entry in the editor).
 

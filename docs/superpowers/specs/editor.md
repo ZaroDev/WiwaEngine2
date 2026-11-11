@@ -38,7 +38,7 @@ The View Preview panel (Renderer menu, closed by default) shows a prefab in a `R
 
 ## Smoke flags
 
-Each panel or system with a headless check runs through `editor_module.cpp`/its own `*_smoke_test.cpp`; the full table is in CLAUDE.md. A smoke check is trusted only after it was seen to fail under a negative control (break a line, confirm failure, restore). After editing a shader, run `wiwa_editor.exe --render-smoke 100 --api=d3d11` before `--render-test`.
+Every check lives in the `wiwa_tests` project (`tests/`), none in the editor: a panel or system with a headless check has its own `tests/src/<area>/*_smoke_test.cpp`, and the panel, play, demo and VFX smokes are driven per frame by `EditorSmokeDriver` through `EditorTestSetup::OnFrame` of `EditorModule`; the full table is in CLAUDE.md. A smoke check is trusted only after it was seen to fail under a negative control (break a line, confirm failure, restore). After editing a shader, run `wiwa_tests.exe --render-smoke 100 --api=d3d11` before `--render-test`.
 
 ## Animation panel (`editor/src/animation`)
 

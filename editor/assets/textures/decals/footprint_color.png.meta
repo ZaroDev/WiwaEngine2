@@ -1,9 +1,9 @@
 {
   "guid": "f8c535408d3925a29b0aea6dc8c17daa",
-  "importer": "TextureImporter",
-  "version": 1,
   "importSettings": {
     "kind": "color"
   },
-  "subAssets": {}
+  "importer": "TextureImporter",
+  "subAssets": {},
+  "version": 1
 }

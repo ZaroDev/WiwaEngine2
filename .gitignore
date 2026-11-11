@@ -80,6 +80,7 @@ Library/
 imgui.ini
 editor/wiwa_game.exe
 editor/wiwa_editor.exe
+editor/wiwa_tests.exe
 editor/wiwa.log
 
 editor/**.meta

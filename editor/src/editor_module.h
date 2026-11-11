@@ -4,11 +4,11 @@
 
 #include <core/module.h>
 
+#include <functional>
+
 #include <imgui.h>
 #include <ImGuizmo.h>
 #include <panels/panels.h>
-#include <play/demo_smoke.h>
-#include <asset_editor/vfx_editor_smoke.h>
 #include <play/play_mode.h>
 #include <scene/scene_editor.h>
 
@@ -22,9 +22,26 @@
 #include "editor_ui/layout_manager.h"
 #include "editor_ui/shortcuts.h"
 
+class EditorModule;
+
+// What the test project (wiwa_tests) changes about an editor it hosts. The editor passes this to nothing of its own: the default is the editor as it ships.
+struct EditorTestSetup
+{
+	// Where the Physics, Input and Navigation panels save their settings; empty: the project's own file. A smoke edits them, and must not touch the project.
+	std::filesystem::path PhysicsSettings{};
+	std::filesystem::path InputSettings{};
+	std::filesystem::path NavSettings{};
+	bool NavSettingsApplyToEngine = true; // false: the Navigation settings are only saved, the running module is left alone
+	bool OpenAudioPanel = false;           // the Audio and Navigation panels start closed: a smoke that draws them opens them
+	bool OpenNavPanel = false;
+	std::function<void(EditorModule&)> OnFrame{}; // called once per frame from update(), before the editor draws its windows
+};
+
 class EditorModule : public wiwa::IModule
 {
 public:
+	EditorModule() = default;
+	explicit EditorModule(EditorTestSetup test) : m_Test(std::move(test)) {}
 	virtual ~EditorModule() override = default;
 
 	virtual void init() override;
@@ -48,6 +65,9 @@ public:
 	virtual int get_priority() const { return 0; }
 
 private:
+	friend class EditorSmokeDriver; // wiwa_tests: the panel, play and demo smokes
+	EditorTestSetup m_Test{};
+
 	void dock_space();
 	void main_bar();
 	void play_toolbar();
@@ -64,8 +84,6 @@ private:
 	// Saves the scene; asks for a name first if it has none.
 	void save_scene();
 	void show_scene_status(const std::string& text);
-	// --play-smoke: plays the scene, changes the copy, stops, and checks that the scene being edited came back untouched.
-	std::string run_play_smoke();
 	void set_theme();
 	// The Edit menu: undo and redo, and the entity actions the shortcut table knows.
 	void edit_menu();
@@ -116,45 +134,24 @@ private:
 	Scope<wiwa::IPlayHost> m_PlayHost;
 	Scope<wiwa::PlayMode> m_PlayMode;
 	bool m_StopPlayRequested = false; // a script called quit()
-	Scope<wiwa::DemoSmoke> m_DemoSmoke;
-	Scope<wiwa::VfxEditorSmoke> m_VfxEditorSmoke;       // --vfx-editor-smoke: the VFX editor in the Asset Editor, its preview on the GPU, its edit model (editor.md)
-	bool m_VfxEditorSmokeRequested = false;
-	bool m_PlaySmoke = false;
 	Ref<class AudioSection> m_AudioSection{};       // the Audio page of the Settings panel; its settings are applied once the first scan has cooked the banks
 	bool m_PendingAudio = false;
 	wiwa::AssetRef m_PendingDefaultMap{}; // input.wsettings' map, applied once the first import scan has cooked it
 	class HierarchyPanel* m_Hierarchy = nullptr; // owned by m_Panels
 	class UiEditorPanel* m_UiEditor = nullptr; // owned by m_Panels
-	bool m_UiEditorSmoke = false;              // --ui-editor-smoke: open a panel in the UI Editor, run for a while, check it is previewing
 	class PhysicsPanel* m_PhysicsPanel = nullptr; // owned by m_Panels
-	bool m_PhysicsPanelSmoke = false;            // --physics-panel-smoke: draw the Physics panel for a while with ImGui asserts on, edit the matrix, check it was saved
 	std::filesystem::path m_PhysicsPanelFile{};
 	class InputPanel* m_InputPanel = nullptr;     // owned by m_Panels
-	bool m_InputPanelSmoke = false;              // --input-panel-smoke: draw the Input panel for a while with ImGui asserts on, edit a map through the panel, check it was saved
-	std::filesystem::path m_InputPanelFile{};
 	class AnimationPanel* m_AnimationPanel = nullptr; // owned by m_Panels
 	class AudioPanel* m_AudioPanel = nullptr;         // owned by m_Panels
-	bool m_AudioPanelSmoke = false;                   // --audio-panel-smoke: draw the Audio panel for a while, audition an event through it, check it stops
-	bool m_AudioPanelAuditioned = false;
 	class NavigationPanel* m_NavPanel = nullptr;      // owned by m_Panels
-	entt::entity m_NavPanelVolume{ entt::null };
 	std::filesystem::path m_NavBakeOut{};              // --nav-bake <file>: bake the first volume of the scene that is loaded at start to this .wnav and exit
 	bool m_NavBakeStarted = false;
-	bool m_AiPanelSmoke = false;                      // --ai-panel-smoke: open a behaviour tree in the Asset Editor for a while with ImGui asserts on, edit it through the model, save it
-	std::filesystem::path m_AiPanelFile{};
-	std::string m_AiPanelFailure{};
-	bool m_NavPanelSmoke = false;                     // --nav-panel-smoke: draw the Navigation panel for a while, make a volume through it, check it
 	Scope<wiwa::SkeletonIndex> m_SkeletonIndex{};   // which meshes and clips name each skeleton, kept up to date in the background
 	Scope<wiwa::EditorState> m_EditorState{};       // Library/editor_state.json
 	Scope<wiwa::ThumbnailCache> m_Thumbnails{};     // the thumbnails of the Asset Browser
 	class AssetEditorPanel* m_AssetEditor = nullptr; // owned by m_Panels
-	bool m_AnimPanelSmoke = false;               // --anim-panel-smoke: draw the Animation panel and the Graph editor (on the demo warrior's graph, whose preview must play it) for a while with ImGui asserts on
-	std::filesystem::path m_AnimPanelDir{};
-	std::filesystem::path m_UiEditorSmokeFile{};
 	wiwa::u32 m_Frame = 0;
-	wiwa::u32 m_PlaySmokeFinalFrame = 0;
-	Ref<wiwa::Scene> m_PlaySmokeEdit{};
-	size_t m_PlaySmokeCount = 0;
 	int m_Operation = ImGuizmo::TRANSLATE;
 	bool m_LocalSpace = false;
 };

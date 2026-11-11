@@ -1,6 +1,6 @@
 # Animation
 
-Code: `engine/src/animation` (poses, nodes, `AnimatorInstance`, `AnimationModule`), `engine/src/scripting/bindings/bind_animation.cpp`, the skinning parts of `engine/src/renderer`, `editor/src/animation` (panel, smoke tests), `editor/src/asset_editor` (clip editor), importers in `editor/src/asset_pipeline/importers/model_skeleton.*`. User API: `docs/scripting.md`. Verified by `--anim-smoke`, `--anim-panel-smoke`, `--render-test` (`skinning_checks.cpp`) and the animated warrior in `--demo-smoke`.
+Code: `engine/src/animation` (poses, nodes, `AnimatorInstance`, `AnimationModule`), `engine/src/scripting/bindings/bind_animation.cpp`, the skinning parts of `engine/src/renderer`, `editor/src/animation` (panel), `tests/src/animation` (smoke tests), `editor/src/asset_editor` (clip editor), importers in `editor/src/asset_pipeline/importers/model_skeleton.*`. User API: `docs/scripting.md`. Verified by `--anim-smoke`, `--anim-panel-smoke`, `--render-test` (`skinning_checks.cpp`) and the animated warrior in `--demo-smoke`.
 
 Part 1 of 5 (foundation), with the native animation assets (B1) on top of it. Part 2, stage one (state-machine animation graphs) is in too, see "Animation graph" below. Later parts are the general pose graph (a state body that is a node graph), root motion, IK and ragdoll; this area only keeps them possible (see the end).
 

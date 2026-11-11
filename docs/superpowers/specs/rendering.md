@@ -1,6 +1,6 @@
 # Rendering
 
-Code: `engine/src/renderer`, shaders in `editor/engine/shaders`. Verified by `--render-test` (checks in `renderer/test/*_checks.cpp`) and `--render-smoke <frames>`, on all three APIs with `--gpu-validation`.
+Code: `engine/src/renderer`, shaders in `editor/engine/shaders`. Verified by `--render-test` (run with `wiwa_tests`; checks in `tests/src/render/*_checks.cpp`, installed in the render module with `set_render_check_runner`) and `--render-smoke <frames>`, on all three APIs with `--gpu-validation`.
 
 ## Threads and hand-off
 

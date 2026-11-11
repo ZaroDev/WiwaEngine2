@@ -11,7 +11,7 @@ Skeletons, clips and skinned meshes of the models are extracted by the editor in
 the animationEvents setting written to the model .meta below only seeds the clips of that first extraction (the files own the events afterwards), and the
 scene's references to the old sub-asset ids keep working through the catalog's redirects.
 
-The demo smoke test (editor/src/play/demo_smoke.cpp) depends on entity names, positions of the joints and the character lane, the
+The demo smoke test (tests/src/play/demo_smoke.cpp) depends on entity names, positions of the joints and the character lane, the
 HUD widget names and colours and the behaviour of the scripts below. Change them together.
 """
 import hashlib
@@ -1673,7 +1673,7 @@ def add_vfx(s, g):
 
 NAV_CENTER = -30  # x of the navigation station: west of the hall, where nothing else stands
 NAV_FILE = "navmeshes/Navmesh_volume_%s.wnav" % guid("entity:Navmesh volume")[:8]  # where the editor's bake puts it (NavigationPanel::bake)
-NAV_GOALS = [(NAV_CENTER - 4 + 4 * i, -8) for i in range(3)]  # (x, z) of where the agents go; editor/src/play/demo_smoke.cpp checks them
+NAV_GOALS = [(NAV_CENTER - 4 + 4 * i, -8) for i in range(3)]  # (x, z) of where the agents go; tests/src/play/demo_smoke.cpp checks them
 
 
 def add_navigation(s, g):
@@ -1701,7 +1701,7 @@ def add_navigation(s, g):
 
 def write_nav_settings():
 	"""The project's navigation settings: walking through mud costs 8 times as much, which sends the agents of the navigation station round it; Swamp is
-	an area the project made up (slot 4, cost 5) and is on the east way. editor/src/play/demo_smoke.cpp checks that the project has it."""
+	an area the project made up (slot 4, cost 5) and is on the east way. tests/src/play/demo_smoke.cpp checks that the project has it."""
 	areas = {"areas": [{"id": 1, "cost": 1.0}, {"id": 2, "name": "Mud", "cost": 8.0}, {"id": 3, "name": "Water", "cost": 1.0}, {"id": 4, "name": "Swamp", "cost": 5.0}]}
 	(ROOT / "editor" / "nav.wsettings").write_text(json.dumps(areas, indent=2) + "\n", encoding="utf-8", newline="\n")
 	# the record of the navmesh asset, so that the guid the volume refers to is the one the baked file gets (the file itself comes from --nav-bake)
@@ -1767,7 +1767,7 @@ def write_ai_assets():
 
 def add_ai(s, g):
 	"""The behaviour tree demo, in the navigation station: a guard (NavAgent, Perceiver, AIController) that patrols, chases the thief it sees across the
-	arena and looks at the noise a noise maker makes. editor/src/play/demo_smoke.cpp checks it (the thief's place and the names here)."""
+	arena and looks at the noise a noise maker makes. tests/src/play/demo_smoke.cpp checks it (the thief's place and the names here)."""
 	cx = NAV_CENTER
 	cylinder = lambda colour: {"MeshRenderer": {"Mesh": ref(g["shapes"], MESH["cylinder"]), "Materials": [ref(g["mat"][colour])]}}
 	s.add("Guard", "Navigation station", pos=(cx + 10, 0, 8), NavAgent={"Speed": 4.5, "Acceleration": 20},

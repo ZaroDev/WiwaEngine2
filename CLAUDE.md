@@ -11,27 +11,29 @@ scripts\GenerateProjects2022.bat        :: premake5 vs2022 -> Wiwa2.sln  (Genera
 msbuild Wiwa2.sln /p:Configuration=Debug /p:Platform=x64
 ```
 
-Configurations `Debug`, `Release`, `Shipping`; output in `bin/<cfg>-windows-x86_64/<project>`. `scripts/Build*2022.bat` are stale, don't use them. Projects: `wiwa` (static lib, `engine/`), `wiwa_editor` (`editor/`, debugdir `editor/`), `wiwa_game` (`game/`, debugdir `game/`). The game links only the engine, never editor code.
+Configurations `Debug`, `Release`, `Shipping`; output in `bin/<cfg>-windows-x86_64/<project>`. `scripts/Build*2022.bat` are stale, don't use them. Projects: `wiwa` (static lib, `engine/`), `wiwa_editor` (`editor/`, debugdir `editor/`), `wiwa_game` (`game/`, debugdir `game/`), `wiwa_tests` (`tests/`, debugdir `editor/`). The game links only the engine, never editor code. The editor and the game contain no test code: every check lives in `wiwa_tests`, which compiles `editor/src` (minus `editor.cpp`) next to its own sources and links the engine.
 
 ### Verification
 
-No test framework (the user decided a suite isn't needed). Smoke commands: run the executable with a flag; the exit code is the result (0 = pass). Run from `editor/` (`..\bin\Debug-windows-x86_64\wiwa_editor\wiwa_editor.exe --scene-smoke`). **A smoke check is only trusted if it was seen to fail under a negative control.** After editing a shader, run `--render-smoke 100 --api=d3d11` before `--render-test`.
+No test framework (the user decided a suite isn't needed). Smoke commands: run `wiwa_tests` with a flag; the exit code is the result (0 = pass). Run from `editor/` (`..\bin\Debug-windows-x86_64\wiwa_tests\wiwa_tests.exe --scene-smoke`, also copied to `editor\wiwa_tests.exe` by a build); with no flag it says it needs one and exits 1. **A smoke check is only trusted if it was seen to fail under a negative control.** After editing a shader, run `--render-smoke 100 --api=d3d11` before `--render-test`.
+
+The test sources are in `tests/src/<area>/` (`*_smoke_test.cpp`, `anim_*_checks.cpp`, `demo_smoke.*`, `vfx_editor_smoke.*`, `render/*_checks.cpp`). The headless smokes run on a thread from `tests/src/test_app.cpp` (an `Editor` subclass, `editor/src/editor_app.h`). The panel, play, demo and VFX smokes are driven per frame by `EditorSmokeDriver` through `EditorTestSetup::OnFrame` (`editor_module.h`), which also gives the panel smokes scratch settings files so they never touch the project's. `--render-test` runs the checks of `tests/src/render` through `set_render_check_runner` (`render_module.h`) on the render thread. `--render-smoke` is the render module's own and `--scene-smoke-load` the game's: they check the real executables and stay in the engine and the game.
 
 | Flag | Where | Checks |
 | --- | --- | --- |
-| `--asset-smoke` | editor | import, pack and load round trip, GUID stability, materials, shaders, build settings |
-| `--scene-smoke` | editor | scene save, cook, load, prefab overrides, settings round trips |
-| `--script-smoke` | editor | Lua runtime, play mode state machine, scene clone, LuaLS stubs |
-| `--ui-smoke` / `--ui-editor-smoke` | editor | game UI (files, layout, interaction, edit model) / UI Editor panel for 130 frames |
-| `--physics-smoke` / `--physics-panel-smoke` | editor | Jolt behaviour, queries, dispatch, repeatability / Physics panel for 130 frames |
-| `--input-smoke` / `--input-panel-smoke` | editor | input, actions, rebinding, `.winput`, Lua API / Input panel for 130 frames |
-| `--audio-smoke` / `--audio-panel-smoke` | editor | audio module on the Null backend, soundbank asset and metadata, emitters and play-mode sync, settings, Lua API, event browser model, audition (and the Wwise backend in a `WWISESDK` build, with banks in `editor/assets/audio`) / Audio panel for 130 frames |
-| `--ai-smoke` / `--ai-panel-smoke` | editor | behaviour tree format and validator, node semantics, blackboard, MoveTo on a baked navmesh, controllers, Lua leaves and the `AI` API, perception, the edit model, gizmo shapes / the tree editor in the Asset Editor for 120 frames. The editor exe often crashes at shutdown: read the log line |
-| `--nav-smoke` / `--nav-panel-smoke` | editor | `.wnav` format, components and settings, Recast bake, Detour queries, crowd agents, Lua API and arrival hooks, the bake model (worker, stale check, cancel), overlay shapes, path tool / Navigation panel for 130 frames. The editor exe often crashes at shutdown: read the log line, not the exit code |
-| `--anim-smoke` / `--anim-panel-smoke` | editor | skeleton import, pose math and nodes, Animator module, sockets, extraction, Lua API, animation graphs (file, state machine, blend spaces, layers, edit model) / Animation panel for 130 frames and the Graph editor on the demo warrior's graph |
-| `--play-smoke` / `--demo-smoke` | editor | play mode / the demo scene end to end |
-| `--render-test` | any | GPU pixel checks in `engine/src/renderer/test/*_checks.cpp`, run on the render thread |
-| `--render-smoke <frames>` | any | render N frames then exit (1 if a validation message or error was logged) |
+| `--asset-smoke` | tests | import, pack and load round trip, GUID stability, materials, shaders, build settings |
+| `--scene-smoke` | tests | scene save, cook, load, prefab overrides, settings round trips |
+| `--script-smoke` | tests | Lua runtime, play mode state machine, scene clone, LuaLS stubs |
+| `--ui-smoke` / `--ui-editor-smoke` | tests | game UI (files, layout, interaction, edit model) / UI Editor panel for 130 frames |
+| `--physics-smoke` / `--physics-panel-smoke` | tests | Jolt behaviour, queries, dispatch, repeatability / Physics panel for 130 frames |
+| `--input-smoke` / `--input-panel-smoke` | tests | input, actions, rebinding, `.winput`, Lua API / Input panel for 130 frames |
+| `--audio-smoke` / `--audio-panel-smoke` | tests | audio module on the Null backend, soundbank asset and metadata, emitters and play-mode sync, settings, Lua API, event browser model, audition (and the Wwise backend in a `WWISESDK` build, with banks in `editor/assets/audio`) / Audio panel for 130 frames |
+| `--ai-smoke` / `--ai-panel-smoke` | tests | behaviour tree format and validator, node semantics, blackboard, MoveTo on a baked navmesh, controllers, Lua leaves and the `AI` API, perception, the edit model, gizmo shapes / the tree editor in the Asset Editor for 120 frames. The tests exe often crashes at shutdown: read the log line |
+| `--nav-smoke` / `--nav-panel-smoke` | tests | `.wnav` format, components and settings, Recast bake, Detour queries, crowd agents, Lua API and arrival hooks, the bake model (worker, stale check, cancel), overlay shapes, path tool / Navigation panel for 130 frames. The tests exe often crashes at shutdown: read the log line, not the exit code |
+| `--anim-smoke` / `--anim-panel-smoke` | tests | skeleton import, pose math and nodes, Animator module, sockets, extraction, Lua API, animation graphs (file, state machine, blend spaces, layers, edit model) / Animation panel for 130 frames and the Graph editor on the demo warrior's graph |
+| `--play-smoke` / `--demo-smoke` | tests | play mode / the demo scene end to end |
+| `--render-test` | tests | GPU pixel checks in `tests/src/render/*_checks.cpp`, run on the render thread |
+| `--render-smoke <frames>` | any (engine) | render N frames then exit (1 if a validation message or error was logged) |
 | `--scene-smoke-load` | game | load the `--scene` (or the pak's default scene) and quit |
 
 Other flags: `--nav-bake <file>` (editor, with `--scene`: bakes the scene's first navmesh volume to the file), `--debug-draw` (game: a game starts with debug draw off), `--scene <path>`, `--pack <outdir>`, `--api=vulkan|d3d11|d3d12` (default Vulkan, no silent fallback), `--gpu-validation`, `--no-copy-queue`. Panel smokes run with ImGui asserts on.
@@ -78,5 +80,5 @@ Renderer in one line: the render thread owns all GPU state and a GUID-keyed `Gpu
 - Log with `WI_LOG` and its area variants (`WI_RENDER_LOG`, `WI_PHYSICS_LOG`, `WI_ASSET_LOG`...), never `std::cout`/`printf`.
 - `near` and `far` are Windows macros: don't use them as identifiers.
 - Premake only (no CMake). Third-party code is vendored under `engine/vendor/`; don't edit it except the patched NVRHI (rendering.md). The workspace `premake5.lua` still lists some stale `Wiwa/vendor/...` paths from an older project.
-- Every new feature must be showcased in `editor/assets/scenes/demo.wscene` and covered by `--demo-smoke`.
+- Every new feature must be showcased in `editor/assets/scenes/demo.wscene` and covered by `--demo-smoke` (`tests/src/play/demo_smoke.cpp`).
 - `docs/superpowers/specs/` is committed; `docs/superpowers/plans/` and `PROMPT.md` are git-ignored and never committed. Plans are scratch and may be stale.

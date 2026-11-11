@@ -32,10 +32,22 @@
 #include "passes/sky_pass.h"
 #include "shader_library.h"
 #include "render_world.h"
-#include "test/render_test.h"
 #include "window.h"
 
 #define WI_RENDER_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
+
+namespace wiwa
+{
+	namespace
+	{
+		RenderCheckRunner g_RenderCheckRunner{};
+	}
+
+	void set_render_check_runner(RenderCheckRunner runner)
+	{
+		g_RenderCheckRunner = std::move(runner);
+	}
+}
 
 namespace
 {
@@ -1037,7 +1049,14 @@ namespace wiwa
 			return;
 		}
 
-		const bool passed = run_render_checks(world) && m_Renderer->are_passes_ready() && get_error_message_count() == 0;
+		if (!g_RenderCheckRunner)
+		{
+			WI_RENDER_LOG(Error, "--render-test needs the checks of wiwa_tests: run it from wiwa_tests.exe");
+			m_RenderTestResult = 2;
+			return;
+		}
+
+		const bool passed = g_RenderCheckRunner(world) && m_Renderer->are_passes_ready() && get_error_message_count() == 0;
 		if (passed)
 		{
 			WI_RENDER_LOG(Info, "Render test passed ({0})", graphics_api_name(m_Description.Api));

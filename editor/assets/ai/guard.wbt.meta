@@ -1,7 +1,7 @@
 {
   "guid": "679c8ce15ad6585ca24b83a7dff4a0ea",
-  "importer": "BehaviorTreeImporter",
-  "version": 1,
   "importSettings": {},
-  "subAssets": {}
+  "importer": "BehaviorTreeImporter",
+  "subAssets": {},
+  "version": 1
 }
