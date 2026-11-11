@@ -68,3 +68,7 @@ Only `project.wproject` (under `PROJECT_SETTINGS_GUID`), `physics.wsettings` and
 A missing or unreadable file gives defaults, logged once.
 
 - **Dropped references.** An importer keeps only the references that exist (`ImportContext::asset_exists`). The ones it dropped are stored as `unresolved` in the import cache; a file is cooked again once one of them exists (`AssetDatabase::refresh_unresolved`, run at the end of a scan and after `reimport`). Without this a scene cooked before its HUD panel was known (imports run in parallel) kept a dependency list without it, and the pack shipped without the panel.
+
+## NavMesh
+
+`AssetType::NavMesh` (`.wnav`, baked by the editor, see [navigation.md](navigation.md)): `NavMeshImporter` validates the file and cooks the `NavMeshData`; a corrupt file keeps the previous cook. The packager also packs `nav.wsettings` (area costs, key `NAV_SETTINGS_GUID`) like the audio settings, and reaches the `.wnav` through the scene's `NavMeshVolume.NavMesh` reference.

@@ -43,3 +43,7 @@ See editor.md (Play runs on a scene clone; `ScriptingModule::update` is gated on
 ## Settings and prefs
 
 `bind_settings.cpp`: `settings.graphics.get/set` (RenderQuality via `RenderModule::set_quality`, applied on the render thread and saved to `render_quality.json`), `settings.scene.get/set` (bloom, ao, motion_blur, exposure_compensation of the active scene through `Scene::set_settings`, not saved) and `prefs.get/set/save` (`UserPrefs`, a flat bool/number/string map in `user_prefs.json`, main thread). Unknown keys and wrong types are Lua errors that name the key. Covered by `check_settings_api` in `--script-smoke`.
+
+## Nav
+
+`bind_nav.cpp` binds the `Nav` table and the `NavAgent` handle ([navigation.md](navigation.md); user docs in `docs/scripting.md`). `ScriptInstances` registers a `NavModule` listener while it runs and delivers `on_nav_arrived` / `on_nav_failed` to the entity's scripts at the start of the next update. The scripting state has no sol2 safety defines, so the Nav bindings validate their arguments (`vec3_arg`, `number_arg`) and raise Lua errors; a binding that takes a usertype by reference without checking crashes on a number.

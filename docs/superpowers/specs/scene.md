@@ -54,3 +54,7 @@ Replace keeps rendering the old scene until the new one is Ready, then swaps in 
 ## Animation components
 
 `expand_prefab` adds an `Animator` (skeleton, the model's clips, the first clip) to the root of an instance of a model that has animations, unless the scene's record of the root already has one, and a `SkinBinding` to every node with a skeleton. Clones of a scene copy them like any component; the runtime state (`AnimatorInstance`) is not copied: the play-mode clone starts with fresh instances (animation.md).
+
+## Navigation components
+
+`NavMeshVolume`, `NavAreaTag` and `NavAgent` are ordinary reflected components (see [navigation.md](navigation.md)). Masks are `i32`; the baked mesh is an `AssetRef` (`AssetType::NavMesh`); the walking state of an agent lives in `NavModule`, not in the component, so a clone starts with idle agents.

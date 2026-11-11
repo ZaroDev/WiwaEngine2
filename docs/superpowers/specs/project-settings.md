@@ -43,3 +43,7 @@ Traps:
 - The Physics and Input panels and the Viewport do not own these values any more; they share the section with the Settings page, so only one object writes each file. Keep `PhysicsPanel`/`InputPanel`'s forwarding methods: the smokes call them.
 - `EditorSection` saves when the mouse is let go (`flush`), so a slider drag writes once. Call it every frame from every widget that edits it.
 - The World panel keeps a one-line hint to Settings where the Quality section used to be.
+
+## Navigation settings
+
+`nav.wsettings` (editor working directory, JSON `areaCost`: area name to cost, each at least 1) is the project's walking costs. It is edited in the Navigation panel (`NavSection`, saved at once, applied to `NavModule`), packed with the game, and read by `NavModule::init` there. See [navigation.md](navigation.md).

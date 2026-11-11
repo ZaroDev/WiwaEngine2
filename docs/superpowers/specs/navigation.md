@@ -1,0 +1,65 @@
+# Navigation
+
+Navigation meshes baked in the editor with Recast, queried at run time with Detour, agents steered by DetourCrowd. Sub-project 1 of the AI work; behaviour trees (`.wbt`) are not built yet and will use `NavAgent` (destination, state, arrival) for their MoveTo.
+
+## Shape
+
+- **Bake (editor only):** `editor/src/asset_pipeline/nav_bake.*` (Recast, plain-data in and out), `nav_geometry.*` (scene to triangles). Writes a `.wnav`.
+- **Runtime (engine):** `engine/src/nav/`. `NavData` (a Detour mesh made from the asset), `NavQuery`, `NavAgents` (a DetourCrowd over the scene's `NavAgent` components), `NavModule` (owns one world: mesh, query, agents), `NavMeshView` (the polygons as plain data), `nav_project_settings.*` (area costs).
+- **Containment:** `dt*` types stay inside `engine/src/nav/` (`nav_data_impl.h` is the only header that includes Detour, for that folder's `.cpp` files). `rc*` stays in `editor/`. Listed exception: `nav_bake.cpp` calls `dtCreateNavMeshData`, `dtFree` and `DT_VERTS_PER_POLYGON`, because building the tile is the last step of a bake; the engine never builds tiles. Vendored sources: `engine/vendor/recastnavigation` (version in `VERSION.txt`, not edited; the engine links Detour and DetourCrowd, the editor Recast).
+- **Threads:** main thread only (scene, ECS, Lua). `NavModule` has priority 5: after the scripts (a destination set this frame is steered in it), before the animation. Nothing on the render or physics thread may call it. A bake runs on its own worker from a snapshot taken on the main thread.
+
+## The asset
+
+`AssetType::NavMesh`, `.wnav` (`nav/nav_mesh_asset.*`): magic `WNAV`, version, the build settings, the **input hash**, the tile grid (origin, tile size, max tiles, max polygons per tile) and the Detour tile blobs. The file is the archived `NavMeshData` itself; `NavMeshImporter` validates and cooks it. A truncated or wrong-magic file is refused with a reason. Detour checks each tile's header, not every offset inside it: the file is as trusted as the editor that wrote it.
+
+The input hash (FNV-1a over geometry, areas, bounds and settings) is how the editor knows a bake is stale. The bake is deterministic: the same input gives the same bytes.
+
+## Components and settings
+
+`NavMeshVolume` (a box of `Size` around the entity, the baked `NavMesh` asset, the Recast settings flat, `LayerMask`, `Enabled`; `build()` / `set_build()` convert to `NavBuildSettings`), `NavAreaTag` (the area of an entity's meshes; the nearest ancestor's if the entity has none), `NavAgent` (speed, acceleration, radius, height, stopping distance, avoidance quality, separation, `AreaMask`, `AutoRepath`, `DriveTransform`; the state of a walk is not a field). Masks are `i32` bit sets (`-1` all) because fields have no `u32`. `NavAreaTag` is the spec's "NavArea": `NavArea` is the enum.
+
+Areas: `NotWalkable 0, Walkable 1, Mud 2, Water 3, Custom0..3 4..7`. The polygon flag of an area is `1 << id`, so an agent's area mask and the cost table share the index. Costs live in `nav.wsettings` (JSON, `editor/`): `{"areaCost": {"Mud": 8.0}}`, each at least 1 (a lower cost breaks Detour's heuristic). The packager puts them in the pack (`NAV_SETTINGS_GUID`), `NavModule::init` reads them in a game, the editor's `NavSection` applies them (at start and on every change; a world already running keeps its costs until the next play).
+
+## Bake
+
+- `capture_nav_snapshot` (main thread): the volume's box, its settings, and per `MeshRenderer` the mesh reference, world matrix and area. `build_nav_input` (worker): loads the meshes through an `INavMeshSource` (`AssetNavMeshSource` waits for **its own** loads only, never `wait_idle`) and makes world-space triangles, skipping triangles outside the box. Smokes inject a memory source.
+- **What counts as ground:** render geometry (physics shapes are not used). An entity with a `Collider` contributes only if its `Collider::Layer` is a bit of `LayerMask`; a mesh without one always does (there is no render layer). **The meshes of a `NavAgent` and of its descendants never count**: they stand on the ground. `NavAreaTag NotWalkable` geometry still rasterizes, as an obstacle.
+- `bake_navmesh` is the standard Recast tile pipeline, tile by tile (`TileSize` cells, border of radius + 3), watershed regions, Detour tile data with poly flags `1 << area`. It checks the cancel flag between tiles and stages. It refuses: no triangles, an index out of range, a vertex that is not finite, an empty or inverted box, a setting out of range, more than 4096 tiles, nothing walkable, a tile with more polygons than `MaxPolys` (use a smaller `TileSize`).
+- `NavEditModel` (no ImGui) runs the worker and writes the `.wnav` through a temp file and a rename only when the bake succeeds: a failed or cancelled bake leaves the earlier file alone.
+- Headless: `wiwa_editor --scene <scene> --nav-bake <file>` bakes the first enabled volume of the scene (lowest entity id) to `<file>`. It waits for the scene to load; the result is the `Nav bake done` / `Nav bake FAILED` log line (see the exit code trap).
+
+## Runtime
+
+- `NavModule::start_world(scene)` picks the first enabled `NavMeshVolume` that has a baked asset (lowest entity id; more are counted in `ignored_volumes()` and warned about). The asset loads in the background: queries fail cleanly and `set_destination` is **queued** until it is there. No volume, or none baked, logs one warning and the world has no mesh. With auto start (the default) the module follows the active scene while the game clock plays and stops when another scene replaces it, so Editor Play (a clone) gets its own world and Stop discards it. `start_world_with_mesh` is for checks.
+- `NavQuery`: `find_path` (corners are the real turning points, `Partial` when the target is not reachable, ends at the nearest reachable point), `nearest_point`, `raycast` (true when the line leaves the mesh), `random_point_around` (Detour picks inside whole polygons; points outside the radius are pulled back and re-snapped), `is_walkable`. Non-finite or huge inputs give failed / nothing, never a crash. One query object per thread.
+- `NavAgents`: agents are added when a `NavAgent` is seen (or retried every second if the mesh was not near), removed with the component or entity, parameters re-applied when the component changes. 128 agents at most. One crowd filter slot per distinct area mask. After the crowd step the transform follows (`DriveTransform`; a parented entity gets the local values that put it at the crowd's world position, the entity faces -Z along its velocity). A route that stops short is walked to its end and then the state is `NoPath`. `Arrived` within `max(StoppingDistance, 0.1)`. An arrived or stopped agent still brakes for a few frames.
+- Events: `NavModule::add_listener` is told on `Arrived` / `NoPath`; scripts get them (below).
+
+## Lua
+
+`Nav` table: `find_path`, `nearest_point`, `raycast`, `random_point`, `has_navmesh`, `agent(entity)` and the agent handle (`set_destination`, `stop`, `warp`, `state`, `remaining_distance`, `velocity`). Entity scripts get `on_nav_arrived(self)` / `on_nav_failed(self)` at the start of the next update (`ScriptInstances` keeps a listener while it runs; the crowd runs after the scripts). User docs: `docs/scripting.md`; stubs: `editor/engine/lua/wiwa.lua`.
+
+## Editor
+
+- **Navigation panel** (`panels/navigation_panel.*`, Window menu): volumes list, Create volume, preset (Humanoid, Small, Large), Bake / Cancel with progress and log, the numbers of the last bake, **Check for changes** (loads the stored mesh and compares the input hash; a button because it loads meshes on the main thread), overlay switches, path test, walking costs. Baking is for the edit scene, not while it plays. After a bake the file is imported (`AssetDatabase::ensure_imported`, so it has a guid) and put in the volume with `SceneEditor::set_field` (undoable, the scene is dirty). Files go to `<assets>/navmeshes/<name>_<id8>.wnav`.
+- **Viewport:** `ViewportPanel::set_overlay_hook` draws the volumes as boxes (the current one highlighted) and the baked mesh from `NavMeshView` (filled polygons by area colour, edges, bright border edges), lifted 5 cm; `set_ray_click_hook` gives a tool the click as a world ray (the path test: click sets the start, Shift+click the end, the route is the query's). The ray math (ndc y up, depth 0 at the near plane) is not covered by a smoke; `NavPathTool::pick` is.
+- **No draggable face handles** on the volume (planned, not built): resize it in the Inspector, move it with the transform gizmo.
+
+## Demo
+
+The Navigation station at x = -30 (`add_navigation` in `scripts/gen_demo_scene.py`): a wall with open ways round both ends, mud over the west way (cost 8 in `editor/nav.wsettings`), three agents with `nav_patrol.lua` walking north to south and back. The `.wnav` is baked by the editor (`--nav-bake`, the command is printed by the generator) at `editor/assets/navmeshes/`, its `.meta` fixes the guid the scene's volume refers to. `python scripts/gen_demo_scene.py --nav-only` adds the station to the written scene without downloading or touching other `.meta` files (the full run rewrites ignored `.meta` files: do not run it casually). `--demo-smoke` checks the three agents come within 1.2 m of their goals (the goals in `demo_smoke.cpp` mirror `NAV_GOALS`).
+
+## Verification
+
+`--nav-smoke` (editor): `.wnav` format and corruption, components and clones, settings, bake (deterministic, empty, cancel, areas), queries (path round a wall, straight when clear, blocked, area cost and mask, invalid input), agents (arrive, blocked, destroyed, clone/Stop cleanup, parented, `DriveTransform` off, no volume, two volumes), Lua and the arrival hooks, the edit model (worker bake, stale check, cancel, destroy while running, agent geometry excluded), overlay shapes, picking, path tool. `--nav-panel-smoke`: the panel for 130 frames with ImGui asserts, a volume made through it. Every check was seen to fail under a negative control when written. Panel smokes force the panel open: the saved ImGui layout of an earlier run can close it.
+
+## Traps
+
+- **The editor exe crashes at shutdown** on many runs (`-1073741819`, after `Engine - Shutdown` starts), in smokes that have nothing to do with navigation too. Read the `passed` / `FAILED` log line, not the exit code.
+- The scripting state has no sol2 safety defines: a number where a usertype argument goes is read unchecked and crashes. The Nav bindings check every argument themselves (`vec3_arg`); other bindings do not.
+- `entt` views iterate newest first: "first volume" is picked by lowest entity id on purpose.
+- `near` and `far` are Windows macros (they bit a smoke).
+- Static navmesh only: no dynamic obstacles, off-mesh links, tile cache or runtime rebuild. Changing the scene needs a rebake (the panel flags it on request).
+- The bake wants a closed, upward-facing floor: a plane facing down gives nothing walkable. Triangle winding is counter-clockwise seen from the walkable side; a mirrored transform is turned around.
+- Area ids are written to files: append, never reorder. The navmesh asset is not rebuilt by the cook.
