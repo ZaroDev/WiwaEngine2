@@ -2,6 +2,9 @@
 #include "nav_geometry.h"
 
 #include <algorithm>
+#include <chrono>
+#include <limits>
+#include <thread>
 
 #include <scene/components.h>
 
@@ -30,9 +33,29 @@ namespace wiwa
 		}
 	}
 
-	NavBakeInput gather_nav_input(Scene& scene, entt::entity volume, AssetManager& assets, std::string* error)
+	const MeshData* AssetNavMeshSource::get(const AssetRef& ref, const std::atomic<bool>* cancel)
 	{
-		NavBakeInput input;
+		auto it = m_Handles.find(ref.resolved());
+		if (it == m_Handles.end())
+		{
+			it = m_Handles.emplace(ref.resolved(), m_Assets.load<MeshData>(ref)).first;
+		}
+
+		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+		while (it->second.state() == LoadState::Loading)
+		{
+			if ((cancel != nullptr && cancel->load()) || std::chrono::steady_clock::now() > deadline)
+			{
+				return nullptr;
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+		return it->second.get();
+	}
+
+	NavSnapshot capture_nav_snapshot(Scene& scene, entt::entity volume, std::string* error)
+	{
+		NavSnapshot snapshot;
 		entt::registry& registry = scene.registry();
 		if (!registry.valid(volume) || !registry.all_of<NavMeshVolume>(volume))
 		{
@@ -40,24 +63,17 @@ namespace wiwa
 			{
 				*error = "the entity is not a NavMeshVolume";
 			}
-			return input;
+			return snapshot;
 		}
 
 		scene.update_world_transforms();
 		const NavMeshVolume& settings = registry.get<NavMeshVolume>(volume);
 		const WorldTransform* volumeWorld = registry.try_get<WorldTransform>(volume);
 		const glm::vec3 centre = volumeWorld != nullptr ? glm::vec3(volumeWorld->Matrix[3]) : glm::vec3(0.0f);
-		input.BoundsMin = centre - settings.Size * 0.5f;
-		input.BoundsMax = centre + settings.Size * 0.5f;
-		input.Build = settings.build();
+		snapshot.BoundsMin = centre - settings.Size * 0.5f;
+		snapshot.BoundsMax = centre + settings.Size * 0.5f;
+		snapshot.Build = settings.build();
 
-		struct Pending
-		{
-			entt::entity Entity = entt::null;
-			glm::mat4 World{ 1.0f };
-			Handle<MeshData> Mesh{};
-		};
-		std::vector<Pending> pending;
 		for (auto [entity, renderer, world] : registry.view<MeshRenderer, WorldTransform>().each())
 		{
 			if (!renderer.Mesh.valid())
@@ -72,16 +88,31 @@ namespace wiwa
 					continue;
 				}
 			}
-			pending.push_back({ entity, world.Matrix, assets.load<MeshData>(renderer.Mesh) });
+			snapshot.Items.push_back({ renderer.Mesh, world.Matrix, area_of(registry, entity) });
 		}
-		assets.wait_idle();
+		return snapshot;
+	}
 
-		for (const Pending& item : pending)
+	NavBakeInput build_nav_input(const NavSnapshot& snapshot, INavMeshSource& meshes, const std::atomic<bool>* cancel, std::string* error)
+	{
+		NavBakeInput input;
+		input.BoundsMin = snapshot.BoundsMin;
+		input.BoundsMax = snapshot.BoundsMax;
+		input.Build = snapshot.Build;
+
+		for (const NavSnapshotItem& item : snapshot.Items)
 		{
-			const MeshData* mesh = item.Mesh.get();
+			if (cancel != nullptr && cancel->load())
+			{
+				break;
+			}
+			const MeshData* mesh = meshes.get(item.Mesh, cancel);
 			if (mesh == nullptr)
 			{
-				WI_NAV_LOG(Warning, "Navigation: a mesh did not load and is left out of the bake");
+				if (cancel == nullptr || !cancel->load())
+				{
+					WI_NAV_LOG(Warning, "Navigation: a mesh did not load and is left out of the bake");
+				}
 				continue;
 			}
 
@@ -107,7 +138,6 @@ namespace wiwa
 			}
 
 			const bool mirrored = glm::determinant(glm::mat3(item.World)) < 0.0f;
-			const u8 area = area_of(registry, item.Entity);
 			for (const MeshPrimitive& primitive : mesh->Primitives)
 			{
 				if (static_cast<size_t>(primitive.FirstIndex) + primitive.IndexCount > mesh->Indices.size())
@@ -133,7 +163,7 @@ namespace wiwa
 					input.Indices.push_back(base + static_cast<u32>(a));
 					input.Indices.push_back(base + static_cast<u32>(b));
 					input.Indices.push_back(base + static_cast<u32>(c));
-					input.TriangleAreas.push_back(area);
+					input.TriangleAreas.push_back(item.Area);
 				}
 			}
 		}
@@ -143,5 +173,12 @@ namespace wiwa
 			*error = "no geometry touches the volume";
 		}
 		return input;
+	}
+
+	NavBakeInput gather_nav_input(Scene& scene, entt::entity volume, AssetManager& assets, std::string* error)
+	{
+		const NavSnapshot snapshot = capture_nav_snapshot(scene, volume, error);
+		AssetNavMeshSource source(assets);
+		return build_nav_input(snapshot, source, nullptr, error);
 	}
 }

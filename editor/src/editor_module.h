@@ -136,6 +136,9 @@ private:
 	class AudioPanel* m_AudioPanel = nullptr;         // owned by m_Panels
 	bool m_AudioPanelSmoke = false;                   // --audio-panel-smoke: draw the Audio panel for a while, audition an event through it, check it stops
 	bool m_AudioPanelAuditioned = false;
+	class NavigationPanel* m_NavPanel = nullptr;      // owned by m_Panels
+	entt::entity m_NavPanelVolume{ entt::null };
+	bool m_NavPanelSmoke = false;                     // --nav-panel-smoke: draw the Navigation panel for a while, make a volume through it, check it
 	Scope<wiwa::SkeletonIndex> m_SkeletonIndex{};   // which meshes and clips name each skeleton, kept up to date in the background
 	Scope<wiwa::EditorState> m_EditorState{};       // Library/editor_state.json
 	Scope<wiwa::ThumbnailCache> m_Thumbnails{};     // the thumbnails of the Asset Browser

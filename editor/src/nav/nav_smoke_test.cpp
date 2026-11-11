@@ -2,6 +2,9 @@
 #include "nav_smoke_test.h"
 
 #include <atomic>
+#include <chrono>
+#include <map>
+#include <thread>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -25,6 +28,8 @@
 #include <scene/scene_components.h>
 #include "../asset_pipeline/lua_stubs.h"
 #include "../asset_pipeline/nav_bake.h"
+#include "../asset_pipeline/nav_geometry.h"
+#include "nav_edit_model.h"
 #include "../asset_pipeline/nav_settings_file.h"
 
 namespace wiwa
@@ -807,6 +812,163 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// A mesh made of the triangles of a bake input (the fixtures), in world coordinates.
+		MeshData mesh_of(const NavBakeInput& input)
+		{
+			MeshData mesh;
+			mesh.Name = "fixture";
+			glm::vec3 lo(std::numeric_limits<float>::max());
+			glm::vec3 hi(std::numeric_limits<float>::lowest());
+			for (const glm::vec3& vertex : input.Vertices)
+			{
+				MeshVertex out;
+				out.Position[0] = vertex.x;
+				out.Position[1] = vertex.y;
+				out.Position[2] = vertex.z;
+				mesh.Vertices.push_back(out);
+				lo = glm::min(lo, vertex);
+				hi = glm::max(hi, vertex);
+			}
+			mesh.Indices = input.Indices;
+			MeshPrimitive primitive;
+			primitive.IndexCount = static_cast<u32>(input.Indices.size());
+			primitive.VertexCount = static_cast<u32>(input.Vertices.size());
+			mesh.Primitives.push_back(primitive);
+			mesh.BoundsMin = lo;
+			mesh.BoundsMax = hi;
+			return mesh;
+		}
+
+		// Meshes from memory; with Gate set a get() waits until it is released (or the bake is cancelled).
+		class MemoryMeshes final : public INavMeshSource
+		{
+		public:
+			AssetRef add(const NavBakeInput& input)
+			{
+				const AssetRef ref{ AssetGuid::generate(), 0 };
+				m_Meshes[ref.Guid] = mesh_of(input);
+				return ref;
+			}
+
+			void set(const AssetRef& ref, const NavBakeInput& input) { m_Meshes[ref.Guid] = mesh_of(input); }
+
+			virtual const MeshData* get(const AssetRef& ref, const std::atomic<bool>* cancel) override
+			{
+				while (Gate.load() && !(cancel != nullptr && cancel->load()))
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
+				if (cancel != nullptr && cancel->load())
+				{
+					return nullptr;
+				}
+				const auto it = m_Meshes.find(ref.Guid);
+				return it != m_Meshes.end() ? &it->second : nullptr;
+			}
+
+			std::atomic<bool> Gate{ false };
+
+		private:
+			std::map<AssetGuid, MeshData> m_Meshes{};
+		};
+
+		bool wait_for_bake(NavEditModel& model)
+		{
+			for (int i = 0; i < 20000 && model.state() == NavEditModel::BakeState::Running; i++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+			model.poll();
+			return model.state() != NavEditModel::BakeState::Running;
+		}
+
+		std::vector<char> read_all(const std::filesystem::path& file)
+		{
+			std::ifstream stream(file, std::ios::binary);
+			return std::vector<char>((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+		}
+
+		void edit_model(Check& check)
+		{
+			// The floor and the wall are two entities with meshes; the volume is a box round them.
+			NavBakeInput floorOnly;
+			add_floor(floorOnly, -10, 10, -10, 10, NavArea::Walkable);
+			NavBakeInput wallOnly;
+			add_box(wallOnly, { -0.5f, 0.0f, -3.0f }, { 0.5f, 2.0f, 3.0f });
+
+			MemoryMeshes meshes;
+			const AssetRef floorMesh = meshes.add(floorOnly);
+			const AssetRef wallMesh = meshes.add(wallOnly);
+
+			Ref<Scene> scene = CreateRef<Scene>();
+			const entt::entity floor = scene->create("Floor");
+			scene->registry().emplace<MeshRenderer>(floor).Mesh = floorMesh;
+			const entt::entity wall = scene->create("Wall");
+			scene->registry().emplace<MeshRenderer>(wall).Mesh = wallMesh;
+			const entt::entity volume = scene->create("Volume");
+			scene->registry().get<Transform>(volume).Position = glm::vec3(0.0f, 1.5f, 0.0f);
+			NavMeshVolume& settings = scene->registry().emplace<NavMeshVolume>(volume);
+			settings.Size = glm::vec3(20.0f, 5.0f, 20.0f);
+			settings.CellSize = 0.25f;
+
+			const std::filesystem::path file = std::filesystem::temp_directory_path() / "wiwa_nav_model.wnav";
+			std::error_code remove;
+			std::filesystem::remove(file, remove);
+
+			NavEditModel model(meshes);
+			check(!model.start_bake(*scene, floor, file) && !model.error().empty(), "model_not_a_volume: an entity that is not a volume cannot be baked");
+
+			// A bake on the worker writes the file and reports.
+			check(model.start_bake(*scene, volume, file), "model_bake: a bake starts (" + model.error() + ")");
+			check(wait_for_bake(model) && model.state() == NavEditModel::BakeState::Done, "model_bake: it ends Done (" + model.error() + ")");
+			check(model.progress() == 1.0f && model.log().find("Baked") != std::string::npos && model.last().PolyCount > 0, "model_bake: progress, log and numbers are there");
+			NavMeshData stored;
+			std::string error;
+			const std::vector<char> first = read_all(file);
+			check(!first.empty() && nav_mesh_from_bytes(std::span<const std::byte>(reinterpret_cast<const std::byte*>(first.data()), first.size()), stored, error), "model_bake: the written file is a valid .wnav (" + error + ")");
+
+			const NavBakeResult direct = bake_navmesh(build_nav_input(capture_nav_snapshot(*scene, volume), meshes));
+			check(direct.Ok && stored == direct.Mesh, "model_bake: the worker bakes what a direct bake of the same scene gives");
+
+			// The file is not stale until the scene changes.
+			check(model.is_stale(*scene, volume, stored) == std::optional<bool>(false), "model_stale: a fresh bake is not stale");
+			scene->registry().get<Transform>(wall).Position = glm::vec3(0.0f, 0.0f, 2.0f);
+			check(model.is_stale(*scene, volume, stored) == std::optional<bool>(true), "model_stale: a moved wall makes the bake stale");
+			scene->registry().get<Transform>(wall).Position = glm::vec3(0.0f);
+			check(model.is_stale(*scene, volume, stored) == std::optional<bool>(false), "model_stale: putting it back makes it fresh again");
+			scene->registry().get<NavMeshVolume>(volume).AgentRadius = 0.5f;
+			check(model.is_stale(*scene, volume, stored) == std::optional<bool>(true), "model_stale: other settings make the bake stale");
+			scene->registry().get<NavMeshVolume>(volume).AgentRadius = 0.4f;
+
+			// A volume with nothing in it fails and leaves the file alone.
+			scene->registry().get<Transform>(volume).Position = glm::vec3(500.0f, 1.5f, 500.0f);
+			check(model.start_bake(*scene, volume, file) && wait_for_bake(model) && model.state() == NavEditModel::BakeState::Failed && !model.error().empty(), "model_failure_keeps_asset: a volume without geometry fails with a reason");
+			check(read_all(file) == first, "model_failure_keeps_asset: the file of the earlier bake is untouched");
+			scene->registry().get<Transform>(volume).Position = glm::vec3(0.0f, 1.5f, 0.0f);
+
+			// A bake that is cancelled while it waits for its meshes fails as cancelled and leaves the file alone.
+			meshes.Gate = true;
+			check(model.start_bake(*scene, volume, file), "model_cancel: a bake starts");
+			check(!model.start_bake(*scene, volume, file) && model.error().find("running") != std::string::npos, "model_cancel: a second bake is refused while one runs");
+			model.cancel();
+			check(wait_for_bake(model) && model.state() == NavEditModel::BakeState::Failed && model.error() == "cancelled", "model_cancel: a cancelled bake ends Failed with 'cancelled'");
+			check(read_all(file) == first, "model_cancel: the file is untouched");
+			meshes.Gate = false;
+
+			// The model can be destroyed while a bake runs.
+			{
+				NavEditModel other(meshes);
+				meshes.Gate = true;
+				other.start_bake(*scene, volume, file);
+			}
+			meshes.Gate = false;
+			check(read_all(file) == first, "model_destroyed_running: destroying the model during a bake stops it and leaves the file");
+			std::filesystem::remove(file, remove);
+		}
+	}
+
 	bool run_nav_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -819,6 +981,7 @@ namespace wiwa
 		queries(check);
 		agents(check);
 		lua_nav(check);
+		edit_model(check);
 
 		if (check.Failures == 0)
 		{

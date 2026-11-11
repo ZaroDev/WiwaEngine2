@@ -27,6 +27,10 @@
 #include <assets/native_anim_files.h>
 #include "editor_ui/history_panel.h"
 #include "settings/audio_section.h"
+#include "settings/nav_section.h"
+#include "panels/navigation_panel.h"
+#include <asset_pipeline/nav_settings_file.h>
+#include <nav/nav_module.h>
 #include "ui/ui_editor_panel.h"
 #include "ui/ui_smoke_test.h"
 
@@ -159,6 +163,7 @@ void EditorModule::init()
 		m_AnimPanelSmoke = m_AnimPanelSmoke || argument == "--anim-panel-smoke";
 		m_VfxEditorSmokeRequested = m_VfxEditorSmokeRequested || argument == "--vfx-editor-smoke";
 		m_AudioPanelSmoke = m_AudioPanelSmoke || argument == "--audio-panel-smoke";
+		m_NavPanelSmoke = m_NavPanelSmoke || argument == "--nav-panel-smoke";
 		if (argument == "--demo-smoke")
 		{
 			m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
@@ -189,6 +194,20 @@ void EditorModule::init()
 	m_AudioPanel = audioPanel.get();
 	audioPanel->set_open(m_AudioPanelSmoke); // closed until opened from the Window menu; the smoke check draws it
 	m_Panels.push_back(audioPanel);
+	{
+		// the smoke check changes the costs: it must not touch the project's nav.wsettings
+		const std::filesystem::path navFile = m_NavPanelSmoke ? std::filesystem::temp_directory_path() / "wiwa_nav_panel_smoke.wsettings" : std::filesystem::path(wiwa::NAV_SETTINGS_FILE);
+		if (m_NavPanelSmoke)
+		{
+			std::error_code removed;
+			std::filesystem::remove(navFile, removed);
+		}
+		wiwa::AssetPipelineModule* pipeline = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>();
+		Ref<NavigationPanel> navPanel = CreateRef<NavigationPanel>(*m_SceneEditor, pipeline->get_database(), *wiwa::Engine::get().get_module<wiwa::AssetManager>(), CreateRef<NavSection>(navFile, !m_NavPanelSmoke));
+		m_NavPanel = navPanel.get();
+		navPanel->set_open(m_NavPanelSmoke); // closed until opened from the Window menu; the smoke check draws it
+		m_Panels.push_back(navPanel);
+	}
 	Ref<AnimationPanel> animationPanel = CreateRef<AnimationPanel>(*m_SceneEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database(),
 		[this]() { return m_PlayMode->state() == wiwa::PlayState::Edit; });
 	m_AnimationPanel = animationPanel.get();
@@ -851,6 +870,30 @@ void EditorModule::update(float deltaTime)
 			const bool silent = audio != nullptr && audio->backend().playing_count() == 0 && !audio->auditioning();
 			const bool passed = m_AudioPanel->frames_drawn() >= 100 && audio != nullptr && audio->active_kind() == wiwa::AudioBackendKind::Null && m_AudioPanelAuditioned && silent;
 			WI_INFO("Editor", "Audio panel smoke test {0} (frames {1}, auditioned {2}, silent after stop {3})", passed ? "passed" : "FAILED", m_AudioPanel->frames_drawn(), m_AudioPanelAuditioned, silent);
+			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+		}
+	}
+
+	if (m_NavPanelSmoke && m_NavPanel != nullptr)
+	{
+		if (m_Frame == 5)
+		{
+			m_NavPanel->set_open(true); // the saved layout of an earlier run may have closed it
+		}
+		if (m_Frame == 10)
+		{
+			m_NavPanel->request_focus();
+		}
+		if (m_Frame == 20)
+		{
+			m_NavPanelVolume = m_NavPanel->create_volume();
+		}
+		if (m_Frame == 130)
+		{
+			const bool made = m_NavPanelVolume != entt::null && m_SceneEditor->scene().registry().valid(m_NavPanelVolume) && m_SceneEditor->scene().registry().all_of<wiwa::NavMeshVolume>(m_NavPanelVolume) && m_NavPanel->current_volume() == m_NavPanelVolume;
+			const bool passed = m_NavPanel->frames_drawn() >= 100 && made;
+			WI_INFO("Editor", "Nav panel smoke test {0} (frames {1}, volume made through the panel {2})", passed ? "passed" : "FAILED", m_NavPanel->frames_drawn(), made);
 			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
 			wiwa::Engine::get().request_quit();
 		}
