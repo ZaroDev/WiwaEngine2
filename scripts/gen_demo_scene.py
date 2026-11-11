@@ -48,7 +48,8 @@ _U64 = 0xFFFFFFFFFFFFFFFF
 
 
 def node_id(path):
-	"""The stable id of a prefab node (engine/src/scene/prefab_node_id.cpp compute_node_id): FNV-1a 64 of the path of names ("Street lamp/Head")."""
+	"""The stable id of a prefab node (engine/src/scene/prefab_node_id.cpp compute_node_id): FNV-1a 64 of the path of names ("Street lamp/Head"). Only for nodes
+	with unique names among their siblings (the engine adds "#n" to a repeated name and bumps a collision)."""
 	h = _FNV
 	for b in path.encode():
 		h = ((h ^ b) * _FNV_PRIME) & _U64

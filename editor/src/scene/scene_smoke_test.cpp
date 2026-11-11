@@ -764,7 +764,7 @@ namespace wiwa
 			known[cycleA.resolved()] = &a;
 			known[cycleB.resolved()] = &b;
 			const ExpandResult cycle = expand_prefab(make_instance(EntityGuid::generate(), cycleA), a, resolve);
-			check(cycle.Entities.size() <= 4 && !cycle.Warnings.empty(), "nested: a prefab that holds itself through another ends with a warning");
+			check(cycle.Entities.size() <= 4 && cycle.Warnings.size() == 1, "nested: a prefab that holds itself through another ends with one warning");
 
 			std::vector<AssetRef> chainRefs;
 			std::vector<PrefabData> chain(11);
@@ -781,6 +781,64 @@ namespace wiwa
 			}
 			const ExpandResult deep = expand_prefab(make_instance(EntityGuid::generate(), chainRefs[0]), chain[0], resolve);
 			check(deep.Entities.size() == 1 + 9 && deep.Warnings.size() == 1, "nested: the depth is capped at 8 levels of instances");
+
+			// Final review C1: a node three levels down has the id compose(outer, compose(middle, inner)), so an override recorded for it
+			// against the holder (compose(slot, blade)) still reaches it when the holder is itself nested in another prefab
+			PrefabData wrapper;
+			wrapper.Name = "wrapper";
+			const AssetRef wrapperHolderRef = holderRef;
+			wrapper.Nodes = { nested_node("Wrap", -1, wrapperHolderRef, { set_field_override(deepBlade, "Transform", "Position", FieldValue(glm::vec3(0, 6, 0))) }) };
+			assign_stable_ids(wrapper.Nodes);
+			const AssetRef wrapperRef{ AssetGuid::generate(), 0 };
+			known[wrapperRef.resolved()] = &wrapper;
+			const u64 wrapNode = wrapper.Nodes[0].StableId;
+			const EntityGuid wrapperRoot = EntityGuid::generate();
+			const u64 threeDeepBlade = compose_node_id(wrapNode, compose_node_id(slotNode, bladeNode));
+			const ExpandResult threeLevels = expand_prefab(make_instance(wrapperRoot, wrapperRef), wrapper, resolve);
+			check(threeLevels.Entities.size() == 1 + 1 + 2 + 2 && threeLevels.Warnings.empty()
+				&& position_of(find_entity(threeLevels.Entities, EntityGuid::derive(wrapperRoot, threeDeepBlade))) == glm::vec3(0, 6, 0), "nested: an override stored for a node two instances deep reaches it (ids are nested from the right)");
+			EntityRecord wrapperScene = make_instance(wrapperRoot, wrapperRef);
+			wrapperScene.Overrides.push_back(set_field_override(threeDeepBlade, "Transform", "Position", FieldValue(glm::vec3(0, 7, 0))));
+			check(position_of(find_entity(expand_prefab(wrapperScene, wrapper, resolve).Entities, EntityGuid::derive(wrapperRoot, threeDeepBlade))) == glm::vec3(0, 7, 0), "nested: a scene overrides a node three levels deep by its composite id");
+
+			// Final review I2/I3: a child that an instance's override adds is a node of the instance, with its own guid and id in each place
+			// the instance is used
+			PrefabOverride gem;
+			gem.Kind = OverrideKind::AddChild;
+			gem.NodeId = hiltNode;
+			gem.Child.Id = EntityGuid::generate();
+			gem.Child.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Gem")) } } });
+			PrefabData gemHolder;
+			gemHolder.Name = "gem_holder";
+			gemHolder.Nodes = { nested_node("Slot", -1, weaponRef, { gem }) };
+			assign_stable_ids(gemHolder.Nodes);
+			const AssetRef gemHolderRef{ AssetGuid::generate(), 0 };
+			known[gemHolderRef.resolved()] = &gemHolder;
+			PrefabData pair;
+			pair.Name = "pair";
+			pair.Nodes = { nested_node("Left", -1, gemHolderRef), nested_node("Right", -1, gemHolderRef) };
+			assign_stable_ids(pair.Nodes);
+			const ExpandResult pairs = expand_prefab(make_instance(EntityGuid::generate(), AssetRef{ AssetGuid::generate(), 0 }), pair, resolve);
+			std::unordered_set<EntityGuid> gemGuids;
+			std::unordered_set<u64> gemNodes;
+			for (size_t i = 0; i < pairs.Entities.size(); i++)
+			{
+				const ComponentRecord* gemName = find_component(pairs.Entities[i], "Name");
+				const FieldRecord* gemValue = gemName ? find_field(*gemName, "Value") : nullptr;
+				if (gemValue != nullptr && std::get<std::string>(gemValue->Value) == "Gem")
+				{
+					gemGuids.insert(pairs.Entities[i].Id);
+					gemNodes.insert(pairs.NodeIds[i]);
+				}
+			}
+			check(gemGuids.size() == 2 && gemNodes.size() == 2 && !gemNodes.contains(ADDED_CHILD_NODE), "nested: a child added by a nested instance's override has its own guid and node id in each instance of it");
+
+			// Final review I4: an edit of the inner prefab reaches the outer one
+			PrefabData longerWeapon = weapon;
+			longerWeapon.Nodes[1].Translation = glm::vec3(0, 2, 0);
+			known[weaponRef.resolved()] = &longerWeapon;
+			check(position_of(find_entity(expand_prefab(make_instance(twinId, twinRef), twin, resolve).Entities, EntityGuid::derive(twinId, compose_node_id(slotB, bladeNode)))) == glm::vec3(0, 2, 0), "nested: a change of the inner prefab shows in the expansion of the outer one");
+			known[weaponRef.resolved()] = &weapon;
 
 			const std::optional<FieldValue> value = prefab_value(holder, deepBlade, "Transform", "Position", resolve);
 			check(value && std::get<glm::vec3>(*value) == glm::vec3(0, 5, 0), "nested: prefab_value of a deep node includes the nested instance's overrides");
@@ -1622,6 +1680,8 @@ namespace wiwa
 			registry.get<Name>(group).Value = "Group";
 			const entt::entity inner = editor.add_prefab(*lampRef, group);
 			pump();
+			const entt::entity handle = editor.create_entity(inner); // an entity of the scene under the root of an instance
+			registry.get<Name>(handle).Value = "Handle";
 			check(inner != entt::null && editor.make_prefab(group, assets.folder()).empty(), "nested scene: an entity that holds a prefab instance can be made a prefab");
 			database.ensure_imported(assets.folder() / "Group.wprefab");
 			pump();
@@ -1632,7 +1692,7 @@ namespace wiwa
 			{
 				holdsInstance = holdsInstance || find_component(entity, "PrefabInstance") != nullptr;
 			}
-			check(written && written->size() == 2 && holdsInstance, "nested scene: the prefab file has the instance and not the nodes it generated");
+			check(written && written->size() == 3 && holdsInstance, "nested scene: the prefab file has the instance and the children the scene gave it, and not the nodes it generated");
 		}
 
 		void check_make_prefab(Check& check, AssetPipelineModule& pipeline)

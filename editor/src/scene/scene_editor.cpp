@@ -867,15 +867,16 @@ namespace wiwa
 				return "Only entities of the scene itself can become a prefab, not the ones a prefab made";
 			}
 			subtree.push_back(current);
-			if (registry.all_of<PrefabInstance>(current))
-			{
-				continue; // an instance goes into the prefab as the link and its overrides: its nodes are generated again from the prefab
-			}
 
+			// an instance goes into the prefab as the link and its overrides: the nodes it generated are made again from its prefab, only
+			// the entities the scene put under it are kept
 			std::vector<entt::entity> children;
 			for (entt::entity child = registry.get<Hierarchy>(current).FirstChild; child != entt::null; child = registry.get<Hierarchy>(child).NextSibling)
 			{
-				children.push_back(child);
+				if (!registry.all_of<PrefabChild>(child))
+				{
+					children.push_back(child);
+				}
 			}
 			stack.insert(stack.end(), children.rbegin(), children.rend());
 		}

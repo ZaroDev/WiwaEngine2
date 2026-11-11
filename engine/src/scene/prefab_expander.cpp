@@ -109,14 +109,22 @@ namespace wiwa
 			std::vector<AssetGuid> Stack{};         // the prefabs being expanded, outermost first
 		};
 
-		u64 level_id(u64 prefix, u64 stableId)
+		// The id a node has in the frame of the prefab of the instance root. chain holds the stable ids of the instance nodes it sits under,
+		// outermost first; the ids nest from the right, compose(outer, compose(middle, inner)), so the id a node has in the prefab that
+		// holds it is the one an override stored on an instance of that prefab uses, at any depth.
+		u64 wrapped_id(const std::vector<u64>& chain, u64 local)
 		{
-			return prefix == 0 ? stableId : compose_node_id(prefix, stableId);
+			u64 id = local;
+			for (size_t i = chain.size(); i-- > 0;)
+			{
+				id = compose_node_id(chain[i], id);
+			}
+			return id;
 		}
 
-		// The nodes of a prefab, parents first, under parentGuid. prefix is 0 for the prefab of the instance root, and the composite id of
-		// the instance's node for a nested one.
-		void emit_nodes(Expansion& expansion, const PrefabData& prefab, u64 prefix, EntityGuid parentGuid, u32 depth)
+		// The nodes of a prefab, parents first, under parentGuid. chain is empty for the prefab of the instance root, and ends with the
+		// stable id of the instance's node for a nested one.
+		void emit_nodes(Expansion& expansion, const PrefabData& prefab, std::vector<u64>& chain, EntityGuid parentGuid, u32 depth)
 		{
 			const size_t count = prefab.Nodes.size();
 			std::vector<std::vector<size_t>> children(count);
@@ -142,10 +150,10 @@ namespace wiwa
 				stack.pop_back();
 
 				const PrefabNode& node = prefab.Nodes[index];
-				const u64 id = level_id(prefix, node.StableId);
+				const u64 id = wrapped_id(chain, node.StableId);
 				EntityRecord record = node_record(node);
 				record.Id = EntityGuid::derive(expansion.RootId, id);
-				record.Parent = node.Parent < 0 ? parentGuid : EntityGuid::derive(expansion.RootId, level_id(prefix, prefab.Nodes[static_cast<size_t>(node.Parent)].StableId));
+				record.Parent = node.Parent < 0 ? parentGuid : EntityGuid::derive(expansion.RootId, wrapped_id(chain, prefab.Nodes[static_cast<size_t>(node.Parent)].StableId));
 				const EntityGuid recordId = record.Id;
 				reached++;
 
@@ -180,16 +188,18 @@ namespace wiwa
 				if (inner != nullptr)
 				{
 					expansion.Stack.push_back(node.Instance->Prefab.resolved());
-					emit_nodes(expansion, *inner, id, recordId, depth + 1);
-					expansion.Stack.pop_back();
+					chain.push_back(node.StableId);
+					emit_nodes(expansion, *inner, chain, recordId, depth + 1);
 
-					// the instance's own overrides address the inner nodes by their ids: 0 is the instance's node. They apply after
-					// the ones of the instances inside it, so the outer level has the last word.
+					// the instance's own overrides address the inner nodes by the ids they have in the inner prefab: 0 is the instance's node.
+					// They apply after the ones of the instances inside it, so the outer level has the last word.
 					for (PrefabOverride override : node.Instance->Overrides)
 					{
-						override.NodeId = override.NodeId == 0 ? id : compose_node_id(id, override.NodeId);
+						override.NodeId = override.NodeId == 0 ? id : wrapped_id(chain, override.NodeId);
 						expansion.Queued.push_back(std::move(override));
 					}
+					chain.pop_back();
+					expansion.Stack.pop_back();
 				}
 
 				stack.insert(stack.end(), children[index].rbegin(), children[index].rend());
@@ -221,7 +231,8 @@ namespace wiwa
 				}
 			}
 		}
-		emit_nodes(expansion, prefab, 0, instanceRoot.Id, 0);
+		std::vector<u64> chain;
+		emit_nodes(expansion, prefab, chain, instanceRoot.Id, 0);
 
 		auto index_of_node = [&](u64 nodeId) -> std::optional<size_t>
 		{
@@ -245,10 +256,13 @@ namespace wiwa
 			}
 		};
 
+		const size_t nestedCount = expansion.Queued.size(); // the overrides of nested instances come first
 		std::vector<PrefabOverride> overrides = std::move(expansion.Queued);
 		overrides.insert(overrides.end(), instanceRoot.Overrides.begin(), instanceRoot.Overrides.end());
-		for (const PrefabOverride& override : overrides)
+		for (size_t overrideIndex = 0; overrideIndex < overrides.size(); overrideIndex++)
 		{
+			const PrefabOverride& override = overrides[overrideIndex];
+			const bool fromNested = overrideIndex < nestedCount;
 			if (removed.contains(override.NodeId))
 			{
 				continue; // the node was removed by an earlier override: nothing left to change
@@ -299,11 +313,16 @@ namespace wiwa
 				EntityRecord child = override.Child;
 				child.Overrides.clear();
 				child.Parent = entity.Id;
-				child.Id = EntityGuid::derive(instanceRoot.Id, override.Child.Id.Hi ^ override.Child.Id.Lo);
+				// a child that the root's overrides add is told apart by its own id; one that a nested instance's override adds belongs to
+				// the node it goes under, so that it has its own guid in every place the instance is used, and is a node of the instance
+				// (an edit to it is an override of the root, by this id)
+				const u64 childKey = override.Child.Id.Hi ^ override.Child.Id.Lo;
+				const u64 childNode = fromNested ? compose_node_id(override.NodeId, childKey) : ADDED_CHILD_NODE;
+				child.Id = EntityGuid::derive(instanceRoot.Id, fromNested ? childNode : childKey);
 				const EntityGuid parentId = entity.Id; // entity may move when the vector grows
 				child.Parent = parentId;
 				result.Entities.push_back(std::move(child));
-				result.NodeIds.push_back(ADDED_CHILD_NODE);
+				result.NodeIds.push_back(childNode);
 				result.NestedRoots.push_back(0);
 				break;
 			}
