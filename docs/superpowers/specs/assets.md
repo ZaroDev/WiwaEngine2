@@ -72,3 +72,7 @@ A missing or unreadable file gives defaults, logged once.
 ## NavMesh
 
 `AssetType::NavMesh` (`.wnav`, baked by the editor, see [navigation.md](navigation.md)): `NavMeshImporter` validates the file and cooks the `NavMeshData`; a corrupt file keeps the previous cook. The packager also packs `nav.wsettings` (area costs, key `NAV_SETTINGS_GUID`) like the audio settings, and reaches the `.wnav` through the scene's `NavMeshVolume.NavMesh` reference.
+
+## BehaviorTree
+
+`AssetType::BehaviorTree` (`.wbt`, JSON text, see [behavior-trees.md](behavior-trees.md)): `BehaviorTreeImporter` parses and validates it (an error fails the import and keeps the previous cook) and lists the Lua leaf scripts it names as dependencies. The cooked asset is the text itself; the `AIModule` compiles it.

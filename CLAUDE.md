@@ -26,6 +26,7 @@ No test framework (the user decided a suite isn't needed). Smoke commands: run t
 | `--physics-smoke` / `--physics-panel-smoke` | editor | Jolt behaviour, queries, dispatch, repeatability / Physics panel for 130 frames |
 | `--input-smoke` / `--input-panel-smoke` | editor | input, actions, rebinding, `.winput`, Lua API / Input panel for 130 frames |
 | `--audio-smoke` / `--audio-panel-smoke` | editor | audio module on the Null backend, soundbank asset and metadata, emitters and play-mode sync, settings, Lua API, event browser model, audition (and the Wwise backend in a `WWISESDK` build, with banks in `editor/assets/audio`) / Audio panel for 130 frames |
+| `--ai-smoke` / `--ai-panel-smoke` | editor | behaviour tree format and validator, node semantics, blackboard, MoveTo on a baked navmesh, controllers, Lua leaves and the `AI` API, perception, the edit model, gizmo shapes / the tree editor in the Asset Editor for 120 frames. The editor exe often crashes at shutdown: read the log line |
 | `--nav-smoke` / `--nav-panel-smoke` | editor | `.wnav` format, components and settings, Recast bake, Detour queries, crowd agents, Lua API and arrival hooks, the bake model (worker, stale check, cancel), overlay shapes, path tool / Navigation panel for 130 frames. The editor exe often crashes at shutdown: read the log line, not the exit code |
 | `--anim-smoke` / `--anim-panel-smoke` | editor | skeleton import, pose math and nodes, Animator module, sockets, extraction, Lua API, animation graphs (file, state machine, blend spaces, layers, edit model) / Animation panel for 130 frames and the Graph editor on the demo warrior's graph |
 | `--play-smoke` / `--demo-smoke` | editor | play mode / the demo scene end to end |
@@ -60,6 +61,7 @@ Rules that cut across areas:
 | Offscreen views (previews, 3D UI widgets, readback; `ViewHost`, `ViewImage`) | [views.md](docs/superpowers/specs/views.md) | `engine/src/renderer/view`, `engine/src/scene/preview_scene.*` |
 | Asset Editor, asset thumbnails (skeleton/mesh editors, sockets, joint rename) | [editor.md](docs/superpowers/specs/editor.md) | `editor/src/asset_editor` |
 | Audio (Wwise behind a vendor-neutral backend, soundbanks, emitters) | [audio.md](docs/superpowers/specs/audio.md) | `engine/src/audio`, `engine/src/audio/wwise` (`AK::` stays inside it), `editor/src/audio` |
+| Behaviour trees and perception (`.wbt`, `AIController`, Lua leaves `BtAction`/`BtCondition`, `Perceiver`, the tree editor) | [behavior-trees.md](docs/superpowers/specs/behavior-trees.md) | `engine/src/ai`, `editor/src/ai` |
 | Navigation (Recast bake in the editor, Detour queries and DetourCrowd agents, `.wnav`, the `Nav` Lua API) | [navigation.md](docs/superpowers/specs/navigation.md) | `engine/src/nav`, `editor/src/asset_pipeline/nav_bake.*`, `editor/src/nav`; vendored `engine/vendor/recastnavigation`; `dt*` stays in `engine/src/nav`, `rc*` in the editor |
 | Input | [input.md](docs/superpowers/specs/input.md) | `engine/src/input` |
 | Game UI | [ui.md](docs/superpowers/specs/ui.md) | `engine/src/ui`, `editor/src/ui` |

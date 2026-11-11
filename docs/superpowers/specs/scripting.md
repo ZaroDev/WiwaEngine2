@@ -47,3 +47,7 @@ See editor.md (Play runs on a scene clone; `ScriptingModule::update` is gated on
 ## Nav
 
 `bind_nav.cpp` binds the `Nav` table and the `NavAgent` handle ([navigation.md](navigation.md); user docs in `docs/scripting.md`). `ScriptInstances` registers a `NavModule` listener while it runs and delivers `on_nav_arrived` / `on_nav_failed` to the entity's scripts at the start of the next update. The scripting state has no sol2 safety defines, so the Nav bindings validate their arguments (`vec3_arg`, `number_arg`) and raise Lua errors; a binding that takes a usertype by reference without checking crashes on a number.
+
+## AI
+
+`bind_ai.cpp` binds `AI.controller` / `AI.emit_noise`; the Lua leaf host (`engine/src/ai/bt_lua_host.*`) runs `BtAction` / `BtCondition` scripts on the same runtime ([behavior-trees.md](behavior-trees.md); user docs in `docs/scripting.md`). `ScriptRuntime`'s constructor defines the leaf bases so every runtime (the importer's too) knows them. The same sol2 rule as for `Nav` applies: arguments and `self` are validated by the binding.

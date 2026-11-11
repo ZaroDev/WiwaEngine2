@@ -14,6 +14,7 @@ CLAUDE.md has the one-paragraph map of every area; read the matching doc here be
 | [physics.md](physics.md) | Jolt integration, physics thread, components, events, queries |
 | [animation.md](animation.md) | Skeletons, clips, the Animator, GPU skinning, the Lua API, the Animation panel |
 | [views.md](views.md) | Offscreen scene views: previews, UI widgets, readback; `ViewHost`, `ViewImage` |
+| [behavior-trees.md](behavior-trees.md) | Behaviour trees (`.wbt`), the `AIModule`, Lua leaves, perception, the tree editor |
 | [navigation.md](navigation.md) | Navmesh baking (Recast), queries and crowd agents (Detour), `.wnav`, the Navigation panel, the `Nav` Lua API |
 | [input.md](input.md) | Raw input, actions, rebinding, `.winput`, UI source |
 | [ui.md](ui.md) | Game UI: `.wuipanel`, layout, interaction, rendering, UI editor |

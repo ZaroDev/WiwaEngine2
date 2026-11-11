@@ -58,3 +58,7 @@ Replace keeps rendering the old scene until the new one is Ready, then swaps in 
 ## Navigation components
 
 `NavMeshVolume`, `NavAreaTag` and `NavAgent` are ordinary reflected components (see [navigation.md](navigation.md)). Masks are `i32`; the baked mesh is an `AssetRef` (`AssetType::NavMesh`); the walking state of an agent lives in `NavModule`, not in the component, so a clone starts with idle agents.
+
+## AI components
+
+`AIController`, `Perceiver` and `Perceivable` are ordinary reflected components ([behavior-trees.md](behavior-trees.md)). `AIController::Overrides` is a JSON text field; the state of a run lives in the `AIModule`, so a clone starts every tree from the beginning.
