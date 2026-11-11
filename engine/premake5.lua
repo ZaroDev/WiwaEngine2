@@ -81,6 +81,10 @@ project "wiwa"
 		enablepch "Off"
 		warnings "Off"
 
+	-- every component description of the reflection registry is one big function
+	filter "files:src/scene/scene_components.cpp"
+		buildoptions { "/bigobj" }
+
 	-- the sol2 usertypes of the Lua bindings make big object files
 	filter "files:src/scripting/bindings/**.cpp"
 		buildoptions { "/bigobj" }

@@ -373,6 +373,36 @@ namespace wiwa
 		std::string Overrides{};
 	};
 
+	// Senses for the AI of the entity (ai/perception.h): sight (a cone of SightAngle degrees and SightRange metres from the eye, blocked by the physics
+	// layers in SightLayerMask) and hearing (HearingRadius times the loudness of AI.emit_noise). Every Interval seconds the results go to the blackboard of
+	// the entity's AIController under the key names below (an empty name switches that output off). Team and TargetTeams (comma separated; empty: everyone
+	// but its own team) pick what it looks for.
+	struct Perceiver
+	{
+		float SightRange = 15.0f;
+		float SightAngle = 110.0f;
+		glm::vec3 EyeOffset{ 0.0f, 1.6f, 0.0f };
+		i32 SightLayerMask = -1;
+		float HearingRadius = 10.0f;
+		std::string Team{};
+		std::string TargetTeams{};
+		float Interval = 0.2f;
+		std::string SeenKey = "seen_target";
+		std::string CanSeeKey = "can_see_target";
+		std::string LastSeenKey = "last_seen_position";
+		std::string HeardKey = "heard_position";
+		std::string HeardKindKey = "heard_kind";
+	};
+
+	// Something a Perceiver can see: Kind and Team tag it, AimOffset (local) is where sight rays aim, Visible false hides it.
+	struct Perceivable
+	{
+		std::string Kind{};
+		std::string Team{};
+		glm::vec3 AimOffset{ 0.0f, 1.0f, 0.0f };
+		bool Visible = true;
+	};
+
 	// What a ViewHost's preview is drawn with (the profiles of renderer/view/view_types.h; the values match).
 	enum class ViewHostProfile : u32 { Full, Preview, Thumbnail };
 

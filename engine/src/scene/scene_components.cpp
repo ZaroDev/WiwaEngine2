@@ -189,6 +189,27 @@ namespace wiwa
 			WI_FIELD(Seed),
 			WI_FIELD(Overrides)));
 
+		registry.register_component(WI_COMPONENT(Perceiver,
+			WI_FIELD_META(SightRange, FieldMeta::range(0.0f, 1000.0f)),
+			WI_FIELD_META(SightAngle, FieldMeta::range(0.0f, 360.0f)),
+			WI_FIELD(EyeOffset),
+			WI_FIELD(SightLayerMask),
+			WI_FIELD_META(HearingRadius, FieldMeta::range(0.0f, 1000.0f)),
+			WI_FIELD(Team),
+			WI_FIELD(TargetTeams),
+			WI_FIELD_META(Interval, FieldMeta::range(0.0f, 10.0f)),
+			WI_FIELD(SeenKey),
+			WI_FIELD(CanSeeKey),
+			WI_FIELD(LastSeenKey),
+			WI_FIELD(HeardKey),
+			WI_FIELD(HeardKindKey)));
+
+		registry.register_component(WI_COMPONENT(Perceivable,
+			WI_FIELD(Kind),
+			WI_FIELD(Team),
+			WI_FIELD(AimOffset),
+			WI_FIELD(Visible)));
+
 		registry.register_component(WI_COMPONENT(AnimationSocket,
 			WI_FIELD(Joint),
 			WI_FIELD(OffsetPosition),

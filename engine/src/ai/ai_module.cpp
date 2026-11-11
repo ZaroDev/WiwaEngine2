@@ -4,6 +4,8 @@
 #include <core/engine.h>
 #include <animation/animation_module.h>
 #include <nav/nav_module.h>
+#include <physics/physics_module.h>
+#include <physics/query_snapshot.h>
 #include <scene/components.h>
 #include <scene/scene.h>
 #include <scene/scene_module.h>
@@ -38,6 +40,22 @@ namespace wiwa
 			AnimationModule* animation = Engine::get().get_module<AnimationModule>();
 			const AnimatorInstance* animator = animation != nullptr ? animation->instance_for(entity) : nullptr;
 			return animator != nullptr && (animator->pending_commands() > 0 || animator->playing());
+		};
+
+		m_SightRaycast = [](glm::vec3 origin, glm::vec3 direction, float distance, u32 mask)
+		{
+			std::vector<SightHit> hits;
+			if (PhysicsModule* physics = Engine::get().get_module<PhysicsModule>())
+			{
+				if (const Ref<const QuerySnapshot> query = physics->query())
+				{
+					for (const RayHit& hit : query->raycast_all(origin, direction, distance, mask))
+					{
+						hits.push_back({ hit.Key, hit.Distance });
+					}
+				}
+			}
+			return hits;
 		};
 
 		if (AssetManager* assets = Engine::get().get_module<AssetManager>())
@@ -138,6 +156,8 @@ namespace wiwa
 			drop(controller);
 		}
 		m_Controllers.clear();
+		m_Perception.clear();
+		m_Noises.clear();
 		m_World.reset();
 		m_HasWorld = false;
 		m_Hooks.TheScene = nullptr;
@@ -383,6 +403,13 @@ namespace wiwa
 		{
 			controller.Seen = false;
 		}
+
+		// What the AIs sense, before they think: it lands in their blackboards.
+		m_Perception.update(scene, m_Time, m_SightRaycast, m_Noises, [this](entt::entity entity) -> Blackboard*
+		{
+			BtInstance* instance = acquire(entity);
+			return instance != nullptr ? &instance->blackboard() : nullptr;
+		});
 
 		for (auto [entity, ai] : registry.view<AIController>().each())
 		{

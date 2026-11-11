@@ -13,6 +13,7 @@
 #include <ai/bt_file.h>
 #include <ai/bt_instance.h>
 #include <ai/ai_module.h>
+#include <ai/perception.h>
 #include "../asset_pipeline/lua_stubs.h"
 #include <ai/bt_leaves_engine.h>
 #include <ai/bt_lua_host.h>
@@ -1291,6 +1292,303 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// Boxes that sight rays can hit, standing in for the physics world.
+		struct FakeWorld
+		{
+			struct Box
+			{
+				glm::vec3 Lo{ 0.0f };
+				glm::vec3 Hi{ 0.0f };
+				EntityGuid Key{};
+			};
+			std::vector<Box> Boxes{};
+			int Calls = 0;
+
+			SightRaycast raycast()
+			{
+				return [this](glm::vec3 origin, glm::vec3 direction, float distance, u32) -> std::vector<SightHit>
+				{
+					Calls++;
+					std::vector<SightHit> hits;
+					for (const Box& box : Boxes)
+					{
+						float tNear = 0.0f;
+						float tFar = distance;
+						bool miss = false;
+						for (int axis = 0; axis < 3 && !miss; axis++)
+						{
+							if (std::abs(direction[axis]) < 1.0e-8f)
+							{
+								miss = origin[axis] < box.Lo[axis] || origin[axis] > box.Hi[axis];
+								continue;
+							}
+							float t0 = (box.Lo[axis] - origin[axis]) / direction[axis];
+							float t1 = (box.Hi[axis] - origin[axis]) / direction[axis];
+							if (t0 > t1) { std::swap(t0, t1); }
+							tNear = std::max(tNear, t0);
+							tFar = std::min(tFar, t1);
+							miss = tNear > tFar;
+						}
+						if (!miss)
+						{
+							hits.push_back({ box.Key, tNear });
+						}
+					}
+					return hits;
+				};
+			}
+		};
+
+		// A perceiver at the origin facing -Z with eye and aim at height 1, 90 degrees of sight and 15 m of range.
+		entt::entity add_perceiver(Scene& scene, const std::string& name = "Eye")
+		{
+			const entt::entity entity = scene.create(name);
+			Perceiver& perceiver = scene.registry().emplace<Perceiver>(entity);
+			perceiver.EyeOffset = glm::vec3(0.0f, 1.0f, 0.0f);
+			perceiver.SightAngle = 90.0f;
+			perceiver.Interval = 0.0f;
+			return entity;
+		}
+
+		entt::entity add_target(Scene& scene, glm::vec3 position, const std::string& team = "", const std::string& name = "Target")
+		{
+			const entt::entity entity = scene.create(name);
+			scene.registry().get<Transform>(entity).Position = position;
+			Perceivable& perceivable = scene.registry().emplace<Perceivable>(entity);
+			perceivable.Team = team;
+			return entity;
+		}
+
+		struct Sensing
+		{
+			Perception Senses;
+			FakeWorld World;
+			Blackboard Board{};
+			double Time = 0.0;
+
+			void update(Scene& scene, const std::vector<Noise>& noises = {}, bool withBoard = false)
+			{
+				scene.update_world_transforms();
+				Senses.update(scene, Time, World.raycast(), noises, [&](entt::entity) { return withBoard ? &Board : nullptr; });
+			}
+		};
+
+		void perception(Check& check)
+		{
+			// The cone.
+			{
+				const glm::vec3 eye(0.0f);
+				const glm::vec3 forward(0.0f, 0.0f, -1.0f);
+				const auto at = [](float degrees) { const float r = glm::radians(degrees); return glm::vec3(std::sin(r) * 10.0f, 0.0f, -std::cos(r) * 10.0f); };
+				check(Perception::in_cone(eye, forward, 90.0f, at(44.0f)) && !Perception::in_cone(eye, forward, 90.0f, at(46.0f)) && Perception::in_cone(eye, forward, 90.0f, at(-44.0f)) && !Perception::in_cone(eye, forward, 90.0f, at(-46.0f)), "cone_edges: 44 degrees is inside a 90 degree cone, 46 is not, both sides");
+				check(!Perception::in_cone(eye, forward, 90.0f, glm::vec3(0.0f, 0.0f, 10.0f)) && Perception::in_cone(eye, forward, 360.0f, glm::vec3(0.0f, 0.0f, 10.0f)), "cone_behind: behind is outside, a full circle sees everything");
+				check(Perception::in_cone(eye, forward, 0.0f, glm::vec3(0.0f, 0.0f, -5.0f)) && !Perception::in_cone(eye, forward, 0.0f, at(5.0f)), "cone_zero: a zero angle sees only straight ahead");
+				check(Perception::in_cone(eye, forward, 10.0f, eye) && !Perception::in_cone(eye, glm::vec3(0.0f), 90.0f, glm::vec3(0.0f, 0.0f, -5.0f)) && !Perception::in_cone(eye, glm::vec3(std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f), 90.0f, glm::vec3(1.0f, 0.0f, 0.0f)), "cone_degenerate: a point at the eye is inside, a zero or NaN direction sees nothing");
+			}
+
+			// Range, cone, wall, visibility, teams.
+			{
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity eye = add_perceiver(*scene);
+				const entt::entity target = add_target(*scene, glm::vec3(0.0f, 0.0f, -14.9f));
+				Sensing s;
+				s.update(*scene);
+				check(s.Senses.result(eye) && s.Senses.result(eye)->CanSee && s.Senses.result(eye)->Seen == scene->registry().get<Id>(target).Guid, "sight_range: a target just inside the range is seen");
+				scene->registry().get<Transform>(target).Position = glm::vec3(0.0f, 0.0f, -15.1f);
+				s.update(*scene);
+				check(!s.Senses.result(eye)->CanSee && !s.Senses.result(eye)->Seen.valid(), "sight_range: just outside it is not");
+
+				scene->registry().get<Transform>(target).Position = glm::vec3(0.0f, 0.0f, -10.0f);
+				s.World.Boxes = { { glm::vec3(-2.0f, -1.0f, -6.0f), glm::vec3(2.0f, 3.0f, -5.0f), EntityGuid::generate() } };
+				s.update(*scene);
+				check(!s.Senses.result(eye)->CanSee, "sight_wall: a wall between blocks sight");
+				s.World.Boxes.clear();
+				s.update(*scene);
+				check(s.Senses.result(eye)->CanSee, "sight_wall: without the wall it is seen again");
+				s.World.Boxes = { { glm::vec3(-1.0f, -1.0f, -11.0f), glm::vec3(1.0f, 3.0f, -9.0f), scene->registry().get<Id>(target).Guid } };
+				s.update(*scene);
+				check(s.Senses.result(eye)->CanSee, "sight_own_body: the body of the target itself does not block it");
+				s.World.Boxes = { { glm::vec3(-1.0f, -1.0f, -4.0f), glm::vec3(1.0f, 3.0f, 1.0f), scene->registry().get<Id>(eye).Guid } };
+				s.update(*scene);
+				check(s.Senses.result(eye)->CanSee, "sight_own_body: nor does the body of the perceiver");
+				s.World.Boxes.clear();
+
+				scene->registry().get<Perceivable>(target).Visible = false;
+				s.update(*scene);
+				check(!s.Senses.result(eye)->CanSee, "sight_visible: a target that is not Visible is not seen");
+				scene->registry().get<Perceivable>(target).Visible = true;
+
+				scene->registry().get<Transform>(target).Position = glm::vec3(10.0f, 0.0f, 0.0f);
+				s.update(*scene);
+				check(!s.Senses.result(eye)->CanSee, "sight_cone: a target to the side is outside a 90 degree cone");
+			}
+
+			// Teams and the nearest of two.
+			{
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity eye = add_perceiver(*scene);
+				const entt::entity friendly = add_target(*scene, glm::vec3(0.0f, 0.0f, -4.0f), "red", "Friend");
+				const entt::entity enemy = add_target(*scene, glm::vec3(0.0f, 0.0f, -8.0f), "blue", "Enemy");
+				scene->registry().get<Perceiver>(eye).Team = "red";
+				Sensing s;
+				s.update(*scene);
+				check(s.Senses.result(eye)->Seen == scene->registry().get<Id>(enemy).Guid, "sight_teams: with no TargetTeams its own team is skipped");
+				scene->registry().get<Perceiver>(eye).TargetTeams = "red, green";
+				s.update(*scene);
+				check(s.Senses.result(eye)->Seen == scene->registry().get<Id>(friendly).Guid, "sight_teams: TargetTeams picks the listed teams (trimmed)");
+				scene->registry().get<Perceiver>(eye).TargetTeams = "";
+				scene->registry().get<Perceiver>(eye).Team = "";
+				s.update(*scene);
+				check(s.Senses.result(eye)->Seen == scene->registry().get<Id>(friendly).Guid, "sight_nearest: of two visible targets the nearest wins");
+			}
+
+			// Last seen is kept; a destroyed target clears sight; the interval.
+			{
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity eye = add_perceiver(*scene);
+				const entt::entity target = add_target(*scene, glm::vec3(1.0f, 0.0f, -6.0f));
+				Sensing s;
+				s.update(*scene);
+				check(s.Senses.result(eye)->HasLastSeen && s.Senses.result(eye)->LastSeenPosition == glm::vec3(1.0f, 0.0f, -6.0f), "sight_last_seen: the place it was seen is kept");
+				scene->registry().get<Transform>(target).Position = glm::vec3(20.0f, 0.0f, 0.0f);
+				s.update(*scene);
+				check(!s.Senses.result(eye)->CanSee && s.Senses.result(eye)->LastSeenPosition == glm::vec3(1.0f, 0.0f, -6.0f), "sight_last_seen: lost sight keeps the last place");
+				scene->registry().get<Transform>(target).Position = glm::vec3(0.0f, 0.0f, -6.0f);
+				s.update(*scene);
+				scene->destroy(target);
+				s.update(*scene);
+				check(!s.Senses.result(eye)->CanSee && !s.Senses.result(eye)->Seen.valid(), "sight_destroyed: a destroyed target is not seen and the entity is cleared");
+
+				Ref<Scene> timed = CreateRef<Scene>();
+				const entt::entity watcher = add_perceiver(*timed);
+				timed->registry().get<Perceiver>(watcher).Interval = 0.5f;
+				const entt::entity mover = add_target(*timed, glm::vec3(0.0f, 0.0f, -5.0f));
+				Sensing t;
+				t.update(*timed);
+				check(t.Senses.result(watcher)->CanSee, "sight_interval: the first pass is at once");
+				timed->registry().get<Transform>(mover).Position = glm::vec3(50.0f, 0.0f, 0.0f);
+				t.Time = 0.2;
+				t.update(*timed);
+				check(t.Senses.result(watcher)->CanSee, "sight_interval: no new pass before the interval is up");
+				t.Time = 0.55;
+				t.update(*timed);
+				check(!t.Senses.result(watcher)->CanSee, "sight_interval: and one when it is");
+			}
+
+			// Degenerate input: no range, a target at the eye, a target that is not a point.
+			{
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity eye = add_perceiver(*scene);
+				scene->registry().get<Perceiver>(eye).SightRange = 0.0f;
+				const entt::entity target = add_target(*scene, glm::vec3(0.0f, 0.0f, -2.0f));
+				Sensing s;
+				s.update(*scene);
+				check(s.Senses.result(eye)->Sensed && !s.Senses.result(eye)->CanSee, "sight_zero_range: no range sees nothing");
+				scene->registry().get<Perceiver>(eye).SightRange = 10.0f;
+				scene->registry().get<Transform>(target).Position = glm::vec3(0.0f, 0.0f, 0.0f); // the aim point is the eye
+				s.update(*scene);
+				check(s.Senses.result(eye)->CanSee && std::isfinite(s.Senses.result(eye)->LastSeenPosition.x), "sight_at_eye: a target at the eye is seen, without NaN");
+				scene->registry().get<Transform>(target).Position = glm::vec3(std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f);
+				s.update(*scene);
+				check(!s.Senses.result(eye)->CanSee, "sight_nan: a target that is not a point is skipped");
+				scene->registry().get<Transform>(target).Position = glm::vec3(0.0f, 0.0f, -2.0f);
+				scene->registry().get<Transform>(eye).Position = glm::vec3(std::numeric_limits<float>::infinity(), 0.0f, 0.0f);
+				s.update(*scene);
+				check(!s.Senses.result(eye)->CanSee, "sight_nan: a perceiver that is not at a point sees nothing");
+			}
+
+			// Hearing: by distance and loudness, once, the nearest noise, and the kind.
+			{
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity ear = add_perceiver(*scene, "Ear");
+				scene->registry().get<Perceiver>(ear).HearingRadius = 10.0f;
+				Sensing s;
+				s.update(*scene, { { glm::vec3(8.0f, 1.0f, 0.0f), 1.0f, "step" } }, true);
+				check(s.Senses.result(ear)->HasHeard && s.Senses.result(ear)->HeardPosition == glm::vec3(8.0f, 1.0f, 0.0f) && s.Senses.result(ear)->HeardKind == "step", "hear_radius: a noise inside the radius is heard, with its kind");
+				check(std::get<glm::vec3>(*s.Board.get("heard_position")) == glm::vec3(8.0f, 1.0f, 0.0f) && std::get<std::string>(*s.Board.get("heard_kind")) == "step", "hear_board: it is written to the blackboard (keys made on the spot)");
+
+				Ref<Scene> quiet = CreateRef<Scene>();
+				const entt::entity deaf = add_perceiver(*quiet, "Deaf");
+				Sensing t;
+				t.update(*quiet, { { glm::vec3(12.0f, 1.0f, 0.0f), 1.0f, "far" } });
+				check(!t.Senses.result(deaf)->HasHeard, "hear_radius: a noise outside the radius is not heard");
+				t.update(*quiet, { { glm::vec3(15.0f, 1.0f, 0.0f), 2.0f, "loud" } });
+				check(t.Senses.result(deaf)->HasHeard && t.Senses.result(deaf)->HeardKind == "loud", "hear_loudness: loudness scales the radius");
+				t.update(*quiet, { { glm::vec3(9.0f, 1.0f, 0.0f), 1.0f, "far one" }, { glm::vec3(3.0f, 1.0f, 0.0f), 1.0f, "near one" } });
+				check(t.Senses.result(deaf)->HeardKind == "near one", "hear_nearest: of two noises the nearest is kept");
+				t.update(*quiet, {});
+				check(t.Senses.result(deaf)->HeardKind == "near one", "hear_once: no noise this call changes nothing, what was heard stays");
+				quiet->registry().get<Perceiver>(deaf).HearingRadius = 0.0f;
+				t.update(*quiet, { { glm::vec3(0.0f, 1.0f, 0.0f), 1.0f, "zero radius" } });
+				check(t.Senses.result(deaf)->HeardKind == "near one", "hear_zero_radius: a zero radius hears nothing");
+			}
+
+			// 300 perceivers each with a target in view: the ray budget holds and everyone is served.
+			{
+				Ref<Scene> scene = CreateRef<Scene>();
+				std::vector<entt::entity> eyes;
+				for (int i = 0; i < 300; i++)
+				{
+					const entt::entity eye = add_perceiver(*scene, "Eye" + std::to_string(i));
+					scene->registry().get<Transform>(eye).Position = glm::vec3(static_cast<float>(i) * 40.0f, 0.0f, 0.0f);
+					add_target(*scene, glm::vec3(static_cast<float>(i) * 40.0f, 0.0f, -5.0f), "", "T" + std::to_string(i));
+					eyes.push_back(eye);
+				}
+				Sensing s;
+				u32 mostRays = 0;
+				for (int frame = 0; frame < 12; frame++)
+				{
+					s.update(*scene);
+					mostRays = std::max(mostRays, s.Senses.rays_last_frame());
+					s.Time += 0.016;
+				}
+				bool all = true;
+				for (const entt::entity eye : eyes)
+				{
+					const PerceptionResult* result = s.Senses.result(eye);
+					all = all && result != nullptr && result->Sensed && result->CanSee;
+				}
+				check(mostRays <= Perception::MAX_RAYS_PER_FRAME && mostRays > 0, "sight_budget: no frame spends more than the ray budget (" + std::to_string(mostRays) + ")");
+				check(all, "sight_budget: 300 perceivers are all served within a few frames");
+			}
+
+			// Through the module: results land in the blackboard of the controller, declared keys typed, others made; a perceiver without a controller senses.
+			{
+				AIModule module;
+				module.set_auto_start(false);
+				FakeWorld world;
+				module.set_sight_raycast(world.raycast());
+				const AssetRef treeRef{ AssetGuid::generate(), 0 };
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Blackboard = { key("seen_target", BtValueType::Entity), key("can_see_target", BtValueType::Bool, false) };
+				doc.Nodes = { node("s", "Sequence", { "w" }), node("w", "Wait", {}, { { "seconds", 100.0 } }) };
+				module.register_tree(treeRef, doc);
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity guard = add_perceiver(*scene, "Guard");
+				scene->registry().emplace<AIController>(guard).Tree = treeRef;
+				const entt::entity lone = add_perceiver(*scene, "Lone");
+				scene->registry().get<Transform>(lone).Position = glm::vec3(100.0f, 0.0f, 0.0f);
+				const entt::entity target = add_target(*scene, glm::vec3(0.0f, 0.0f, -5.0f));
+				scene->registry().get<Transform>(target).Position = glm::vec3(0.0f, 0.0f, -5.0f);
+				module.start_world(scene);
+				module.emit_noise(glm::vec3(2.0f, 1.0f, 0.0f), 1.0f, "bang");
+				scene->update_world_transforms();
+				module.tick(nullptr, true, 0.1f);
+				const BtInstance* instance = module.instance_of(guard);
+				check(instance != nullptr && std::get<bool>(*instance->blackboard().get("can_see_target")) && std::get<EntityGuid>(*instance->blackboard().get("seen_target")) == scene->registry().get<Id>(target).Guid, "perception_board: sight is written to the declared keys of the controller");
+				check(instance != nullptr && instance->blackboard().has("last_seen_position") && instance->blackboard().has("heard_position") && !instance->blackboard().declared("heard_position"), "perception_board: keys the tree does not declare are made, and a noise reaches the controller");
+				check(module.perception().result(lone) != nullptr && module.perception().result(lone)->Sensed && module.instance_of(lone) == nullptr, "perception_no_controller: a perceiver without a controller senses and has no instance");
+				module.tick(nullptr, true, 0.1f);
+				check(module.noises().empty(), "perception_noise_once: a noise lasts one tick");
+				module.stop_world();
+				check(module.perception().result(guard) == nullptr, "perception_stop: stopping the world forgets what was sensed");
+			}
+		}
+	}
+
 	bool run_ai_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -1304,6 +1602,7 @@ namespace wiwa
 		controllers(check);
 		lua_leaves(check);
 		lua_ai(check);
+		perception(check);
 
 		if (check.Failures == 0)
 		{

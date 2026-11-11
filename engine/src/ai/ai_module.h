@@ -15,6 +15,7 @@
 
 #include "bt_instance.h"
 #include "bt_leaves_engine.h"
+#include "perception.h"
 #include "bt_lua_host.h"
 
 namespace wiwa
@@ -70,14 +71,12 @@ namespace wiwa
 		bool restart(entt::entity entity);
 
 		// Sounds the scripts made this frame (AI.emit_noise), for perception; cleared at the end of every tick.
-		struct Noise
-		{
-			glm::vec3 Position{ 0.0f };
-			float Loudness = 1.0f;
-			std::string Kind{};
-		};
 		void emit_noise(glm::vec3 position, float loudness, std::string kind);
 		const std::vector<Noise>& noises() const { return m_Noises; }
+
+		// Sight rays: init() uses the physics query snapshot; a check gives its own. Without any, nothing blocks sight.
+		void set_sight_raycast(SightRaycast raycast) { m_SightRaycast = std::move(raycast); }
+		const Perception& perception() const { return m_Perception; }
 
 		BtInstance* instance_of(entt::entity entity);
 		const BtInstance* instance_of(entt::entity entity) const;
@@ -133,6 +132,8 @@ namespace wiwa
 		Scope<BtLuaHost> m_Lua{};
 		std::unordered_map<entt::entity, Controller> m_Controllers{};
 		std::vector<Noise> m_Noises{};
+		Perception m_Perception{};
+		SightRaycast m_SightRaycast{};
 		std::unordered_map<AssetGuid, TreeEntry> m_Trees{};
 
 		std::mutex m_DirtyMutex{};
