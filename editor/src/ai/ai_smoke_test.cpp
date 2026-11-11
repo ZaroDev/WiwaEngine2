@@ -15,6 +15,8 @@
 #include <ai/ai_module.h>
 #include <ai/perception.h>
 #include "bt_edit_model.h"
+#include "../gizmo/gizmo_settings.h"
+#include "../gizmo/perception_gizmo.h"
 #include "../asset_pipeline/lua_stubs.h"
 #include <ai/bt_leaves_engine.h>
 #include <ai/bt_lua_host.h>
@@ -1754,6 +1756,84 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		void perception_gizmo(Check& check)
+		{
+			Perceiver perceiver;
+			perceiver.SightRange = 10.0f;
+			perceiver.SightAngle = 90.0f;
+			perceiver.EyeOffset = glm::vec3(0.0f, 1.5f, 0.0f);
+			perceiver.HearingRadius = 6.0f;
+			glm::mat4 world(1.0f);
+			world[3] = glm::vec4(2.0f, 0.0f, 3.0f, 1.0f);
+
+			const PerceptionGizmoShapes shapes = perceiver_gizmo_shapes(perceiver, world);
+			const glm::vec3 eye(2.0f, 1.5f, 3.0f);
+			check(!shapes.Sight.empty() && shapes.Eye == eye && shapes.HearingRadius == 6.0f && shapes.HearingCentre == glm::vec3(2.0f, 0.0f, 3.0f), "gizmo_shapes: a cone from the eye and a hearing sphere round the entity");
+
+			// every point of the rim is at the range from the eye, at half the angle from the way it faces (-Z)
+			bool onCone = true;
+			for (const PerceptionGizmoLine& line : shapes.Sight)
+			{
+				for (const glm::vec3& point : { line.A, line.B })
+				{
+					const glm::vec3 to = point - eye;
+					const float length = glm::length(to);
+					if (length < 1.0e-4f)
+					{
+						continue; // the apex
+					}
+					const float angle = glm::degrees(std::acos(glm::clamp(glm::dot(to / length, glm::vec3(0.0f, 0.0f, -1.0f)), -1.0f, 1.0f)));
+					onCone = onCone && std::abs(length - 10.0f) < 0.02f && angle <= 45.5f;
+				}
+			}
+			check(onCone, "gizmo_angle: the rim is at the sight range and inside half the angle");
+			float widest = 0.0f;
+			for (const PerceptionGizmoLine& line : shapes.Sight)
+			{
+				widest = std::max(widest, std::abs(line.B.x - eye.x));
+			}
+			check(std::abs(widest - 10.0f * std::sin(glm::radians(45.0f))) < 0.05f, "gizmo_angle: and it reaches the edge of the cone (" + std::to_string(widest) + ")");
+
+			Perceiver narrow = perceiver;
+			narrow.SightAngle = 20.0f;
+			float narrowest = 0.0f;
+			for (const PerceptionGizmoLine& line : perceiver_gizmo_shapes(narrow, world).Sight)
+			{
+				narrowest = std::max(narrowest, std::abs(line.B.x - eye.x));
+			}
+			check(narrowest < widest * 0.5f, "gizmo_angle: a narrower angle gives a narrower cone");
+
+			Perceiver deaf = perceiver;
+			deaf.HearingRadius = 0.0f;
+			deaf.SightRange = 0.0f;
+			const PerceptionGizmoShapes none = perceiver_gizmo_shapes(deaf, world);
+			check(none.Sight.empty() && none.HearingRadius == 0.0f, "gizmo_off: no range and no hearing draw nothing");
+
+			glm::mat4 broken(1.0f);
+			broken[3] = glm::vec4(std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f, 1.0f);
+			check(perceiver_gizmo_shapes(perceiver, broken).Sight.empty() && perceiver_gizmo_shapes(perceiver, glm::mat4(0.0f)).Sight.empty(), "gizmo_degenerate: a transform that is not a finite point draws nothing");
+			Perceiver all = perceiver;
+			all.SightAngle = 360.0f;
+			check(!perceiver_gizmo_shapes(all, world).Sight.empty(), "gizmo_full_circle: a full circle still draws");
+
+			// the switch in the settings: saved, loaded, and an old file without it keeps the default
+			GizmoSettings settings;
+			settings.Perception = false;
+			const std::filesystem::path file = std::filesystem::temp_directory_path() / "wiwa_ai_gizmo_settings.json";
+			check(settings.save(file) && !GizmoSettings::load(file).Perception, "gizmo_settings: the perception switch is saved and loaded");
+			{
+				std::ofstream old(file, std::ios::binary | std::ios::trunc);
+				old << "{ \"audio\": false }";
+			}
+			const GizmoSettings loaded = GizmoSettings::load(file);
+			check(loaded.Perception && !loaded.Audio, "gizmo_settings: an old file without the switch keeps it on");
+			std::error_code removed;
+			std::filesystem::remove(file, removed);
+		}
+	}
+
 	bool run_ai_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -1769,6 +1849,7 @@ namespace wiwa
 		lua_ai(check);
 		perception(check);
 		edit_model(check);
+		perception_gizmo(check);
 
 		if (check.Failures == 0)
 		{

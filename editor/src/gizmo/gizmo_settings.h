@@ -14,6 +14,7 @@ namespace wiwa
 		bool Decals = true;   // markers for every decal, and the box and projection direction of the selected one
 		bool Particles = true; // markers for every particle system, and the emitter shapes and reach of the selected one
 		bool Audio = true;    // markers for every audio emitter, and the range of the selected one
+		bool Perception = true; // the sight cone and the hearing radius of the selected Perceiver
 		bool Bounds = true;   // the world bounds of the selected mesh
 		bool Grid = true;     // a grid on the ground (y = 0) around the origin
 		bool Axes = true;     // the world axes at the origin: X red, Y green, Z blue

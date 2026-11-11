@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include <math/gizmo_math.h>
+#include "perception_gizmo.h"
 #include <renderer/scene/scene_extractor.h>
 #include <core/engine.h>
 #include <scene/components.h>
@@ -27,6 +28,8 @@ namespace wiwa
 		const glm::vec4 PARTICLE_COLOR(1.0f, 0.75f, 0.3f, 1.0f);
 		const glm::vec4 BOUNDS_COLOR(0.5f, 1.0f, 0.5f, 1.0f);
 		const glm::vec4 AUDIO_COLOR(0.85f, 0.55f, 1.0f, 1.0f);
+		const glm::vec4 PERCEPTION_COLOR(1.0f, 0.85f, 0.2f, 1.0f);
+		const glm::vec4 PERCEPTION_HEARING_COLOR(0.3f, 0.8f, 1.0f, 0.8f);
 		const glm::vec4 GRID_COLOR(0.6f, 0.6f, 0.6f, 0.6f);
 		constexpr i32 GRID_HALF_COUNT = 50;     // lines on each side of the camera, per level
 
@@ -269,6 +272,19 @@ namespace wiwa
 						draw.sphere(position, radius, AUDIO_COLOR, DebugDepth::Tested, 1.0f);
 					}
 				}
+			}
+		}
+
+		if (settings.Perception && hasSelection && registry.all_of<Perceiver, WorldTransform>(selected))
+		{
+			const PerceptionGizmoShapes shapes = perceiver_gizmo_shapes(registry.get<Perceiver>(selected), registry.get<WorldTransform>(selected).Matrix);
+			for (const PerceptionGizmoLine& line : shapes.Sight)
+			{
+				draw.line(line.A, line.B, PERCEPTION_COLOR, DebugDepth::Faded, 1.5f);
+			}
+			if (shapes.HearingRadius > 0.0f)
+			{
+				draw.sphere(shapes.HearingCentre, shapes.HearingRadius, PERCEPTION_HEARING_COLOR, DebugDepth::Faded, 1.0f);
 			}
 		}
 

@@ -221,6 +221,7 @@ void ViewportPanel::on_draw()
 				changed |= ImGui::Checkbox("Decals", &settings.Decals);
 				changed |= ImGui::Checkbox("Particle systems", &settings.Particles);
 				changed |= ImGui::Checkbox("Audio emitters", &settings.Audio);
+				changed |= ImGui::Checkbox("Perception ranges", &settings.Perception);
 				changed |= ImGui::Checkbox("Bounds of the selection", &settings.Bounds);
 				ImGui::Separator();
 				changed |= ImGui::Checkbox("Outline the selection", &settings.Outline.Enabled);
