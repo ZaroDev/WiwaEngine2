@@ -14,6 +14,7 @@ namespace
 {
 	constexpr const char* ENTITY_PAYLOAD = "WI_ENTITY";
 	const ImVec4 PREFAB_NODE_COLOR(0.60f, 0.76f, 1.00f, 1.0f);
+	const ImVec4 NESTED_PREFAB_COLOR(0.55f, 0.90f, 0.85f, 1.0f); // the root of a prefab that a prefab holds
 	const ImVec4 ADDED_CHILD_COLOR(0.60f, 1.00f, 0.65f, 1.0f);
 	const ImVec4 INSTANCE_COLOR(1.00f, 0.80f, 0.45f, 1.0f);
 	const ImVec4 ERROR_COLOR(1.0f, 0.4f, 0.4f, 1.0f);
@@ -452,7 +453,8 @@ void HierarchyPanel::draw_node(entt::entity entity)
 	ImVec4 textColor;
 	if (kind == wiwa::SceneEditor::Kind::PrefabNode)
 	{
-		textColor = PREFAB_NODE_COLOR;
+		const wiwa::PrefabChild* child = m_Editor.scene().registry().try_get<wiwa::PrefabChild>(entity);
+		textColor = child != nullptr && child->NestedRoot ? NESTED_PREFAB_COLOR : PREFAB_NODE_COLOR;
 		color = "";
 	}
 	else if (kind == wiwa::SceneEditor::Kind::AddedChild)

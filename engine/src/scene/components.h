@@ -53,6 +53,7 @@ namespace wiwa
 	{
 		EntityGuid Instance{};
 		u64 NodeId = 0;
+		bool NestedRoot = false; // the node is the root of a nested prefab instance (its children come from that prefab)
 	};
 
 	// Components and fields that were in the scene file but that this engine does not know. They are kept so that saving the

@@ -2,6 +2,7 @@
 #include "scene_editor.h"
 
 #include <core/engine.h>
+#include <scene/prefab_loading.h>
 #include <scene/reflection/component_registry.h>
 
 #include "../asset_pipeline/asset_templates.h"
@@ -164,6 +165,11 @@ namespace wiwa
 			}
 			else if (state == LoadState::Ready)
 			{
+				if (nested_state(*pending.Prefab.get()) == LoadState::Loading)
+				{
+					i++; // the prefabs it instantiates are still loading
+					continue;
+				}
 				expand_instance(root, *pending.Prefab.get());
 				m_Pending.erase(m_Pending.begin() + static_cast<std::ptrdiff_t>(i));
 			}
@@ -774,10 +780,20 @@ namespace wiwa
 		return prefab_handle(instance->Prefab).get();
 	}
 
+	LoadState SceneEditor::nested_state(const PrefabData& prefab)
+	{
+		return nested_prefabs_state(prefab, [this](const AssetRef& ref) { return prefab_handle(ref); });
+	}
+
+	PrefabResolver SceneEditor::resolver()
+	{
+		return [this](const AssetRef& ref) -> const PrefabData* { return prefab_handle(ref).get(); };
+	}
+
 	void SceneEditor::expand_instance(entt::entity root, const PrefabData& prefab)
 	{
 		const EntityRecord rootRecord = record_from_entity(*m_Scene, root);
-		const ExpandResult expanded = expand_prefab(rootRecord, prefab);
+		const ExpandResult expanded = expand_prefab(rootRecord, prefab, resolver());
 		for (const std::string& warning : expanded.Warnings)
 		{
 			WI_EDITOR_LOG(Warning, "{0}", warning);
@@ -788,7 +804,7 @@ namespace wiwa
 			const entt::entity entity = apply_record(*m_Scene, expanded.Entities[i]);
 			if (entity != entt::null)
 			{
-				m_Scene->registry().emplace<PrefabChild>(entity, PrefabChild{ rootRecord.Id, expanded.NodeIds[i] });
+				m_Scene->registry().emplace<PrefabChild>(entity, PrefabChild{ rootRecord.Id, expanded.NodeIds[i], expanded.NestedRoots[i] != 0 });
 			}
 		}
 		m_Scene->update_world_transforms();
@@ -846,11 +862,15 @@ namespace wiwa
 		{
 			const entt::entity current = stack.back();
 			stack.pop_back();
-			if (registry.all_of<PrefabInstance>(current) || registry.all_of<PrefabChild>(current))
+			if (registry.all_of<PrefabChild>(current))
 			{
-				return "A prefab cannot hold an instance of another prefab";
+				return "Only entities of the scene itself can become a prefab, not the ones a prefab made";
 			}
 			subtree.push_back(current);
+			if (registry.all_of<PrefabInstance>(current))
+			{
+				continue; // an instance goes into the prefab as the link and its overrides: its nodes are generated again from the prefab
+			}
 
 			std::vector<entt::entity> children;
 			for (entt::entity child = registry.get<Hierarchy>(current).FirstChild; child != entt::null; child = registry.get<Hierarchy>(child).NextSibling)
@@ -1186,7 +1206,7 @@ namespace wiwa
 		wiwa::revert_field(holder, generated->NodeId, component, field);
 		registry.get<PrefabInstance>(generated->Root).Overrides = std::move(holder.Overrides);
 
-		if (const std::optional<FieldValue> original = prefab_value(*prefab, generated->NodeId, component, field))
+		if (const std::optional<FieldValue> original = prefab_value(*prefab, generated->NodeId, component, field, resolver()))
 		{
 			const ComponentInfo* info = ComponentRegistry::get().find(component);
 			const int index = info != nullptr ? info->field_index(field) : -1;

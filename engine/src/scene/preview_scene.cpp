@@ -3,6 +3,7 @@
 
 #include "components.h"
 #include "prefab_expander.h"
+#include "prefab_loading.h"
 #include "scene_records.h"
 
 #define WI_PREVIEW_LOG(level, ...) WI_LOG(level, "Scene", __VA_ARGS__)
@@ -74,6 +75,7 @@ namespace wiwa
 		}
 		clear();
 		m_Prefab = prefab;
+		m_Nested.clear();
 		m_Handle = prefab.valid() ? m_Assets.load<PrefabData>(prefab) : Handle<PrefabData>{};
 	}
 
@@ -88,11 +90,24 @@ namespace wiwa
 		{
 			return; // still loading, or it failed (failed())
 		}
+		const auto nested_handle = [&](const AssetRef& ref)
+		{
+			auto found = m_Nested.find(ref.resolved());
+			if (found == m_Nested.end())
+			{
+				found = m_Nested.emplace(ref.resolved(), m_Assets.load<PrefabData>(ref)).first;
+			}
+			return found->second;
+		};
+		if (nested_prefabs_state(*prefab, nested_handle) == LoadState::Loading)
+		{
+			return; // what it instantiates is still loading
+		}
 
 		const entt::entity root = m_Scene->create("Model");
 		m_Scene->registry().emplace<PrefabInstance>(root, PrefabInstance{ m_Prefab, {} });
 		const EntityRecord rootRecord = record_from_entity(*m_Scene, root);
-		const ExpandResult expanded = expand_prefab(rootRecord, *prefab);
+		const ExpandResult expanded = expand_prefab(rootRecord, *prefab, [&](const AssetRef& ref) { return nested_handle(ref).get(); });
 		for (const std::string& warning : expanded.Warnings)
 		{
 			WI_PREVIEW_LOG(Warning, "{0}", warning);
@@ -102,7 +117,7 @@ namespace wiwa
 			const entt::entity entity = apply_record(*m_Scene, expanded.Entities[i]);
 			if (entity != entt::null)
 			{
-				m_Scene->registry().emplace<PrefabChild>(entity, PrefabChild{ rootRecord.Id, expanded.NodeIds[i] });
+				m_Scene->registry().emplace<PrefabChild>(entity, PrefabChild{ rootRecord.Id, expanded.NodeIds[i], expanded.NestedRoots[i] != 0 });
 			}
 		}
 		m_Scene->update_world_transforms();

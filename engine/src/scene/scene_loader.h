@@ -16,6 +16,7 @@ namespace wiwa
 	{
 		EntityGuid Instance{}; // the instance that generated it; invalid for an entity written in the scene
 		u64 NodeId = 0;        // its prefab node, or ADDED_CHILD_NODE (see prefab_expander.h)
+		bool NestedRoot = false; // the root of a nested prefab instance
 	};
 
 	// A scene ready to be created: the file's entities with every prefab instance expanded, parents before children.

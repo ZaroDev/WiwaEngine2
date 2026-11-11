@@ -54,12 +54,12 @@ namespace wiwa
 				continue;
 			}
 
-			ExpandResult expanded = expand_prefab(entity, *prefab);
+			ExpandResult expanded = expand_prefab(entity, *prefab, prefabs);
 			blueprint.Warnings.insert(blueprint.Warnings.end(), expanded.Warnings.begin(), expanded.Warnings.end());
 			for (size_t i = 0; i < expanded.Entities.size(); i++)
 			{
 				blueprint.Entities.push_back(std::move(expanded.Entities[i]));
-				blueprint.Origins.push_back(i == 0 ? EntityOrigin{} : EntityOrigin{ entity.Id, expanded.NodeIds[i] });
+				blueprint.Origins.push_back(i == 0 ? EntityOrigin{} : EntityOrigin{ entity.Id, expanded.NodeIds[i], expanded.NestedRoots[i] != 0 });
 			}
 		}
 
@@ -89,7 +89,7 @@ namespace wiwa
 				const EntityOrigin& origin = m_Blueprint.Origins[m_Next];
 				if (origin.Instance.valid())
 				{
-					m_Target.registry().emplace<PrefabChild>(entity, PrefabChild{ origin.Instance, origin.NodeId });
+					m_Target.registry().emplace<PrefabChild>(entity, PrefabChild{ origin.Instance, origin.NodeId, origin.NestedRoot });
 				}
 				m_Created.push_back(entity);
 			}

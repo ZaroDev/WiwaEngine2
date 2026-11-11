@@ -21,6 +21,7 @@
 
 #include "scene_editor.h"
 #include "scene_json.h"
+#include "../asset_pipeline/prefab_file.h"
 
 #define WI_SCENE_LOG(level, ...) WI_LOG(level, "Scene", __VA_ARGS__)
 
@@ -1200,6 +1201,26 @@ namespace wiwa
 			check(blueprint.Origins[0].Instance == EntityGuid{} && blueprint.Origins[2].Instance == data.Entities[1].Id && blueprint.Origins[2].NodeId == prefab.Nodes[0].StableId, "the entities of an instance are marked with their instance and node");
 			check(std::find(blueprint.References.begin(), blueprint.References.end(), meshRef) != blueprint.References.end() && std::find(blueprint.References.begin(), blueprint.References.end(), prefabRef) != blueprint.References.end(), "the references include the prefab and what its nodes use");
 
+			// a nested instance: the blueprint follows it and marks its root; without its prefab the outer nodes stay and there is a warning
+			const AssetRef innerRef{ AssetGuid::generate(), 0 };
+			PrefabData outer;
+			outer.Name = "outer";
+			outer.Nodes = { make_node("Frame", -1), nested_node("Holder", 0, innerRef) };
+			assign_stable_ids(outer.Nodes);
+			SceneData nestedData;
+			nestedData.Entities.push_back(make_instance(EntityGuid::generate(), prefabRef));
+			nestedData.Entities.back().Components.back() = ComponentRecord{ "PrefabInstance", { FieldRecord{ "Prefab", FieldValue(prefabRef) } } };
+			const PrefabLookup both = [&](const AssetRef& ref) -> const PrefabData* { return ref == prefabRef ? &outer : ref == innerRef ? &prefab : nullptr; };
+			SceneBlueprint nestedBlueprint = build_blueprint(nestedData, both);
+			size_t flagged = 0;
+			for (const EntityOrigin& origin : nestedBlueprint.Origins)
+			{
+				flagged += origin.NestedRoot ? 1 : 0;
+			}
+			check(nestedBlueprint.Entities.size() == 1 + 2 + 2 && flagged == 1 && nestedBlueprint.Warnings.empty(), "a blueprint expands the prefab a node instantiates and marks the root of it");
+			SceneBlueprint nestedMissing = build_blueprint(nestedData, [&](const AssetRef& ref) -> const PrefabData* { return ref == prefabRef ? &outer : nullptr; });
+			check(nestedMissing.Entities.size() == 3 && !nestedMissing.Warnings.empty(), "a nested prefab that is not available leaves the outer nodes and a warning");
+
 			SceneBlueprint noPrefab = build_blueprint(data, [](const AssetRef&) { return nullptr; });
 			check(noPrefab.Entities.size() == 3 && !noPrefab.Warnings.empty(), "an instance whose prefab did not load stays as the root alone, with a warning");
 		}
@@ -1480,6 +1501,140 @@ namespace wiwa
 			module.set_commit_budget_ms(2.0f);
 		}
 
+		// A street prefab holds a lamp prefab: loaded in a scene and edited in the editor, the nodes of the lamp are there (preload follows
+		// the dependency), a change to one of them is an override of the scene's instance, and Revert and Unpack work on it.
+		void check_nested_scene(Check& check, AssetPipelineModule& pipeline)
+		{
+			register_scene_components();
+			SmokeAssets assets(pipeline);
+			AssetDatabase& database = pipeline.get_database();
+			AssetManager& manager = *Engine::get().get_module<AssetManager>();
+			SceneModule& module = *Engine::get().get_module<SceneModule>();
+
+			const auto named = [](const std::string& name, EntityGuid id, EntityGuid parent)
+			{
+				EntityRecord record;
+				record.Id = id;
+				record.Parent = parent;
+				record.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(name) } } });
+				return record;
+			};
+
+			EntityRecord pole = named("Pole", EntityGuid::generate(), EntityGuid{});
+			EntityRecord bulb = named("Bulb", EntityGuid::generate(), pole.Id);
+			bulb.Components.push_back(ComponentRecord{ "Light", { FieldRecord{ "Intensity", FieldValue(3.0f) } } });
+			const std::filesystem::path lampFile = assets.folder() / "PostLamp.wprefab";
+			check(write_prefab_file(lampFile, { pole, bulb }, "Lamp"), "nested scene: the lamp prefab is written");
+			const std::optional<AssetRef> lampRef = database.ensure_imported(lampFile);
+			check(lampRef.has_value(), "nested scene: the lamp prefab imports");
+			if (!lampRef)
+			{
+				return;
+			}
+
+			std::string conversionError;
+			const std::optional<PrefabData> lamp = prefab_from_records({ pole, bulb }, "Lamp", conversionError);
+			const u64 bulbNode = lamp ? lamp->Nodes[1].StableId : 0;
+
+			EntityRecord street = named("Street", EntityGuid::generate(), EntityGuid{});
+			EntityRecord post = named("Post", EntityGuid::generate(), street.Id);
+			post.Components.push_back(ComponentRecord{ "PrefabInstance", { FieldRecord{ "Prefab", FieldValue(*lampRef) } } });
+			post.Overrides.push_back(set_field_override(bulbNode, "Light", "Intensity", FieldValue(4.0f)));
+			const std::filesystem::path streetFile = assets.folder() / "NestedStreet.wprefab";
+			check(write_prefab_file(streetFile, { street, post }, "Street"), "nested scene: the street prefab is written");
+			const std::optional<AssetRef> streetRef = database.ensure_imported(streetFile);
+			check(streetRef.has_value(), "nested scene: the street prefab (with a lamp instance) imports");
+			if (!streetRef)
+			{
+				return;
+			}
+
+			// a scene that holds the street loads the lamp too
+			SceneData level;
+			level.Name = "nested_level";
+			level.Entities = { make_instance(EntityGuid::generate(), *streetRef) };
+			const std::filesystem::path levelPath = assets.write("nested_level.wscene", scene_to_json(level).dump());
+			const std::optional<AssetRef> levelRef = database.ensure_imported(levelPath);
+			check(levelRef.has_value(), "nested scene: the level imports");
+			if (levelRef)
+			{
+				Ref<JobProgress> progress = module.load_async(*levelRef);
+				progress->wait();
+				Ref<Scene> loaded = module.get_active();
+				size_t lights = 0;
+				size_t nestedRoots = 0;
+				float intensity = 0.0f;
+				if (loaded)
+				{
+					for (const entt::entity entity : loaded->registry().view<Light>())
+					{
+						lights++;
+						intensity = loaded->registry().get<Light>(entity).Intensity;
+					}
+					for (const entt::entity entity : loaded->registry().view<PrefabChild>())
+					{
+						nestedRoots += loaded->registry().get<PrefabChild>(entity).NestedRoot ? 1 : 0;
+					}
+				}
+				check(entity_count(loaded) == 5 && lights == 1 && intensity == 4.0f && nestedRoots == 1, "nested scene: a loaded scene has the nodes of the nested prefab, with the override of the instance, and flags the nested root (" + std::to_string(entity_count(loaded)) + " entities, " + std::to_string(lights) + " lights, intensity " + std::to_string(intensity) + ", " + std::to_string(nestedRoots) + " nested roots)");
+			}
+
+			// in the editor
+			SceneEditor editor(manager, module);
+			editor.set_scene(CreateRef<Scene>(), {});
+			Scene& scene = editor.scene();
+			entt::registry& registry = scene.registry();
+			const auto pump = [&]()
+			{
+				for (u32 i = 0; i < 2000 && (editor.has_pending_prefab() || editor.has_pending()); i++)
+				{
+					editor.update();
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+			};
+
+			const entt::entity instance = editor.add_prefab(*streetRef, entt::null);
+			pump();
+			check(instance != entt::null && registry.storage<Id>().size() == 5, "nested scene: the editor expands the nested prefab too (" + std::to_string(registry.storage<Id>().size()) + ")");
+
+			entt::entity lampBulb = entt::null;
+			for (const entt::entity entity : registry.view<PrefabChild, Light>())
+			{
+				lampBulb = entity;
+			}
+			check(lampBulb != entt::null && registry.get<Light>(lampBulb).Intensity == 4.0f, "nested scene: the nested instance's override is applied in the editor (" + std::to_string(lampBulb == entt::null ? -1.0f : registry.get<Light>(lampBulb).Intensity) + ")");
+			if (lampBulb == entt::null)
+			{
+				return;
+			}
+
+			const u64 deepNode = registry.get<PrefabChild>(lampBulb).NodeId;
+			check(deepNode != bulbNode && deepNode != 0 && deepNode != ADDED_CHILD_NODE, "nested scene: the node of a nested prefab has a composite id");
+			check(editor.set_field(lampBulb, "Light", "Intensity", FieldValue(11.0f)), "nested scene: a deep node can be edited");
+			const PrefabInstance& link = registry.get<PrefabInstance>(instance);
+			check(link.Overrides.size() == 1 && link.Overrides[0].Kind == OverrideKind::SetField && link.Overrides[0].NodeId == deepNode && editor.is_overridden(lampBulb, "Light", "Intensity"), "nested scene: the edit is one override of the scene's instance, by the composite id");
+			check(editor.revert_field(lampBulb, "Light", "Intensity") && registry.get<PrefabInstance>(instance).Overrides.empty() && registry.get<Light>(lampBulb).Intensity == 4.0f, "nested scene: Revert brings back the value the nested instance gives");
+
+			check(editor.unpack(instance) && registry.view<PrefabChild>().size() == 0 && !registry.all_of<PrefabInstance>(instance) && registry.storage<Id>().size() == 5, "nested scene: Unpack leaves plain entities for every level");
+
+			// an entity that holds an instance can become a prefab (a prefab that holds a prefab)
+			const entt::entity group = editor.create_entity(entt::null);
+			registry.get<Name>(group).Value = "Group";
+			const entt::entity inner = editor.add_prefab(*lampRef, group);
+			pump();
+			check(inner != entt::null && editor.make_prefab(group, assets.folder()).empty(), "nested scene: an entity that holds a prefab instance can be made a prefab");
+			database.ensure_imported(assets.folder() / "Group.wprefab");
+			pump();
+			std::string readError;
+			const std::optional<std::vector<EntityRecord>> written = read_prefab_file(assets.folder() / "Group.wprefab", readError);
+			bool holdsInstance = false;
+			for (const EntityRecord& entity : written ? *written : std::vector<EntityRecord>{})
+			{
+				holdsInstance = holdsInstance || find_component(entity, "PrefabInstance") != nullptr;
+			}
+			check(written && written->size() == 2 && holdsInstance, "nested scene: the prefab file has the instance and not the nodes it generated");
+		}
+
 		void check_make_prefab(Check& check, AssetPipelineModule& pipeline)
 		{
 			register_scene_components();
@@ -1544,8 +1699,7 @@ namespace wiwa
 
 			// what cannot become a prefab
 			const size_t afterCount = registry.storage<Id>().size();
-			check(instance != entt::null && !editor.make_prefab(instance, assets.folder()).empty(), "make_prefab: an instance is refused");
-			check(generated != entt::null && !editor.make_prefab(generated, assets.folder()).empty(), "make_prefab: an entity a prefab made is refused");
+						check(generated != entt::null && !editor.make_prefab(generated, assets.folder()).empty(), "make_prefab: an entity a prefab made is refused");
 			check(!editor.has_pending_prefab() && registry.storage<Id>().size() == afterCount, "make_prefab: refusals change nothing");
 
 			// an entity deleted while the prefab is being imported is not brought back
@@ -2439,6 +2593,7 @@ namespace wiwa
 		check_scene_loading(check, pipeline);
 		check_extracted_materials(check, pipeline);
 		check_make_prefab(check, pipeline);
+		check_nested_scene(check, pipeline);
 		check_duplicate_rename(check, pipeline);
 		check_scene_editor(check, pipeline);
 
