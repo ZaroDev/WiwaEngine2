@@ -749,6 +749,55 @@ function Audio.load_bank(bank) end
 ---@return string
 function Audio.backend() end
 
+--- The AIController of an entity (AI.controller): its behaviour tree's blackboard and its run. Methods are called with a colon.
+---@class AIHandle
+local AIHandle = {}
+--- A blackboard value: a number, bool, string, vec3 or Entity (nil for no entity). An unknown key is an error naming it.
+---@param key string
+---@return any
+function AIHandle:get(key) end
+--- Sets a value of the key's own type (no conversions; a number for an int key must be whole); an error names the key and the type.
+---@param key string
+---@param value any
+function AIHandle:set(key, value) end
+--- Aborts what runs and puts the blackboard back to the defaults and the controller's overrides.
+function AIHandle:restart() end
+--- Whether the tree is in the middle of a run.
+---@return boolean
+function AIHandle:running() end
+
+--- Behaviour trees: the AI of entities that have an AIController. An AI error is raised when there is no AI module.
+AI = {}
+--- The controller of an entity; an error when it has no AIController component.
+---@param entity Entity
+---@return AIHandle
+function AI.controller(entity) end
+--- A sound that the AIs with a Perceiver within hearing (hearing radius times loudness) hear this frame. They get it in their blackboard (heard_position, heard_kind).
+---@param position vec3
+---@param loudness number  0 to 1000
+---@param kind? string
+function AI.emit_noise(position, loudness, kind) end
+
+--- The blackboard of a behaviour tree leaf (the `bb` argument of its hooks). Methods are called with a colon.
+---@class BtBlackboard
+local BtBlackboard = {}
+---@param key string
+---@return any
+function BtBlackboard:get(key) end
+---@param key string
+---@param value any
+function BtBlackboard:set(key, value) end
+---@param key string
+---@return boolean
+function BtBlackboard:has(key) end
+
+--- Base class of a behaviour tree action leaf (a LuaAction node). Return BtAction:extend{ properties = {...}, on_start, on_tick, on_abort }.
+---@class BtAction : ScriptClass
+BtAction = {}
+--- Base class of a behaviour tree condition leaf (a LuaCondition node).
+---@class BtCondition : ScriptClass
+BtCondition = {}
+
 --- The NavAgent of an entity (Nav.agent): it walks the navmesh to a destination while the game plays.
 ---@class NavAgentHandle
 local NavAgentHandle = {}
