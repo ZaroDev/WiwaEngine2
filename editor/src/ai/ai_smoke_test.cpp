@@ -3,7 +3,12 @@
 
 #include <algorithm>
 
+#include <map>
+
+#include <ai/blackboard.h>
+#include <ai/bt_compile.h>
 #include <ai/bt_file.h>
+#include <ai/bt_instance.h>
 #include <assets/wasset_io.h>
 
 namespace wiwa
@@ -209,6 +214,324 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// External leaves that answer from a script, by node id, and count what they were asked.
+		struct FakeLeaves
+		{
+			std::map<std::string, std::vector<BtStatus>> Script{};
+			std::map<std::string, int> Starts{}, Ticks{}, Aborts{};
+			std::map<std::string, size_t> Position{};
+			BtServices Services{};
+
+			FakeLeaves()
+			{
+				Services.Leaf = [this](BtLeafCall& call) -> BtStatus
+				{
+					const std::string& id = call.Node->Id;
+					if (call.Phase == BtLeafPhase::Abort)
+					{
+						Aborts[id]++;
+						return BtStatus::Failure;
+					}
+					size_t& at = Position[id];
+					if (call.Phase == BtLeafPhase::Start)
+					{
+						Starts[id]++;
+						at = 0;
+					}
+					else
+					{
+						Ticks[id]++;
+						at++;
+					}
+					const std::vector<BtStatus>& script = Script[id];
+					if (script.empty())
+					{
+						return BtStatus::Running;
+					}
+					return script[std::min(at, script.size() - 1)];
+				};
+			}
+		};
+
+		BtNodeDesc leaf(const std::string& id) { return node(id, "MoveTo", {}, { { "target", Json::array({ 0, 0, 0 }) } }); }
+
+		Ref<const CompiledTree> compiled(Check& check, BehaviorTreeDoc doc)
+		{
+			std::string error;
+			Ref<const CompiledTree> tree = compile_bt(doc, error);
+			check(tree != nullptr, "compile: the test tree compiles (" + error + ")");
+			return tree;
+		}
+
+		constexpr auto SUCCESS = BtStatus::Success;
+		constexpr auto FAILURE = BtStatus::Failure;
+		constexpr auto RUNNING = BtStatus::Running;
+
+		void runtime_nodes(Check& check)
+		{
+			const entt::entity self{ 3 };
+
+			// Sequence: memory, and stopping at the first failure.
+			{
+				FakeLeaves fake;
+				fake.Script["a"] = { SUCCESS };
+				fake.Script["b"] = { RUNNING, RUNNING, SUCCESS };
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Nodes = { node("s", "Sequence", { "a", "b" }), leaf("a"), leaf("b") };
+				BtInstance instance(compiled(check, doc), self);
+				check(instance.tick(fake.Services, 0.1f, 0.0) == RUNNING && instance.tick(fake.Services, 0.1f, 0.1) == RUNNING && instance.tick(fake.Services, 0.1f, 0.2) == SUCCESS, "sequence_memory: Running, Running, then Success");
+				check(fake.Starts["a"] == 1 && fake.Starts["b"] == 1 && fake.Ticks["b"] == 2, "sequence_memory: the first child is not run again while the second runs");
+
+				FakeLeaves failing;
+				failing.Script["a"] = { SUCCESS };
+				failing.Script["b"] = { FAILURE };
+				BehaviorTreeDoc stops;
+				stops.Root = "s";
+				stops.Nodes = { node("s", "Sequence", { "a", "b", "c" }), leaf("a"), leaf("b"), leaf("c") };
+				BtInstance second(compiled(check, stops), self);
+				check(second.tick(failing.Services, 0.1f, 0.0) == FAILURE && failing.Starts["c"] == 0, "sequence_fail: the first failure ends it, the rest does not run");
+			}
+
+			// Selector: falls through failures, keeps the running child.
+			{
+				FakeLeaves fake;
+				fake.Script["a"] = { FAILURE };
+				fake.Script["b"] = { RUNNING, SUCCESS };
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Nodes = { node("s", "Selector", { "a", "b", "c" }), leaf("a"), leaf("b"), leaf("c") };
+				BtInstance instance(compiled(check, doc), self);
+				check(instance.tick(fake.Services, 0.1f, 0.0) == RUNNING && instance.tick(fake.Services, 0.1f, 0.1) == SUCCESS, "selector_memory: falls through a failure, keeps the running child, then succeeds");
+				check(fake.Starts["a"] == 1 && fake.Starts["c"] == 0, "selector_memory: a child that failed is not asked again while a later one runs");
+			}
+
+			// Reactive and plain selector with a guard that changes.
+			for (const bool reactive : { true, false })
+			{
+				FakeLeaves fake;
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Blackboard = { key("alert", BtValueType::Bool, false) };
+				doc.Nodes = { node("s", "Selector", { "g", "y" }, { { "reactive", reactive } }), node("g", "Guard", { "x" }, { { "key", "alert" }, { "op", "true" } }), leaf("x"), leaf("y") };
+				BtInstance instance(compiled(check, doc), self);
+				const std::string mode = reactive ? "reactive" : "plain";
+				check(instance.tick(fake.Services, 0.1f, 0.0) == RUNNING && fake.Starts["y"] == 1 && fake.Starts["x"] == 0, mode + "_selector: the lower priority child runs while the guard is false");
+				instance.blackboard().set("alert", true);
+				instance.tick(fake.Services, 0.1f, 0.1);
+				if (reactive)
+				{
+					check(fake.Aborts["y"] == 1 && fake.Starts["x"] == 1, "reactive_selector: a higher priority child that now runs aborts the running one, once");
+					instance.blackboard().set("alert", false);
+					instance.tick(fake.Services, 0.1f, 0.2);
+					check(fake.Aborts["x"] == 1 && fake.Starts["y"] == 2, "reactive_selector: the guard going false cuts its child and the other one starts again");
+				}
+				else
+				{
+					check(fake.Aborts["y"] == 0 && fake.Starts["x"] == 0 && fake.Ticks["y"] == 1, "plain_selector: the running child is not interrupted");
+				}
+			}
+
+			// Reactive sequence: a condition that stops holding aborts what runs after it.
+			{
+				FakeLeaves fake;
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Blackboard = { key("alert", BtValueType::Bool, true) };
+				doc.Nodes = { node("s", "Sequence", { "c", "m" }, { { "reactive", true } }), node("c", "CheckBlackboard", {}, { { "key", "alert" }, { "op", "true" } }), leaf("m") };
+				BtInstance instance(compiled(check, doc), self);
+				check(instance.tick(fake.Services, 0.1f, 0.0) == RUNNING && fake.Starts["m"] == 1, "reactive_sequence: runs while the condition holds");
+				instance.blackboard().set("alert", false);
+				check(instance.tick(fake.Services, 0.1f, 0.1) == FAILURE && fake.Aborts["m"] == 1 && !instance.running(), "reactive_sequence: the condition failing aborts the running child once and fails");
+			}
+
+			// Parallel policies.
+			{
+				FakeLeaves all;
+				all.Script["a"] = { RUNNING, SUCCESS };
+				all.Script["b"] = { RUNNING, RUNNING, SUCCESS };
+				BehaviorTreeDoc doc;
+				doc.Root = "p";
+				doc.Nodes = { node("p", "Parallel", { "a", "b" }), leaf("a"), leaf("b") };
+				BtInstance instance(compiled(check, doc), self);
+				check(instance.tick(all.Services, 0.1f, 0.0) == RUNNING && instance.tick(all.Services, 0.1f, 0.1) == RUNNING && instance.tick(all.Services, 0.1f, 0.2) == SUCCESS, "parallel_all: succeeds when every child has");
+				check(all.Starts["a"] == 1 && all.Ticks["a"] == 1, "parallel_all: a child that finished is not run again");
+
+				FakeLeaves one;
+				one.Script["a"] = { RUNNING, SUCCESS };
+				BehaviorTreeDoc first;
+				first.Root = "p";
+				first.Nodes = { node("p", "Parallel", { "a", "b" }, { { "success", "one" } }), leaf("a"), leaf("b") };
+				BtInstance quick(compiled(check, first), self);
+				quick.tick(one.Services, 0.1f, 0.0);
+				check(quick.tick(one.Services, 0.1f, 0.1) == SUCCESS && one.Aborts["b"] == 1, "parallel_one: succeeds when one child does and aborts the others");
+
+				FakeLeaves fails;
+				fails.Script["a"] = { RUNNING, FAILURE };
+				BehaviorTreeDoc bad;
+				bad.Root = "p";
+				bad.Nodes = { node("p", "Parallel", { "a", "b" }), leaf("a"), leaf("b") };
+				BtInstance failing(compiled(check, bad), self);
+				failing.tick(fails.Services, 0.1f, 0.0);
+				check(failing.tick(fails.Services, 0.1f, 0.1) == FAILURE && fails.Aborts["b"] == 1, "parallel_failure: one failure fails it and aborts the others");
+			}
+
+			// Decorators.
+			{
+				FakeLeaves fake;
+				fake.Script["ok"] = { SUCCESS };
+				fake.Script["no"] = { FAILURE };
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Nodes = { node("s", "Sequence", { "i", "u" }), node("i", "Inverter", { "no" }), node("u", "Succeeder", { "no2" }), leaf("no"), leaf("no2") };
+				fake.Script["no2"] = { FAILURE };
+				BtInstance instance(compiled(check, doc), self);
+				check(instance.tick(fake.Services, 0.1f, 0.0) == SUCCESS, "inverter_succeeder: an inverted failure and a forced success");
+
+				BehaviorTreeDoc inverted;
+				inverted.Root = "i";
+				inverted.Nodes = { node("i", "Inverter", { "ok" }), leaf("ok") };
+				BtInstance second(compiled(check, inverted), self);
+				check(second.tick(fake.Services, 0.1f, 0.0) == FAILURE, "inverter: an inverted success fails");
+			}
+
+			// Repeat: three times, for ever, and a failure ends it.
+			{
+				FakeLeaves fake;
+				fake.Script["a"] = { SUCCESS };
+				BehaviorTreeDoc doc;
+				doc.Root = "r";
+				doc.Nodes = { node("r", "Repeat", { "a" }, { { "count", 3 } }), leaf("a") };
+				BtInstance three(compiled(check, doc), self);
+				const BtStatus a = three.tick(fake.Services, 0.1f, 0.0);
+				const BtStatus b = three.tick(fake.Services, 0.1f, 0.1);
+				const BtStatus c = three.tick(fake.Services, 0.1f, 0.2);
+				check(a == RUNNING && b == RUNNING && c == SUCCESS && fake.Starts["a"] == 3, "repeat_count: three runs, then Success");
+				doc.Nodes[0].Params["count"] = 0;
+				BtInstance forever(compiled(check, doc), self);
+				bool always = true;
+				for (int i = 0; i < 20; i++)
+				{
+					always = always && forever.tick(fake.Services, 0.1f, 0.1 * i) == RUNNING;
+				}
+				check(always, "repeat_forever: Running for ever");
+				fake.Script["a"] = { FAILURE };
+				BtInstance failing(compiled(check, doc), self);
+				check(failing.tick(fake.Services, 0.1f, 0.0) == FAILURE, "repeat_failure: a failing child ends it");
+			}
+
+			// Cooldown.
+			{
+				FakeLeaves fake;
+				fake.Script["a"] = { SUCCESS };
+				BehaviorTreeDoc doc;
+				doc.Root = "c";
+				doc.Nodes = { node("c", "Cooldown", { "a" }, { { "seconds", 5.0 } }), leaf("a") };
+				BtInstance instance(compiled(check, doc), self);
+				const BtStatus first = instance.tick(fake.Services, 0.1f, 0.0);
+				const BtStatus within = instance.tick(fake.Services, 0.1f, 1.0);
+				const BtStatus after = instance.tick(fake.Services, 0.1f, 6.0);
+				check(first == SUCCESS && within == FAILURE && after == SUCCESS && fake.Starts["a"] == 2, "cooldown: runs, is refused inside the window, runs again after it");
+			}
+
+			// Wait, and the seeded random range.
+			{
+				FakeLeaves fake;
+				BehaviorTreeDoc doc;
+				doc.Root = "w";
+				doc.Nodes = { node("w", "Wait", {}, { { "seconds", 2.0 } }) };
+				BtInstance instance(compiled(check, doc), self);
+				check(instance.tick(fake.Services, 0.1f, 0.0) == RUNNING && instance.tick(fake.Services, 0.1f, 1.0) == RUNNING && instance.tick(fake.Services, 0.1f, 2.0) == SUCCESS, "wait: Running until the time is up");
+
+				doc.Nodes = { node("w", "Wait", {}, { { "min", 1.0 }, { "max", 3.0 } }) };
+				const Ref<const CompiledTree> tree = compiled(check, doc);
+				const auto finish_time = [&](u32 seed)
+				{
+					BtInstance random(tree, self, seed);
+					double time = 0.0;
+					while (random.tick(fake.Services, 0.1f, time) == RUNNING && time < 10.0)
+					{
+						time += 0.01;
+					}
+					return time;
+				};
+				const double one = finish_time(7);
+				check(one >= 1.0 && one <= 3.01 && finish_time(7) == one && finish_time(8) != one, "wait_random: a time in the range, the same for a seed, another for another seed");
+				BtInstance zero(compiled(check, BehaviorTreeDoc{ "w", { node("w", "Wait") }, {} }), self);
+				check(zero.tick(fake.Services, 0.1f, 0.0) == SUCCESS, "wait_zero: no time given is Success at once");
+			}
+
+			// SetBlackboard, CheckBlackboard and the comparisons of every type.
+			{
+				FakeLeaves fake;
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Blackboard = { key("count", BtValueType::Int, 1), key("name", BtValueType::String, "a"), key("home", BtValueType::Vec3, Json::array({ 1, 2, 3 })), key("on", BtValueType::Bool, false) };
+				doc.Nodes = { node("s", "Sequence", { "set", "c1", "c2", "c3", "c4", "c5" }),
+					node("set", "SetBlackboard", {}, { { "key", "count" }, { "value", 7 } }),
+					node("c1", "CheckBlackboard", {}, { { "key", "count" }, { "op", ">" }, { "value", 6 } }),
+					node("c2", "CheckBlackboard", {}, { { "key", "count" }, { "op", "!=" }, { "value", 8 } }),
+					node("c3", "CheckBlackboard", {}, { { "key", "name" }, { "op", "==" }, { "value", "a" } }),
+					node("c4", "CheckBlackboard", {}, { { "key", "home" }, { "op", "==" }, { "value", Json::array({ 1, 2, 3 }) } }),
+					node("c5", "CheckBlackboard", {}, { { "key", "on" }, { "op", "false" } }) };
+				BtInstance instance(compiled(check, doc), self);
+				check(instance.tick(fake.Services, 0.1f, 0.0) == SUCCESS && std::get<i32>(*instance.blackboard().get("count")) == 7, "blackboard_nodes: set and the comparisons of int, string, vec3 and bool hold");
+				doc.Nodes[2].Params["op"] = "<";
+				BtInstance failing(compiled(check, doc), self);
+				check(failing.tick(fake.Services, 0.1f, 0.0) == FAILURE, "blackboard_nodes: a comparison that is false fails the sequence");
+			}
+
+			// The blackboard itself.
+			{
+				Blackboard board;
+				board.declare({ key("f", BtValueType::Float, 1.5), key("e", BtValueType::Entity), key("v", BtValueType::Vec3) });
+				std::string error;
+				check(std::get<float>(*board.get("f")) == 1.5f && !std::get<EntityGuid>(*board.get("e")).valid() && std::get<glm::vec3>(*board.get("v")) == glm::vec3(0.0f), "blackboard_defaults: the declared defaults, zero where none");
+				check(!board.set("f", true, &error) && error.find("float") != std::string::npos, "blackboard_type: a value of the wrong type is refused naming the type");
+				check(!board.set("nope", 1.0f, &error) && error.find("no key") != std::string::npos, "blackboard_unknown: an unknown key is refused");
+				check(!board.set("f", std::numeric_limits<float>::quiet_NaN(), &error), "blackboard_nan: a float that is not a number is refused");
+				check(board.set("f", 2.0f) && std::get<float>(*board.get("f")) == 2.0f, "blackboard_set: a value of the right type is kept");
+				check(board.set_dynamic("seen", EntityGuid::derive(EntityGuid{ 1, 2 }, 3)) && board.type_of("seen") == BtValueType::Entity && !board.declared("seen") && !board.set_dynamic("seen", 1.0f), "blackboard_dynamic: an undeclared key is made by set_dynamic, typed by its first value");
+				const std::vector<std::string> problems = board.apply_overrides({ { "f", 9.0 }, { "ghost", 1 }, { "v", "x" } });
+				check(std::get<float>(*board.get("f")) == 9.0f && problems.size() == 2, "blackboard_overrides: a valid override applies, an unknown key and a wrong value are reported");
+			}
+
+			// Compile refuses an invalid tree; instances of one tree are independent; abort is once; no services fails.
+			{
+				BehaviorTreeDoc cycle;
+				cycle.Root = "a";
+				cycle.Nodes = { node("a", "Sequence", { "b" }), node("b", "Inverter", { "a" }) };
+				std::string error;
+				check(compile_bt(cycle, error) == nullptr && error.find("cycle") != std::string::npos, "compile_invalid: an invalid tree is refused with the validator's message");
+
+				FakeLeaves fake;
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Blackboard = { key("n", BtValueType::Int, 0) };
+				doc.Nodes = { node("s", "Sequence", { "a" }), leaf("a") };
+				const Ref<const CompiledTree> tree = compiled(check, doc);
+				BtInstance one(tree, entt::entity{ 1 });
+				BtInstance two(tree, entt::entity{ 2 });
+				one.tick(fake.Services, 0.1f, 0.0);
+				one.blackboard().set("n", i32{ 5 });
+				check(one.running() && !two.running() && std::get<i32>(*two.blackboard().get("n")) == 0, "instances_independent: two instances of one tree keep their own state and blackboard");
+
+				one.abort(fake.Services, 0.1);
+				one.abort(fake.Services, 0.2);
+				check(fake.Aborts["a"] == 1 && !one.running(), "abort_once: aborting twice aborts the running leaf once");
+				one.tick(fake.Services, 0.1f, 0.3);
+				one.restart(fake.Services, 0.4);
+				check(fake.Aborts["a"] == 2 && std::get<i32>(*one.blackboard().get("n")) == 0, "restart: aborts the running leaf and puts the blackboard back");
+
+				BtServices none;
+				BtInstance orphan(tree, entt::entity{ 4 });
+				check(orphan.tick(none, 0.1f, 0.0) == FAILURE, "external_without_services: a leaf with nothing to run it fails");
+			}
+		}
+	}
+
 	bool run_ai_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -217,6 +540,7 @@ namespace wiwa
 		file_format(check);
 		validation(check);
 		asset_wiring(check);
+		runtime_nodes(check);
 
 		if (check.Failures == 0)
 		{
