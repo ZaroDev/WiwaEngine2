@@ -9,7 +9,14 @@
 #include <ai/bt_compile.h>
 #include <ai/bt_file.h>
 #include <ai/bt_instance.h>
+#include <ai/bt_leaves_engine.h>
+#include <nav/nav_module.h>
+#include <scene/components.h>
+#include <scene/scene.h>
 #include <assets/wasset_io.h>
+
+#include "../asset_pipeline/nav_bake.h"
+#include "../nav/nav_fixtures.h"
 
 namespace wiwa
 {
@@ -532,6 +539,234 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		BtNodeDesc move_node(const std::string& id, Json target, double stopping = 0.0)
+		{
+			Json params = { { "target", std::move(target) } };
+			if (stopping > 0.0)
+			{
+				params["stoppingDistance"] = stopping;
+			}
+			return node(id, "MoveTo", {}, params);
+		}
+
+		// A scene with an agent at (-8, 0, 0), a goal entity at (8, 0, 0), and a navigation module with a baked floor (with a wall of halfZ, 0: none).
+		struct MoveFixture
+		{
+			NavMeshData Mesh{};
+			Ref<Scene> TheScene = CreateRef<Scene>();
+			NavModule Nav;
+			entt::entity Agent = entt::null;
+			entt::entity Goal = entt::null;
+			BtEngineHooks Hooks{};
+			BtServices Services{};
+			double Time = 0.0;
+			bool Ok = true;
+
+			explicit MoveFixture(float halfZ, bool withMesh = true)
+			{
+				if (withMesh)
+				{
+					const NavBakeResult baked = bake_navmesh(nav_fixtures::floor_with_wall(halfZ));
+					Ok = baked.Ok;
+					Mesh = baked.Mesh;
+				}
+				Agent = TheScene->create("Agent");
+				TheScene->registry().get<Transform>(Agent).Position = glm::vec3(-8.0f, 0.0f, 0.0f);
+				TheScene->registry().emplace<NavAgent>(Agent);
+				Goal = TheScene->create("Goal");
+				TheScene->registry().get<Transform>(Goal).Position = glm::vec3(8.0f, 0.0f, 0.0f);
+				TheScene->update_world_transforms();
+				Nav.set_auto_start(false);
+				if (withMesh)
+				{
+					Nav.start_world_with_mesh(TheScene, Mesh);
+				}
+				else
+				{
+					Nav.start_world(TheScene);
+				}
+				Hooks.TheScene = TheScene.get();
+				Hooks.Nav = &Nav;
+				Services.Leaf = [this](BtLeafCall& call) { return bt_engine_leaf(call, Hooks); };
+			}
+
+			// One frame: the tree, then the navigation (the engine's order); returns what the tree said.
+			BtStatus frame(BtInstance& instance)
+			{
+				const BtStatus status = instance.tick(Services, 1.0f / 60.0f, Time);
+				Nav.tick(nullptr, true, 1.0f / 60.0f);
+				Time += 1.0 / 60.0;
+				return status;
+			}
+
+			glm::vec3 position() const { return TheScene->registry().get<Transform>(Agent).Position; }
+		};
+
+		void engine_leaves(Check& check)
+		{
+			// Arrives.
+			{
+				MoveFixture f(0.0f);
+				check(f.Ok, "moveto_fixture: the floor bakes");
+				BehaviorTreeDoc doc;
+				doc.Root = "m";
+				doc.Nodes = { move_node("m", Json::array({ 8, 0, 0 })) };
+				BtInstance instance(compiled(check, doc), f.Agent);
+				BtStatus status = f.frame(instance);
+				check(status == RUNNING, "moveto_arrive: Running when the walk starts");
+				for (int i = 0; i < 1200 && status == RUNNING; i++)
+				{
+					status = f.frame(instance);
+				}
+				check(status == SUCCESS && glm::distance(f.position(), glm::vec3(8.0f, 0.0f, 0.0f)) < 0.6f, "moveto_arrive: Success at the target");
+			}
+
+			// A wall across the whole floor: the walk goes as far as it can, then fails.
+			{
+				MoveFixture f(10.0f);
+				BehaviorTreeDoc doc;
+				doc.Root = "m";
+				doc.Nodes = { move_node("m", Json::array({ 8, 0, 0 })) };
+				BtInstance instance(compiled(check, doc), f.Agent);
+				BtStatus status = RUNNING;
+				for (int i = 0; i < 1200 && status == RUNNING; i++)
+				{
+					status = f.frame(instance);
+				}
+				check(status == FAILURE && f.position().x < -0.4f, "moveto_unreachable: Failure, and the agent stayed on its side of the wall");
+			}
+
+			// An entity target that is destroyed mid-walk fails; one that moves is followed.
+			{
+				MoveFixture f(0.0f);
+				BehaviorTreeDoc doc;
+				doc.Root = "m";
+				doc.Blackboard = { key("target", BtValueType::Entity) };
+				doc.Nodes = { move_node("m", "key:target") };
+				BtInstance instance(compiled(check, doc), f.Agent);
+				instance.blackboard().set("target", f.TheScene->registry().get<Id>(f.Goal).Guid);
+				BtStatus status = RUNNING;
+				for (int i = 0; i < 20; i++)
+				{
+					status = f.frame(instance);
+				}
+				f.TheScene->registry().get<Transform>(f.Goal).Position = glm::vec3(8.0f, 0.0f, 6.0f);
+				f.TheScene->update_world_transforms();
+				for (int i = 0; i < 1200 && status == RUNNING; i++)
+				{
+					status = f.frame(instance);
+				}
+				check(status == SUCCESS && glm::distance(f.position(), glm::vec3(8.0f, 0.0f, 6.0f)) < 0.8f, "moveto_follows: an entity target that moved is followed to its new place");
+
+				MoveFixture g(0.0f);
+				BtInstance second(compiled(check, doc), g.Agent);
+				second.blackboard().set("target", g.TheScene->registry().get<Id>(g.Goal).Guid);
+				BtStatus ongoing = RUNNING;
+				for (int i = 0; i < 10; i++)
+				{
+					ongoing = g.frame(second);
+				}
+				g.TheScene->destroy(g.Goal);
+				ongoing = g.frame(second);
+				check(ongoing == FAILURE && g.Nav.state(g.Agent) == NavAgentState::Idle, "moveto_target_destroyed: a target that is gone fails the node and stops the agent");
+
+				MoveFixture h(0.0f);
+				BtInstance empty(compiled(check, doc), h.Agent);
+				check(h.frame(empty) == FAILURE, "moveto_empty_key: an empty entity key fails");
+			}
+
+			// Off the mesh, a point that is not a number, a key that is not a point.
+			{
+				MoveFixture f(0.0f);
+				BehaviorTreeDoc doc;
+				doc.Root = "m";
+				doc.Blackboard = { key("spot", BtValueType::Vec3), key("size", BtValueType::Float) };
+				doc.Nodes = { move_node("m", "key:spot") };
+				BtInstance instance(compiled(check, doc), f.Agent);
+				instance.blackboard().set("spot", glm::vec3(500.0f, 0.0f, 500.0f));
+				check(f.frame(instance) == FAILURE, "moveto_off_mesh: a point far from the navmesh fails");
+				std::string error;
+				check(!instance.blackboard().set("spot", glm::vec3(std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f), &error), "moveto_nan: a point that is not a number cannot be put on the blackboard");
+				BehaviorTreeDoc wrong = doc;
+				wrong.Nodes = { move_node("m", "key:size") };
+				std::string compileError;
+				check(compile_bt(wrong, compileError) == nullptr, "moveto_wrong_key: a float key as a target does not compile");
+			}
+
+			// Abort stops the agent; stopping distance ends the walk early.
+			{
+				MoveFixture f(0.0f);
+				BehaviorTreeDoc doc;
+				doc.Root = "m";
+				doc.Nodes = { move_node("m", Json::array({ 8, 0, 0 })) };
+				BtInstance instance(compiled(check, doc), f.Agent);
+				for (int i = 0; i < 30; i++)
+				{
+					f.frame(instance);
+				}
+				check(f.Nav.state(f.Agent) == NavAgentState::Moving, "moveto_abort: the agent walks");
+				instance.abort(f.Services, f.Time);
+				check(f.Nav.state(f.Agent) == NavAgentState::Idle && !instance.running(), "moveto_abort: an abort stops the agent");
+
+				MoveFixture g(0.0f);
+				doc.Nodes = { move_node("m", Json::array({ 8, 0, 0 }), 3.0) };
+				BtInstance closer(compiled(check, doc), g.Agent);
+				BtStatus status = RUNNING;
+				for (int i = 0; i < 1200 && status == RUNNING; i++)
+				{
+					status = g.frame(closer);
+				}
+				const float left = glm::distance(g.position(), glm::vec3(8.0f, 0.0f, 0.0f));
+				check(status == SUCCESS && left > 2.0f && left < 3.6f, "moveto_stopping_distance: Success within the stopping distance (" + std::to_string(left) + " m left)");
+			}
+
+			// No agent, no navmesh.
+			{
+				MoveFixture f(0.0f);
+				f.TheScene->registry().remove<NavAgent>(f.Agent);
+				BehaviorTreeDoc doc;
+				doc.Root = "m";
+				doc.Nodes = { move_node("m", Json::array({ 8, 0, 0 })) };
+				BtInstance instance(compiled(check, doc), f.Agent);
+				check(f.frame(instance) == FAILURE && instance.states()[0].Warned, "moveto_no_agent: an entity without a NavAgent fails, once logged");
+
+				MoveFixture g(0.0f, false);
+				BtInstance blind(compiled(check, doc), g.Agent);
+				check(g.frame(blind) == FAILURE && blind.states()[0].Warned, "moveto_no_navmesh: a scene without a navmesh fails, once logged");
+			}
+
+			// PlayAnimation.
+			{
+				BtEngineHooks hooks;
+				int busy = 3;
+				hooks.PlayClip = [](entt::entity, const std::string& clip) { return clip != "Nope"; };
+				hooks.ClipBusy = [&busy](entt::entity) { return busy-- > 0; };
+				BtServices services;
+				services.Leaf = [&](BtLeafCall& call) { return bt_engine_leaf(call, hooks); };
+				BehaviorTreeDoc doc;
+				doc.Root = "p";
+				doc.Nodes = { node("p", "PlayAnimation", {}, { { "clip", "Wave" }, { "wait", true } }) };
+				BtInstance waits(compiled(check, doc), entt::entity{ 1 });
+				const BtStatus a = waits.tick(services, 0.1f, 0.0);
+				const BtStatus b = waits.tick(services, 0.1f, 0.1);
+				BtStatus last = b;
+				for (int i = 0; i < 10 && last == RUNNING; i++)
+				{
+					last = waits.tick(services, 0.1f, 0.2 + i);
+				}
+				check(a == RUNNING && b == RUNNING && last == SUCCESS, "playanimation_wait: Running while the clip is busy, then Success");
+				doc.Nodes = { node("p", "PlayAnimation", {}, { { "clip", "Wave" } }) };
+				BtInstance quick(compiled(check, doc), entt::entity{ 1 });
+				check(quick.tick(services, 0.1f, 0.0) == SUCCESS, "playanimation_nowait: Success at once without wait");
+				doc.Nodes = { node("p", "PlayAnimation", {}, { { "clip", "Nope" } }) };
+				BtInstance unknown(compiled(check, doc), entt::entity{ 1 });
+				check(unknown.tick(services, 0.1f, 0.0) == FAILURE, "playanimation_unknown: an unknown clip fails");
+			}
+		}
+	}
+
 	bool run_ai_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -541,6 +776,7 @@ namespace wiwa
 		validation(check);
 		asset_wiring(check);
 		runtime_nodes(check);
+		engine_leaves(check);
 
 		if (check.Failures == 0)
 		{

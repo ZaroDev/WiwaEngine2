@@ -114,6 +114,14 @@ namespace wiwa
 			}
 			return false;
 		}
+		if (const glm::vec3* point = std::get_if<glm::vec3>(&value); point != nullptr && !(std::isfinite(point->x) && std::isfinite(point->y) && std::isfinite(point->z)))
+		{
+			if (error != nullptr)
+			{
+				*error = "the key \"" + key + "\" cannot hold a point that is not a number";
+			}
+			return false;
+		}
 		m_Values[key] = value;
 		return true;
 	}

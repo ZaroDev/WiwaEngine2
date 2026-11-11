@@ -49,6 +49,7 @@ namespace wiwa
 		std::vector<u8> ChildStatus{}; // Parallel: 0 pending, 1 succeeded, 2 failed
 		BtStatus Last = BtStatus::Failure;
 		bool Warned = false;
+		glm::vec3 Anchor{ 0.0f };     // for External leaves: where the leaf last sent the entity
 	};
 
 	// The run of one tree for one entity: the state of every node, the blackboard, a random generator. The compiled tree is shared and never changes.
@@ -70,6 +71,17 @@ namespace wiwa
 		const CompiledTree& tree() const { return *m_Tree; }
 		Ref<const CompiledTree> tree_ref() const { return m_Tree; }
 		const std::vector<BtNodeState>& states() const { return m_States; }
+		BtNodeState& state(u32 index) { return m_States[index]; }
+		// True the first time it is asked for this node in a run (a run ends with a cut or a finish... the flag is reset when the node is cut); for logging a failure once.
+		bool warn_once(u32 index)
+		{
+			if (m_States[index].Warned)
+			{
+				return false;
+			}
+			m_States[index].Warned = true;
+			return true;
+		}
 		entt::entity self() const { return m_Self; }
 		// A random number in [low, high] from the instance's generator (Wait, Lua leaves that ask).
 		double random(double low, double high);
