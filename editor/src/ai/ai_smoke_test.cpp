@@ -9,7 +9,10 @@
 #include <ai/bt_compile.h>
 #include <ai/bt_file.h>
 #include <ai/bt_instance.h>
+#include <ai/ai_module.h>
 #include <ai/bt_leaves_engine.h>
+#include <scene/scene_clone.h>
+#include <scene/scene_components.h>
 #include <nav/nav_module.h>
 #include <scene/components.h>
 #include <scene/scene.h>
@@ -767,6 +770,165 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		const char* const FAKE_SCRIPT = "00000000000000000000000000000001";
+
+		// External leaves the module hands to a handler (LuaAction nodes): counts per node id, always Running.
+		struct CountingLeaves
+		{
+			std::map<std::string, int> Starts{}, Ticks{}, Aborts{};
+
+			void install(AIModule& module)
+			{
+				module.set_leaf_handler([this](BtLeafCall& call) -> BtStatus
+				{
+					const std::string& id = call.Node->Id;
+					switch (call.Phase)
+					{
+					case BtLeafPhase::Start: Starts[id]++; break;
+					case BtLeafPhase::Tick: Ticks[id]++; break;
+					case BtLeafPhase::Abort: Aborts[id]++; break;
+					}
+					return BtStatus::Running;
+				});
+			}
+		};
+
+		BehaviorTreeDoc running_tree(const std::string& leafId = "a")
+		{
+			BehaviorTreeDoc doc;
+			doc.Root = "s";
+			doc.Blackboard = { key("n", BtValueType::Int, 1) };
+			doc.Nodes = { node("s", "Sequence", { leafId }), node(leafId, "LuaAction", {}, { { "script", FAKE_SCRIPT } }) };
+			return doc;
+		}
+
+		entt::entity add_controller(Scene& scene, const AssetRef& tree, const std::string& name = "AI")
+		{
+			const entt::entity entity = scene.create(name);
+			scene.registry().emplace<AIController>(entity).Tree = tree;
+			return entity;
+		}
+
+		void controllers(Check& check)
+		{
+			register_scene_components();
+			const AssetRef tree{ AssetGuid::generate(), 0 };
+
+			// A controller is made and ticked; its running leaf is aborted once when it goes.
+			{
+				AIModule module;
+				module.set_auto_start(false);
+				CountingLeaves leaves;
+				leaves.install(module);
+				std::string error;
+				check(module.register_tree(tree, running_tree(), &error), "ai_register: a valid tree registers (" + error + ")");
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity ai = add_controller(*scene, tree);
+				const entt::entity second = add_controller(*scene, tree, "Second");
+				scene->registry().get<AIController>(second).Overrides = "{ \"n\": 5 }";
+				check(module.start_world(scene) && module.world_scene() == scene, "ai_world: a world starts for a scene");
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(module.active_count() == 2 && module.instance_of(ai) != nullptr && leaves.Starts["a"] == 2, "ai_controller: every enabled controller gets an instance and starts");
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(leaves.Ticks["a"] == 2, "ai_controller: a running leaf is ticked every frame");
+				check(std::get<i32>(*module.instance_of(ai)->blackboard().get("n")) == 1 && std::get<i32>(*module.instance_of(second)->blackboard().get("n")) == 5, "ai_overrides: two controllers share a tree with their own blackboards, overrides apply");
+
+				// A controller whose tree changes restarts.
+				BehaviorTreeDoc changed = running_tree("b");
+				check(module.register_tree(tree, changed), "ai_recompile: a changed tree registers");
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(leaves.Aborts["a"] == 2 && leaves.Starts["b"] == 2 && module.active_count() == 2, "ai_recompile: controllers restart on the new tree, the old leaf is aborted once");
+				check(!module.register_tree(tree, BehaviorTreeDoc{}, &error) && !error.empty(), "ai_register: an invalid tree is refused with a reason");
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(leaves.Aborts["b"] == 0, "ai_register: a refused tree leaves the running one alone");
+
+				// Disabled: aborted once, no instance; enabled again: a new run.
+				scene->registry().get<AIController>(ai).Enabled = false;
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(leaves.Aborts["b"] == 1 && module.instance_of(ai) == nullptr, "ai_disabled: a disabled controller aborts its leaf once and has no instance");
+				scene->registry().get<AIController>(ai).Enabled = true;
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(module.instance_of(ai) != nullptr && leaves.Starts["b"] == 3, "ai_disabled: enabled again it runs from the start");
+
+				// Destroyed entity, removed component.
+				scene->destroy(ai);
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(leaves.Aborts["b"] == 2 && module.instance_of(ai) == nullptr && module.active_count() == 1, "ai_destroyed: a destroyed entity aborts once and leaves no instance");
+				scene->registry().remove<AIController>(second);
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(leaves.Aborts["b"] == 3 && module.active_count() == 0, "ai_removed: a removed component aborts once");
+				module.stop_world();
+				check(leaves.Aborts["b"] == 3 && module.world_scene() == nullptr, "ai_stop_world: nothing left to abort");
+			}
+
+			// A clone that plays and stops (the Editor Play shape), and a scene that is gone.
+			{
+				AIModule module;
+				module.set_auto_start(false);
+				CountingLeaves leaves;
+				leaves.install(module);
+				module.register_tree(tree, running_tree());
+				Ref<Scene> scene = CreateRef<Scene>();
+				add_controller(*scene, tree);
+				Ref<Scene> copy = clone_scene(*scene);
+				module.start_world(copy);
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(module.active_count() == 1 && leaves.Starts["a"] == 1, "ai_clone: the clone's controller runs");
+				module.stop_world();
+				check(leaves.Aborts["a"] == 1 && module.active_count() == 0, "ai_clone: Stop aborts what runs, once");
+
+				module.start_world(copy);
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				copy.reset();
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(leaves.Aborts["a"] == 2 && module.world_scene() == nullptr && module.active_count() == 0, "ai_gone_scene: a scene that is gone takes its controllers with it (aborted once)");
+			}
+
+			// A paused game does not tick; no tree, an unknown tree and bad overrides do not crash.
+			{
+				AIModule module;
+				module.set_auto_start(false);
+				CountingLeaves leaves;
+				leaves.install(module);
+				module.register_tree(tree, running_tree());
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity ai = add_controller(*scene, tree);
+				const entt::entity bare = add_controller(*scene, AssetRef{}, "Bare");
+				const entt::entity broken = add_controller(*scene, tree, "Broken");
+				scene->registry().get<AIController>(broken).Overrides = "not json";
+				module.start_world(scene);
+				module.tick(nullptr, false, 1.0f / 60.0f);
+				check(module.active_count() == 0 && leaves.Starts["a"] == 0, "ai_paused: a paused game starts and ticks nothing");
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				module.tick(nullptr, true, 1.0f / 60.0f);
+				check(module.instance_of(bare) == nullptr && module.instance_of(ai) != nullptr && module.instance_of(broken) != nullptr, "ai_no_tree: a controller without a tree is skipped, bad overrides are ignored");
+				module.stop_world();
+			}
+
+			// The tick rate: 10 Hz over one second of 60 frames.
+			{
+				AIModule module;
+				module.set_auto_start(false);
+				CountingLeaves leaves;
+				leaves.install(module);
+				module.register_tree(tree, running_tree());
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity ai = add_controller(*scene, tree);
+				scene->registry().get<AIController>(ai).TickRate = 10.0f;
+				module.start_world(scene);
+				for (int i = 0; i < 60; i++)
+				{
+					module.tick(nullptr, true, 1.0f / 60.0f);
+				}
+				const int calls = leaves.Starts["a"] + leaves.Ticks["a"];
+				check(calls >= 9 && calls <= 11, "ai_tick_rate: 10 Hz gives about ten ticks in a second (" + std::to_string(calls) + ")");
+			}
+		}
+	}
+
 	bool run_ai_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -777,6 +939,7 @@ namespace wiwa
 		asset_wiring(check);
 		runtime_nodes(check);
 		engine_leaves(check);
+		controllers(check);
 
 		if (check.Failures == 0)
 		{

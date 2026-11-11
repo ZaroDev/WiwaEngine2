@@ -362,6 +362,17 @@ namespace wiwa
 		bool DriveTransform = true;
 	};
 
+	// Runs a behaviour tree (.wbt) for the entity while the game plays (ai/ai_module.h). TickRate is in Hz (0: every frame). Overrides is a JSON object of
+	// blackboard key to value that replaces the tree's defaults for this entity. The state of the run lives in the AIModule, not here.
+	struct AIController
+	{
+		AssetRef Tree{};
+		bool Enabled = true;
+		float TickRate = 0.0f;
+		i32 Seed = 0;
+		std::string Overrides{};
+	};
+
 	// What a ViewHost's preview is drawn with (the profiles of renderer/view/view_types.h; the values match).
 	enum class ViewHostProfile : u32 { Full, Preview, Thumbnail };
 

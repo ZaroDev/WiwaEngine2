@@ -182,6 +182,13 @@ namespace wiwa
 			WI_FIELD(AutoRepath),
 			WI_FIELD(DriveTransform)));
 
+		registry.register_component(WI_COMPONENT(AIController,
+			WI_FIELD_META(Tree, FieldMeta::asset(AssetType::BehaviorTree)),
+			WI_FIELD(Enabled),
+			WI_FIELD_META(TickRate, FieldMeta::range(0.0f, 120.0f)),
+			WI_FIELD(Seed),
+			WI_FIELD(Overrides)));
+
 		registry.register_component(WI_COMPONENT(AnimationSocket,
 			WI_FIELD(Joint),
 			WI_FIELD(OffsetPosition),
