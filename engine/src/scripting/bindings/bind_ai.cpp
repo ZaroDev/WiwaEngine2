@@ -65,6 +65,7 @@ namespace wiwa
 	void bind_ai(ScriptRuntime& runtime, ScriptContext& context)
 	{
 		sol::state& lua = runtime.state();
+		define_bt_lua_bases(runtime); // BtAction and BtCondition are globals of every runtime that has the AI API (the stub declares them)
 
 		lua.new_usertype<LuaAiController>("AIHandle", sol::no_constructor,
 			// A blackboard value: numbers, vec3, string, an Entity (or nil for none). An unknown key is an error naming it.
