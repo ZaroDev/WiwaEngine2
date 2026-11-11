@@ -60,8 +60,14 @@ namespace wiwa
 			{
 				if (component.Name == "PrefabInstance")
 				{
-					error = "a prefab cannot hold an instance of a prefab";
-					return std::nullopt;
+					const AssetRef* inner = field_of<AssetRef>(component, "Prefab");
+					if (inner == nullptr || !inner->valid())
+					{
+						error = "an instance of a prefab names no prefab";
+						return std::nullopt;
+					}
+					node.Instance = PrefabNodeInstance{ *inner, entity.Overrides };
+					continue; // the node is the root of the instance; the link is not one of its components
 				}
 				else if (component.Name == "Id")
 				{

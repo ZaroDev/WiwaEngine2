@@ -12,8 +12,10 @@
 // importer turns it into a PrefabData whose nodes hold the entities' components.
 namespace wiwa
 {
-	// One node per entity. Name and Transform become the node's own fields, every other component goes to PrefabNode::Components. A
-	// parent that is not in the list, a PrefabInstance (prefabs do not nest), or an empty list is refused, with the reason in error.
+	// One node per entity. Name and Transform become the node's own fields, every other component goes to PrefabNode::Components. An
+	// entity with a PrefabInstance becomes a node that holds a nested instance (the prefab it names and its overrides; the instance's
+	// generated children are not in the list). A parent that is not in the list, a PrefabInstance that names no prefab, or an empty
+	// list is refused, with the reason in error.
 	std::optional<PrefabData> prefab_from_records(const std::vector<EntityRecord>& entities, std::string name, std::string& error);
 
 	// Writes through a temporary file that is renamed over the target. False (and logs) if it cannot.

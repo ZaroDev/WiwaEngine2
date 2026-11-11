@@ -1845,12 +1845,59 @@ namespace wiwa
 			database.ensure_imported(broken);
 			check(!cooked_prefab(broken).has_value(), "prefab_file: a file that is not JSON cooks no prefab");
 
-			// a prefab file cannot hold an instance of a prefab
+			// a prefab file can hold an instance of another prefab: the node keeps the prefab and the overrides, and the prefab is a dependency
+			if (ref && prefab && prefab->Nodes.size() == 2)
+			{
+				EntityRecord holderRoot;
+				holderRoot.Id = EntityGuid::generate();
+				holderRoot.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Holder")) } } });
+				EntityRecord slot;
+				slot.Id = EntityGuid::generate();
+				slot.Parent = holderRoot.Id;
+				slot.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Slot")) } } });
+				slot.Components.push_back(ComponentRecord{ "PrefabInstance", { FieldRecord{ "Prefab", FieldValue(*ref) } } });
+				PrefabOverride brighter;
+				brighter.Kind = OverrideKind::SetField;
+				brighter.NodeId = prefab->Nodes[1].StableId;
+				brighter.Component = "Light";
+				brighter.Field = "Intensity";
+				brighter.Value = FieldValue(9.0f);
+				slot.Overrides.push_back(brighter);
+
+				const std::filesystem::path holderFile = dir / "holder.wprefab";
+				check(write_prefab_file(holderFile, { holderRoot, slot }, "Holder"), "prefab_nested: the file with an instance is written");
+				std::vector<AssetGuid> holderDependencies;
+				check(database.ensure_imported(holderFile).has_value(), "prefab_nested: the .wprefab with an instance imports");
+				const std::optional<PrefabData> holder = cooked_prefab(holderFile, &holderDependencies);
+				check(holder && holder->Nodes.size() == 2 && holder->Nodes[1].Name == "Slot" && holder->Nodes[1].Parent == 0 && holder->Nodes[1].Instance.has_value()
+					&& holder->Nodes[1].Instance->Prefab.Guid == ref->Guid && holder->Nodes[1].Instance->Overrides.size() == 1
+					&& holder->Nodes[1].Instance->Overrides[0].NodeId == brighter.NodeId && holder->Nodes[1].Instance->Overrides[0].Field == "Intensity", "prefab_nested: the cooked node keeps the prefab it instantiates and the overrides");
+				check(holder && holder->Nodes[1].Components.empty() && !holder->Nodes[0].Instance, "prefab_nested: the PrefabInstance component is not a component of the node");
+				check(std::find(holderDependencies.begin(), holderDependencies.end(), ref->Guid) != holderDependencies.end(), "prefab_nested: the prefab it instantiates is a dependency");
+
+				// a prefab that holds an instance of itself fails the import and keeps the previous cooked prefab
+				const std::filesystem::path selfFile = dir / "self.wprefab";
+				check(write_prefab_file(selfFile, { holderRoot }, "Self"), "prefab_nested: the file that will hold itself is written");
+				const std::optional<AssetRef> selfRef = database.ensure_imported(selfFile);
+				if (selfRef)
+				{
+					EntityRecord selfSlot = slot;
+					selfSlot.Overrides.clear();
+					selfSlot.Components[1] = ComponentRecord{ "PrefabInstance", { FieldRecord{ "Prefab", FieldValue(*selfRef) } } };
+					check(write_prefab_file(selfFile, { holderRoot, selfSlot }, "Self"), "prefab_nested: the file holding itself is written");
+					WI_ASSET_LOG(Info, "Smoke test: the next import error is expected");
+					database.reimport(selfFile, true);
+					const std::optional<PrefabData> kept = cooked_prefab(selfFile);
+					check(kept && kept->Nodes.size() == 1, "prefab_nested: a prefab that holds an instance of itself is not imported");
+				}
+			}
+
+			// an instance that names no prefab is refused with a reason; so is no entity at all
 			EntityRecord nested;
 			nested.Id = EntityGuid::generate();
-			nested.Components.push_back(ComponentRecord{ "PrefabInstance", { FieldRecord{ "Prefab", FieldValue(pixel.value_or(AssetRef{})) } } });
+			nested.Components.push_back(ComponentRecord{ "PrefabInstance", {} });
 			std::string conversionError;
-			check(!prefab_from_records({ nested }, "Nested", conversionError).has_value() && !conversionError.empty(), "prefab_file: a nested prefab instance is refused with a reason");
+			check(!prefab_from_records({ nested }, "Nested", conversionError).has_value() && !conversionError.empty(), "prefab_file: an instance that names no prefab is refused with a reason");
 			check(!prefab_from_records({}, "Empty", conversionError).has_value(), "prefab_file: no entities is refused");
 
 			std::filesystem::remove_all(dir, error);
