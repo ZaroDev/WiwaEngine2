@@ -2,7 +2,7 @@
 	"version": 1,
 	"name": "warrior",
 	"skeleton": {
-		"guid": "d515a6d6d7942fde677ff51abce7095e"
+		"guid": "1e18577598e5b077df74f38e2783c719"
 	},
 	"parameters": [
 		{
@@ -38,7 +38,7 @@
 						"name": "Idle",
 						"body": {
 							"clip": {
-								"guid": "98eef1680ff750bafa91f8c188ea62af"
+								"guid": "003cdc2c85e611da76e4d7cf9c61bc16"
 							}
 						},
 						"loop": true,
@@ -57,21 +57,21 @@
 								"samples": [
 									{
 										"clip": {
-											"guid": "98eef1680ff750bafa91f8c188ea62af"
+											"guid": "003cdc2c85e611da76e4d7cf9c61bc16"
 										},
 										"x": 0,
 										"y": 0
 									},
 									{
 										"clip": {
-											"guid": "8f01ea877feebd1dcab2cf60d9f3aad7"
+											"guid": "ea45ac29b928c37acb41ab3a1de26fbe"
 										},
 										"x": 1,
 										"y": 0
 									},
 									{
 										"clip": {
-											"guid": "29b839c28e727dcd38a1f0ebaaf18926"
+											"guid": "b414bb62be699ab9114c88e479c66650"
 										},
 										"x": 3,
 										"y": 0
@@ -132,7 +132,7 @@
 						"name": "None",
 						"body": {
 							"clip": {
-								"guid": "98eef1680ff750bafa91f8c188ea62af"
+								"guid": "003cdc2c85e611da76e4d7cf9c61bc16"
 							}
 						},
 						"loop": true,
@@ -146,7 +146,7 @@
 						"name": "Attack",
 						"body": {
 							"clip": {
-								"guid": "a57864557685d9cbd7060436333df9f3"
+								"guid": "f4d4f5e5a7613d948c7cc60940ad2fbc"
 							}
 						},
 						"loop": false,
