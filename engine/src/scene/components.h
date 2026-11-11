@@ -9,6 +9,7 @@
 #include "entity_guid.h"
 #include "scene_data.h"
 #include <physics/physics_types.h>
+#include <nav/nav_types.h>
 
 // The components of a scene. They are plain data; the reflection layer (reflection/) describes their fields for the
 // serializer and the editor. Assets are referenced by AssetRef, never by a loaded handle.
@@ -274,6 +275,91 @@ namespace wiwa
 		std::string Event{};              // the vendor's event name (Wwise: Play_Footstep); empty plays nothing
 		bool PlayOnStart = false;         // posts Event once when the emitter starts to exist in a playing scene
 		float AttenuationScale = 1.0f;    // scales the event's attenuation distances
+	};
+
+	// The region of the scene a navmesh is baked for (navigation.md). NavMesh is the baked .wnav; the rest are what Recast bakes with, the fields of
+	// NavBuildSettings one by one (build() puts them together). The box is Size around the entity's position. Masks are bit sets held in an i32
+	// (-1: all): LayerMask picks the render layers that contribute geometry.
+	struct NavMeshVolume
+	{
+		AssetRef NavMesh{};
+		glm::vec3 Size{ 20.0f, 6.0f, 20.0f };
+		float AgentRadius = 0.4f;
+		float AgentHeight = 1.8f;
+		float AgentMaxClimb = 0.4f;
+		float AgentMaxSlope = 45.0f;
+		float CellSize = 0.2f;
+		float CellHeight = 0.1f;
+		i32 RegionMinSize = 8;
+		i32 RegionMergeSize = 20;
+		float EdgeMaxLength = 12.0f;
+		float EdgeMaxError = 1.3f;
+		i32 VertsPerPoly = 6;
+		float DetailSampleDist = 6.0f;
+		float DetailSampleMaxError = 1.0f;
+		i32 TileSize = 64;
+		i32 LayerMask = -1;
+		bool Enabled = true;
+
+		NavBuildSettings build() const
+		{
+			NavBuildSettings settings;
+			settings.AgentRadius = AgentRadius;
+			settings.AgentHeight = AgentHeight;
+			settings.AgentMaxClimb = AgentMaxClimb;
+			settings.AgentMaxSlope = AgentMaxSlope;
+			settings.CellSize = CellSize;
+			settings.CellHeight = CellHeight;
+			settings.RegionMinSize = RegionMinSize;
+			settings.RegionMergeSize = RegionMergeSize;
+			settings.EdgeMaxLength = EdgeMaxLength;
+			settings.EdgeMaxError = EdgeMaxError;
+			settings.VertsPerPoly = VertsPerPoly;
+			settings.DetailSampleDist = DetailSampleDist;
+			settings.DetailSampleMaxError = DetailSampleMaxError;
+			settings.TileSize = TileSize;
+			return settings;
+		}
+
+		void set_build(const NavBuildSettings& settings)
+		{
+			AgentRadius = settings.AgentRadius;
+			AgentHeight = settings.AgentHeight;
+			AgentMaxClimb = settings.AgentMaxClimb;
+			AgentMaxSlope = settings.AgentMaxSlope;
+			CellSize = settings.CellSize;
+			CellHeight = settings.CellHeight;
+			RegionMinSize = settings.RegionMinSize;
+			RegionMergeSize = settings.RegionMergeSize;
+			EdgeMaxLength = settings.EdgeMaxLength;
+			EdgeMaxError = settings.EdgeMaxError;
+			VertsPerPoly = settings.VertsPerPoly;
+			DetailSampleDist = settings.DetailSampleDist;
+			DetailSampleMaxError = settings.DetailSampleMaxError;
+			TileSize = settings.TileSize;
+		}
+	};
+
+	// Marks the geometry of the entity's mesh as one kind of ground when a navmesh is baked. NotWalkable makes it an obstacle.
+	struct NavAreaTag
+	{
+		NavArea Area = NavArea::Walkable;
+	};
+
+	// Walks the navmesh to a destination while the game plays (NavModule moves the transform). The state of the walk lives in the module.
+	// AreaMask is a bit set of the areas it may walk on (-1: all); with DriveTransform off the module only reports the velocity (for a character body).
+	struct NavAgent
+	{
+		float Speed = 3.5f;
+		float Acceleration = 8.0f;
+		float Radius = 0.4f;
+		float Height = 1.8f;
+		float StoppingDistance = 0.2f;
+		i32 AvoidanceQuality = 2;     // 0 none .. 3 best
+		float SeparationWeight = 2.0f;
+		i32 AreaMask = -1;
+		bool AutoRepath = true;
+		bool DriveTransform = true;
 	};
 
 	// What a ViewHost's preview is drawn with (the profiles of renderer/view/view_types.h; the values match).

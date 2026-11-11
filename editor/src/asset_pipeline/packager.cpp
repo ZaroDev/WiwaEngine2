@@ -95,7 +95,7 @@ namespace wiwa
 		}
 	}
 
-	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile, const std::filesystem::path& inputSettingsFile, const std::filesystem::path& projectSettingsFile, const std::filesystem::path& audioSettingsFile)
+	bool Packager::pack(AssetDatabase& database, const std::filesystem::path& outDirectory, JobProgress* progress, const BuildSettings* settings, const std::filesystem::path& physicsSettingsFile, const std::filesystem::path& inputSettingsFile, const std::filesystem::path& projectSettingsFile, const std::filesystem::path& audioSettingsFile, const std::filesystem::path& navSettingsFile)
 	{
 		JobProgress local;
 		if (progress == nullptr)
@@ -414,6 +414,26 @@ namespace wiwa
 				else
 				{
 					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", inputSettingsFile.string(), inputError);
+					ok = false;
+				}
+			}
+		}
+
+		// The project's navigation settings (area costs), if the editor has saved any.
+		{
+			std::error_code exists;
+			if (!navSettingsFile.empty() && std::filesystem::exists(navSettingsFile, exists))
+			{
+				NavSettings navSettings;
+				std::string navError;
+				if (load_nav_settings(navSettingsFile, navSettings, navError))
+				{
+					ok = add_blob(NAV_SETTINGS_GUID, 0, serialize(navSettings), "navigation settings") && ok;
+					log_extra(NAV_SETTINGS_GUID, shown_path(navSettingsFile.generic_string()));
+				}
+				else
+				{
+					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", navSettingsFile.string(), navError);
 					ok = false;
 				}
 			}

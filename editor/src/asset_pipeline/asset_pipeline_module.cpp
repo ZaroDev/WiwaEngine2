@@ -101,7 +101,7 @@ namespace wiwa
 				progress->finish(false);
 				return;
 			}
-			Packager::pack(*database, outDirectory, progress.get(), settings ? &*settings : nullptr, PHYSICS_SETTINGS_FILE, INPUT_SETTINGS_FILE, PROJECT_SETTINGS_FILE, AUDIO_SETTINGS_FILE);
+			Packager::pack(*database, outDirectory, progress.get(), settings ? &*settings : nullptr, PHYSICS_SETTINGS_FILE, INPUT_SETTINGS_FILE, PROJECT_SETTINGS_FILE, AUDIO_SETTINGS_FILE, NAV_SETTINGS_FILE);
 		});
 		return progress;
 	}

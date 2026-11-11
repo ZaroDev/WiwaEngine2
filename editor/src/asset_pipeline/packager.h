@@ -7,6 +7,7 @@
 
 #include "asset_database.h"
 #include "audio_settings_file.h"
+#include "nav_settings_file.h"
 #include "build_settings.h"
 #include "input_settings_file.h"
 #include "physics_settings_file.h"
@@ -45,6 +46,7 @@ namespace wiwa
 			const std::filesystem::path& physicsSettingsFile = PHYSICS_SETTINGS_FILE,
 			const std::filesystem::path& inputSettingsFile = INPUT_SETTINGS_FILE,
 			const std::filesystem::path& projectSettingsFile = wiwa::PROJECT_SETTINGS_FILE,
-			const std::filesystem::path& audioSettingsFile = {});
+			const std::filesystem::path& audioSettingsFile = {},
+			const std::filesystem::path& navSettingsFile = {}); // the navigation settings (area costs), like the audio ones
 	};
 }

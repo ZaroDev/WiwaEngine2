@@ -147,6 +147,41 @@ namespace wiwa
 			WI_FIELD(PlayOnStart),
 			WI_FIELD_META(AttenuationScale, FieldMeta::range(0.01f, 100.0f))));
 
+		registry.register_component(WI_COMPONENT(NavMeshVolume,
+			WI_FIELD_META(NavMesh, FieldMeta::asset(AssetType::NavMesh)),
+			WI_FIELD_META(Size, FieldMeta::range(0.5f, 10000.0f)),
+			WI_FIELD_META(AgentRadius, FieldMeta::range(0.05f, 10.0f)),
+			WI_FIELD_META(AgentHeight, FieldMeta::range(0.2f, 20.0f)),
+			WI_FIELD_META(AgentMaxClimb, FieldMeta::range(0.0f, 5.0f)),
+			WI_FIELD_META(AgentMaxSlope, FieldMeta::range(0.0f, 89.0f)),
+			WI_FIELD_META(CellSize, FieldMeta::range(0.05f, 2.0f)),
+			WI_FIELD_META(CellHeight, FieldMeta::range(0.02f, 2.0f)),
+			WI_FIELD_META(RegionMinSize, FieldMeta::range(0.0f, 150.0f)),
+			WI_FIELD_META(RegionMergeSize, FieldMeta::range(0.0f, 150.0f)),
+			WI_FIELD_META(EdgeMaxLength, FieldMeta::range(0.0f, 50.0f)),
+			WI_FIELD_META(EdgeMaxError, FieldMeta::range(0.1f, 3.0f)),
+			WI_FIELD_META(VertsPerPoly, FieldMeta::range(3.0f, 6.0f)),
+			WI_FIELD_META(DetailSampleDist, FieldMeta::range(0.0f, 16.0f)),
+			WI_FIELD_META(DetailSampleMaxError, FieldMeta::range(0.0f, 16.0f)),
+			WI_FIELD_META(TileSize, FieldMeta::range(16.0f, 512.0f)),
+			WI_FIELD(LayerMask),
+			WI_FIELD(Enabled)));
+
+		registry.register_component(WI_COMPONENT(NavAreaTag,
+			WI_FIELD_META(Area, FieldMeta::enumeration({ "NotWalkable", "Walkable", "Mud", "Water", "Custom0", "Custom1", "Custom2", "Custom3" }))));
+
+		registry.register_component(WI_COMPONENT(NavAgent,
+			WI_FIELD_META(Speed, FieldMeta::range(0.0f, 100.0f)),
+			WI_FIELD_META(Acceleration, FieldMeta::range(0.1f, 200.0f)),
+			WI_FIELD_META(Radius, FieldMeta::range(0.05f, 10.0f)),
+			WI_FIELD_META(Height, FieldMeta::range(0.2f, 20.0f)),
+			WI_FIELD_META(StoppingDistance, FieldMeta::range(0.0f, 10.0f)),
+			WI_FIELD_META(AvoidanceQuality, FieldMeta::range(0.0f, 3.0f)),
+			WI_FIELD_META(SeparationWeight, FieldMeta::range(0.0f, 20.0f)),
+			WI_FIELD(AreaMask),
+			WI_FIELD(AutoRepath),
+			WI_FIELD(DriveTransform)));
+
 		registry.register_component(WI_COMPONENT(AnimationSocket,
 			WI_FIELD(Joint),
 			WI_FIELD(OffsetPosition),
