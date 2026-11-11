@@ -37,12 +37,12 @@ namespace wiwa
 			return self.as<LuaBlackboard&>();
 		}
 
-		sol::object value_to_lua(sol::state_view lua, ScriptContext* context, const BtValue& value)
+		sol::object bt_value_to_lua_impl(sol::state_view lua, ScriptContext* context, const BtValue& value)
 		{
 			switch (bt_value_type_of(value))
 			{
 			case BtValueType::Bool: return sol::make_object(lua, std::get<bool>(value));
-			case BtValueType::Int: return sol::make_object(lua, static_cast<double>(std::get<i32>(value)));
+			case BtValueType::Int: return sol::make_object(lua, static_cast<lua_Integer>(std::get<i32>(value)));
 			case BtValueType::Float: return sol::make_object(lua, static_cast<double>(std::get<float>(value)));
 			case BtValueType::Vec3: return sol::make_object(lua, LuaVec3{ std::get<glm::vec3>(value), {} });
 			case BtValueType::String: return sol::make_object(lua, std::get<std::string>(value));
@@ -60,7 +60,7 @@ namespace wiwa
 		}
 
 		// A Lua value as the value of a blackboard key of that type. False, with why, if it is not one.
-		bool value_from_lua(BtValueType type, const sol::object& value, BtValue& out, std::string& why)
+		bool bt_value_from_lua_impl(BtValueType type, const sol::object& value, BtValue& out, std::string& why)
 		{
 			switch (type)
 			{
@@ -118,6 +118,9 @@ namespace wiwa
 		}
 	}
 
+	sol::object bt_value_to_lua(sol::state_view lua, ScriptContext* context, const BtValue& value) { return bt_value_to_lua_impl(lua, context, value); }
+	bool bt_value_from_lua(BtValueType type, const sol::object& value, BtValue& out, std::string& why) { return bt_value_from_lua_impl(type, value, out, why); }
+
 	void define_bt_lua_bases(ScriptRuntime& runtime)
 	{
 		sol::table& sandbox = runtime.sandbox();
@@ -154,7 +157,7 @@ namespace wiwa
 					{
 						throw sol::error("the blackboard has no key \"" + name + "\"");
 					}
-					return value_to_lua(sol::state_view(state), board.Context, *value);
+					return bt_value_to_lua_impl(sol::state_view(state), board.Context, *value);
 				},
 				"has", [](const sol::object& self, const sol::object& key) -> bool
 				{
@@ -176,7 +179,7 @@ namespace wiwa
 					}
 					BtValue converted;
 					std::string why;
-					if (!value_from_lua(*type, value, converted, why))
+					if (!bt_value_from_lua_impl(*type, value, converted, why))
 					{
 						throw sol::error("the key \"" + name + "\" is " + bt_value_type_name(*type) + ": expected " + why);
 					}

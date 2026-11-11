@@ -11,6 +11,8 @@
 #include <assets/asset_manager.h>
 #include <assets/handle.h>
 
+#include <vector>
+
 #include "bt_instance.h"
 #include "bt_leaves_engine.h"
 #include "bt_lua_host.h"
@@ -19,6 +21,7 @@ namespace wiwa
 {
 	class NavModule;
 	class Scene;
+	struct AIController;
 
 	// Runs the behaviour trees of the scene that plays: one BtInstance per enabled AIController, ticked at the controller's rate. Main thread only; the
 	// render and physics threads never touch it. Priority 6: after the scripts (0), so what they put on a blackboard is read this frame, and after the
@@ -59,6 +62,23 @@ namespace wiwa
 		bool register_tree(const AssetRef& ref, const BehaviorTreeDoc& doc, std::string* error = nullptr);
 
 		// The instance of a controller of the world's scene (null when it has none yet: no tree, loading, disabled).
+		// For scripts, which run before tick(): the instance of an enabled controller of the world's scene, made now if there is none yet (so a script
+		// can use the blackboard in the frame the scene starts). Null when the entity has no enabled controller, its tree is unset, still loading or
+		// invalid, or no world runs.
+		BtInstance* acquire(entt::entity entity);
+		// Aborts what the controller runs and puts its blackboard back to the declared defaults and overrides. False without an instance.
+		bool restart(entt::entity entity);
+
+		// Sounds the scripts made this frame (AI.emit_noise), for perception; cleared at the end of every tick.
+		struct Noise
+		{
+			glm::vec3 Position{ 0.0f };
+			float Loudness = 1.0f;
+			std::string Kind{};
+		};
+		void emit_noise(glm::vec3 position, float loudness, std::string kind);
+		const std::vector<Noise>& noises() const { return m_Noises; }
+
 		BtInstance* instance_of(entt::entity entity);
 		const BtInstance* instance_of(entt::entity entity) const;
 		u32 active_count() const;
@@ -100,6 +120,7 @@ namespace wiwa
 		void refresh_entry(const AssetRef& ref, TreeEntry& entry);
 		void drop(Controller& controller);
 		void tick_controllers(Scene& scene, float dt);
+		BtInstance* ensure_instance(entt::entity entity, const AIController& ai, Controller& controller, float dt);
 		BtStatus leaf(BtLeafCall& call);
 
 		bool m_AutoStart = true;
@@ -111,6 +132,7 @@ namespace wiwa
 		std::function<BtStatus(BtLeafCall&)> m_LeafHandler{};
 		Scope<BtLuaHost> m_Lua{};
 		std::unordered_map<entt::entity, Controller> m_Controllers{};
+		std::vector<Noise> m_Noises{};
 		std::unordered_map<AssetGuid, TreeEntry> m_Trees{};
 
 		std::mutex m_DirtyMutex{};

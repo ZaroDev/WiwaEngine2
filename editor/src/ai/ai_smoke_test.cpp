@@ -3,13 +3,17 @@
 
 #include <algorithm>
 
+#include <fstream>
 #include <map>
+#include <set>
+#include <sstream>
 
 #include <ai/blackboard.h>
 #include <ai/bt_compile.h>
 #include <ai/bt_file.h>
 #include <ai/bt_instance.h>
 #include <ai/ai_module.h>
+#include "../asset_pipeline/lua_stubs.h"
 #include <ai/bt_leaves_engine.h>
 #include <ai/bt_lua_host.h>
 #include <scripting/script_instances.h>
@@ -1171,6 +1175,122 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// A Lua runtime with the AI API bound to a module, a tree with a key of every type and a running Lua leaf, an entity "AI" with the controller and a
+		// bare entity.
+		struct LuaAiHarness
+		{
+			MemoryScripts Source;
+			ScriptRuntime Runtime{ Source };
+			AIModule Module;
+			Ref<Scene> TheScene = CreateRef<Scene>();
+			ScriptInstances Instances{ Runtime };
+			sol::environment Env{ Runtime.state(), sol::create, Runtime.sandbox() };
+			std::vector<std::string> Events{};
+			AssetRef Tree{ AssetGuid::generate(), 0 };
+
+			explicit LuaAiHarness(bool withModule = true)
+			{
+				Runtime.sandbox().set_function("record", [this](const std::string& event) { Events.push_back(event); });
+				const AssetRef leafScript = Source.add("assets/scripts/running.lua", "return BtAction:extend{ on_tick = function() return 'running' end, on_abort = function() record('abort') end }");
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Blackboard = { key("flag", BtValueType::Bool, false), key("count", BtValueType::Int, 3), key("speed", BtValueType::Float, 1.5), key("home", BtValueType::Vec3, Json::array({ 1, 2, 3 })),
+					key("name", BtValueType::String, "guard"), key("target", BtValueType::Entity) };
+				doc.Nodes = { node("s", "Sequence", { "a" }), node("a", "LuaAction", {}, { { "script", leafScript.Guid.to_string() } }) };
+				const entt::entity ai = TheScene->create("AI");
+				TheScene->registry().emplace<AIController>(ai).Tree = Tree;
+				TheScene->create("Bare");
+				TheScene->create("Other");
+				Module.set_auto_start(false);
+				Module.attach_lua(Runtime, Instances.context());
+				Module.register_tree(Tree, doc);
+				Module.start_world(TheScene);
+				Instances.start(TheScene);
+				if (withModule)
+				{
+					Instances.context().AI = &Module;
+				}
+			}
+
+			~LuaAiHarness() { Module.detach_lua(); }
+
+			std::string run(const std::string& chunk, std::string* error = nullptr)
+			{
+				sol::protected_function_result result = Runtime.state().safe_script(chunk, Env, sol::script_pass_on_error);
+				if (!result.valid())
+				{
+					sol::error failure = result;
+					if (error) *error = failure.what();
+					return {};
+				}
+				if (error) error->clear();
+				return result.get_type() == sol::type::none ? std::string() : Runtime.state()["tostring"](result.get<sol::object>()).get<std::string>();
+			}
+
+			bool fails(const std::string& chunk, const std::string& mention)
+			{
+				std::string error;
+				run(chunk, &error);
+				return !error.empty() && error.find(mention) != std::string::npos;
+			}
+		};
+
+		void lua_ai(Check& check)
+		{
+			{
+				LuaAiHarness h;
+				const std::string c = "local c = AI.controller(find_entity('AI')) ";
+				// before the first tick: the handle makes the instance
+				check(h.run(c + "return c:get('count')") == "3" && h.run(c + "return c:get('home').y") == "2.0" && h.run(c + "return c:get('name')") == "guard" && h.run(c + "return tostring(c:get('flag'))") == "false" && h.run(c + "return tostring(c:get('target'))") == "nil", "lua_ai_get: every type reads, before the first tick too");
+				check(h.run(c + "c:set('count', 9) c:set('flag', true) c:set('speed', 2) c:set('name', 'x') c:set('home', vec3(4,5,6)) c:set('target', find_entity('Other')) return c:get('count') .. tostring(c:get('flag')) .. c:get('name') .. c:get('home').z") == "9truex6.0", "lua_ai_set: values of the key's own type are written");
+				check(h.run(c + "return c:get('target'):is_valid()") == "true" && h.run(c + "c:set('target', nil) return tostring(c:get('target'))") == "nil", "lua_ai_set: an entity is held and cleared with nil");
+				check(h.Module.instance_of(h.TheScene->registry().view<AIController>().front()) != nullptr, "lua_ai_acquire: the handle made the instance");
+
+				check(h.fails(c + "c:get('nope')", "no key \"nope\"") && h.fails(c + "c:set('nope', 1)", "no key \"nope\""), "lua_ai_errors: an unknown key names the key, for get and set");
+				check(h.fails(c + "c:set('count', 'x')", "count") && h.fails(c + "c:set('count', 1.5)", "whole number") && h.fails(c + "c:set('flag', 1)", "boolean") && h.fails(c + "c:set('speed', true)", "number")
+					&& h.fails(c + "c:set('home', 5)", "vec3") && h.fails(c + "c:set('name', 5)", "string") && h.fails(c + "c:set('target', 5)", "entity"), "lua_ai_errors: a value of the wrong type names the key and what is expected");
+				check(h.fails(c + "c:set(5, 1)", "key must be a string") && h.fails(c + "c:get({})", "key must be a string") && h.fails(c + "c.get('count')", "colon") && h.fails(c + "c.running()", "colon") && h.fails(c + "c.set('count', 1)", "colon"), "lua_ai_errors: a key that is not a string and a call with a dot are Lua errors, not crashes");
+				check(h.fails("AI.controller(5)", "entity") && h.fails("AI.controller(find_entity('Bare'))", "AIController") && h.fails("AI.controller()", "entity"), "lua_ai_errors: AI.controller wants an entity that has an AIController");
+
+				// running, restart, noise
+				h.Module.tick(nullptr, true, 0.1f);
+				check(h.run(c + "return c:running()") == "true", "lua_ai_running: true while a node runs");
+				check(h.run(c + "c:set('count', 9) c:restart() return c:get('count')") == "3" && std::count(h.Events.begin(), h.Events.end(), "abort") == 1, "lua_ai_restart: aborts the leaf once and restores the blackboard");
+
+				check(h.run("AI.emit_noise(vec3(1,2,3), 2, 'door') return 'ok'") == "ok" && h.Module.noises().size() == 1 && h.Module.noises()[0].Kind == "door" && h.Module.noises()[0].Loudness == 2.0f, "lua_ai_noise: a noise is queued with its kind");
+				h.run("AI.emit_noise(vec3(1,2,3), 1) return 'ok'");
+				check(h.Module.noises().size() == 2 && h.Module.noises()[1].Kind.empty(), "lua_ai_noise: the kind is optional");
+				check(h.fails("AI.emit_noise(vec3(0/0,0,0), 1)", "finite") && h.fails("AI.emit_noise(vec3(0,0,0), -1)", "loudness") && h.fails("AI.emit_noise(vec3(0,0,0), 0/0)", "loudness") && h.fails("AI.emit_noise(5, 1)", "vec3")
+					&& h.fails("AI.emit_noise(vec3(0,0,0), 'loud')", "loudness") && h.fails("AI.emit_noise(vec3(0,0,0), 1, 5)", "kind"), "lua_ai_noise: a bad position, loudness or kind is an error");
+				h.Module.tick(nullptr, true, 0.1f);
+				check(h.Module.noises().empty(), "lua_ai_noise: noises last one tick");
+
+				// A destroyed entity.
+				const std::string gone = "local e = create_entity('Temp') local k = AI.controller(find_entity('AI')) destroy_entity(find_entity('AI')) return pcall(function() return k:get('count') end)";
+				check(h.run(gone).find("false") != std::string::npos, "lua_ai_gone: a handle of an entity that is gone is an error, not a crash");
+			}
+
+			// No module.
+			{
+				LuaAiHarness h(false);
+				check(h.fails("AI.controller(find_entity('AI'))", "AI module") && h.fails("AI.emit_noise(vec3(0,0,0), 1)", "AI module"), "lua_ai_no_module: without an AI module the calls are Lua errors");
+			}
+
+			// The static stub declares the API.
+			{
+				std::ifstream file("engine/lua/wiwa.lua", std::ios::binary);
+				std::stringstream text;
+				text << file.rdbuf();
+				const std::string stub = text.str();
+				const std::set<std::string> globals = declared_globals(stub);
+				check(globals.contains("AI") && globals.contains("BtAction") && globals.contains("BtCondition") && stub.find("function AI.controller(") != std::string::npos && stub.find("function AIHandle:get(") != std::string::npos
+					&& stub.find("function BtBlackboard:set(") != std::string::npos && stub.find("function AI.emit_noise(") != std::string::npos, "lua_stubs_have_ai: the static stub declares AI, the handle, the blackboard and the bases");
+			}
+		}
+	}
+
 	bool run_ai_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -1183,6 +1303,7 @@ namespace wiwa
 		engine_leaves(check);
 		controllers(check);
 		lua_leaves(check);
+		lua_ai(check);
 
 		if (check.Failures == 0)
 		{

@@ -39,6 +39,7 @@ namespace wiwa
 		context.Animation = Engine::get().get_module<AnimationModule>();
 		context.Audio = Engine::get().get_module<AudioModule>();
 		context.Nav = Engine::get().get_module<NavModule>();
+		context.AI = Engine::get().get_module<AIModule>();
 		context.RequestQuit = []() { Engine::get().request_quit(); };
 		if (RenderModule* renderer = Engine::get().get_module<RenderModule>())
 		{

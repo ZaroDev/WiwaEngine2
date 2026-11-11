@@ -92,6 +92,14 @@ or `debug`.
   without an entity plays globally. `Audio.stop(handle)`, `Audio.stop_entity(e)`, `Audio.stop_all()`, `Audio.set_rtpc(name, value [, entity])`,
   `Audio.set_switch(group, state [, entity])`, `Audio.set_state(group, state)`, `Audio.load_bank(load_asset("assets/audio/Music.bnk"))`,
   `Audio.backend()` (`"Null"`, `"Wwise"` or `"MiniAudio"`). Banks the project lists in Settings, Audio are loaded at start. Sound only plays while the game clock plays.
+- **AI (behaviour trees):** `AI.controller(entity)` is the handle of the entity's `AIController` (an error without one): `:get(key)` / `:set(key, value)` read and
+  write the blackboard of its tree (numbers, booleans, strings, `vec3`, `Entity` or `nil`; a value of another type than the key's, a fraction for an int key and an
+  unknown key are errors that name the key), `:restart()`, `:running()`. `AI.emit_noise(position, loudness, kind)` makes a sound the AIs with a `Perceiver` within
+  `HearingRadius * loudness` hear this frame. Methods are called with a colon (a dot is a Lua error). A tree leaf is a script that returns
+  `BtAction:extend{ properties = { ... }, on_start = function(self, bb) end, on_tick = function(self, bb, dt) return "running" end, on_abort = function(self, bb) end }`
+  (`BtCondition` for a condition): `on_tick` returns `"success"`, `"failure"` or `"running"` (anything else, or an error, fails the node and is logged once);
+  `self.entity` is the AI, the declared `properties` take the node's parameters over their defaults, `bb:get(key)` / `bb:set(key, value)` / `bb:has(key)` are the blackboard.
+  A leaf script is for trees: put it in a `LuaAction` / `LuaCondition` node, not on an entity.
 - **Navigation:** queries against the baked navmesh of the scene that plays (a `NavMeshVolume` with a `.wnav`, see the Navigation panel); without one they answer
   failed / `nil` / `false`. `Nav.find_path(from, to [, area_mask])` is `{ status = "complete" | "partial" | "failed", length, points = { vec3... } }` (partial: the walk
   ends where it comes closest), `Nav.nearest_point(p [, extents])`, `Nav.raycast(a, b)` (`hit, point`: the line leaves the mesh), `Nav.random_point(centre, radius)`,

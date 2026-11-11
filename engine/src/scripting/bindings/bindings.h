@@ -43,6 +43,9 @@ namespace wiwa
 	// Nav.agent(entity) and its handle (set_destination, stop, warp, state, remaining_distance, velocity), Nav.find_path / nearest_point / raycast / random_point.
 	void bind_nav(ScriptRuntime& runtime, ScriptContext& context);
 
+	// AI.controller(entity) and its handle (get, set, restart, running), AI.emit_noise(position, loudness, kind).
+	void bind_ai(ScriptRuntime& runtime, ScriptContext& context);
+
 	// Animation.animator(entity), the animator handle (play, crossfade, stop, layer, on, off, joint_world, ...) and layer handles.
 	void bind_animation(ScriptRuntime& runtime, ScriptContext& context);
 

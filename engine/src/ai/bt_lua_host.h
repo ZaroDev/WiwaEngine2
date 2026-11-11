@@ -17,6 +17,11 @@ namespace wiwa
 	// __bt_kind ("action" / "condition"). A leaf script returns BtAction:extend{ properties = {...}, on_start, on_tick, on_abort } (or BtCondition). Safe to
 	// call twice. The ScriptingModule calls it before it loads the scripts of the catalog, which may extend them.
 	void define_bt_lua_bases(ScriptRuntime& runtime);
+	// A blackboard value as Lua holds it (numbers, vec3, string, an Entity handle or nil for the null entity) and back. The way back refuses what the key's
+	// type cannot hold (no conversions): false, with what was expected ("a whole number", "a vec3"...) in why.
+	sol::object bt_value_to_lua(sol::state_view lua, ScriptContext* context, const BtValue& value);
+	bool bt_value_from_lua(BtValueType type, const sol::object& value, BtValue& out, std::string& why);
+
 	// Whether a loaded script class is a leaf (it inherits from BtAction or BtCondition): "action", "condition", or "" for any other script.
 	std::string bt_leaf_kind(const sol::table& scriptClass);
 

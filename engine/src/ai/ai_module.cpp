@@ -272,6 +272,92 @@ namespace wiwa
 		tick_controllers(*scene, dt);
 	}
 
+	// The controller's instance, made (or made again on a changed tree) when the tree is ready; null while it is loading or cannot run.
+	BtInstance* AIModule::ensure_instance(entt::entity entity, const AIController& ai, Controller& controller, float dt)
+	{
+		TreeEntry& entry = entry_for(ai.Tree);
+		refresh_entry(ai.Tree, entry);
+		if (!entry.Tree)
+		{
+			drop(controller);
+			controller.Tree.reset();
+			return nullptr;
+		}
+
+		if (!controller.Instance || controller.Tree != entry.Tree)
+		{
+			drop(controller);
+			controller.Tree = entry.Tree;
+			controller.Instance = CreateScope<BtInstance>(entry.Tree, entity, static_cast<u32>(ai.Seed));
+			controller.LastTick = m_Time - dt;
+			controller.NextTick = m_Time;
+			if (!ai.Overrides.empty())
+			{
+				const nlohmann::json overrides = nlohmann::json::parse(ai.Overrides, nullptr, false);
+				if (overrides.is_discarded() || !overrides.is_object())
+				{
+					WI_AI_LOG(Warning, "The blackboard overrides of an AIController are not a JSON object and are ignored");
+				}
+				else
+				{
+					for (const std::string& problem : controller.Instance->blackboard().apply_overrides(overrides))
+					{
+						WI_AI_LOG(Warning, "{0}", problem);
+					}
+				}
+			}
+		}
+		return controller.Instance.get();
+	}
+
+	BtInstance* AIModule::acquire(entt::entity entity)
+	{
+		const Ref<Scene> scene = world_scene();
+		if (!scene || !scene->registry().valid(entity) || !scene->registry().all_of<AIController>(entity))
+		{
+			return nullptr;
+		}
+		const AIController& ai = scene->registry().get<AIController>(entity);
+		if (!ai.Enabled || !ai.Tree.valid())
+		{
+			return nullptr;
+		}
+		Controller& controller = m_Controllers[entity];
+		controller.Seen = true;
+		return ensure_instance(entity, ai, controller, 0.0f);
+	}
+
+	bool AIModule::restart(entt::entity entity)
+	{
+		BtInstance* instance = acquire(entity);
+		if (instance == nullptr)
+		{
+			return false;
+		}
+		Controller& controller = m_Controllers[entity];
+		const Ref<Scene> scene = world_scene();
+		instance->restart(m_Services, m_Time);
+		const AIController& ai = scene->registry().get<AIController>(entity);
+		if (!ai.Overrides.empty())
+		{
+			const nlohmann::json overrides = nlohmann::json::parse(ai.Overrides, nullptr, false);
+			if (overrides.is_object())
+			{
+				instance->blackboard().apply_overrides(overrides);
+			}
+		}
+		controller.NextTick = m_Time;
+		return true;
+	}
+
+	void AIModule::emit_noise(glm::vec3 position, float loudness, std::string kind)
+	{
+		if (m_HasWorld)
+		{
+			m_Noises.push_back({ position, loudness, std::move(kind) });
+		}
+	}
+
 	void AIModule::tick_controllers(Scene& scene, float dt)
 	{
 		entt::registry& registry = scene.registry();
@@ -315,37 +401,9 @@ namespace wiwa
 				continue;
 			}
 
-			TreeEntry& entry = entry_for(ai.Tree);
-			refresh_entry(ai.Tree, entry);
-			if (!entry.Tree)
+			if (ensure_instance(entity, ai, controller, dt) == nullptr)
 			{
-				drop(controller);
-				controller.Tree.reset();
 				continue; // loading, or it failed (logged once when it did)
-			}
-
-			if (!controller.Instance || controller.Tree != entry.Tree)
-			{
-				drop(controller);
-				controller.Tree = entry.Tree;
-				controller.Instance = CreateScope<BtInstance>(entry.Tree, entity, static_cast<u32>(ai.Seed));
-				controller.LastTick = m_Time - dt;
-				controller.NextTick = m_Time;
-				if (!ai.Overrides.empty())
-				{
-					const nlohmann::json overrides = nlohmann::json::parse(ai.Overrides, nullptr, false);
-					if (overrides.is_discarded() || !overrides.is_object())
-					{
-						WI_AI_LOG(Warning, "The blackboard overrides of an AIController are not a JSON object and are ignored");
-					}
-					else
-					{
-						for (const std::string& problem : controller.Instance->blackboard().apply_overrides(overrides))
-						{
-							WI_AI_LOG(Warning, "{0}", problem);
-						}
-					}
-				}
 			}
 
 			if (ai.TickRate > 0.0f && m_Time + 1.0e-9 < controller.NextTick)
@@ -360,6 +418,8 @@ namespace wiwa
 			}
 			controller.Instance->tick(m_Services, elapsed, m_Time);
 		}
+
+		m_Noises.clear();
 
 		// Controllers whose component or entity is gone: what runs is aborted, once.
 		for (auto it = m_Controllers.begin(); it != m_Controllers.end();)
