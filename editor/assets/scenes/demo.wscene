@@ -5498,6 +5498,48 @@
         }
       },
       "parent": "7bbbf3b0defd68969a5ef2744e5866fe"
+    },
+    {
+      "id": "f676f0c409cbe97d8e6f5be6c59a50bf",
+      "components": {
+        "Name": {
+          "Value": "Lamp pair"
+        },
+        "Transform": {
+          "Position": [
+            6,
+            0,
+            -8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "PrefabInstance": {
+          "Prefab": {
+            "guid": "808dd25ad719f073f27631147837b7ec",
+            "localId": 0
+          }
+        }
+      },
+      "parent": "11c09b5402d107390bf8d70bc01bf74f",
+      "overrides": [
+        {
+          "kind": "SetField",
+          "node": "f10d0a974ccc72ad",
+          "component": "Light",
+          "field": "Intensity",
+          "value": 40.0
+        }
+      ]
     }
   ]
 }

@@ -91,6 +91,19 @@ namespace wiwa
 		{
 			(name.Value.rfind("Footprint", 0) == 0 ? footprints : placed)++;
 		}
+		// the lamp pair: a prefab that holds two lamp prefabs, the scene brightens one head (an override two levels deep), the pair prefab makes the other blue
+		u32 bright = 0;
+		u32 blue = 0;
+		for (const auto [entity, light, name] : play.registry().view<Light, Name>().each())
+		{
+			if (name.Value == "Head" && play.registry().all_of<PrefabChild>(entity))
+			{
+				bright += std::abs(light.Intensity - 40.0f) < 0.01f ? 1 : 0;
+				blue += light.Color.z > 0.9f && light.Color.x < 0.5f ? 1 : 0;
+			}
+		}
+		m_Fox.NestedBright = std::max(m_Fox.NestedBright, bright);
+		m_Fox.NestedBlue = std::max(m_Fox.NestedBlue, blue);
 		m_Fox.PlacedDecals = std::max(m_Fox.PlacedDecals, placed);
 		m_Fox.MostFootprints = std::max(m_Fox.MostFootprints, footprints);
 
@@ -185,6 +198,10 @@ namespace wiwa
 		if (m_Fox.EventsSeen == 0)
 		{
 			return "no footstep of the warrior was fired";
+		}
+		if (m_Fox.NestedBright == 0 || m_Fox.NestedBlue == 0)
+		{
+			return "the lamp pair (a prefab that holds two prefabs) did not get its overrides: " + std::to_string(m_Fox.NestedBright) + " bright head(s) from the scene, " + std::to_string(m_Fox.NestedBlue) + " blue head(s) from the pair prefab";
 		}
 		if (m_Fox.PlacedDecals < 6)
 		{

@@ -42,6 +42,35 @@ def ref(g, local=0):
 	return {"guid": g, "localId": local}
 
 
+_FNV = 0xCBF29CE484222325
+_FNV_PRIME = 0x100000001B3
+_U64 = 0xFFFFFFFFFFFFFFFF
+
+
+def node_id(path):
+	"""The stable id of a prefab node (engine/src/scene/prefab_node_id.cpp compute_node_id): FNV-1a 64 of the path of names ("Street lamp/Head")."""
+	h = _FNV
+	for b in path.encode():
+		h = ((h ^ b) * _FNV_PRIME) & _U64
+	return h or 1
+
+
+def compose_node_id(outer, inner):
+	"""The id of a node of a nested prefab instance (compose_node_id in prefab_node_id.cpp): `outer` is the id of the instance's node, `inner` the id in the inner prefab."""
+	h = _FNV
+	for part in (outer, inner):
+		for shift in range(0, 64, 8):
+			h = ((h ^ ((part >> shift) & 0xFF)) * _FNV_PRIME) & _U64
+		h = ((h ^ 0x9E) * _FNV_PRIME) & _U64
+	if h == 0:
+		return 1
+	return _U64 - 1 if h == _U64 else h
+
+
+def set_field_override(node, component, field, value):
+	return {"kind": "SetField", "node": "%016x" % node, "component": component, "field": field, "value": value}
+
+
 # ---------------------------------------------------------------------------------------------------------------- files
 
 def write(rel, text, binary=False):
@@ -1565,6 +1594,18 @@ def add_vfx(s, g):
 	s.add("Rune motes", "Decals station", pos=(-3, 0.35, 6.5), **system("rune_motes"))
 
 
+def patch_scene_with_nested(g):
+	"""--nested-only: adds the lamp pair (a prefab that holds prefabs) to the scene that is already written, without downloading anything."""
+	path = ASSETS / "scenes/demo.wscene"
+	scene = json.loads(path.read_text(encoding="utf-8"))
+	fresh = Scene()
+	fresh.ids["Lighting station"] = guid("entity:Lighting station")
+	add_nested_lamps(fresh, g)
+	ours = set(e["id"] for e in fresh.entities)
+	scene["entities"] = [e for e in scene["entities"] if e["id"] not in ours] + fresh.entities
+	write_json("scenes/demo.wscene", scene)
+
+
 def patch_scene_with_vfx(g):
 	"""--vfx-only: adds the effects to the scene that is already written (no downloads): the VFX station, the motes over the rune circle, and the footstep
 	script on the warrior."""
@@ -1754,6 +1795,7 @@ def build_scene(g):
 	for i, x in enumerate((-9, 9, 0)):
 		z = -2 if x else -11
 		s.add("Street lamp %d" % (i + 1), "Lighting station", pos=(x, 0, z), PrefabInstance={"Prefab": ref(g["lamp"])})
+	add_nested_lamps(s, g)
 
 	# --- station 2: materials and shaders --------------------------------------------------------------------
 	s.add("Materials station", "World")
@@ -1782,8 +1824,8 @@ def build_scene(g):
 	# with the same skeleton reference the prefab's skinned node holds (the legacy local id 1 of the model, which the catalog redirects)
 	s.add("Warrior (animated)", "Animation station", pos=(0, 0, 9), PrefabInstance={"Prefab": ref(g["models"]["Warrior"][0])},
 		Animator={"Skeleton": ref(g["models"]["Warrior"][0], 1), "Graph": ref(guid("asset:models/characters/Warrior_animation/warrior.wgraph")), "PlayOnStart": False},
+		AudioEmitter={"Event": "", "PlayOnStart": False, "AttenuationScale": 1.0},
 		**merge(script("animation_graph_demo", period=0.4, attack_every=0.15), script("decal_footprints"), script("vfx_footsteps")))
-		AudioEmitter={"Event": "", "PlayOnStart": False, "AttenuationScale": 1.0}, **script("animation_graph_demo", period=0.4, attack_every=0.15))
 	s.add("Warrior head socket", "Warrior (animated)", AnimationSocket={"Joint": "Head", "OffsetPosition": [0, 0.3, 0], "OffsetRotation": IDENTITY})
 	s.add("Warrior head ornament", "Warrior head socket", scale=(0.18, 0.18, 0.18), **mesh("sphere", "gold"))
 	lineup = (("Wizard", -2.5, 11), ("Ranger", 2.5, 11), ("Cleric", -5, 12), ("Yeti", 5, 12), ("Panda", -7.5, 12.5), ("YellowDragon", 7.5, 12.5))
@@ -1872,6 +1914,35 @@ def scene_settings(g):
 		"motionBlur": {"enabled": True}}
 
 
+HEAD_NODE = node_id("Street lamp/Head")  # the lamp head, in the street lamp prefab
+LEFT_LAMP_NODE = node_id("Lamp pair/Left lamp")  # the node of the lamp pair prefab that holds the left lamp
+
+
+def add_nested_lamps(s, g):
+	"""A lamp pair: a prefab that holds two instances of the street lamp (the right one has a blue head, an override stored in the pair prefab). The
+	instance in the scene brightens the head of the left lamp, an override of a node two prefabs deep (its id is composed from the node of the left lamp)."""
+	eid = s.add("Lamp pair", "Lighting station", pos=(6, 0, -8), PrefabInstance={"Prefab": ref(g["lamp_pair"])})
+	s.entities[-1]["overrides"] = [set_field_override(compose_node_id(LEFT_LAMP_NODE, HEAD_NODE), "Light", "Intensity", 40.0)]
+	return eid
+
+
+def build_lamp_pair(g):
+	"""lamp_pair.wprefab: a prefab that holds two street lamps (a nested prefab instance each)."""
+	root = guid("lamp_pair:root")
+	identity = {"Rotation": IDENTITY, "Scale": [1, 1, 1]}
+	blue = set_field_override(HEAD_NODE, "Light", "Color", [0.3, 0.5, 1, 1])
+	ents = [
+		{"id": root, "components": {"Name": {"Value": "Lamp pair"}, "Transform": dict(identity, Position=[0, 0, 0])}},
+		{"id": guid("lamp_pair:left"), "parent": root, "components": {"Name": {"Value": "Left lamp"}, "Transform": dict(identity, Position=[-1.6, 0, 0]),
+			"PrefabInstance": {"Prefab": ref(g["lamp"])}}},
+		{"id": guid("lamp_pair:right"), "parent": root, "components": {"Name": {"Value": "Right lamp"}, "Transform": dict(identity, Position=[1.6, 0, 0]),
+			"PrefabInstance": {"Prefab": ref(g["lamp"])}}, "overrides": [blue]},
+	]
+	rel = "prefabs/lamp_pair.wprefab"
+	write_json(rel, {"name": "Lamp pair", "entities": ents})
+	return write_meta(rel, "PrefabImporter", 2)
+
+
 def build_lamp(g):
 	"""street_lamp.wprefab: a pole, an emissive head and a point light, instanced three times in the lighting station."""
 	root = guid("lamp:root")
@@ -1889,6 +1960,14 @@ def build_lamp(g):
 
 
 def main():
+	if "--nested-only" in sys.argv:
+		# adds only the lamp pair to the scene that is already written (and its prefab), without downloading anything or touching other .meta files
+		g = {"lamp": guid("asset:prefabs/street_lamp.wprefab")}
+		g["lamp_pair"] = build_lamp_pair(g)
+		patch_scene_with_nested(g)
+		print("added the lamp pair to the demo scene")
+		return
+
 	if "--vfx-only" in sys.argv:
 		# adds only the particle effects to the scene that is already written, without downloading anything
 		g = {"vfx": vfx_effects(), "shapes": guid("asset:models/shapes/shapes.glb"), "mat": {"crate": guid("asset:materials/crate.wmat")}}
@@ -1932,6 +2011,7 @@ def main():
 
 	input_map = build_input()
 	g["lamp"] = build_lamp(g)
+	g["lamp_pair"] = build_lamp_pair(g)
 
 	scene, labels = build_scene(g | {"ui": "0" * 32})  # the HUD guid does not depend on its content
 	g["ui"] = build_ui(font, scene.ids["Beacon"], labels)

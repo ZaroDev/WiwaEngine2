@@ -107,6 +107,9 @@ namespace wiwa
 			u32 MostFootprints = 0;
 			u32 WarriorMeshes = 0;
 			u32 WarriorMeshesReceiving = 0;
+			// prefabs in prefabs (scene.md): the lamp heads of the lamp pair with the override of the scene (bright), and with the one of the pair prefab (blue)
+			u32 NestedBright = 0;
+			u32 NestedBlue = 0;
 			// particle effects (vfx.md): the playing systems the scene places, the most dust puffs and impact sparks alive at once
 			u32 PlayingEffects = 0;
 			u32 MostDust = 0;
