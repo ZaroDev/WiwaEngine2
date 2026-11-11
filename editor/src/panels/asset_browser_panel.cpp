@@ -500,7 +500,7 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 		{
 			m_OpenUiPanel(file);
 		}
-		else if ((file.extension() == ".wskel" || file.extension() == ".wmesh" || file.extension() == ".wanim" || file.extension() == ".wgraph") && m_OpenAssetEditor)
+		else if ((file.extension() == ".wskel" || file.extension() == ".wmesh" || file.extension() == ".wanim" || file.extension() == ".wgraph" || file.extension() == ".wbt") && m_OpenAssetEditor)
 		{
 			m_OpenAssetEditor(file);
 		}

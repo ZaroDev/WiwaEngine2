@@ -474,7 +474,7 @@ void AssetEditorPanel::on_draw()
 		}
 		else
 		{
-			ImGui::TextDisabled("Open a skeleton (.wskel), a skinned mesh (.wmesh), a clip (.wanim) or an animation graph (.wgraph) from the Assets panel.");
+			ImGui::TextDisabled("Open a skeleton (.wskel), a skinned mesh (.wmesh), a clip (.wanim) an animation graph (.wgraph) or a behaviour tree (.wbt) from the Assets panel.");
 		}
 		draw_prompt();
 		ImGui::End();
