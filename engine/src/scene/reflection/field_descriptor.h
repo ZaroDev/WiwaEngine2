@@ -15,6 +15,7 @@ namespace wiwa
 		float Min = 0.0f;
 		float Max = 0.0f;
 		bool IsColor = false;                 // a Vec4 that is a color
+		bool AudioEvent = false;              // for a String field: the name of an audio event (the editor offers the events of the loaded banks)
 		AssetType Asset = AssetType::None;    // for an Asset field: the type it accepts
 		std::vector<std::string> EnumNames{}; // for an Enum field: the name of each value, in order
 		std::string Tooltip{};
@@ -32,6 +33,13 @@ namespace wiwa
 		{
 			FieldMeta meta;
 			meta.IsColor = true;
+			return meta;
+		}
+
+		static FieldMeta audio_event()
+		{
+			FieldMeta meta;
+			meta.AudioEvent = true;
 			return meta;
 		}
 

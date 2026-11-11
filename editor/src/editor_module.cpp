@@ -7,10 +7,12 @@
 
 #include <asset_pipeline/asset_pipeline_module.h>
 #include <asset_pipeline/asset_templates.h>
+#include <asset_pipeline/audio_settings_file.h>
 #include <asset_pipeline/input_settings_file.h>
 #include <asset_pipeline/meta_file.h>
 #include <asset_pipeline/physics_settings_file.h>
 #include <assets/asset_manager.h>
+#include <audio/audio_module.h>
 #include <core/engine.h>
 #include <input/input_module.h>
 #include <physics/physics_module.h>
@@ -24,6 +26,7 @@
 #include "asset_pipeline/file_utils.h"
 #include <assets/native_anim_files.h>
 #include "editor_ui/history_panel.h"
+#include "settings/audio_section.h"
 #include "ui/ui_editor_panel.h"
 #include "ui/ui_smoke_test.h"
 
@@ -154,6 +157,7 @@ void EditorModule::init()
 		m_PhysicsPanelSmoke = m_PhysicsPanelSmoke || argument == "--physics-panel-smoke";
 		m_InputPanelSmoke = m_InputPanelSmoke || argument == "--input-panel-smoke";
 		m_AnimPanelSmoke = m_AnimPanelSmoke || argument == "--anim-panel-smoke";
+		m_AudioPanelSmoke = m_AudioPanelSmoke || argument == "--audio-panel-smoke";
 		if (argument == "--demo-smoke")
 		{
 			m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
@@ -180,6 +184,10 @@ void EditorModule::init()
 	Ref<InputPanel> inputPanel = CreateRef<InputPanel>(m_InputPanelSmoke ? std::filesystem::temp_directory_path() / "wiwa_input_panel_smoke.wsettings" : std::filesystem::path(wiwa::INPUT_SETTINGS_FILE));
 	m_InputPanel = inputPanel.get();
 	m_Panels.push_back(inputPanel);
+	Ref<AudioPanel> audioPanel = CreateRef<AudioPanel>();
+	m_AudioPanel = audioPanel.get();
+	audioPanel->set_open(m_AudioPanelSmoke); // closed until opened from the Window menu; the smoke check draws it
+	m_Panels.push_back(audioPanel);
 	Ref<AnimationPanel> animationPanel = CreateRef<AnimationPanel>(*m_SceneEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database(),
 		[this]() { return m_PlayMode->state() == wiwa::PlayState::Edit; });
 	m_AnimationPanel = animationPanel.get();
@@ -195,8 +203,10 @@ void EditorModule::init()
 		m_Thumbnails = CreateScope<wiwa::ThumbnailCache>(database, *m_SkeletonIndex, *m_EditorState);
 	}
 	Ref<EditorSection> editorSection = CreateRef<EditorSection>();
+	m_AudioSection = CreateRef<AudioSection>(std::filesystem::path(wiwa::AUDIO_SETTINGS_FILE));
+	m_PendingAudio = true; // applied once the first import scan has cooked the banks (see update())
 	// every project-wide setting in one place (closed until opened from the Window menu); it shares the sections the Physics and Input panels made
-	m_Panels.push_back(CreateRef<SettingsPanel>(CreateRef<ProjectSection>(), CreateRef<RendererSection>(), physicsPanel->section(), inputPanel->section(), editorSection));
+	m_Panels.push_back(CreateRef<SettingsPanel>(CreateRef<ProjectSection>(), CreateRef<RendererSection>(), physicsPanel->section(), inputPanel->section(), m_AudioSection, editorSection));
 	// the Scene and Game panels share the renderer's one view: the Game panel, added first, wins when both are visible
 	Ref<ViewOwner> viewOwner = CreateRef<ViewOwner>();
 	m_Panels.push_back(CreateRef<GamePanel>(*m_SceneEditor, viewOwner));
@@ -600,11 +610,40 @@ void EditorModule::status_bar()
 	ImGui::End();
 }
 
+// One spelling for a scene path, so that the same scene reached by the Open dialog (an absolute path), the Asset Browser (a path with backslashes) or a drop
+// is one entry of the recent list: absolute and clean, then relative to the working directory when it is inside it ("assets/scenes/demo.wscene"), with
+// forward slashes. Windows paths are not case sensitive, so recent_scene_key() lowers the case for comparing.
+static std::string recent_scene_path(const std::string& path)
+{
+	std::error_code error;
+	std::filesystem::path absolute = std::filesystem::weakly_canonical(std::filesystem::absolute(path, error), error);
+	if (error)
+	{
+		return std::filesystem::path(path).lexically_normal().generic_string();
+	}
+	const std::filesystem::path relative = absolute.lexically_relative(std::filesystem::current_path(error));
+	const bool inside = !relative.empty() && *relative.begin() != "..";
+	return (inside ? relative : absolute).generic_string();
+}
+
+static std::string recent_scene_key(const std::string& path)
+{
+	std::string key = recent_scene_path(path);
+	std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	return key;
+}
+
 void EditorModule::open_scene(const std::string& path)
 {
-	m_SceneEditor->open(path);
-	m_RecentScenes.erase(std::remove(m_RecentScenes.begin(), m_RecentScenes.end(), path), m_RecentScenes.end());
-	m_RecentScenes.insert(m_RecentScenes.begin(), path);
+	m_SceneEditor->open(recent_scene_path(path)); // remembered by update() once it has opened
+}
+
+// Puts a scene first in the recent list (once: another spelling of the same path replaces the old entry).
+void EditorModule::remember_recent_scene(const std::string& path)
+{
+	const std::string key = recent_scene_key(path);
+	m_RecentScenes.erase(std::remove_if(m_RecentScenes.begin(), m_RecentScenes.end(), [&](const std::string& scene) { return recent_scene_key(scene) == key; }), m_RecentScenes.end());
+	m_RecentScenes.insert(m_RecentScenes.begin(), recent_scene_path(path));
 	if (m_RecentScenes.size() > 8)
 	{
 		m_RecentScenes.resize(8);
@@ -616,12 +655,31 @@ void EditorModule::load_recent_scenes()
 {
 	std::ifstream in("recent_scenes.txt");
 	std::string line;
+	std::vector<std::string> keys;
+	bool changed = false;
 	while (std::getline(in, line) && m_RecentScenes.size() < 8)
 	{
-		if (!line.empty())
+		while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
 		{
-			m_RecentScenes.push_back(line);
+			line.pop_back();
 		}
+		if (line.empty())
+		{
+			continue;
+		}
+		const std::string key = recent_scene_key(line);
+		if (std::find(keys.begin(), keys.end(), key) != keys.end())
+		{
+			changed = true; // a list saved before this check: the same scene written two ways
+			continue;
+		}
+		keys.push_back(key);
+		m_RecentScenes.push_back(recent_scene_path(line));
+		changed = changed || m_RecentScenes.back() != line;
+	}
+	if (changed)
+	{
+		save_recent_scenes();
 	}
 }
 
@@ -694,6 +752,22 @@ void EditorModule::pre_update(float deltaTime)
 void EditorModule::update(float deltaTime)
 {
 	m_Frame++;
+	// Every way a scene gets opened or saved (the Open dialog, the Asset Browser, a drop on the Viewport, Save As) ends with the editor holding it at a
+	// path: that is what is remembered, once the scene is really there (an open that fails never gets here).
+	if (!m_SceneEditor->playing() && !m_SceneEditor->path().empty() && m_SceneEditor->path() != m_RememberedScene)
+	{
+		m_RememberedScene = m_SceneEditor->path();
+		remember_recent_scene(m_RememberedScene.string());
+	}
+	if (m_PendingAudio)
+	{
+		const Ref<wiwa::JobProgress> scan = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().scan_progress();
+		if (scan && scan->finished())
+		{
+			m_AudioSection->apply();
+			m_PendingAudio = false;
+		}
+	}
 	if (m_PendingDefaultMap.valid())
 	{
 		const Ref<wiwa::JobProgress> scan = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().scan_progress();
@@ -746,6 +820,36 @@ void EditorModule::update(float deltaTime)
 			WI_INFO("Editor", "Physics panel smoke test {0} (frames {1}, read {2}, layer 1 \"{3}\", 0-1 collide {4}, error \"{5}\")", passed ? "passed" : "FAILED", m_PhysicsPanel->frames_drawn(), read, saved.Names[1], saved.collides(0, 1), m_PhysicsPanel->last_error());
 			std::error_code removed;
 			std::filesystem::remove(m_PhysicsPanelFile, removed);
+			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			wiwa::Engine::get().request_quit();
+		}
+	}
+
+	if (m_AudioPanelSmoke && m_AudioPanel != nullptr)
+	{
+		wiwa::AudioModule* audio = wiwa::Engine::get().get_module<wiwa::AudioModule>();
+		if (m_Frame == 5 && audio != nullptr)
+		{
+			audio->select_backend(wiwa::AudioBackendKind::Null, wiwa::AudioInitInfo{}); // whatever the project chose: the smoke checks the panel, not a vendor
+		}
+		if (m_Frame == 10)
+		{
+			m_AudioPanel->request_focus();
+		}
+		if (m_Frame == 40 && audio != nullptr && audio->active_kind() == wiwa::AudioBackendKind::Null)
+		{
+			// the panel auditions on the Null backend: it plays whatever event it is given when no bank metadata is loaded
+			m_AudioPanelAuditioned = m_AudioPanel->audition("Play_PanelSmoke") && audio->backend().playing_count() == 1 && audio->auditioning();
+		}
+		if (m_Frame == 100 && audio != nullptr && m_AudioPanelAuditioned)
+		{
+			m_AudioPanel->stop_audition();
+		}
+		if (m_Frame == 130)
+		{
+			const bool silent = audio != nullptr && audio->backend().playing_count() == 0 && !audio->auditioning();
+			const bool passed = m_AudioPanel->frames_drawn() >= 100 && audio != nullptr && audio->active_kind() == wiwa::AudioBackendKind::Null && m_AudioPanelAuditioned && silent;
+			WI_INFO("Editor", "Audio panel smoke test {0} (frames {1}, auditioned {2}, silent after stop {3})", passed ? "passed" : "FAILED", m_AudioPanel->frames_drawn(), m_AudioPanelAuditioned, silent);
 			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
 			wiwa::Engine::get().request_quit();
 		}

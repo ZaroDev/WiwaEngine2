@@ -21,7 +21,7 @@ function InputDemo:setup()
   self.move = panel:find("InputInfo/Move")
   self.jump = panel:find("InputInfo/JumpKey")
   self.rebind_label = panel:find("InputInfo/RebindJump/Label")
-  panel:find("InputInfo/RebindJump"):on("click", function(me) me:start_rebind() end)
+  panel:find("InputInfo/RebindJump"):on("click", function(me) Audio.post("UI_Click") me:start_rebind() end)
   self.ready = true
 end
 

@@ -142,6 +142,10 @@ namespace wiwa
 	void archive(BinaryArchive& ar, InputMapData& v);
 	// A version, then the .wgraph JSON text (native_anim_files.h is the one description of it).
 	void archive(BinaryArchive& ar, AnimationGraphData& v);
+	// A version, the bank name, its bytes, then the metadata (when HasInfo). Refuses another version, an empty name or empty bytes and trailing bytes.
+	void archive(BinaryArchive& ar, SoundBankData& v);
+	// A version, the clip name, then the encoded bytes. Refuses another version, an empty name or empty bytes and trailing bytes.
+	void archive(BinaryArchive& ar, AudioClipData& v);
 
 	template<typename T>
 	constexpr AssetType asset_type_of();
@@ -163,6 +167,8 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<CookedShapeData>() { return AssetType::PhysicsShape; }
 	template<> constexpr AssetType asset_type_of<InputMapData>() { return AssetType::InputMap; }
 	template<> constexpr AssetType asset_type_of<AnimationGraphData>() { return AssetType::AnimationGraph; }
+	template<> constexpr AssetType asset_type_of<SoundBankData>() { return AssetType::SoundBank; }
+	template<> constexpr AssetType asset_type_of<AudioClipData>() { return AssetType::AudioClip; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)

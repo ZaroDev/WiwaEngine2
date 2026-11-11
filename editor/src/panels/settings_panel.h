@@ -6,20 +6,21 @@
 
 #include "panel.h"
 
+#include "../settings/audio_section.h"
 #include "../settings/editor_section.h"
 #include "../settings/input_section.h"
 #include "../settings/physics_section.h"
 #include "../settings/project_section.h"
 #include "../settings/renderer_section.h"
 
-// The "Settings" panel: every project-wide value in one place, in pages on the left (Project, Launch, Performance, Renderer, Physics, Input, Editor).
+// The "Settings" panel: every project-wide value in one place, in pages on the left (Project, Launch, Performance, Renderer, Physics, Input, Audio, Editor).
 // The search box keeps only the rows whose label contains the text, across all pages. Each change is saved at once and applied by the page's
 // section (ProjectSection...); this class only draws rows. Closed until opened from the Window menu. Main thread, between the ImGui frame's
 // begin and end.
 class SettingsPanel final : public Panel
 {
 public:
-	SettingsPanel(Ref<ProjectSection> project, Ref<RendererSection> renderer, Ref<PhysicsSection> physics, Ref<InputSection> input, Ref<EditorSection> editor);
+	SettingsPanel(Ref<ProjectSection> project, Ref<RendererSection> renderer, Ref<PhysicsSection> physics, Ref<InputSection> input, Ref<AudioSection> audio, Ref<EditorSection> editor);
 
 	virtual void on_draw() override;
 
@@ -32,6 +33,7 @@ private:
 		Renderer,
 		Physics,
 		Input,
+		Audio,
 		Editor,
 		Count,
 	};
@@ -45,6 +47,7 @@ private:
 	void renderer_rows();
 	void physics_rows();
 	void input_rows();
+	void audio_rows();
 	void editor_rows();
 
 	// A row: drawn only if its label matches the search; the page title is drawn before the first row that shows while searching.
@@ -62,6 +65,7 @@ private:
 	Ref<RendererSection> m_Renderer;
 	Ref<PhysicsSection> m_Physics;
 	Ref<InputSection> m_Input;
+	Ref<AudioSection> m_Audio;
 	Ref<EditorSection> m_Editor;
 
 	Page m_Page = Page::Project;

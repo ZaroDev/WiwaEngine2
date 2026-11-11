@@ -1,5 +1,9 @@
 #include "viewport_panel.h"
 
+#include <audio/audio_module.h>
+
+#include "../audio/audio_edit_model.h"
+
 #include <algorithm>
 #include <optional>
 
@@ -42,6 +46,11 @@ namespace
 ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor, Ref<ViewOwner> owner, Ref<EditorSection> section)
 	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_Owner(std::move(owner)), m_Section(std::move(section)), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>())
 {
+	m_SceneGizmos.set_audio_radius([](const wiwa::AudioEmitter& emitter)
+	{
+		wiwa::AudioModule* audio = wiwa::Engine::get().get_module<wiwa::AudioModule>();
+		return audio != nullptr ? wiwa::audio_attenuation_radius(emitter.Event, emitter.AttenuationScale, audio->bank_infos()) : 0.0f;
+	});
 }
 
 // ImGuizmo hands back the entity's new world matrix; the operation in use decides which field of the local Transform it becomes.
@@ -209,6 +218,7 @@ void ViewportPanel::on_draw()
 				changed |= ImGui::Checkbox("World axes", &settings.Axes);
 				changed |= ImGui::Checkbox("Lights", &settings.Lights);
 				changed |= ImGui::Checkbox("Cameras", &settings.Cameras);
+				changed |= ImGui::Checkbox("Audio emitters", &settings.Audio);
 				changed |= ImGui::Checkbox("Bounds of the selection", &settings.Bounds);
 				ImGui::Separator();
 				changed |= ImGui::Checkbox("Outline the selection", &settings.Outline.Enabled);

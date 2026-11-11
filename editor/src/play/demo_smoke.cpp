@@ -7,6 +7,8 @@
 
 #include <animation/animation_module.h>
 #include <assets/asset_manager.h>
+#include <audio/audio_module.h>
+#include <audio/null_backend.h>
 #include <core/engine.h>
 #include <input/input_module.h>
 #include <scene/reflection/component_registry.h>
@@ -138,6 +140,56 @@ namespace wiwa
 		return {};
 	}
 
+	void DemoSmoke::sample_audio(Scene& play)
+	{
+		AudioModule* audio = Engine::get().get_module<AudioModule>();
+		const entt::entity entity = find_named(play, "Audio demo");
+		if (audio == nullptr || entity == entt::null)
+		{
+			return;
+		}
+
+		m_Audio.HasEmitter = m_Audio.HasEmitter || play.registry().all_of<AudioEmitter>(entity);
+		m_Audio.Registered = m_Audio.Registered || audio->emitter_of(entity).valid();
+		m_Audio.NullBackend = audio->active_kind() == AudioBackendKind::Null;
+		m_Audio.WwiseWithBanks = (audio->active_kind() == AudioBackendKind::Wwise && !audio->banks().empty()) || audio->active_kind() == AudioBackendKind::MiniAudio; // a backend that plays: something must
+		m_Audio.Playing = m_Audio.Playing || audio->backend().playing_count() > 0;
+
+		if (m_Audio.NullBackend && (!m_Audio.LoopPosted || !m_Audio.ScriptPosted))
+		{
+			for (const std::string& call : static_cast<NullAudioBackend&>(audio->backend()).calls())
+			{
+				m_Audio.LoopPosted = m_Audio.LoopPosted || call.rfind("post:Amb_Hall_loop@", 0) == 0;
+				m_Audio.ScriptPosted = m_Audio.ScriptPosted || call.rfind("post:Beacon_Blip@", 0) == 0;
+			}
+		}
+	}
+
+	std::string DemoSmoke::check_audio() const
+	{
+		if (!m_Audio.HasEmitter)
+		{
+			return "the Audio demo entity has no AudioEmitter";
+		}
+		if (!m_Audio.Registered)
+		{
+			return "the audio module never gave the Audio demo emitter a voice in the backend";
+		}
+		if (m_Audio.NullBackend && !m_Audio.LoopPosted)
+		{
+			return "the PlayOnStart event (the ambience) of the Audio demo emitter never reached the audio backend";
+		}
+		if (m_Audio.NullBackend && !m_Audio.ScriptPosted)
+		{
+			return "the Audio.post call (the beacon blip) of the audio demo script never reached the audio backend";
+		}
+		if (m_Audio.WwiseWithBanks && !m_Audio.Playing)
+		{
+			return "the audio backend has sounds to play but nothing played in the Audio demo (Settings, Audio: Wwise needs its banks, MiniAudio the clips in assets/audio/clips)";
+		}
+		return {};
+	}
+
 	bool DemoSmoke::wait(u32 frames, const char* what, std::string& failure)
 	{
 		if (m_PhaseFrames == 0)
@@ -241,6 +293,7 @@ namespace wiwa
 			m_LightHigh = std::max(m_LightHigh, intensity);
 
 			sample_fox(play);
+			sample_audio(play);
 
 			if (++m_RunFrames < 150)
 			{
@@ -250,6 +303,12 @@ namespace wiwa
 			if (const std::string fox = check_fox(); !fox.empty())
 			{
 				failure = fox;
+				return true;
+			}
+
+			if (const std::string audio = check_audio(); !audio.empty())
+			{
+				failure = audio;
 				return true;
 			}
 

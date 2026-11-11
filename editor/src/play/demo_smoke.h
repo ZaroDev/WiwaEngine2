@@ -44,6 +44,8 @@ namespace wiwa
 		bool wait(u32 frames, const char* what, std::string& failure);
 		void sample_fox(Scene& play);
 		std::string check_fox() const;
+		void sample_audio(Scene& play);
+		std::string check_audio() const;
 		std::string finish_checks();
 		bool sample_physics(Scene& play, std::string& failure);
 
@@ -102,6 +104,19 @@ namespace wiwa
 			u64 EventsSeen = 0;
 		};
 		FoxWatch m_Fox{};
+
+		// the audio demo: an emitter with an event on start and a script that posts, heard through the project's backend (the silent Null one records the calls)
+		struct AudioWatch
+		{
+			bool HasEmitter = false;        // the entity has its AudioEmitter
+			bool Registered = false;        // the audio module gave it an emitter of the backend
+			bool LoopPosted = false;        // its PlayOnStart event reached the backend (Null backend)
+			bool ScriptPosted = false;      // the script's Audio.post reached it (Null backend)
+			bool Playing = false;           // something played (Wwise with banks)
+			bool WwiseWithBanks = false;   // a backend that plays sound is selected (Wwise with banks, or MiniAudio)
+			bool NullBackend = true;
+		};
+		AudioWatch m_Audio{};
 
 		// the Physics phase: the joints demo (door, cart, pendulum, bridge, breaking box) and the character demo (a patrolling character, a sliding
 		// platform) of the scene while it plays

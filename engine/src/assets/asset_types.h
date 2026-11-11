@@ -25,6 +25,8 @@ namespace wiwa
 		PhysicsShape,
 		InputMap,
 		AnimationGraph,
+		SoundBank,
+		AudioClip,
 
 		Last
 	};
@@ -51,6 +53,8 @@ namespace wiwa
 		case AssetType::PhysicsShape: return "PhysicsShape";
 		case AssetType::InputMap: return "InputMap";
 		case AssetType::AnimationGraph: return "AnimationGraph";
+		case AssetType::SoundBank: return "SoundBank";
+		case AssetType::AudioClip: return "AudioClip";
 		default: return "None";
 		}
 	}

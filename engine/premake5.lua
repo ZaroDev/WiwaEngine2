@@ -38,6 +38,7 @@ project "wiwa"
 		"%{IncludeDirs.lua}",
 		"%{IncludeDirs.sol2}",
 		"%{IncludeDirs.Jolt}",
+		"%{IncludeDirs.miniaudio}",
 	}
 
 	links
@@ -66,9 +67,15 @@ project "wiwa"
 
 	-- must match the Jolt library defines
 	JoltDefines()
+	WwiseDefines()
 
 	filter "files:vendor/imguizmo/**.cpp"
 		enablepch "Off"
+
+	-- the miniaudio implementation is one big vendor file: no precompiled header, and not our warnings
+	filter "files:src/audio/mini/miniaudio_impl.cpp"
+		enablepch "Off"
+		warnings "Off"
 
 	-- the sol2 usertypes of the Lua bindings make big object files
 	filter "files:src/scripting/bindings/**.cpp"

@@ -26,6 +26,8 @@ function AnimationGraphDemo:on_init()
   end
   self.anim:on("footstep", function(me, event)
     me.steps = me.steps + 1
+    -- the entity has an AudioEmitter (its Event is empty): the step is heard from where the warrior is
+    Audio.post("Footstep_" .. (me.steps % 3 + 1), me.entity)
   end)
 end
 

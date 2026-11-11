@@ -42,6 +42,7 @@ namespace wiwa
 		};
 		flag(json, "lights", settings.Lights);
 		flag(json, "cameras", settings.Cameras);
+		flag(json, "audio", settings.Audio);
 		flag(json, "bounds", settings.Bounds);
 		flag(json, "grid", settings.Grid);
 		flag(json, "axes", settings.Axes);
@@ -79,6 +80,7 @@ namespace wiwa
 		nlohmann::ordered_json json = nlohmann::ordered_json::object();
 		json["lights"] = Lights;
 		json["cameras"] = Cameras;
+		json["audio"] = Audio;
 		json["bounds"] = Bounds;
 		json["grid"] = Grid;
 		json["axes"] = Axes;

@@ -100,6 +100,8 @@ namespace wiwa
 			case AssetType::PhysicsShape: { auto h = manager.load<CookedShapeData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::InputMap: { auto h = manager.load<InputMapData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::AnimationGraph: { auto h = manager.load<AnimationGraphData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::SoundBank: { auto h = manager.load<SoundBankData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::AudioClip: { auto h = manager.load<AudioClipData>(ref); return [h]() { return h.state(); }; }
 			default: return []() { return LoadState::Failed; };
 			}
 		}

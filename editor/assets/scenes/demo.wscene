@@ -81,6 +81,71 @@
       }
     },
     {
+      "id": "2b2ea28f17483091bdb1cb9346ecfadf",
+      "components": {
+        "Name": {
+          "Value": "Audio listener"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "AudioListener": {
+          "Active": true
+        }
+      },
+      "parent": "14c13bb5133352ea35142ebd0ed6e343"
+    },
+    {
+      "id": "5aa74478dcbcb4e3ce61cd354e97860a",
+      "components": {
+        "Name": {
+          "Value": "Audio demo"
+        },
+        "Transform": {
+          "Position": [
+            -3,
+            1.5,
+            3
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "AudioEmitter": {
+          "Event": "Amb_Hall_loop",
+          "PlayOnStart": true,
+          "AttenuationScale": 4.0
+        },
+        "script:f11faf2bcf90ee87065a9a4fe2c65d96": {
+          "event": "Beacon_Blip",
+          "every": 4
+        }
+      }
+    },
+    {
       "id": "3bb5728b02cd528cc2adac9795552518",
       "components": {
         "Name": {
@@ -2597,11 +2662,16 @@
             "guid": "b898dc0290fb5347a780ef8c57719cc0",
             "localId": 1
           },
-          "PlayOnStart": false,
           "Graph": {
             "guid": "bcba63970f059ed0d34a706f340d48c4",
             "localId": 0
-          }
+          },
+          "PlayOnStart": false
+        },
+        "AudioEmitter": {
+          "Event": "",
+          "PlayOnStart": false,
+          "AttenuationScale": 1.0
         },
         "script:68ea71680c291c59f52eb202fa969b38": {
           "period": 0.4,
@@ -3389,6 +3459,11 @@
         },
         "RigidBody": {
           "Motion": "Dynamic"
+        },
+        "AudioEmitter": {
+          "Event": "",
+          "PlayOnStart": false,
+          "AttenuationScale": 1.0
         },
         "script:b6dd26765e0383a2af156820cb6ef850": {
           "interval": 3,

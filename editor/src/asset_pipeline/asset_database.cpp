@@ -764,6 +764,38 @@ namespace wiwa
 					orphans.push_back(guid);
 				}
 			}
+
+			// A source whose .meta guid changed (a project regenerated, a .meta replaced by another): the cache still holds an entry for the old guid,
+			// and the catalog would list the file twice (a script would then be offered twice as a component). The entry the .meta names stays.
+			std::unordered_map<std::string, std::vector<std::string>> bySource;
+			for (auto& [guid, entry] : m_ImportCache.items())
+			{
+				const std::string source = entry.value("source", std::string{});
+				if (!source.empty())
+				{
+					bySource[source].push_back(guid);
+				}
+			}
+			for (const auto& [source, guids] : bySource)
+			{
+				if (guids.size() < 2)
+				{
+					continue;
+				}
+				const std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(std::filesystem::path(source)));
+				if (!meta || !meta->Guid.valid())
+				{
+					continue;
+				}
+				for (const std::string& guid : guids)
+				{
+					if (guid != meta->Guid.to_string() && std::find(orphans.begin(), orphans.end(), guid) == orphans.end())
+					{
+						WI_ASSET_LOG(Info, "Dropping the stale import record {0} of {1}: its .meta says {2}", guid, source, meta->Guid.to_string());
+						orphans.push_back(guid);
+					}
+				}
+			}
 		}
 
 		for (const std::string& guidText : orphans)

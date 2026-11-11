@@ -27,6 +27,7 @@ end
 function Hopper:on_collision_enter(other, contact)
   if contact.impulse > 30 then
     debug_draw.sphere(contact.point, 0.25, vec4(1, 0.5, 0, 1), 0.4)
+    Audio.post("Impact_Soft", self.entity)
   end
 end
 

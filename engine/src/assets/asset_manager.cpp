@@ -43,6 +43,8 @@ namespace wiwa
 			case AssetType::PhysicsShape: return make_asset<CookedShapeData>(payload);
 			case AssetType::InputMap: return make_asset<InputMapData>(payload);
 			case AssetType::AnimationGraph: return make_asset<AnimationGraphData>(payload);
+			case AssetType::SoundBank: return make_asset<SoundBankData>(payload);
+			case AssetType::AudioClip: return make_asset<AudioClipData>(payload);
 			default: return nullptr;
 			}
 		}

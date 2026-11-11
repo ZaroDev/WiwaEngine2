@@ -654,6 +654,44 @@ Animation = {}
 ---@return AnimatorHandle?
 function Animation.animator(entity) end
 
+--- An event that was started with Audio.post. It stays valid to pass to Audio.stop after the event ended.
+---@class AudioHandle
+local AudioHandle = {}
+---@return boolean
+function AudioHandle:is_valid() end
+
+--- Audio through the project's backend (Wwise, or Null when none is available). Names are the vendor's own (Wwise event, RTPC, switch and state names).
+Audio = {}
+--- Starts an event from the entity (it needs an AudioEmitter component, whose Event may be empty) or globally without one. Returns a handle, or nil when the event did not start (an unknown name is logged once).
+---@param event string
+---@param entity? Entity
+---@return AudioHandle?
+function Audio.post(event, entity) end
+---@param handle AudioHandle
+function Audio.stop(handle) end
+--- Stops everything the entity's emitter plays.
+---@param entity Entity
+function Audio.stop_entity(entity) end
+function Audio.stop_all() end
+--- A game parameter (RTPC): global, or of one entity.
+---@param name string
+---@param value number
+---@param entity? Entity
+function Audio.set_rtpc(name, value, entity) end
+---@param group string
+---@param state string
+---@param entity? Entity
+function Audio.set_switch(group, state, entity) end
+---@param group string
+---@param state string
+function Audio.set_state(group, state) end
+--- Loads a SoundBank asset (a .bnk) in the background.
+---@param bank Asset
+function Audio.load_bank(bank) end
+--- The backend that plays: "Null" or "Wwise".
+---@return string
+function Audio.backend() end
+
 time = {}
 --- Seconds of the update that is running.
 ---@return number

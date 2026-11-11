@@ -80,6 +80,7 @@ private:
 	void open_scene(const std::string& path);
 	void load_recent_scenes();
 	void save_recent_scenes() const;
+	void remember_recent_scene(const std::string& path);
 	void layout_popups();
 private:
 	ShortcutRegistry m_Shortcuts{};
@@ -91,6 +92,7 @@ private:
 	std::vector<wiwa::ReferenceUpdate> m_UpdateReferencesPlan{};
 	std::string m_UpdateReferencesResult{};
 	class AssetBrowserPanel* m_Browser = nullptr; // owned by m_Panels
+	std::filesystem::path m_RememberedScene{};      // the scene path the recent list last took from the scene editor
 	std::vector<std::string> m_RecentScenes{};    // most recent first, as the catalog knows them (source paths)
 	bool m_SaveLayoutRequested = false;
 	char m_LayoutName[64] = "";
@@ -115,6 +117,8 @@ private:
 	bool m_StopPlayRequested = false; // a script called quit()
 	Scope<wiwa::DemoSmoke> m_DemoSmoke;
 	bool m_PlaySmoke = false;
+	Ref<class AudioSection> m_AudioSection{};       // the Audio page of the Settings panel; its settings are applied once the first scan has cooked the banks
+	bool m_PendingAudio = false;
 	wiwa::AssetRef m_PendingDefaultMap{}; // input.wsettings' map, applied once the first import scan has cooked it
 	class HierarchyPanel* m_Hierarchy = nullptr; // owned by m_Panels
 	class UiEditorPanel* m_UiEditor = nullptr; // owned by m_Panels
@@ -126,6 +130,9 @@ private:
 	bool m_InputPanelSmoke = false;              // --input-panel-smoke: draw the Input panel for a while with ImGui asserts on, edit a map through the panel, check it was saved
 	std::filesystem::path m_InputPanelFile{};
 	class AnimationPanel* m_AnimationPanel = nullptr; // owned by m_Panels
+	class AudioPanel* m_AudioPanel = nullptr;         // owned by m_Panels
+	bool m_AudioPanelSmoke = false;                   // --audio-panel-smoke: draw the Audio panel for a while, audition an event through it, check it stops
+	bool m_AudioPanelAuditioned = false;
 	Scope<wiwa::SkeletonIndex> m_SkeletonIndex{};   // which meshes and clips name each skeleton, kept up to date in the background
 	Scope<wiwa::EditorState> m_EditorState{};       // Library/editor_state.json
 	Scope<wiwa::ThumbnailCache> m_Thumbnails{};     // the thumbnails of the Asset Browser
