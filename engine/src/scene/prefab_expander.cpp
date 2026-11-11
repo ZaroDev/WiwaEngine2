@@ -3,6 +3,8 @@
 
 #include <unordered_set>
 
+#include "prefab_node_id.h"
+
 namespace wiwa
 {
 	namespace
@@ -71,17 +73,15 @@ namespace wiwa
 			}
 			component.Fields.push_back(FieldRecord{ name, value });
 		}
-	}
 
-	ExpandResult expand_prefab(const EntityRecord& instanceRoot, const PrefabData& prefab)
-	{
-		ExpandResult result;
-		result.Entities.push_back(instanceRoot);
-		result.NodeIds.push_back(0);
-
-		// a model with animations plays them: its root gets an Animator, unless the scene already gave it one
-		if (!prefab.Animations.empty() && find_component(result.Entities[0], "Animator") == nullptr)
+		// a model with animations plays them: its root gets an Animator, unless it already has one
+		void add_animator(EntityRecord& entity, const PrefabData& prefab)
 		{
+			if (prefab.Animations.empty() || find_component(entity, "Animator") != nullptr)
+			{
+				return;
+			}
+
 			AssetRef skeleton{};
 			for (const PrefabNode& node : prefab.Nodes)
 			{
@@ -93,51 +93,135 @@ namespace wiwa
 			}
 			if (skeleton.valid())
 			{
-				result.Entities[0].Components.push_back(ComponentRecord{ "Animator", {
+				entity.Components.push_back(ComponentRecord{ "Animator", {
 					FieldRecord{ "Skeleton", FieldValue(skeleton) },
 					FieldRecord{ "Clips", FieldValue(prefab.Animations) },
 					FieldRecord{ "Clip", FieldValue(prefab.Animations.front()) } } });
 			}
 		}
 
-		// the nodes, parents first: a depth-first walk from the top-level nodes (a node in a parent loop is never reached)
-		const size_t count = prefab.Nodes.size();
-		std::vector<std::vector<size_t>> children(count);
-		std::vector<size_t> roots;
-		for (size_t i = 0; i < count; i++)
+		struct Expansion
 		{
-			const i32 parent = prefab.Nodes[i].Parent;
-			if (parent < 0)
+			const PrefabResolver& Resolve;
+			EntityGuid RootId{};
+			ExpandResult& Result;
+			std::vector<PrefabOverride> Queued{};   // the overrides of nested instances, deepest first, with composite node ids
+			std::vector<AssetGuid> Stack{};         // the prefabs being expanded, outermost first
+		};
+
+		u64 level_id(u64 prefix, u64 stableId)
+		{
+			return prefix == 0 ? stableId : compose_node_id(prefix, stableId);
+		}
+
+		// The nodes of a prefab, parents first, under parentGuid. prefix is 0 for the prefab of the instance root, and the composite id of
+		// the instance's node for a nested one.
+		void emit_nodes(Expansion& expansion, const PrefabData& prefab, u64 prefix, EntityGuid parentGuid, u32 depth)
+		{
+			const size_t count = prefab.Nodes.size();
+			std::vector<std::vector<size_t>> children(count);
+			std::vector<size_t> roots;
+			for (size_t i = 0; i < count; i++)
 			{
-				roots.push_back(i);
+				const i32 parent = prefab.Nodes[i].Parent;
+				if (parent < 0)
+				{
+					roots.push_back(i);
+				}
+				else if (static_cast<size_t>(parent) < count)
+				{
+					children[static_cast<size_t>(parent)].push_back(i);
+				}
 			}
-			else if (static_cast<size_t>(parent) < count)
+
+			size_t reached = 0;
+			std::vector<size_t> stack(roots.rbegin(), roots.rend());
+			while (!stack.empty())
 			{
-				children[static_cast<size_t>(parent)].push_back(i);
+				const size_t index = stack.back();
+				stack.pop_back();
+
+				const PrefabNode& node = prefab.Nodes[index];
+				const u64 id = level_id(prefix, node.StableId);
+				EntityRecord record = node_record(node);
+				record.Id = EntityGuid::derive(expansion.RootId, id);
+				record.Parent = node.Parent < 0 ? parentGuid : EntityGuid::derive(expansion.RootId, level_id(prefix, prefab.Nodes[static_cast<size_t>(node.Parent)].StableId));
+				const EntityGuid recordId = record.Id;
+				reached++;
+
+				// a nested instance: its nodes follow right after this one (parents first), under this one
+				const PrefabData* inner = nullptr;
+				if (node.Instance)
+				{
+					const AssetGuid innerGuid = node.Instance->Prefab.resolved();
+					const std::string where = "prefab " + prefab.Name + ": node " + node.Name;
+					if (depth + 1 > MAX_PREFAB_DEPTH)
+					{
+						expansion.Result.Warnings.push_back(where + " holds an instance nested deeper than " + std::to_string(MAX_PREFAB_DEPTH) + " levels, it was left out");
+					}
+					else if (std::find(expansion.Stack.begin(), expansion.Stack.end(), innerGuid) != expansion.Stack.end())
+					{
+						expansion.Result.Warnings.push_back(where + " holds an instance of a prefab that contains it (a cycle), it was left out");
+					}
+					else if ((inner = expansion.Resolve ? expansion.Resolve(node.Instance->Prefab) : nullptr) == nullptr)
+					{
+						expansion.Result.Warnings.push_back(where + " holds an instance of a prefab that is not available, it has no children");
+					}
+				}
+
+				if (inner != nullptr)
+				{
+					add_animator(record, *inner);
+				}
+				expansion.Result.Entities.push_back(std::move(record));
+				expansion.Result.NodeIds.push_back(id);
+				expansion.Result.NestedRoots.push_back(node.Instance ? 1 : 0);
+
+				if (inner != nullptr)
+				{
+					expansion.Stack.push_back(node.Instance->Prefab.resolved());
+					emit_nodes(expansion, *inner, id, recordId, depth + 1);
+					expansion.Stack.pop_back();
+
+					// the instance's own overrides address the inner nodes by their ids: 0 is the instance's node. They apply after
+					// the ones of the instances inside it, so the outer level has the last word.
+					for (PrefabOverride override : node.Instance->Overrides)
+					{
+						override.NodeId = override.NodeId == 0 ? id : compose_node_id(id, override.NodeId);
+						expansion.Queued.push_back(std::move(override));
+					}
+				}
+
+				stack.insert(stack.end(), children[index].rbegin(), children[index].rend());
+			}
+
+			if (reached < count)
+			{
+				expansion.Result.Warnings.push_back("prefab " + prefab.Name + ": " + std::to_string(count - reached) + " node(s) are in a parent loop and were left out");
 			}
 		}
+	}
 
-		std::unordered_set<u64> prefabNodes;
-		std::vector<size_t> stack(roots.rbegin(), roots.rend());
-		while (!stack.empty())
+	ExpandResult expand_prefab(const EntityRecord& instanceRoot, const PrefabData& prefab, const PrefabResolver& resolve)
+	{
+		ExpandResult result;
+		result.Entities.push_back(instanceRoot);
+		result.NodeIds.push_back(0);
+		result.NestedRoots.push_back(0);
+		add_animator(result.Entities[0], prefab);
+
+		Expansion expansion{ resolve, instanceRoot.Id, result };
+		if (const ComponentRecord* link = find_component(instanceRoot, "PrefabInstance"))
 		{
-			const size_t index = stack.back();
-			stack.pop_back();
-
-			const PrefabNode& node = prefab.Nodes[index];
-			EntityRecord record = node_record(node);
-			record.Id = EntityGuid::derive(instanceRoot.Id, node.StableId);
-			record.Parent = node.Parent < 0 ? instanceRoot.Id : EntityGuid::derive(instanceRoot.Id, prefab.Nodes[static_cast<size_t>(node.Parent)].StableId);
-			result.Entities.push_back(std::move(record));
-			result.NodeIds.push_back(node.StableId);
-			prefabNodes.insert(node.StableId);
-
-			stack.insert(stack.end(), children[index].rbegin(), children[index].rend());
+			for (const FieldRecord& field : link->Fields)
+			{
+				if (const AssetRef* ref = std::get_if<AssetRef>(&field.Value); field.Name == "Prefab" && ref != nullptr && ref->valid())
+				{
+					expansion.Stack.push_back(ref->resolved()); // so that a prefab that holds itself is caught at the first level
+				}
+			}
 		}
-		if (prefabNodes.size() < count)
-		{
-			result.Warnings.push_back("prefab " + prefab.Name + ": " + std::to_string(count - prefabNodes.size()) + " node(s) are in a parent loop and were left out");
-		}
+		emit_nodes(expansion, prefab, 0, instanceRoot.Id, 0);
 
 		auto index_of_node = [&](u64 nodeId) -> std::optional<size_t>
 		{
@@ -161,7 +245,9 @@ namespace wiwa
 			}
 		};
 
-		for (const PrefabOverride& override : instanceRoot.Overrides)
+		std::vector<PrefabOverride> overrides = std::move(expansion.Queued);
+		overrides.insert(overrides.end(), instanceRoot.Overrides.begin(), instanceRoot.Overrides.end());
+		for (const PrefabOverride& override : overrides)
 		{
 			if (removed.contains(override.NodeId))
 			{
@@ -218,6 +304,7 @@ namespace wiwa
 				child.Parent = parentId;
 				result.Entities.push_back(std::move(child));
 				result.NodeIds.push_back(ADDED_CHILD_NODE);
+				result.NestedRoots.push_back(0);
 				break;
 			}
 			case OverrideKind::RemoveNode:
@@ -249,6 +336,7 @@ namespace wiwa
 						removed.insert(result.NodeIds[i]);
 						result.Entities.erase(result.Entities.begin() + static_cast<std::ptrdiff_t>(i));
 						result.NodeIds.erase(result.NodeIds.begin() + static_cast<std::ptrdiff_t>(i));
+						result.NestedRoots.erase(result.NestedRoots.begin() + static_cast<std::ptrdiff_t>(i));
 					}
 					else
 					{
@@ -263,17 +351,35 @@ namespace wiwa
 		return result;
 	}
 
-	std::optional<FieldValue> prefab_value(const PrefabData& prefab, u64 nodeId, std::string_view component, std::string_view field)
+	ExpandResult expand_prefab(const EntityRecord& instanceRoot, const PrefabData& prefab)
+	{
+		return expand_prefab(instanceRoot, prefab, PrefabResolver{});
+	}
+
+	void collect_nested_prefabs(const PrefabData& prefab, std::vector<AssetRef>& out)
 	{
 		for (const PrefabNode& node : prefab.Nodes)
 		{
-			if (node.StableId != nodeId)
+			if (node.Instance && node.Instance->Prefab.valid())
+			{
+				out.push_back(node.Instance->Prefab);
+			}
+		}
+	}
+
+	std::optional<FieldValue> prefab_value(const PrefabData& prefab, u64 nodeId, std::string_view component, std::string_view field, const PrefabResolver& resolve)
+	{
+		EntityRecord root;
+		root.Id = EntityGuid::derive(EntityGuid{ 1, 1 }, 1); // any id: only the node's fields are read
+		const ExpandResult expanded = expand_prefab(root, prefab, resolve);
+		for (size_t i = 1; i < expanded.Entities.size(); i++)
+		{
+			if (expanded.NodeIds[i] != nodeId)
 			{
 				continue;
 			}
 
-			const EntityRecord record = node_record(node);
-			const ComponentRecord* found = find_component(record, component);
+			const ComponentRecord* found = find_component(expanded.Entities[i], component);
 			if (found == nullptr)
 			{
 				return std::nullopt;
@@ -291,6 +397,11 @@ namespace wiwa
 		return std::nullopt;
 	}
 
+	std::optional<FieldValue> prefab_value(const PrefabData& prefab, u64 nodeId, std::string_view component, std::string_view field)
+	{
+		return prefab_value(prefab, nodeId, component, field, PrefabResolver{});
+	}
+
 	void revert_field(EntityRecord& instanceRoot, u64 nodeId, std::string_view component, std::string_view field)
 	{
 		std::erase_if(instanceRoot.Overrides, [&](const PrefabOverride& override)
@@ -304,12 +415,17 @@ namespace wiwa
 		instanceRoot.Overrides.clear();
 	}
 
-	std::vector<EntityRecord> unpack(const EntityRecord& instanceRoot, const PrefabData& prefab)
+	std::vector<EntityRecord> unpack(const EntityRecord& instanceRoot, const PrefabData& prefab, const PrefabResolver& resolve)
 	{
-		ExpandResult expanded = expand_prefab(instanceRoot, prefab);
+		ExpandResult expanded = expand_prefab(instanceRoot, prefab, resolve);
 		EntityRecord& root = expanded.Entities[0];
 		root.Overrides.clear();
 		std::erase_if(root.Components, [](const ComponentRecord& component) { return component.Name == "PrefabInstance"; });
 		return std::move(expanded.Entities);
+	}
+
+	std::vector<EntityRecord> unpack(const EntityRecord& instanceRoot, const PrefabData& prefab)
+	{
+		return unpack(instanceRoot, prefab, PrefabResolver{});
 	}
 }

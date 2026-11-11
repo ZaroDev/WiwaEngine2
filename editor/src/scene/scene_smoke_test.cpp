@@ -638,6 +638,154 @@ namespace wiwa
 			return position ? std::get<glm::vec3>(position->Value) : glm::vec3(-1000.0f);
 		}
 
+		PrefabNode nested_node(const std::string& name, i32 parent, const AssetRef& inner, std::vector<PrefabOverride> overrides = {})
+		{
+			PrefabNode node = make_node(name, parent);
+			node.Instance = PrefabNodeInstance{ inner, std::move(overrides) };
+			return node;
+		}
+
+		void check_nested_prefab(Check& check)
+		{
+			const AssetRef weaponRef{ AssetGuid::generate(), 0 };
+			const AssetRef holderRef{ AssetGuid::generate(), 0 };
+			const AssetRef twinRef{ AssetGuid::generate(), 0 };
+
+			PrefabData weapon;
+			weapon.Name = "weapon";
+			weapon.Nodes = { make_node("Hilt", -1), make_node("Blade", 0) };
+			weapon.Nodes[1].Translation = glm::vec3(0, 1, 0);
+			assign_stable_ids(weapon.Nodes);
+			const u64 hiltNode = weapon.Nodes[0].StableId;
+			const u64 bladeNode = weapon.Nodes[1].StableId;
+
+			PrefabData holder;
+			holder.Name = "holder";
+			holder.Nodes = { make_node("Base", -1), nested_node("Slot", 0, weaponRef, { set_field_override(bladeNode, "Transform", "Position", FieldValue(glm::vec3(0, 5, 0))) }) };
+			assign_stable_ids(holder.Nodes);
+			const u64 slotNode = holder.Nodes[1].StableId;
+
+			PrefabData twin;
+			twin.Name = "twin";
+			twin.Nodes = { nested_node("SlotA", -1, weaponRef), nested_node("SlotB", -1, weaponRef) };
+			assign_stable_ids(twin.Nodes);
+
+			std::unordered_map<AssetGuid, const PrefabData*> known{ { weaponRef.resolved(), &weapon }, { holderRef.resolved(), &holder }, { twinRef.resolved(), &twin } };
+			const PrefabResolver resolve = [&](const AssetRef& ref) -> const PrefabData* { const auto found = known.find(ref.resolved()); return found == known.end() ? nullptr : found->second; };
+
+			const EntityGuid rootId = EntityGuid::generate();
+			const EntityRecord root = make_instance(rootId, holderRef);
+			const u64 deepBlade = compose_node_id(slotNode, bladeNode);
+			const u64 deepHilt = compose_node_id(slotNode, hiltNode);
+			const EntityGuid bladeId = EntityGuid::derive(rootId, deepBlade);
+
+			ExpandResult expanded = expand_prefab(root, holder, resolve);
+			check(expanded.Entities.size() == 5 && expanded.Warnings.empty(), "nested: the instance's nodes are expanded under the node that holds it");
+			const EntityRecord* blade = find_entity(expanded.Entities, bladeId);
+			const EntityRecord* hilt = find_entity(expanded.Entities, EntityGuid::derive(rootId, deepHilt));
+			check(blade != nullptr && hilt != nullptr && blade->Parent == hilt->Id && hilt->Parent == EntityGuid::derive(rootId, slotNode), "nested: inner nodes get composite ids and keep their parents, the inner roots hang under the instance node");
+			bool nestedFlags = expanded.NestedRoots.size() == expanded.Entities.size();
+			for (size_t i = 0; nestedFlags && i < expanded.Entities.size(); i++)
+			{
+				nestedFlags = (expanded.NestedRoots[i] != 0) == (expanded.Entities[i].Id == EntityGuid::derive(rootId, slotNode));
+			}
+			check(nestedFlags, "nested: only the node of a nested instance is flagged");
+			check(position_of(blade) == glm::vec3(0, 5, 0), "nested: the overrides stored on the instance node apply to the inner nodes");
+
+			const ExpandResult again = expand_prefab(root, holder, resolve);
+			bool same = again.Entities.size() == expanded.Entities.size();
+			for (size_t i = 0; same && i < again.Entities.size(); i++)
+			{
+				same = again.Entities[i].Id == expanded.Entities[i].Id && again.NodeIds[i] == expanded.NodeIds[i];
+			}
+			check(same, "nested: ids are the same on every expansion");
+
+			EntityRecord overridden = root;
+			overridden.Overrides.push_back(set_field_override(deepBlade, "Transform", "Position", FieldValue(glm::vec3(0, 9, 0))));
+			check(position_of(find_entity(expand_prefab(overridden, holder, resolve).Entities, bladeId)) == glm::vec3(0, 9, 0), "nested: an override of the scene wins over the one of the nested instance");
+
+			EntityRecord removing = root;
+			PrefabOverride remove;
+			remove.Kind = OverrideKind::RemoveNode;
+			remove.NodeId = deepHilt;
+			removing.Overrides.push_back(remove);
+			check(expand_prefab(removing, holder, resolve).Entities.size() == 3, "nested: RemoveNode on a deep node removes it and what is under it");
+
+			EntityRecord adding = root;
+			PrefabOverride add;
+			add.Kind = OverrideKind::AddChild;
+			add.NodeId = deepHilt;
+			add.Child.Id = EntityGuid::generate();
+			add.Child.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(std::string("Gem")) } } });
+			adding.Overrides.push_back(add);
+			const ExpandResult added = expand_prefab(adding, holder, resolve);
+			check(added.Entities.size() == 6 && added.Entities.back().Parent == EntityGuid::derive(rootId, deepHilt) && added.NodeIds.back() == ADDED_CHILD_NODE, "nested: AddChild on a deep node makes a child of it");
+
+			const EntityGuid twinId = EntityGuid::generate();
+			const ExpandResult twins = expand_prefab(make_instance(twinId, twinRef), twin, resolve);
+			std::unordered_set<EntityGuid> distinct;
+			for (const EntityRecord& entity : twins.Entities)
+			{
+				distinct.insert(entity.Id);
+			}
+			check(twins.Entities.size() == 7 && distinct.size() == 7, "nested: two instances of one prefab in a prefab have different guids");
+			const u64 slotA = twin.Nodes[0].StableId;
+			const u64 slotB = twin.Nodes[1].StableId;
+			EntityRecord twinOverride = make_instance(twinId, twinRef);
+			twinOverride.Overrides.push_back(set_field_override(compose_node_id(slotA, bladeNode), "Transform", "Position", FieldValue(glm::vec3(7, 7, 7))));
+			const ExpandResult twinsChanged = expand_prefab(twinOverride, twin, resolve);
+			check(position_of(find_entity(twinsChanged.Entities, EntityGuid::derive(twinId, compose_node_id(slotA, bladeNode)))) == glm::vec3(7, 7, 7)
+				&& position_of(find_entity(twinsChanged.Entities, EntityGuid::derive(twinId, compose_node_id(slotB, bladeNode)))) == glm::vec3(0, 1, 0), "nested: an override reaches only the instance it names");
+
+			const PrefabResolver nothing = [](const AssetRef&) -> const PrefabData* { return nullptr; };
+			const ExpandResult missing = expand_prefab(root, holder, nothing);
+			check(missing.Entities.size() == 3 && missing.Warnings.size() == 1, "nested: a prefab that is not available leaves the node as a plain entity and one warning");
+			const ExpandResult plainOverload = expand_prefab(root, holder);
+			check(plainOverload.Entities.size() == 3 && plainOverload.Warnings.size() == 1, "nested: expanding without a resolver counts nested prefabs as not available");
+
+			EntityRecord stale = root;
+			const u64 gone = compose_node_id(slotNode, 12345);
+			stale.Overrides.push_back(set_field_override(gone, "Transform", "Position", FieldValue(glm::vec3(1))));
+			const ExpandResult dropped = expand_prefab(stale, holder, resolve);
+			check(std::find(dropped.DroppedOverrideNodes.begin(), dropped.DroppedOverrideNodes.end(), gone) != dropped.DroppedOverrideNodes.end() && dropped.Entities.size() == 5, "nested: an override of a deep node that is not there any more is dropped");
+
+			// a cycle (A holds B, B holds A) and a chain deeper than the cap end with a warning, never loop
+			const AssetRef cycleA{ AssetGuid::generate(), 0 };
+			const AssetRef cycleB{ AssetGuid::generate(), 0 };
+			PrefabData a;
+			a.Name = "a";
+			a.Nodes = { nested_node("X", -1, cycleB) };
+			PrefabData b;
+			b.Name = "b";
+			b.Nodes = { nested_node("Y", -1, cycleA) };
+			assign_stable_ids(a.Nodes);
+			assign_stable_ids(b.Nodes);
+			known[cycleA.resolved()] = &a;
+			known[cycleB.resolved()] = &b;
+			const ExpandResult cycle = expand_prefab(make_instance(EntityGuid::generate(), cycleA), a, resolve);
+			check(cycle.Entities.size() <= 4 && !cycle.Warnings.empty(), "nested: a prefab that holds itself through another ends with a warning");
+
+			std::vector<AssetRef> chainRefs;
+			std::vector<PrefabData> chain(11);
+			for (size_t i = 0; i < chain.size(); i++)
+			{
+				chainRefs.push_back(AssetRef{ AssetGuid::generate(), 0 });
+			}
+			for (size_t i = 0; i < chain.size(); i++)
+			{
+				chain[i].Name = "chain" + std::to_string(i);
+				chain[i].Nodes = { i + 1 < chain.size() ? nested_node("N", -1, chainRefs[i + 1]) : make_node("Leaf", -1) };
+				assign_stable_ids(chain[i].Nodes);
+				known[chainRefs[i].resolved()] = &chain[i];
+			}
+			const ExpandResult deep = expand_prefab(make_instance(EntityGuid::generate(), chainRefs[0]), chain[0], resolve);
+			check(deep.Entities.size() == 1 + 9 && deep.Warnings.size() == 1, "nested: the depth is capped at 8 levels of instances");
+
+			const std::optional<FieldValue> value = prefab_value(holder, deepBlade, "Transform", "Position", resolve);
+			check(value && std::get<glm::vec3>(*value) == glm::vec3(0, 5, 0), "nested: prefab_value of a deep node includes the nested instance's overrides");
+			check(!prefab_value(holder, deepBlade, "Transform", "Position").has_value(), "nested: prefab_value without a resolver finds no deep node");
+		}
+
 		void check_prefab(Check& check)
 		{
 			// compose_node_id: stable, asymmetric, never a reserved value
@@ -2286,6 +2434,7 @@ namespace wiwa
 		check_node_ids(check, pipeline);
 		check_node_components(check);
 		check_prefab(check);
+		check_nested_prefab(check);
 		check_scene_json(check, pipeline);
 		check_scene_loading(check, pipeline);
 		check_extracted_materials(check, pipeline);

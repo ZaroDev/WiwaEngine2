@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <assets/asset_data.h>
+#include "prefab_expander.h"
 #include "scene.h"
 #include "scene_records.h"
 
@@ -30,7 +31,7 @@ namespace wiwa
 	};
 
 	// Returns the prefab a PrefabInstance names, or null if it is not available (it did not load).
-	using PrefabLookup = std::function<const PrefabData*(const AssetRef&)>;
+	using PrefabLookup = PrefabResolver;
 
 	SceneBlueprint build_blueprint(const SceneData& data, const PrefabLookup& prefabs);
 
