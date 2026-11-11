@@ -643,6 +643,31 @@ namespace wiwa
 		u32 version = static_cast<u32>(WFX_VERSION);
 		ar.value(version);
 		if (ar.reading() && ar.ok() && version != static_cast<u32>(WFX_VERSION))
+		{
+			ar.fail();
+			return;
+		}
+
+		std::string text;
+		if (!ar.reading())
+		{
+			text = write_particle_file(v);
+		}
+		ar.string(text);
+
+		if (ar.reading() && ar.ok())
+		{
+			std::string error;
+			std::optional<ParticleEffectData> parsed = read_particle_file(text, error);
+			if (ar.remaining() != 0 || !parsed)
+			{
+				ar.fail();
+				return;
+			}
+			v = std::move(*parsed);
+		}
+	}
+
 	namespace
 	{
 		void archive_name_groups(BinaryArchive& ar, std::vector<AudioNameGroup>& groups)
@@ -682,23 +707,6 @@ namespace wiwa
 			return;
 		}
 
-		std::string text;
-		if (!ar.reading())
-		{
-			text = write_particle_file(v);
-		}
-		ar.string(text);
-
-		if (ar.reading() && ar.ok())
-		{
-			std::string error;
-			std::optional<ParticleEffectData> parsed = read_particle_file(text, error);
-			if (ar.remaining() != 0 || !parsed)
-			{
-				ar.fail();
-				return;
-			}
-			v = std::move(*parsed);
 		ar.string(v.Name);
 		ar.pod_vector(v.Bytes);
 		u8 hasInfo = v.HasInfo ? 1 : 0;
