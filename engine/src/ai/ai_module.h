@@ -13,6 +13,7 @@
 
 #include "bt_instance.h"
 #include "bt_leaves_engine.h"
+#include "bt_lua_host.h"
 
 namespace wiwa
 {
@@ -64,6 +65,12 @@ namespace wiwa
 		// Game seconds the module has ticked for in this world.
 		double time() const { return m_Time; }
 
+		// The Lua leaves (LuaAction / LuaCondition nodes) run on the scripting runtime: the ScriptingModule attaches it when it is made and detaches it
+		// before the runtime goes. Detaching aborts every running tree first, while the Lua state is still there.
+		void attach_lua(ScriptRuntime& runtime, ScriptContext& context);
+		void detach_lua();
+		BtLuaHost* lua_host() { return m_Lua.get(); }
+
 		// What a External leaf does besides the built-in ones (the Lua leaves, set by the Lua host).
 		void set_leaf_handler(std::function<BtStatus(BtLeafCall&)> handler) { m_LeafHandler = std::move(handler); }
 		BtServices& services() { return m_Services; }
@@ -102,6 +109,7 @@ namespace wiwa
 		BtEngineHooks m_Hooks{};
 		BtServices m_Services{};
 		std::function<BtStatus(BtLeafCall&)> m_LeafHandler{};
+		Scope<BtLuaHost> m_Lua{};
 		std::unordered_map<entt::entity, Controller> m_Controllers{};
 		std::unordered_map<AssetGuid, TreeEntry> m_Trees{};
 

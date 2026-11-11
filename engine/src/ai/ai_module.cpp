@@ -78,11 +78,26 @@ namespace wiwa
 			m_Hooks.TheScene = world_scene().get();
 			return bt_engine_leaf(call, m_Hooks);
 		}
+		if ((type == "LuaAction" || type == "LuaCondition") && m_Lua)
+		{
+			return m_Lua->handle(call);
+		}
 		if (m_LeafHandler)
 		{
 			return m_LeafHandler(call);
 		}
 		return BtStatus::Failure;
+	}
+
+	void AIModule::attach_lua(ScriptRuntime& runtime, ScriptContext& context)
+	{
+		m_Lua = CreateScope<BtLuaHost>(runtime, context);
+	}
+
+	void AIModule::detach_lua()
+	{
+		stop_world();
+		m_Lua.reset();
 	}
 
 	bool AIModule::start_world(Ref<Scene> scene)

@@ -11,6 +11,10 @@
 #include <ai/bt_instance.h>
 #include <ai/ai_module.h>
 #include <ai/bt_leaves_engine.h>
+#include <ai/bt_lua_host.h>
+#include <scripting/script_instances.h>
+#include <scripting/script_runtime.h>
+#include <scripting/script_source.h>
 #include <scene/scene_clone.h>
 #include <scene/scene_components.h>
 #include <nav/nav_module.h>
@@ -929,6 +933,244 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// Scripts from memory, by path.
+		class MemoryScripts final : public IScriptSource
+		{
+		public:
+			AssetRef add(const std::string& path, const std::string& source)
+			{
+				LoadedScript script;
+				script.Asset = AssetRef{ AssetGuid::generate(), 0 };
+				script.Path = path;
+				script.Source = source;
+				m_Scripts.push_back(script);
+				return script.Asset;
+			}
+
+			void set_source(const AssetRef& ref, const std::string& source)
+			{
+				for (LoadedScript& script : m_Scripts)
+				{
+					if (script.Asset == ref)
+					{
+						script.Source = source;
+					}
+				}
+			}
+
+			virtual std::optional<LoadedScript> find_by_path(std::string_view path) override
+			{
+				for (const LoadedScript& script : m_Scripts)
+				{
+					if (script.Path == path)
+					{
+						return script;
+					}
+				}
+				return std::nullopt;
+			}
+
+			virtual std::optional<LoadedScript> find_by_asset(AssetRef ref) override
+			{
+				for (const LoadedScript& script : m_Scripts)
+				{
+					if (script.Asset == ref)
+					{
+						return script;
+					}
+				}
+				return std::nullopt;
+			}
+
+		private:
+			std::vector<LoadedScript> m_Scripts{};
+		};
+
+		// A runtime with the leaf bases, a scene, and the Lua host as the services of trees.
+		struct LuaLeafHarness
+		{
+			MemoryScripts Source;
+			ScriptRuntime Runtime{ Source };
+			Ref<Scene> TheScene = CreateRef<Scene>();
+			ScriptInstances Instances{ Runtime };
+			BtLuaHost Host;
+			BtServices Services{};
+			std::vector<std::string> Events{};
+			entt::entity Entity = entt::null;
+			double Time = 0.0;
+
+			LuaLeafHarness() : Host(Runtime, Instances.context())
+			{
+				Runtime.sandbox().set_function("record", [this](const std::string& event) { Events.push_back(event); });
+				Entity = TheScene->create("AI");
+				Instances.start(TheScene);
+				Services.Leaf = [this](BtLeafCall& call) { return Host.handle(call); };
+			}
+
+			AssetRef script(const std::string& name, const std::string& source) { return Source.add("assets/scripts/" + name + ".lua", source); }
+
+			BehaviorTreeDoc tree(const AssetRef& leafScript, const std::string& type = "LuaAction", Json params = Json::object())
+			{
+				params["script"] = leafScript.Guid.to_string();
+				BehaviorTreeDoc doc;
+				doc.Root = "s";
+				doc.Blackboard = { key("count", BtValueType::Int, 0), key("alert", BtValueType::Bool, false), key("target", BtValueType::Entity) };
+				doc.Nodes = { node("s", "Sequence", { "a" }), node("a", type, {}, params) };
+				return doc;
+			}
+
+			BtStatus tick(BtInstance& instance)
+			{
+				const BtStatus status = instance.tick(Services, 0.1f, Time);
+				Time += 0.1;
+				return status;
+			}
+
+			size_t count(const std::string& event) const { return static_cast<size_t>(std::count(Events.begin(), Events.end(), event)); }
+			bool saw(const std::string& text) const
+			{
+				return std::any_of(Events.begin(), Events.end(), [&](const std::string& e) { return e.find(text) != std::string::npos; });
+			}
+		};
+
+		void lua_leaves(Check& check)
+		{
+			const char* const COUNTING = R"lua(return BtAction:extend{
+				properties = { label = { type = "string", default = "x" }, speed = { type = "float", default = 2 } },
+				on_start = function(self, bb) record("start:" .. self.label .. ":" .. tostring(self.speed)) end,
+				on_tick = function(self, bb, dt) self.n = (self.n or 0) + 1; if self.n >= 3 then return "success" end; return "running" end,
+				on_abort = function(self, bb) record("abort") end })lua";
+
+			// Status mapping, start once per run, abort once, properties from the params.
+			{
+				LuaLeafHarness h;
+				const AssetRef counting = h.script("counting", COUNTING);
+				BtInstance instance(compiled(check, h.tree(counting)), h.Entity);
+				const BtStatus a = h.tick(instance);
+				const BtStatus b = h.tick(instance);
+				const BtStatus c = h.tick(instance);
+				check(a == RUNNING && b == RUNNING && c == SUCCESS, "lua_status: running, running, success maps from the strings");
+				check(h.count("start:x:2.0") == 1 && h.Host.running() == 0, "lua_start: on_start runs once per run, a finished leaf is released");
+				h.tick(instance);
+				check(h.count("start:x:2.0") == 2, "lua_start: a new run starts again");
+				instance.abort(h.Services, h.Time);
+				instance.abort(h.Services, h.Time);
+				check(h.count("abort") == 1 && h.Host.running() == 0, "lua_abort: on_abort runs once when the branch is cut");
+
+				BtInstance configured(compiled(check, h.tree(counting, "LuaAction", { { "label", "hello" }, { "speed", 5 } })), h.Entity);
+				h.tick(configured);
+				check(h.count("start:hello:5.0") == 1, "lua_params: the node's params override the property defaults");
+			}
+
+			// Failures: every one fails the node, logs once, and leaves nothing running.
+			{
+				LuaLeafHarness h;
+				struct Case { const char* Name; const char* Source; };
+				const Case cases[] = {
+					{ "fail", "return BtAction:extend{ on_tick = function() return 'failure' end }" },
+					{ "maybe", "return BtAction:extend{ on_tick = function() return 'maybe' end }" },
+					{ "nothing", "return BtAction:extend{ on_tick = function() end }" },
+					{ "number", "return BtAction:extend{ on_tick = function() return 5 end }" },
+					{ "boom", "return BtAction:extend{ on_tick = function() error('boom') end }" },
+					{ "start_boom", "return BtAction:extend{ on_start = function() error('start boom') end, on_tick = function() return 'success' end }" },
+					{ "no_tick", "return BtAction:extend{}" },
+					{ "not_leaf", "return Script:extend{ on_tick = function() return 'success' end }" },
+					{ "wrong_kind", "return BtCondition:extend{ on_tick = function() return 'success' end }" },
+				};
+				for (const Case& c : cases)
+				{
+					const AssetRef leafScript = h.script(c.Name, c.Source);
+					BtInstance instance(compiled(check, h.tree(leafScript)), h.Entity);
+					const bool plain = std::string(c.Name) == "fail"; // a leaf that says "failure" is an answer, not an error: nothing is logged
+					check(h.tick(instance) == FAILURE && instance.states()[1].Warned == !plain && h.Host.running() == 0, std::string("lua_fails: ") + c.Name + " fails the node, logged once unless it is a plain failure, nothing left running");
+				}
+
+				BehaviorTreeDoc missing = h.tree(AssetRef{ AssetGuid::generate(), 0 });
+				BtInstance orphan(compiled(check, missing), h.Entity);
+				check(h.tick(orphan) == FAILURE && orphan.states()[1].Warned, "lua_missing_script: a script that does not exist fails the node");
+
+				// The tree keeps going: a selector falls through a broken leaf to a good one.
+				const AssetRef broken = h.script("selector_broken", "return BtAction:extend{ on_tick = function() error('x') end }");
+				const AssetRef good = h.script("selector_good", "return BtAction:extend{ on_tick = function() return 'success' end }");
+				BehaviorTreeDoc doc = h.tree(broken);
+				doc.Nodes = { node("s", "Selector", { "a", "b" }), node("a", "LuaAction", {}, { { "script", broken.Guid.to_string() } }), node("b", "LuaAction", {}, { { "script", good.Guid.to_string() } }) };
+				BtInstance both(compiled(check, doc), h.Entity);
+				check(h.tick(both) == SUCCESS && h.tick(both) == SUCCESS, "lua_continues: a broken leaf does not stop the tree, every tick");
+			}
+
+			// Conditions, the blackboard and the entity.
+			{
+				LuaLeafHarness h;
+				const AssetRef condition = h.script("cond", "return BtCondition:extend{ on_tick = function(self, bb) if bb:get('alert') then return 'success' end return 'failure' end }");
+				BtInstance cond(compiled(check, h.tree(condition, "LuaCondition")), h.Entity);
+				check(h.tick(cond) == FAILURE, "lua_condition: a condition reads the blackboard");
+				cond.blackboard().set("alert", true);
+				check(h.tick(cond) == SUCCESS, "lua_condition: and follows it");
+
+				const AssetRef setter = h.script("setter", R"lua(return BtAction:extend{ on_tick = function(self, bb)
+					bb:set('count', 7)
+					bb:set('alert', true)
+					bb:set('target', self.entity)
+					record('has:' .. tostring(bb:has('count')) .. tostring(bb:has('nope')))
+					record('entity:' .. tostring(self.entity:is_valid()))
+					return 'success' end })lua");
+				BtInstance set(compiled(check, h.tree(setter)), h.Entity);
+				check(h.tick(set) == SUCCESS && std::get<i32>(*set.blackboard().get("count")) == 7 && std::get<bool>(*set.blackboard().get("alert")) && std::get<EntityGuid>(*set.blackboard().get("target")) == h.TheScene->registry().get<Id>(h.Entity).Guid, "lua_blackboard: set writes the typed values, an entity too");
+				check(h.saw("has:truefalse") && h.saw("entity:true"), "lua_blackboard: has, and self.entity is the AI entity");
+
+				const AssetRef errors = h.script("errors", R"lua(return BtAction:extend{ on_tick = function(self, bb)
+					local _, e1 = pcall(bb.set, bb, 'count', 'x')
+					local _, e2 = pcall(bb.set, bb, 'nope', 1)
+					local _, e3 = pcall(bb.get, bb, 'nope')
+					local _, e4 = pcall(bb.get, 'count')
+					local _, e5 = pcall(bb.set, bb, 'count', 1.5)
+					local _, e6 = pcall(bb.set, bb, 'alert', 1)
+					local _, e7 = pcall(bb.get, bb, 5)
+					record('e1:' .. tostring(e1)) record('e2:' .. tostring(e2)) record('e3:' .. tostring(e3)) record('e4:' .. tostring(e4))
+					record('e5:' .. tostring(e5)) record('e6:' .. tostring(e6)) record('e7:' .. tostring(e7))
+					return 'success' end })lua");
+				BtInstance bad(compiled(check, h.tree(errors)), h.Entity);
+				check(h.tick(bad) == SUCCESS, "lua_errors: a script that catches the blackboard errors goes on");
+				check(h.saw("e1:") && h.saw("count") && h.saw("is int"), "lua_errors: a value of the wrong type names the key and the type");
+				check(h.saw("e2:") && h.saw("no key \"nope\"") && h.saw("e3:"), "lua_errors: an unknown key is an error naming it, for set and get");
+				check(h.saw("with a colon"), "lua_errors: a method called with a dot is an error, not a crash");
+				check(h.saw("e5:") && h.saw("whole number") && h.saw("e6:") && h.saw("boolean") && h.saw("e7:") && h.saw("must be a string"), "lua_errors: a fraction for an int, a number for a bool and a non-string key are errors");
+			}
+
+			// A reload gives the next run the new code.
+			{
+				LuaLeafHarness h;
+				const AssetRef leafScript = h.script("reload", "return BtAction:extend{ on_tick = function() return 'failure' end }");
+				BtInstance instance(compiled(check, h.tree(leafScript)), h.Entity);
+				check(h.tick(instance) == FAILURE, "lua_reload: the first version fails");
+				h.Source.set_source(leafScript, "return BtAction:extend{ on_tick = function() return 'success' end }");
+				std::string error;
+				check(h.Runtime.reload_script(leafScript, error), "lua_reload: the script reloads (" + error + ")");
+				BtInstance again(compiled(check, h.tree(leafScript)), h.Entity);
+				check(h.tick(again) == SUCCESS, "lua_reload: the next run uses the new code");
+			}
+
+			// The module routes Lua leaves to the host, and aborts them when the world ends or the host is detached.
+			{
+				LuaLeafHarness h;
+				const AssetRef counting = h.script("module_counting", COUNTING);
+				AIModule module;
+				module.set_auto_start(false);
+				module.attach_lua(h.Runtime, h.Instances.context());
+				const AssetRef treeRef{ AssetGuid::generate(), 0 };
+				module.register_tree(treeRef, h.tree(counting));
+				const entt::entity ai = add_controller(*h.TheScene, treeRef);
+				module.start_world(h.TheScene);
+				module.tick(nullptr, true, 0.1f);
+				check(h.count("start:x:2.0") == 1 && module.instance_of(ai) != nullptr, "ai_lua_module: the module runs a Lua leaf through the host");
+				module.detach_lua();
+				check(h.count("abort") == 1 && module.world_scene() == nullptr, "ai_lua_detach: detaching aborts what runs while the runtime is still there");
+			}
+		}
+	}
+
 	bool run_ai_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -940,6 +1182,7 @@ namespace wiwa
 		runtime_nodes(check);
 		engine_leaves(check);
 		controllers(check);
+		lua_leaves(check);
 
 		if (check.Failures == 0)
 		{
