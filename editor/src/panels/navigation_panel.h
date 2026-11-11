@@ -6,12 +6,16 @@
 
 #include <assets/asset_manager.h>
 #include <assets/handle.h>
+#include <nav/nav_data.h>
 #include <nav/nav_mesh_asset.h>
+#include <nav/nav_query.h>
+#include <nav/nav_view.h>
 
 #include "../asset_pipeline/asset_database.h"
 #include "../asset_pipeline/nav_geometry.h"
 #include "../nav/nav_edit_model.h"
 #include "../nav/nav_overlay.h"
+#include "../nav/nav_path_tool.h"
 #include "../scene/scene_editor.h"
 #include "../settings/nav_section.h"
 #include "panel.h"
@@ -38,11 +42,21 @@ public:
 	const wiwa::NavOverlayOptions& overlay_options() const { return m_Overlay; }
 	bool overlay_visible() const { return m_ShowOverlay; }
 
+	// What the viewport shows (the editor wires these into the scene view): the baked mesh of the current volume, the boxes of the volumes and the
+	// path test; and the clicks of the scene view as rays while the path test is on (click: start, Shift+click: end). True when the click was used.
+	void draw_overlay(wiwa::DebugDraw& draw);
+	bool handle_ray_click(glm::vec3 origin, glm::vec3 direction, bool shift);
+	const wiwa::NavMeshView& overlay_view() const { return m_OverlayView; }
+	wiwa::NavPathTool& path_tool() { return m_PathTool; }
+	bool path_test_active() const { return m_PathTest; }
+	void set_path_test(bool active) { m_PathTest = active; }
+
 	wiwa::u32 frames_drawn() const { return m_Frames; }
 	void request_focus() { m_Focus = true; }
 
 private:
 	void finish_bake();
+	void refresh_overlay();
 	void apply_preset(entt::entity volume, int preset);
 
 	wiwa::SceneEditor& m_Editor;
@@ -51,6 +65,19 @@ private:
 	Ref<NavSection> m_Section;
 	wiwa::AssetNavMeshSource m_Source;
 	wiwa::NavEditModel m_Model;
+
+	// The baked mesh being shown: loaded from the volume's asset, made into Detour data (for the path test) and plain polygons (for drawing and picking).
+	wiwa::AssetRef m_OverlayRef{};
+	wiwa::Handle<wiwa::NavMeshData> m_OverlayHandle{};
+	Scope<wiwa::NavData> m_OverlayData{};
+	Scope<wiwa::NavQuery> m_OverlayQuery{};
+	wiwa::NavMeshView m_OverlayView{};
+	wiwa::NavOverlayShapes m_Shapes{};
+	wiwa::NavOverlayOptions m_ShapesOptions{};
+	bool m_ShapesValid = false;
+	bool m_OverlayDirty = true;
+	bool m_PathTest = false;
+	wiwa::NavPathTool m_PathTool{};
 
 	wiwa::NavOverlayOptions m_Overlay{};
 	bool m_ShowOverlay = true;

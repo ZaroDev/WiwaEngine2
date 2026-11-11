@@ -1,5 +1,10 @@
 #pragma once
 
+#include <functional>
+#include <glm/glm.hpp>
+
+namespace wiwa { class DebugDraw; }
+
 #include "panel.h"
 #include "play_input_router.h"
 #include "view_owner.h"
@@ -33,6 +38,12 @@ public:
 	// fits its scale, keeping the way the camera looks.
 	void focus_on(entt::entity entity);
 
+	// Something else that draws in the scene view each frame (the navmesh overlay): called with the debug draw after the editor's own gizmos.
+	void set_overlay_hook(std::function<void(wiwa::DebugDraw&)> hook) { m_OverlayHook = std::move(hook); }
+	// A tool that wants the clicks of the scene view as rays (the navigation path test): called with the world-space ray under the mouse and whether
+	// Shift is held; returns true when it used the click (the click then selects nothing). Editor camera only.
+	void set_ray_click_hook(std::function<bool(glm::vec3 origin, glm::vec3 direction, bool shift)> hook) { m_RayClickHook = std::move(hook); }
+
 private:
 	void apply_manipulation(entt::entity entity, const glm::mat4& world);
 
@@ -45,5 +56,7 @@ private:
 	wiwa::SceneGizmos m_SceneGizmos;
 	wiwa::EditorCamera m_Camera{};
 	bool m_UseEditorCamera = true;
+	std::function<void(wiwa::DebugDraw&)> m_OverlayHook{};
+	std::function<bool(glm::vec3, glm::vec3, bool)> m_RayClickHook{};
 	bool m_ShowGameUi = false; // the Scene view leaves the game UI out; the Game panel shows it
 };

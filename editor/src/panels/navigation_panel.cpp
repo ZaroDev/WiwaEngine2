@@ -6,6 +6,7 @@
 
 #include <imgui.h>
 
+#include <renderer/debug/debug_draw.h>
 #include <scene/components.h>
 
 #include "../asset_pipeline/nav_settings_file.h"
@@ -109,6 +110,7 @@ bool NavigationPanel::bake()
 void NavigationPanel::finish_bake()
 {
 	m_BakeCollected = true;
+	m_OverlayDirty = true; // a new file: the mesh being shown is read again
 	if (m_Model.state() != wiwa::NavEditModel::BakeState::Done)
 	{
 		return;
@@ -127,8 +129,106 @@ void NavigationPanel::finish_bake()
 	}
 }
 
+// Loads the baked mesh of the current volume when it changed, and makes what is drawn and picked from it.
+void NavigationPanel::refresh_overlay()
+{
+	const entt::entity volume = current_volume();
+	wiwa::AssetRef wanted{};
+	if (volume != entt::null)
+	{
+		wanted = m_Editor.scene().registry().get<wiwa::NavMeshVolume>(volume).NavMesh;
+	}
+
+	if (m_OverlayDirty || !(wanted == m_OverlayRef))
+	{
+		m_OverlayDirty = false;
+		m_OverlayRef = wanted;
+		m_OverlayHandle = wanted.valid() ? m_Assets.load<wiwa::NavMeshData>(wanted) : wiwa::Handle<wiwa::NavMeshData>{};
+		m_OverlayQuery.reset();
+		m_OverlayData.reset();
+		m_OverlayView = {};
+		m_Shapes = {};
+		m_ShapesValid = false;
+		m_PathTool.clear();
+	}
+
+	if (m_OverlayHandle && !m_OverlayData && m_OverlayHandle.ready())
+	{
+		std::string error;
+		m_OverlayData = wiwa::NavData::create(*m_OverlayHandle.get(), error);
+		if (m_OverlayData)
+		{
+			m_OverlayQuery = CreateScope<wiwa::NavQuery>(*m_OverlayData);
+			m_OverlayView = wiwa::extract_navmesh_view(*m_OverlayData);
+			m_ShapesValid = false;
+		}
+		else
+		{
+			m_Message = "The baked navmesh cannot be shown: " + error;
+		}
+	}
+
+	if (!m_ShapesValid || m_ShapesOptions.Polys != m_Overlay.Polys || m_ShapesOptions.Edges != m_Overlay.Edges || m_ShapesOptions.Boundary != m_Overlay.Boundary)
+	{
+		m_Shapes = wiwa::nav_overlay_shapes(m_OverlayView, m_Overlay);
+		m_ShapesOptions = m_Overlay;
+		m_ShapesValid = true;
+	}
+}
+
+void NavigationPanel::draw_overlay(wiwa::DebugDraw& draw)
+{
+	if (!m_ShowOverlay || m_Editor.get_scene() == nullptr)
+	{
+		return;
+	}
+
+	// The volumes as boxes; the one the panel works on stands out.
+	entt::registry& registry = m_Editor.scene().registry();
+	const entt::entity current = current_volume();
+	for (auto [entity, volume, world] : registry.view<wiwa::NavMeshVolume, wiwa::WorldTransform>().each())
+	{
+		const glm::vec3 centre(world.Matrix[3]);
+		const glm::vec4 color = entity == current ? glm::vec4(0.3f, 0.9f, 1.0f, 1.0f) : glm::vec4(0.3f, 0.6f, 0.8f, 0.5f);
+		draw.box(centre - volume.Size * 0.5f, centre + volume.Size * 0.5f, color, wiwa::DebugDepth::Faded, entity == current ? 2.0f : 1.0f);
+	}
+
+	wiwa::draw_nav_overlay(draw, m_Shapes);
+	if (m_PathTest)
+	{
+		m_PathTool.draw(draw);
+	}
+}
+
+bool NavigationPanel::handle_ray_click(glm::vec3 origin, glm::vec3 direction, bool shift)
+{
+	if (!m_PathTest || !m_OverlayQuery || m_OverlayView.empty())
+	{
+		return false;
+	}
+	const std::optional<glm::vec3> hit = wiwa::NavPathTool::pick(m_OverlayView, origin, direction);
+	if (!hit)
+	{
+		return true; // the path test is on: a click that misses the mesh selects nothing either
+	}
+	if (shift)
+	{
+		m_PathTool.set_end(*hit);
+	}
+	else
+	{
+		m_PathTool.set_start(*hit);
+	}
+	m_PathTool.recompute(*m_OverlayQuery, wiwa::NavFilter{ 0xFFFFFFFFu, m_Section->settings().AreaCost });
+	return true;
+}
+
 void NavigationPanel::on_update()
 {
+	if (m_Editor.get_scene() != nullptr)
+	{
+		refresh_overlay();
+	}
 	m_Model.poll();
 	if (!m_BakeCollected && m_Model.state() != wiwa::NavEditModel::BakeState::Running)
 	{
@@ -297,6 +397,25 @@ void NavigationPanel::on_draw()
 			ImGui::Checkbox("Edges", &m_Overlay.Edges);
 			ImGui::SameLine();
 			ImGui::Checkbox("Boundary", &m_Overlay.Boundary);
+
+			ImGui::Checkbox("Path test (click: start, Shift+click: end)", &m_PathTest);
+			if (m_PathTest)
+			{
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Clear"))
+				{
+					m_PathTool.clear();
+				}
+				if (!m_OverlayQuery)
+				{
+					ImGui::TextDisabled("Bake the volume first: the test walks the baked mesh.");
+				}
+				else if (m_PathTool.has_start() && m_PathTool.has_end())
+				{
+					const wiwa::NavPath& path = m_PathTool.path();
+					ImGui::Text("%s, %.2f m, %zu corners", path.Status == wiwa::NavPathStatus::Complete ? "Complete" : (path.Status == wiwa::NavPathStatus::Partial ? "Partial: the end is not reachable" : "No route"), path.Length, path.Corners.size());
+				}
+			}
 
 			ImGui::SeparatorText("Walking cost");
 			ImGui::TextDisabled("What one metre of each kind of ground costs; the walk takes the cheaper way round.");

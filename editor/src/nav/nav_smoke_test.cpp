@@ -16,6 +16,7 @@
 #include <nav/nav_mesh_asset.h>
 #include <nav/nav_module.h>
 #include <nav/nav_query.h>
+#include <nav/nav_view.h>
 #include <scripting/script_component.h>
 #include <scripting/script_instances.h>
 #include <scripting/script_runtime.h>
@@ -30,6 +31,8 @@
 #include "../asset_pipeline/nav_bake.h"
 #include "../asset_pipeline/nav_geometry.h"
 #include "nav_edit_model.h"
+#include "nav_overlay.h"
+#include "nav_path_tool.h"
 #include "../asset_pipeline/nav_settings_file.h"
 
 namespace wiwa
@@ -969,6 +972,116 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		void view_and_tools(Check& check)
+		{
+			const Scope<NavData> wall = data_of(check, wall_fixture(3.0f), "view");
+			if (!wall)
+			{
+				return;
+			}
+
+			// The polygons as plain data.
+			const NavMeshView view = extract_navmesh_view(*wall);
+			check(!view.empty() && view.Vertices.size() >= 3 * view.Polys.size() && view.BoundaryEdge.size() == view.Vertices.size(), "view_extract: polygons, vertices and one boundary flag per vertex");
+			bool shaped = true;
+			bool inside = true;
+			size_t boundary = 0;
+			for (const NavViewPoly& poly : view.Polys)
+			{
+				shaped = shaped && poly.VertexCount >= 3 && poly.VertexCount <= 6 && poly.FirstVertex + poly.VertexCount <= view.Vertices.size() && poly.Area == static_cast<u8>(NavArea::Walkable);
+			}
+			for (size_t i = 0; i < view.Vertices.size(); i++)
+			{
+				inside = inside && glm::all(glm::greaterThanEqual(view.Vertices[i], view.BoundsMin - 0.01f)) && glm::all(glm::lessThanEqual(view.Vertices[i], view.BoundsMax + 0.01f));
+				boundary += view.BoundaryEdge[i];
+			}
+			check(shaped && inside, "view_extract: every polygon has 3 to 6 vertices and an area, and lies inside the bounds");
+			check(boundary > 0 && boundary < view.Vertices.size(), "view_extract: some edges are the border, not all");
+			check(view.BoundsMin.x < -9.0f && view.BoundsMax.x > 9.0f && std::abs(view.BoundsMax.y) < 0.5f, "view_extract: the bounds are the floor");
+
+			// The overlay shapes follow the options.
+			NavOverlayOptions all;
+			const NavOverlayShapes full = nav_overlay_shapes(view, all);
+			check(!full.Triangles.empty() && !full.Lines.empty(), "overlay_shapes: triangles and lines");
+			NavOverlayOptions onlyBoundary;
+			onlyBoundary.Polys = false;
+			onlyBoundary.Edges = false;
+			const NavOverlayShapes border = nav_overlay_shapes(view, onlyBoundary);
+			check(border.Triangles.empty() && border.Lines.size() == boundary, "overlay_shapes: only the boundary option gives exactly the border edges (" + std::to_string(border.Lines.size()) + " of " + std::to_string(boundary) + ")");
+			NavOverlayOptions nothing;
+			nothing.Polys = nothing.Edges = nothing.Boundary = false;
+			const NavOverlayShapes none = nav_overlay_shapes(view, nothing);
+			check(none.Triangles.empty() && none.Lines.empty(), "overlay_shapes: no option, no shapes");
+			NavOverlayOptions noEdges;
+			noEdges.Edges = false;
+			check(nav_overlay_shapes(view, noEdges).Lines.size() == boundary, "overlay_shapes: without edges only the border is drawn");
+			bool lifted = true;
+			for (const NavOverlayTriangle& triangle : full.Triangles)
+			{
+				lifted = lifted && triangle.A.y > view.BoundsMin.y;
+			}
+			check(lifted, "overlay_shapes: shapes are lifted off the ground");
+			check(nav_area_color(static_cast<u8>(NavArea::Mud), 1.0f) != nav_area_color(static_cast<u8>(NavArea::Walkable), 1.0f) && nav_area_color(static_cast<u8>(NavArea::Water), 1.0f) != nav_area_color(static_cast<u8>(NavArea::Custom0), 1.0f), "overlay_colors: areas have their own colours");
+
+			// An area shows in the polygons.
+			NavBakeInput split;
+			add_floor(split, -10, 0, -10, 10, NavArea::Walkable);
+			add_floor(split, 0, 10, -10, 10, NavArea::Mud);
+			split.BoundsMin = { -10.0f, -1.0f, -10.0f };
+			split.BoundsMax = { 10.0f, 4.0f, 10.0f };
+			split.Build.CellSize = 0.25f;
+			const Scope<NavData> twoAreas = data_of(check, split, "view_areas");
+			if (twoAreas)
+			{
+				const NavMeshView areas = extract_navmesh_view(*twoAreas);
+				bool mudEast = true;
+				bool sawMud = false;
+				bool sawWalkable = false;
+				for (const NavViewPoly& poly : areas.Polys)
+				{
+					const glm::vec3 first = areas.Vertices[poly.FirstVertex];
+					if (poly.Area == static_cast<u8>(NavArea::Mud))
+					{
+						sawMud = true;
+						mudEast = mudEast && first.x > -0.5f;
+					}
+					if (poly.Area == static_cast<u8>(NavArea::Walkable))
+					{
+						sawWalkable = true;
+					}
+				}
+				check(sawMud && sawWalkable && mudEast, "view_areas: the mud half of the floor gives Mud polygons, the other half Walkable");
+			}
+
+			// Picking a point on the mesh with a ray.
+			const std::optional<glm::vec3> down = NavPathTool::pick(view, { -8.0f, 5.0f, 2.0f }, { 0.0f, -1.0f, 0.0f });
+			check(down && glm::distance(*down, glm::vec3(-8.0f, 0.0f, 2.0f)) < 0.3f, "path_tool_pick: a ray straight down hits the floor under it");
+			const std::optional<glm::vec3> slanted = NavPathTool::pick(view, { -8.0f, 5.0f, 8.0f }, { 0.5f, -1.0f, -0.5f });
+			check(slanted && glm::distance(glm::vec2(slanted->x, slanted->z), glm::vec2(-5.5f, 5.5f)) < 0.5f && std::abs(slanted->y) < 0.3f, "path_tool_pick: a slanted ray hits where it should");
+			check(!NavPathTool::pick(view, { 200.0f, 5.0f, 200.0f }, { 0.0f, -1.0f, 0.0f }).has_value(), "path_tool_pick: a ray beside the mesh misses");
+			check(!NavPathTool::pick(view, { 0.0f, 5.0f, 5.0f }, { 0.0f, 1.0f, 0.0f }).has_value(), "path_tool_pick: a ray pointing away misses");
+			check(!NavPathTool::pick(view, { 0.0f, 5.0f, 5.0f }, { 0.0f, 0.0f, 0.0f }).has_value() && !NavPathTool::pick(view, { std::numeric_limits<float>::quiet_NaN(), 5.0f, 5.0f }, { 0.0f, -1.0f, 0.0f }).has_value(), "path_tool_pick: a zero or NaN ray gives nothing");
+
+			// The route between two picked points is the one the query gives.
+			const NavQuery query(*wall);
+			const NavFilter filter;
+			NavPathTool tool;
+			tool.recompute(query, filter);
+			check(tool.path().Status == NavPathStatus::Failed && !tool.has_start(), "path_tool: without points there is no route");
+			tool.set_start({ -8.0f, 0.0f, 0.0f });
+			tool.recompute(query, filter);
+			check(tool.path().Status == NavPathStatus::Failed, "path_tool: with a start only there is no route");
+			tool.set_end({ 8.0f, 0.0f, 0.0f });
+			tool.recompute(query, filter);
+			const NavPath expected = query.find_path({ -8.0f, 0.0f, 0.0f }, { 8.0f, 0.0f, 0.0f }, filter);
+			check(tool.has_start() && tool.has_end() && tool.path().Status == NavPathStatus::Complete && tool.path().Corners == expected.Corners && tool.path().Length == expected.Length, "path_tool: the route is the query's");
+			tool.clear();
+			check(!tool.has_start() && !tool.has_end() && tool.path().Corners.empty(), "path_tool: clear forgets both points and the route");
+		}
+	}
+
 	bool run_nav_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -982,6 +1095,7 @@ namespace wiwa
 		agents(check);
 		lua_nav(check);
 		edit_model(check);
+		view_and_tools(check);
 
 		if (check.Failures == 0)
 		{

@@ -300,8 +300,28 @@ void ViewportPanel::on_draw()
 			}
 
 			m_SceneGizmos.draw(render->get_debug_draw(), m_Editor.scene(), m_Editor.selected(), m_Section->gizmos(), sceneView);
+			if (m_OverlayHook)
+			{
+				m_OverlayHook(render->get_debug_draw());
+			}
 
-			if (clicked && !gizmoHasMouse)
+			// A tool may want the click as a ray into the scene (the navigation path test); the camera maps the pixel to clip space with depth 0 at the near plane.
+			bool rayConsumed = false;
+			if (clicked && !gizmoHasMouse && m_RayClickHook && m_UseEditorCamera)
+			{
+				const glm::vec2 ndc(2.0f * (io.MousePos.x - imageMin.x) / std::max(size.x, 1.0f) - 1.0f, 1.0f - 2.0f * (io.MousePos.y - imageMin.y) / std::max(size.y, 1.0f));
+				const glm::mat4 inverse = glm::inverse(sceneView.Projection * sceneView.View);
+				const glm::vec4 nearPoint = inverse * glm::vec4(ndc, 0.0f, 1.0f);
+				const glm::vec4 farPoint = inverse * glm::vec4(ndc, 1.0f, 1.0f);
+				if (nearPoint.w != 0.0f && farPoint.w != 0.0f)
+				{
+					const glm::vec3 origin = glm::vec3(nearPoint) / nearPoint.w;
+					const glm::vec3 target = glm::vec3(farPoint) / farPoint.w;
+					rayConsumed = m_RayClickHook(origin, target - origin, io.KeyShift);
+				}
+			}
+
+			if (clicked && !gizmoHasMouse && !rayConsumed)
 			{
 				WI_LOG(Info, "Viewport", "click at ({0:.0f}, {1:.0f}): asking the renderer what is there", io.MousePos.x - imageMin.x, io.MousePos.y - imageMin.y);
 				const float x = std::max(io.MousePos.x - imageMin.x, 0.0f) * scale;

@@ -232,6 +232,8 @@ void EditorModule::init()
 	m_Panels.push_back(CreateRef<GamePanel>(*m_SceneEditor, viewOwner));
 	Ref<ViewportPanel> viewport = CreateRef<ViewportPanel>(*m_SceneEditor, viewOwner, editorSection);
 	m_Panels.push_back(viewport);
+	viewport->set_overlay_hook([this](wiwa::DebugDraw& draw) { if (m_NavPanel != nullptr) { m_NavPanel->draw_overlay(draw); } });
+	viewport->set_ray_click_hook([this](glm::vec3 origin, glm::vec3 direction, bool shift) { return m_NavPanel != nullptr && m_NavPanel->handle_ray_click(origin, direction, shift); });
 	{
 		ViewportPanel* viewportPanel = viewport.get(); // owned by m_Panels
 		wiwa::SceneEditor* focusEditor = m_SceneEditor.get();
