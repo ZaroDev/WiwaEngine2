@@ -1,7 +1,12 @@
 #include <editor_common.h>
 #include "nav_smoke_test.h"
 
+#include <atomic>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <limits>
 
 #include <nav/nav_mesh_asset.h>
 #include <nav/nav_project_settings.h>
@@ -10,6 +15,7 @@
 #include <scene/scene.h>
 #include <scene/scene_clone.h>
 #include <scene/scene_components.h>
+#include "../asset_pipeline/nav_bake.h"
 #include "../asset_pipeline/nav_settings_file.h"
 
 namespace wiwa
@@ -187,6 +193,119 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// A quad whose normal points away from `outward` is turned around; the triangles are (a, b, c) and (a, c, d).
+		void add_quad(NavBakeInput& input, glm::vec3 a, glm::vec3 b, glm::vec3 c, glm::vec3 d, glm::vec3 outward, u8 area = static_cast<u8>(NavArea::Walkable))
+		{
+			if (glm::dot(glm::cross(b - a, c - a), outward) < 0.0f)
+			{
+				std::swap(b, d);
+			}
+			const u32 base = static_cast<u32>(input.Vertices.size());
+			input.Vertices.insert(input.Vertices.end(), { a, b, c, d });
+			input.Indices.insert(input.Indices.end(), { base, base + 1, base + 2, base, base + 2, base + 3 });
+			input.TriangleAreas.push_back(area);
+			input.TriangleAreas.push_back(area);
+		}
+
+		void add_box(NavBakeInput& input, glm::vec3 lo, glm::vec3 hi)
+		{
+			const glm::vec3 p[8] = {
+				{ lo.x, lo.y, lo.z }, { hi.x, lo.y, lo.z }, { hi.x, hi.y, lo.z }, { lo.x, hi.y, lo.z },
+				{ lo.x, lo.y, hi.z }, { hi.x, lo.y, hi.z }, { hi.x, hi.y, hi.z }, { lo.x, hi.y, hi.z } };
+			add_quad(input, p[0], p[1], p[2], p[3], { 0, 0, -1 });
+			add_quad(input, p[4], p[5], p[6], p[7], { 0, 0, 1 });
+			add_quad(input, p[0], p[3], p[7], p[4], { -1, 0, 0 });
+			add_quad(input, p[1], p[2], p[6], p[5], { 1, 0, 0 });
+			add_quad(input, p[0], p[1], p[5], p[4], { 0, -1, 0 });
+			add_quad(input, p[3], p[2], p[6], p[7], { 0, 1, 0 });
+		}
+
+		// A 20 x 20 m floor at y = 0, with a 1 x 2 x 1 m box in the middle when asked, in a box that holds both.
+		NavBakeInput floor_fixture(bool withBox, u8 floorArea = static_cast<u8>(NavArea::Walkable))
+		{
+			NavBakeInput input;
+			add_quad(input, { -10, 0, -10 }, { -10, 0, 10 }, { 10, 0, 10 }, { 10, 0, -10 }, { 0, 1, 0 }, floorArea);
+			if (withBox)
+			{
+				add_box(input, { -0.5f, 0.0f, -0.5f }, { 0.5f, 2.0f, 0.5f });
+			}
+			input.BoundsMin = { -10.0f, -1.0f, -10.0f };
+			input.BoundsMax = { 10.0f, 4.0f, 10.0f };
+			input.Build.CellSize = 0.25f;
+			return input;
+		}
+
+		void bake(Check& check)
+		{
+			const NavBakeInput withBox = floor_fixture(true);
+			const NavBakeResult floor = bake_navmesh(withBox);
+			check(floor.Ok, "bake_floor: the floor bakes (" + floor.Error + ")");
+			check(floor.Ok && floor.PolyCount > 0 && floor.VertCount > 0 && floor.TileCount >= 1 && floor.Mesh.valid(), "bake_floor: the mesh has polygons, vertices and tiles");
+			check(floor.Ok && floor.Mesh.InputHash == nav_input_hash(withBox) && floor.Mesh.Build == withBox.Build, "bake_floor: the mesh records the input hash and the settings");
+			check(floor.Ok && floor.TileCount > 1, "bake_floor: a 20 m floor at 0.25 m cells and 64 cell tiles needs several tiles");
+
+			const NavBakeResult open = bake_navmesh(floor_fixture(false));
+			check(open.Ok && floor.Ok && open.PolyCount != floor.PolyCount, "bake_box_hole: the box changes the polygons (it leaves a hole in the floor)");
+
+			const NavBakeResult again = bake_navmesh(withBox);
+			check(again.Ok && floor.Ok && nav_mesh_to_bytes(again.Mesh) == nav_mesh_to_bytes(floor.Mesh), "bake_deterministic: the same input gives the same bytes");
+
+			NavBakeInput moved = withBox;
+			moved.Vertices[0].x += 0.01f;
+			check(nav_input_hash(moved) != nav_input_hash(withBox) && nav_input_hash(withBox) == nav_input_hash(floor_fixture(true)), "bake_hash: the hash follows the input");
+			NavBakeInput otherSettings = withBox;
+			otherSettings.Build.AgentRadius = 0.5f;
+			check(nav_input_hash(otherSettings) != nav_input_hash(withBox), "bake_hash: the hash follows the settings");
+
+			const NavBakeResult mud = bake_navmesh(floor_fixture(true, static_cast<u8>(NavArea::Mud)));
+			check(mud.Ok && mud.AreaPolyCount[static_cast<size_t>(NavArea::Mud)] > 0 && mud.AreaPolyCount[static_cast<size_t>(NavArea::Mud)] == mud.PolyCount, "bake_area: a floor tagged Mud gives Mud polygons only");
+
+			const NavBakeResult blocked = bake_navmesh(floor_fixture(false, static_cast<u8>(NavArea::NotWalkable)));
+			check(!blocked.Ok && !blocked.Error.empty(), "bake_nothing_walkable: a floor tagged NotWalkable fails with a reason");
+
+			NavBakeInput empty = floor_fixture(false);
+			empty.Vertices.clear();
+			empty.Indices.clear();
+			empty.TriangleAreas.clear();
+			const NavBakeResult none = bake_navmesh(empty);
+			check(!none.Ok && !none.Error.empty(), "bake_empty_fails: no triangles fails with a reason");
+
+			NavBakeInput badIndex = floor_fixture(false);
+			badIndex.Indices[0] = 999;
+			check(!bake_navmesh(badIndex).Ok, "bake_invalid: an index out of range fails");
+			NavBakeInput badVertex = floor_fixture(false);
+			badVertex.Vertices[1].y = std::numeric_limits<float>::quiet_NaN();
+			check(!bake_navmesh(badVertex).Ok, "bake_invalid: a vertex that is not a number fails");
+			NavBakeInput badBox = floor_fixture(false);
+			badBox.BoundsMax = badBox.BoundsMin;
+			check(!bake_navmesh(badBox).Ok, "bake_invalid: an empty volume fails");
+			NavBakeInput hugeGrid = floor_fixture(false);
+			hugeGrid.BoundsMin = { -5000.0f, -1.0f, -5000.0f };
+			hugeGrid.BoundsMax = { 5000.0f, 4.0f, 5000.0f };
+			check(!bake_navmesh(hugeGrid).Ok, "bake_invalid: a volume of too many tiles fails");
+
+			std::atomic<bool> cancel{ true };
+			const NavBakeResult stopped = bake_navmesh(withBox, &cancel);
+			check(!stopped.Ok && stopped.Error == "cancelled", "bake_cancel: a cancelled bake fails with 'cancelled'");
+
+			// A written file reads back, and a mesh that is not valid is not written.
+			const std::filesystem::path file = std::filesystem::temp_directory_path() / "wiwa_nav_smoke.wnav";
+			std::string error;
+			check(floor.Ok && write_nav_file(file, floor.Mesh, error), "bake_write: the .wnav is written (" + error + ")");
+			std::ifstream stream(file, std::ios::binary);
+			const std::vector<char> text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+			stream.close();
+			NavMeshData back;
+			const std::span<const std::byte> bytes(reinterpret_cast<const std::byte*>(text.data()), text.size());
+			check(nav_mesh_from_bytes(bytes, back, error) && back == floor.Mesh, "bake_write: the file reads back as the baked mesh");
+			std::error_code remove;
+			std::filesystem::remove(file, remove);
+			check(!write_nav_file(file, NavMeshData{}, error) && !std::filesystem::exists(file, remove), "bake_write: an invalid mesh is not written");
+		}
+	}
+
 	bool run_nav_smoke_test(AssetPipelineModule& pipeline)
 	{
 		(void)pipeline;
@@ -195,6 +314,7 @@ namespace wiwa
 		wnav_format(check);
 		components(check);
 		settings(check);
+		bake(check);
 
 		if (check.Failures == 0)
 		{
