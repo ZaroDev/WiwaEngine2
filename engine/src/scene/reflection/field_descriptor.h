@@ -18,6 +18,7 @@ namespace wiwa
 		bool AudioEvent = false;              // for a String field: the name of an audio event (the editor offers the events of the loaded banks)
 		AssetType Asset = AssetType::None;    // for an Asset field: the type it accepts
 		std::vector<std::string> EnumNames{}; // for an Enum field: the name of each value, in order
+		bool NavAreas = false;                // for an Enum field of navigation areas: EnumNames are the stable names scene files store, the editor shows the project's area names
 		std::string Tooltip{};
 
 		static FieldMeta range(float minimum, float maximum)
@@ -47,6 +48,14 @@ namespace wiwa
 		{
 			FieldMeta meta;
 			meta.Asset = type;
+			return meta;
+		}
+
+		static FieldMeta nav_area(std::vector<std::string> names)
+		{
+			FieldMeta meta;
+			meta.EnumNames = std::move(names);
+			meta.NavAreas = true;
 			return meta;
 		}
 

@@ -30,6 +30,7 @@
 #include "../asset_pipeline/lua_stubs.h"
 #include "../asset_pipeline/nav_bake.h"
 #include "../asset_pipeline/nav_geometry.h"
+#include "../settings/nav_section.h"
 #include "nav_edit_model.h"
 #include "nav_overlay.h"
 #include "nav_path_tool.h"
@@ -178,6 +179,79 @@ namespace wiwa
 				check(copy->registry().get<NavAreaTag>(id).Area == NavArea::Mud, "components: a clone keeps the NavAreaTag");
 			}
 			check(found, "components: a clone has the agent entity");
+		}
+
+		void named_areas(Check& check)
+		{
+			std::string error;
+
+			// Named areas round trip through the file text and the pack blob.
+			NavSettings custom;
+			custom.AreaName[5] = "Swamp";
+			custom.AreaCost[5] = 6.0f;
+			custom.AreaName[15] = "Lava";
+			custom.AreaCost[15] = 40.0f;
+			custom.AreaName[3].clear(); // Water removed
+			NavSettings back;
+			check(nav_settings_from_text(nav_settings_to_text(custom), back, error) && back == custom, "areas_file: names and costs round trip through the file text (" + error + ")");
+			check(back.used(5) && back.used(15) && !back.used(3) && !back.used(4), "areas_file: slots are used or not by their name");
+			const std::optional<NavSettings> blob = deserialize<NavSettings>(serialize(custom));
+			check(blob && *blob == custom, "areas_blob: the pack blob (version 2) round trips");
+			check(nav_area_id(custom, "Swamp") == 5 && nav_area_id(custom, "Walkable") == 1 && nav_area_id(custom, "Water") == -1 && nav_area_id(custom, "Nope") == -1, "areas_lookup: a name finds its id, a removed one does not");
+
+			// The first file format and the first blob version still load.
+			NavSettings legacy;
+			check(nav_settings_from_text("{ \"areaCost\": { \"Mud\": 4, \"Water\": 2, \"Custom0\": 1, \"Custom1\": 3 } }", legacy, error), "areas_legacy_file: the areaCost object is read (" + error + ")");
+			check(legacy.AreaCost[2] == 4.0f && legacy.AreaCost[3] == 2.0f && !legacy.used(4) && legacy.used(5) && legacy.AreaName[5] == "Custom1" && legacy.AreaCost[5] == 3.0f, "areas_legacy_file: Mud and Water keep their ids, a Custom area with a cost becomes an area of that name");
+			std::vector<std::byte> v1(sizeof(u32) + 8 * sizeof(float));
+			const u32 one = 1;
+			std::memcpy(v1.data(), &one, sizeof(one));
+			const float oldCosts[8] = { 1, 1, 7, 1, 1, 1, 1, 1 };
+			std::memcpy(v1.data() + sizeof(u32), oldCosts, sizeof(oldCosts));
+			const std::optional<NavSettings> old = deserialize<NavSettings>(v1);
+			check(old && old->AreaCost[2] == 7.0f && old->used(2) && old->used(3) && !old->used(4), "areas_legacy_blob: a version 1 blob is read with its costs");
+
+			// Refusals.
+			NavSettings refused;
+			check(!nav_settings_from_text("{ \"areas\": [ { \"id\": 2, \"name\": \"A\" }, { \"id\": 3, \"name\": \"A\" } ] }", refused, error) && !error.empty(), "areas_duplicate: two areas with one name are refused with a reason");
+			check(!nav_settings_from_text("{ \"areas\": [ { \"id\": 2, \"name\": \"Walkable\" } ] }", refused, error), "areas_reserved: a slot cannot take the name Walkable");
+			check(!nav_settings_from_text("{ \"areas\": [ { \"id\": 16, \"name\": \"Too\" } ] }", refused, error), "areas_cap: an id past 15 is refused");
+			check(!nav_settings_from_text("{ \"areas\": [ { \"id\": 2, \"name\": \"\" } ] }", refused, error), "areas_empty: an empty name is refused");
+			check(!nav_settings_from_text("{ \"areas\": [ { \"id\": 2, \"name\": \"A\" }, { \"id\": 2, \"name\": \"B\" } ] }", refused, error), "areas_twice: an id listed twice is refused");
+			check(!nav_settings_from_text("{ \"areas\": 5 }", refused, error), "areas_type: areas that is not a list is refused");
+			NavSettings twins = custom;
+			twins.AreaName[6] = "Swamp";
+			check(!deserialize<NavSettings>(serialize(twins)).has_value(), "areas_blob_duplicate: a blob with two areas of one name is refused");
+
+			// The edit model: add, rename, remove, the cap.
+			const std::filesystem::path file = std::filesystem::temp_directory_path() / "wiwa_nav_areas_smoke.wsettings";
+			std::error_code remove;
+			std::filesystem::remove(file, remove);
+			{
+				NavSection section(file, false);
+				u32 id = 0;
+				check(section.add_area("Sand", 2.0f, id) && id == 4 && section.settings().used(4), "areas_add: a new area takes the lowest free id (Mud 2 and Water 3 are taken)");
+				check(!section.add_area("Sand", 2.0f, id) && !section.last_error().empty(), "areas_add_duplicate: a name an area has is refused with a reason");
+				check(!section.add_area("", 2.0f, id) && !section.add_area("Walkable", 2.0f, id), "areas_add_invalid: an empty name and a reserved name are refused");
+				check(section.rename_area(4, "Dune") && section.settings().AreaName[4] == "Dune" && nav_area_id(section.settings(), "Dune") == 4, "areas_rename: the id stays when the name changes");
+				check(!section.rename_area(4, "Mud") && section.settings().AreaName[4] == "Dune", "areas_rename_duplicate: renaming to a name that is taken is refused");
+				check(!section.rename_area(1, "Floor") && !section.remove_area(0) && !section.remove_area(1), "areas_fixed: Walkable and NotWalkable cannot be renamed or removed");
+				check(section.set_cost(4, 5.0f) && section.settings().AreaCost[4] == 5.0f && !section.set_cost(9, 5.0f), "areas_cost: a cost is set on an area, not on an unused slot");
+				check(section.remove_area(3) && !section.settings().used(3) && section.settings().AreaCost[3] == 1.0f, "areas_remove: the slot is freed and its cost reset");
+				check(section.add_area("Ice", 3.0f, id) && id == 3, "areas_reuse: the freed id is the next one given");
+				u32 added = 0;
+				bool full = false;
+				for (int i = 0; i < 20 && !full; i++)
+				{
+					full = !section.add_area("Extra" + std::to_string(i), 1.0f, id);
+					added += full ? 0 : 1;
+				}
+				check(full && section.settings().used(15) && !section.last_error().empty(), "areas_full: with sixteen areas the next one is refused with a reason (added " + std::to_string(added) + " more)");
+
+				NavSection reloaded(file, false);
+				check(reloaded.settings() == section.settings(), "areas_persist: every edit was saved, a new section reads the same settings");
+			}
+			std::filesystem::remove(file, remove);
 		}
 
 		void settings(Check& check)
@@ -441,6 +515,33 @@ namespace wiwa
 				noMud.AreaMask = ~nav_area_flag(NavArea::Mud);
 				const NavPath avoided = query.find_path(west, east, noMud);
 				check(avoided.Status == NavPathStatus::Complete && avoided.Length > 18.0f, "area_mask: an agent that may not enter mud goes round");
+			}
+
+			// The same with an area of a user slot (id 9): its cost and the mask act on it like Mud's.
+			{
+				NavBakeInput slot;
+				add_floor(slot, -10, -1, -10, 10, NavArea::Walkable);
+				add_floor(slot, -1, 1, -10, 5, NavArea::Area9);
+				add_floor(slot, -1, 1, 5, 10, NavArea::Walkable);
+				add_floor(slot, 1, 10, -10, 10, NavArea::Walkable);
+				slot.BoundsMin = { -10.0f, -1.0f, -10.0f };
+				slot.BoundsMax = { 10.0f, 4.0f, 10.0f };
+				slot.Build.CellSize = 0.25f;
+				const NavBakeResult bakedSlot = bake_navmesh(slot);
+				check(bakedSlot.Ok && bakedSlot.AreaPolyCount[9] > 0, "area_slot: a floor tagged with area id 9 bakes polygons of that id");
+				const Scope<NavData> slotData = data_of(check, slot, "area_slot");
+				if (slotData)
+				{
+					const NavQuery query(*slotData);
+					NavFilter costly;
+					costly.AreaCost[9] = 10.0f;
+					NavFilter noSlot;
+					noSlot.AreaMask = ~nav_area_flag(NavArea::Area9);
+					const NavPath cheap = query.find_path(west, east, NavFilter{});
+					const NavPath around = query.find_path(west, east, costly);
+					const NavPath avoided = query.find_path(west, east, noSlot);
+					check(cheap.Status == NavPathStatus::Complete && cheap.Length < 16.6f && around.Length > 18.0f && avoided.Status == NavPathStatus::Complete && avoided.Length > 18.0f, "area_slot: a costly or masked user area is walked round (" + std::to_string(cheap.Length) + ", " + std::to_string(around.Length) + ", " + std::to_string(avoided.Length) + ")");
+				}
 			}
 
 			// A tile that Detour refuses fails the load with a reason.
@@ -819,6 +920,8 @@ namespace wiwa
 				check(h.run("local hit, p = Nav.raycast(vec3(-8,0,0), vec3(-8,0,6)); return tostring(hit) .. ':' .. tostring(p)") == "false:nil", "lua_raycast_clear: a clear line is false, nil");
 				check(h.run("return Nav.random_point(vec3(-8,0,0), 3) ~= nil") == "true", "lua_random_point: a random point near a point of the mesh");
 
+				check(h.run("return Nav.area_mask({'Walkable','Mud'})") == "6.0" || h.run("return Nav.area_mask({'Walkable','Mud'})") == "6", "lua_area_mask: names give the bit set of their ids (Walkable 2, Mud 4)");
+				check(h.fails("Nav.area_mask({'Lava'})", "no area called") && h.fails("Nav.area_mask('Mud')", "list") && h.fails("Nav.area_mask({5})", "string"), "lua_area_mask_errors: an unknown name, a string instead of a list and a number are errors");
 				check(h.fails("Nav.find_path(vec3(0/0,0,0), vec3(1,0,0))", "finite"), "lua_nan: a NaN vector is an error that says finite");
 				check(h.fails("Nav.nearest_point(vec3(1,1/0,1))", "finite"), "lua_inf: an infinite vector is an error");
 				check(h.fails("Nav.agent(find_entity('Walker')).state()", "colon") && h.fails("Nav.agent(find_entity('Walker')).stop()", "colon"), "lua_dot_call: an agent method called with a dot is a Lua error, not a crash");
@@ -1004,6 +1107,31 @@ namespace wiwa
 			check(model.is_stale(*scene, volume, stored) == std::optional<bool>(true), "model_stale: other settings make the bake stale");
 			scene->registry().get<NavMeshVolume>(volume).AgentRadius = 0.4f;
 
+			// A removed area: geometry tagged with an id the project no longer has bakes as Walkable (one warning); a named one keeps its id.
+			{
+				const entt::entity patch = scene->create("Patch");
+				scene->registry().emplace<MeshRenderer>(patch).Mesh = wallMesh;
+				scene->registry().emplace<NavAreaTag>(patch).Area = NavArea::Area9;
+				const auto areaOfPatch = [&](const NavSettings* areas)
+				{
+					const NavSnapshot snapshot = capture_nav_snapshot(*scene, volume, nullptr, areas);
+					for (const NavSnapshotItem& item : snapshot.Items)
+					{
+						if (item.Mesh == scene->registry().get<MeshRenderer>(patch).Mesh && item.Area != static_cast<u8>(NavArea::Walkable))
+						{
+							return static_cast<int>(item.Area);
+						}
+					}
+					return static_cast<int>(NavArea::Walkable);
+				};
+				NavSettings withArea;
+				withArea.AreaName[9] = "Quicksand";
+				const NavSettings withoutArea;
+				check(areaOfPatch(nullptr) == 9 && areaOfPatch(&withArea) == 9, "area_tag_named: a tag with an id the project names keeps it (and with no settings every id is kept)");
+				check(areaOfPatch(&withoutArea) == static_cast<int>(NavArea::Walkable), "area_tag_removed: a tag with an id the project no longer has bakes as Walkable");
+				scene->destroy(patch);
+			}
+
 			// The mesh of an agent is not ground: a wall that belongs to an agent (or to a child of one) does not take part in the bake.
 			{
 				const entt::entity agentBody = scene->create("Agent");
@@ -1161,6 +1289,7 @@ namespace wiwa
 		wnav_format(check);
 		components(check);
 		settings(check);
+		named_areas(check);
 		bake(check);
 		queries(check);
 		agents(check);

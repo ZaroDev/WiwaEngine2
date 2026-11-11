@@ -829,6 +829,11 @@ Nav = {}
 ---@param entity Entity
 ---@return NavAgentHandle
 function Nav.agent(entity) end
+--- The bit set of the named areas of the project (the names of the Navigation panel's Areas table, "NotWalkable" and "Walkable" included); an error for a
+--- name the project has no area of. For `find_path`'s `area_mask`.
+---@param names string[]
+---@return integer
+function Nav.area_mask(names) end
 --- The straight path between the navmesh points nearest to the two positions. Partial: the walk ends where it comes closest to the target.
 ---@param from vec3
 ---@param to vec3

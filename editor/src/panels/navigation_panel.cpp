@@ -418,14 +418,62 @@ void NavigationPanel::on_draw()
 				}
 			}
 
-			ImGui::SeparatorText("Walking cost");
-			ImGui::TextDisabled("What one metre of each kind of ground costs; the walk takes the cheaper way round.");
-			for (const wiwa::NavArea area : { wiwa::NavArea::Mud, wiwa::NavArea::Water, wiwa::NavArea::Custom0, wiwa::NavArea::Custom1, wiwa::NavArea::Custom2, wiwa::NavArea::Custom3 })
+			ImGui::SeparatorText("Areas");
+			ImGui::TextDisabled("Kinds of ground, up to %u. A mesh's NavAreaTag picks one; one metre costs what is set here and the walk takes the cheaper way round. Rebake after tagging.", wiwa::NAV_AREA_COUNT);
+			wiwa::u32 removeId = wiwa::NAV_AREA_COUNT;
+			for (wiwa::u32 id = 1; id < wiwa::NAV_AREA_COUNT; id++)
 			{
-				float cost = m_Section->settings().AreaCost[static_cast<size_t>(area)];
-				if (ImGui::DragFloat(wiwa::nav_area_name(area), &cost, 0.1f, 1.0f, wiwa::NAV_AREA_COST_MAX, "%.1f"))
+				const wiwa::NavSettings& areas = m_Section->settings();
+				if (!areas.used(id))
 				{
-					m_Section->set_cost(area, cost);
+					continue;
+				}
+				ImGui::PushID(static_cast<int>(id));
+				float cost = areas.AreaCost[id];
+				if (id == 1)
+				{
+					ImGui::TextUnformatted("Walkable");
+					ImGui::SameLine(160.0f);
+				}
+				else
+				{
+					char name[64];
+					std::snprintf(name, sizeof(name), "%s", areas.AreaName[id].c_str());
+					ImGui::SetNextItemWidth(150.0f);
+					if (ImGui::InputText("##name", name, sizeof(name), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
+					{
+						m_Section->rename_area(id, name);
+					}
+					ImGui::SameLine();
+				}
+				ImGui::SetNextItemWidth(90.0f);
+				if (ImGui::DragFloat("##cost", &cost, 0.1f, 1.0f, wiwa::NAV_AREA_COST_MAX, "%.1f"))
+				{
+					m_Section->set_cost(id, cost);
+				}
+				if (id >= 2)
+				{
+					ImGui::SameLine();
+					if (ImGui::SmallButton("Remove"))
+					{
+						removeId = id;
+					}
+				}
+				ImGui::PopID();
+			}
+			if (removeId < wiwa::NAV_AREA_COUNT)
+			{
+				m_Section->remove_area(removeId);
+			}
+			ImGui::SetNextItemWidth(150.0f);
+			ImGui::InputText("##newarea", m_NewAreaName, sizeof(m_NewAreaName));
+			ImGui::SameLine();
+			if (ImGui::Button("Add area"))
+			{
+				wiwa::u32 added = 0;
+				if (m_Section->add_area(m_NewAreaName, 1.0f, added))
+				{
+					m_NewAreaName[0] = '\0';
 				}
 			}
 			if (!m_Section->last_error().empty())

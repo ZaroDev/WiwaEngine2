@@ -22,6 +22,14 @@ namespace wiwa
 		case NavArea::Custom1: return { 0.95f, 0.85f, 0.20f, alpha };
 		case NavArea::Custom2: return { 0.25f, 0.85f, 0.90f, alpha };
 		case NavArea::Custom3: return { 0.95f, 0.55f, 0.15f, alpha };
+		case NavArea::Area8: return { 0.55f, 0.25f, 0.90f, alpha };
+		case NavArea::Area9: return { 0.65f, 0.90f, 0.25f, alpha };
+		case NavArea::Area10: return { 0.90f, 0.25f, 0.30f, alpha };
+		case NavArea::Area11: return { 0.30f, 0.60f, 0.55f, alpha };
+		case NavArea::Area12: return { 0.85f, 0.65f, 0.55f, alpha };
+		case NavArea::Area13: return { 0.45f, 0.50f, 0.85f, alpha };
+		case NavArea::Area14: return { 0.75f, 0.75f, 0.35f, alpha };
+		case NavArea::Area15: return { 0.60f, 0.60f, 0.70f, alpha };
 		default: return { 0.5f, 0.5f, 0.5f, alpha };
 		}
 	}

@@ -2,6 +2,7 @@
 #include "nav_geometry.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <limits>
 #include <thread>
@@ -13,13 +14,24 @@ namespace wiwa
 	namespace
 	{
 		// The area a mesh entity is tagged with: its own tag, else the nearest ancestor's.
-		u8 area_of(entt::registry& registry, entt::entity entity)
+		// An id the project has no area for (removed since the entity was tagged) is Walkable, with one warning per id.
+		u8 area_of(entt::registry& registry, entt::entity entity, const NavSettings* settings, std::array<bool, NAV_AREA_COUNT>& warned)
 		{
 			for (entt::entity current = entity; current != entt::null && registry.valid(current);)
 			{
 				if (const NavAreaTag* tag = registry.try_get<NavAreaTag>(current))
 				{
-					return static_cast<u8>(tag->Area);
+					const u8 id = static_cast<u8>(tag->Area);
+					if (settings != nullptr && !settings->used(id))
+					{
+						if (id < NAV_AREA_COUNT && !warned[id])
+						{
+							warned[id] = true;
+							WI_WARN("Nav", "a NavAreaTag uses area id {0}, which the project no longer has: its geometry bakes as Walkable", static_cast<u32>(id));
+						}
+						return static_cast<u8>(NavArea::Walkable);
+					}
+					return id;
 				}
 				const Hierarchy* hierarchy = registry.try_get<Hierarchy>(current);
 				current = hierarchy != nullptr ? hierarchy->Parent : entt::null;
@@ -68,9 +80,10 @@ namespace wiwa
 		return it->second.get();
 	}
 
-	NavSnapshot capture_nav_snapshot(Scene& scene, entt::entity volume, std::string* error)
+	NavSnapshot capture_nav_snapshot(Scene& scene, entt::entity volume, std::string* error, const NavSettings* areas)
 	{
 		NavSnapshot snapshot;
+		std::array<bool, NAV_AREA_COUNT> warned{};
 		entt::registry& registry = scene.registry();
 		if (!registry.valid(volume) || !registry.all_of<NavMeshVolume>(volume))
 		{
@@ -103,7 +116,7 @@ namespace wiwa
 					continue;
 				}
 			}
-			snapshot.Items.push_back({ renderer.Mesh, world.Matrix, area_of(registry, entity) });
+			snapshot.Items.push_back({ renderer.Mesh, world.Matrix, area_of(registry, entity, areas, warned) });
 		}
 		return snapshot;
 	}

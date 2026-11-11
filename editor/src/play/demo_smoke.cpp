@@ -380,6 +380,10 @@ namespace wiwa
 		{
 			return "the navigation module never had a navmesh for the demo scene (bake it: wiwa_editor --scene assets/scenes/demo.wscene --nav-bake <the volume's .wnav>, see scripts/gen_demo_scene.py)";
 		}
+		if (const NavModule* nav = Engine::get().get_module<NavModule>(); nav == nullptr || nav->settings().AreaName[4] != "Swamp" || !(nav->settings().AreaCost[4] > 1.0f) || nav->settings().AreaName[2] != "Mud")
+		{
+			return "the project's navigation areas (editor/nav.wsettings) are not Mud (2) and the Swamp (4, a cost above 1) the demo's navigation station uses";
+		}
 		for (int i = 0; i < 3; i++)
 		{
 			if (!(m_Nav.Closest[i] < 1.2f))

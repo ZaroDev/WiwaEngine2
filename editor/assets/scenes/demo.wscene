@@ -5542,6 +5542,206 @@
       ]
     },
     {
+      "id": "d707301312bf396da6c284c283dced25",
+      "components": {
+        "Name": {
+          "Value": "Guard"
+        },
+        "Transform": {
+          "Position": [
+            -20,
+            0,
+            8
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "NavAgent": {
+          "Speed": 4.5,
+          "Acceleration": 20
+        },
+        "Perceiver": {
+          "SightRange": 12,
+          "SightAngle": 120,
+          "HearingRadius": 15,
+          "Team": "guards",
+          "Interval": 0.2
+        },
+        "AIController": {
+          "Tree": {
+            "guid": "679c8ce15ad6585ca24b83a7dff4a0ea",
+            "localId": 0
+          }
+        }
+      },
+      "parent": "5323dc27f77199564ffdd444a3478a09"
+    },
+    {
+      "id": "41fcbbfbfcd2eef40de4adcccd54de17",
+      "components": {
+        "Name": {
+          "Value": "Guard body"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0.9,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.8,
+            1.8,
+            0.8
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 3
+          },
+          "Materials": [
+            {
+              "guid": "ea7deeab64bae42b587390755025b483",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "d707301312bf396da6c284c283dced25"
+    },
+    {
+      "id": "81aa09d79309dbf54ffdc96139d2be4e",
+      "components": {
+        "Name": {
+          "Value": "Thief"
+        },
+        "Transform": {
+          "Position": [
+            -20,
+            0,
+            -10
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Perceivable": {
+          "Team": "thieves",
+          "Kind": "thief",
+          "AimOffset": [
+            0,
+            1,
+            0
+          ]
+        }
+      },
+      "parent": "5323dc27f77199564ffdd444a3478a09"
+    },
+    {
+      "id": "f232e7680671856557e3e64b288ec875",
+      "components": {
+        "Name": {
+          "Value": "Thief body"
+        },
+        "Transform": {
+          "Position": [
+            0,
+            0.9,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            0.7,
+            1.8,
+            0.7
+          ]
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 3
+          },
+          "Materials": [
+            {
+              "guid": "4b3b760039e86a82267962587f768474",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "81aa09d79309dbf54ffdc96139d2be4e"
+    },
+    {
+      "id": "fd49a7fe428d8d2c2aaf9768d6b91a62",
+      "components": {
+        "Name": {
+          "Value": "Noise maker"
+        },
+        "Transform": {
+          "Position": [
+            -17,
+            0.5,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "script:0466d045275efa83c403ede9d7a407b0": {
+          "interval": 3.0
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 2
+          },
+          "Materials": [
+            {
+              "guid": "5528c04a45437a475f688dd0f274fb72",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "5323dc27f77199564ffdd444a3478a09"
+    },
+    {
       "id": "5323dc27f77199564ffdd444a3478a09",
       "components": {
         "Name": {
@@ -5671,6 +5871,48 @@
         },
         "NavAreaTag": {
           "Area": "Mud"
+        },
+        "MeshRenderer": {
+          "Mesh": {
+            "guid": "2ddd013f2460aee0ad4411267438b9e3",
+            "localId": 1
+          },
+          "Materials": [
+            {
+              "guid": "5528c04a45437a475f688dd0f274fb72",
+              "localId": 0
+            }
+          ]
+        }
+      },
+      "parent": "5323dc27f77199564ffdd444a3478a09"
+    },
+    {
+      "id": "850ccf30ae2c4e330ec2bb789dfc7217",
+      "components": {
+        "Name": {
+          "Value": "Nav swamp"
+        },
+        "Transform": {
+          "Position": [
+            -21,
+            0.05,
+            0
+          ],
+          "Rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "Scale": [
+            2.4,
+            0.1,
+            6
+          ]
+        },
+        "NavAreaTag": {
+          "Area": "Custom0"
         },
         "MeshRenderer": {
           "Mesh": {
@@ -5932,206 +6174,6 @@
         }
       },
       "parent": "df7fa31c3a21da30d2769a9971c52f14"
-    },
-    {
-      "id": "d707301312bf396da6c284c283dced25",
-      "components": {
-        "Name": {
-          "Value": "Guard"
-        },
-        "Transform": {
-          "Position": [
-            -20,
-            0,
-            8
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "NavAgent": {
-          "Speed": 4.5,
-          "Acceleration": 20
-        },
-        "Perceiver": {
-          "SightRange": 12,
-          "SightAngle": 120,
-          "HearingRadius": 15,
-          "Team": "guards",
-          "Interval": 0.2
-        },
-        "AIController": {
-          "Tree": {
-            "guid": "679c8ce15ad6585ca24b83a7dff4a0ea",
-            "localId": 0
-          }
-        }
-      },
-      "parent": "5323dc27f77199564ffdd444a3478a09"
-    },
-    {
-      "id": "41fcbbfbfcd2eef40de4adcccd54de17",
-      "components": {
-        "Name": {
-          "Value": "Guard body"
-        },
-        "Transform": {
-          "Position": [
-            0,
-            0.9,
-            0
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            0.8,
-            1.8,
-            0.8
-          ]
-        },
-        "MeshRenderer": {
-          "Mesh": {
-            "guid": "2ddd013f2460aee0ad4411267438b9e3",
-            "localId": 3
-          },
-          "Materials": [
-            {
-              "guid": "ea7deeab64bae42b587390755025b483",
-              "localId": 0
-            }
-          ]
-        }
-      },
-      "parent": "d707301312bf396da6c284c283dced25"
-    },
-    {
-      "id": "81aa09d79309dbf54ffdc96139d2be4e",
-      "components": {
-        "Name": {
-          "Value": "Thief"
-        },
-        "Transform": {
-          "Position": [
-            -20,
-            0,
-            -10
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "Perceivable": {
-          "Team": "thieves",
-          "Kind": "thief",
-          "AimOffset": [
-            0,
-            1,
-            0
-          ]
-        }
-      },
-      "parent": "5323dc27f77199564ffdd444a3478a09"
-    },
-    {
-      "id": "f232e7680671856557e3e64b288ec875",
-      "components": {
-        "Name": {
-          "Value": "Thief body"
-        },
-        "Transform": {
-          "Position": [
-            0,
-            0.9,
-            0
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            0.7,
-            1.8,
-            0.7
-          ]
-        },
-        "MeshRenderer": {
-          "Mesh": {
-            "guid": "2ddd013f2460aee0ad4411267438b9e3",
-            "localId": 3
-          },
-          "Materials": [
-            {
-              "guid": "4b3b760039e86a82267962587f768474",
-              "localId": 0
-            }
-          ]
-        }
-      },
-      "parent": "81aa09d79309dbf54ffdc96139d2be4e"
-    },
-    {
-      "id": "fd49a7fe428d8d2c2aaf9768d6b91a62",
-      "components": {
-        "Name": {
-          "Value": "Noise maker"
-        },
-        "Transform": {
-          "Position": [
-            -17,
-            0.5,
-            0
-          ],
-          "Rotation": [
-            0,
-            0,
-            0,
-            1
-          ],
-          "Scale": [
-            1,
-            1,
-            1
-          ]
-        },
-        "script:0466d045275efa83c403ede9d7a407b0": {
-          "interval": 3.0
-        },
-        "MeshRenderer": {
-          "Mesh": {
-            "guid": "2ddd013f2460aee0ad4411267438b9e3",
-            "localId": 2
-          },
-          "Materials": [
-            {
-              "guid": "5528c04a45437a475f688dd0f274fb72",
-              "localId": 0
-            }
-          ]
-        }
-      },
-      "parent": "5323dc27f77199564ffdd444a3478a09"
     }
   ]
 }

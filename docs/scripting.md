@@ -101,7 +101,7 @@ or `debug`.
   `self.entity` is the AI, the declared `properties` take the node's parameters over their defaults, `bb:get(key)` / `bb:set(key, value)` / `bb:has(key)` are the blackboard.
   A leaf script is for trees: put it in a `LuaAction` / `LuaCondition` node, not on an entity.
 - **Navigation:** queries against the baked navmesh of the scene that plays (a `NavMeshVolume` with a `.wnav`, see the Navigation panel); without one they answer
-  failed / `nil` / `false`. `Nav.find_path(from, to [, area_mask])` is `{ status = "complete" | "partial" | "failed", length, points = { vec3... } }` (partial: the walk
+  failed / `nil` / `false`. `Nav.area_mask({"Walkable", "Mud"})` gives the bit set of named areas of the project, for `area_mask`. `Nav.find_path(from, to [, area_mask])` is `{ status = "complete" | "partial" | "failed", length, points = { vec3... } }` (partial: the walk
   ends where it comes closest), `Nav.nearest_point(p [, extents])`, `Nav.raycast(a, b)` (`hit, point`: the line leaves the mesh), `Nav.random_point(centre, radius)`,
   `Nav.has_navmesh()`. A vector that is not made of finite numbers is a Lua error. `Nav.agent(entity)` is the handle of the entity's `NavAgent` (an error without one):
   `:set_destination(v)` (false when there is no route), `:stop()`, `:warp(v)`, `:state()` (`"idle"`, `"moving"`, `"arrived"`, `"no_path"`), `:remaining_distance()`,

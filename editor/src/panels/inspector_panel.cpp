@@ -8,6 +8,7 @@
 
 #include <scene/reflection/component_registry.h>
 #include <core/engine.h>
+#include <nav/nav_module.h>
 #include <assets/asset_manager.h>
 #include <scene/particle_runtime.h>
 
@@ -493,9 +494,27 @@ bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& 
 	{
 		int v = std::get<i32>(current);
 		std::vector<const char*> names;
-		for (const std::string& name : field.Meta.EnumNames)
+		std::vector<std::string> shown; // the project's names of navigation areas; an unused slot says so
+		if (field.Meta.NavAreas)
 		{
-			names.push_back(name.c_str());
+			const wiwa::NavModule* nav = wiwa::Engine::get().get_module<wiwa::NavModule>();
+			const wiwa::NavSettings defaults;
+			const wiwa::NavSettings& areas = nav != nullptr ? nav->settings() : defaults;
+			for (size_t i = 0; i < field.Meta.EnumNames.size(); i++)
+			{
+				shown.push_back(areas.used(static_cast<u32>(i)) ? areas.AreaName[i] : "(unused) " + field.Meta.EnumNames[i]);
+			}
+			for (const std::string& name : shown)
+			{
+				names.push_back(name.c_str());
+			}
+		}
+		else
+		{
+			for (const std::string& name : field.Meta.EnumNames)
+			{
+				names.push_back(name.c_str());
+			}
 		}
 		if (!names.empty() && ImGui::Combo(label, &v, names.data(), static_cast<int>(names.size()))) { value = static_cast<i32>(v); changed = true; }
 		break;

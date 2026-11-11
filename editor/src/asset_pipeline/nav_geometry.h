@@ -60,8 +60,8 @@ namespace wiwa
 	// with the area of its entity's NavAreaTag (or the nearest ancestor's; Walkable when there is none). An entity with a Collider contributes only when its
 	// Collider::Layer is a bit of the volume's LayerMask (a mesh without a collider always contributes). The meshes of an agent (an entity with a NavAgent and
 	// its descendants) are left out: they walk on the ground, they are not part of it. The volume's world transform is brought up to date
-	// first. An entity that is not a NavMeshVolume gives an empty snapshot and error says so. Main thread.
-	NavSnapshot capture_nav_snapshot(Scene& scene, entt::entity volume, std::string* error = nullptr);
+	// first. With `settings` an area id the project does not have is Walkable (the area was removed; one warning). An entity that is not a NavMeshVolume gives an empty snapshot and error says so. Main thread.
+	NavSnapshot capture_nav_snapshot(Scene& scene, entt::entity volume, std::string* error = nullptr, const NavSettings* settings = nullptr);
 
 	// The world-space triangles of the snapshot that touch its box. A skinned mesh is taken in its bind pose; a mesh the source cannot give is left out and
 	// logged. Stops early (with what it has) when `cancel` is set. error says "no geometry touches the volume" when there is none.

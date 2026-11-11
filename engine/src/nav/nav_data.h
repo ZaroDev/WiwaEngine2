@@ -13,7 +13,7 @@ namespace wiwa
 	struct NavFilter
 	{
 		u32 AreaMask = 0xFFFFFFFFu;
-		std::array<float, NAV_AREA_COUNT> AreaCost{ 1, 1, 1, 1, 1, 1, 1, 1 };
+		std::array<float, NAV_AREA_COUNT> AreaCost = NavSettings{}.AreaCost;
 	};
 
 	// A navigation mesh ready to be queried: the Detour mesh made from a NavMeshData. Immutable after create(), so any number of queries and a crowd

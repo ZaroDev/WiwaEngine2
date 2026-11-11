@@ -1,8 +1,21 @@
 #include <editor_common.h>
 #include "nav_edit_model.h"
 
+#include <core/engine.h>
+#include <nav/nav_module.h>
+
 namespace wiwa
 {
+	namespace
+	{
+		// The project areas the running editor uses (the panel applied them): a bake tags removed areas as Walkable. Null when there is no module (a check).
+		const NavSettings* current_nav_settings()
+		{
+			const NavModule* module = Engine::get().get_module<NavModule>();
+			return module != nullptr ? &module->settings() : nullptr;
+		}
+	}
+
 	NavEditModel::NavEditModel(INavMeshSource& meshes) : m_Meshes(meshes) {}
 
 	NavEditModel::~NavEditModel()
@@ -41,7 +54,7 @@ namespace wiwa
 		m_Meshes.refresh();
 
 		std::string error;
-		NavSnapshot snapshot = capture_nav_snapshot(scene, volume, &error);
+		NavSnapshot snapshot = capture_nav_snapshot(scene, volume, &error, current_nav_settings());
 		if (!error.empty())
 		{
 			m_Error = error;
@@ -175,7 +188,7 @@ namespace wiwa
 		}
 		m_Meshes.refresh();
 		std::string error;
-		const NavSnapshot snapshot = capture_nav_snapshot(scene, volume, &error);
+		const NavSnapshot snapshot = capture_nav_snapshot(scene, volume, &error, current_nav_settings());
 		if (!error.empty())
 		{
 			return std::nullopt;

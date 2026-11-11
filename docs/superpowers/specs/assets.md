@@ -71,7 +71,7 @@ A missing or unreadable file gives defaults, logged once.
 
 ## NavMesh
 
-`AssetType::NavMesh` (`.wnav`, baked by the editor, see [navigation.md](navigation.md)): `NavMeshImporter` validates the file and cooks the `NavMeshData`; a corrupt file keeps the previous cook. The packager also packs `nav.wsettings` (area costs, key `NAV_SETTINGS_GUID`) like the audio settings, and reaches the `.wnav` through the scene's `NavMeshVolume.NavMesh` reference.
+`AssetType::NavMesh` (`.wnav`, baked by the editor, see [navigation.md](navigation.md)): `NavMeshImporter` validates the file and cooks the `NavMeshData`; a corrupt file keeps the previous cook. The packager also packs `nav.wsettings` (the navigation areas: names and costs, key `NAV_SETTINGS_GUID`) like the audio settings, and reaches the `.wnav` through the scene's `NavMeshVolume.NavMesh` reference.
 
 ## BehaviorTree
 

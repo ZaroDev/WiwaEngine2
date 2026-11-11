@@ -63,6 +63,7 @@ private:
 	wiwa::AssetDatabase& m_Database;
 	wiwa::AssetManager& m_Assets;
 	Ref<NavSection> m_Section;
+	char m_NewAreaName[64]{};
 	wiwa::AssetNavMeshSource m_Source;
 	wiwa::NavEditModel m_Model;
 

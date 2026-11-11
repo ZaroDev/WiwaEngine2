@@ -1687,6 +1687,9 @@ def add_navigation(s, g):
 	s.add("Nav wall", "Navigation station", pos=(cx, 1, 0), scale=(16, 2, 1), **crate)
 	s.add("Nav mud", "Navigation station", pos=(cx - 10, 0.05, 0), scale=(4, 0.1, 6), NavAreaTag={"Area": "Mud"},
 		MeshRenderer={"Mesh": ref(g["shapes"], MESH["cube"]), "Materials": [ref(g["mat"]["marker"])]})
+	# a project area of our own (nav.wsettings names it Swamp, slot 4, which a scene stores as "Custom0"): half of the east way, so the walk goes round it
+	s.add("Nav swamp", "Navigation station", pos=(cx + 9, 0.05, 0), scale=(2.4, 0.1, 6), NavAreaTag={"Area": "Custom0"},
+		MeshRenderer={"Mesh": ref(g["shapes"], MESH["cube"]), "Materials": [ref(g["mat"]["marker"])]})
 	for i, (gx, gz) in enumerate(NAV_GOALS):
 		colour = ("neon_cyan", "neon_magenta", "neon_orange")[i]
 		name = "Nav agent %d" % (i + 1)
@@ -1697,8 +1700,10 @@ def add_navigation(s, g):
 
 
 def write_nav_settings():
-	"""The project's navigation settings: walking through mud costs 8 times as much, which sends the agents of the navigation station round it."""
-	(ROOT / "editor" / "nav.wsettings").write_text(json.dumps({"areaCost": {"Mud": 8.0}}, indent=2) + "\n", encoding="utf-8", newline="\n")
+	"""The project's navigation settings: walking through mud costs 8 times as much, which sends the agents of the navigation station round it; Swamp is
+	an area the project made up (slot 4, cost 5) and is on the east way. editor/src/play/demo_smoke.cpp checks that the project has it."""
+	areas = {"areas": [{"id": 1, "cost": 1.0}, {"id": 2, "name": "Mud", "cost": 8.0}, {"id": 3, "name": "Water", "cost": 1.0}, {"id": 4, "name": "Swamp", "cost": 5.0}]}
+	(ROOT / "editor" / "nav.wsettings").write_text(json.dumps(areas, indent=2) + "\n", encoding="utf-8", newline="\n")
 	# the record of the navmesh asset, so that the guid the volume refers to is the one the baked file gets (the file itself comes from --nav-bake)
 	(ASSETS / NAV_FILE).parent.mkdir(parents=True, exist_ok=True)
 	write_meta(NAV_FILE, "NavMeshImporter", 1)

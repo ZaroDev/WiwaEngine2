@@ -73,7 +73,7 @@ One panel for the animation assets: a preview on the left, the tools of the open
 
 ## Navigation panel
 
-See [navigation.md](navigation.md). `NavigationPanel` (Window menu) bakes the volumes of the edit scene on a worker (`NavEditModel`), imports the `.wnav` and puts it in the volume through `SceneEditor::set_field`, shows the stale check, the area costs (`NavSection`, `nav.wsettings`), the overlay and the path test. `ViewportPanel` has two generic hooks for it: `set_overlay_hook` (draws through the debug draw after the gizmos) and `set_ray_click_hook` (a click as a world ray; returns true when used, then nothing is selected). `--nav-bake <file>` (with `--scene`) bakes the first volume headless. The saved ImGui layout restores each panel's open state after construction, so a smoke that needs its panel drawn forces it open.
+See [navigation.md](navigation.md). `NavigationPanel` (Window menu) bakes the volumes of the edit scene on a worker (`NavEditModel`), imports the `.wnav` and puts it in the volume through `SceneEditor::set_field`, shows the stale check, the Areas table (`NavSection`, `nav.wsettings`: add, rename, remove, a cost each; up to 16), the overlay and the path test. `ViewportPanel` has two generic hooks for it: `set_overlay_hook` (draws through the debug draw after the gizmos) and `set_ray_click_hook` (a click as a world ray; returns true when used, then nothing is selected). `--nav-bake <file>` (with `--scene`) bakes the first volume headless. The saved ImGui layout restores each panel's open state after construction, so a smoke that needs its panel drawn forces it open.
 
 ## Behaviour tree editor
 

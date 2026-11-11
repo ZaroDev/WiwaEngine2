@@ -168,7 +168,7 @@ namespace wiwa
 			WI_FIELD(Enabled)));
 
 		registry.register_component(WI_COMPONENT(NavAreaTag,
-			WI_FIELD_META(Area, FieldMeta::enumeration({ "NotWalkable", "Walkable", "Mud", "Water", "Custom0", "Custom1", "Custom2", "Custom3" }))));
+			WI_FIELD_META(Area, FieldMeta::nav_area({ "NotWalkable", "Walkable", "Mud", "Water", "Custom0", "Custom1", "Custom2", "Custom3", "Area8", "Area9", "Area10", "Area11", "Area12", "Area13", "Area14", "Area15" }))));
 
 		registry.register_component(WI_COMPONENT(NavAgent,
 			WI_FIELD_META(Speed, FieldMeta::range(0.0f, 100.0f)),

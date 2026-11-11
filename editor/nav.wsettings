@@ -1,5 +1,23 @@
 {
-  "areaCost": {
-    "Mud": 8.0
-  }
+  "areas": [
+    {
+      "id": 1,
+      "cost": 1.0
+    },
+    {
+      "id": 2,
+      "name": "Mud",
+      "cost": 8.0
+    },
+    {
+      "id": 3,
+      "name": "Water",
+      "cost": 1.0
+    },
+    {
+      "id": 4,
+      "name": "Swamp",
+      "cost": 5.0
+    }
+  ]
 }

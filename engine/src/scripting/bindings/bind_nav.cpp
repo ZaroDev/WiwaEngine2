@@ -130,6 +130,34 @@ namespace wiwa
 				return agent;
 			});
 
+		// Nav.area_mask({ "Walkable", "Mud" }): the bit set of the named areas of the project (an error for a name the project has no area of).
+		nav.set_function("area_mask", [&context](const sol::object& names)
+			{
+				if (names.get_type() != sol::type::table)
+				{
+					throw sol::error("Nav.area_mask: pass a list of area names, e.g. Nav.area_mask({\"Walkable\", \"Mud\"})");
+				}
+				const NavSettings& settings = nav_of(context).settings();
+				const sol::table list = names.as<sol::table>();
+				double mask = 0.0;
+				for (size_t i = 1; i <= list.size(); i++)
+				{
+					const sol::object entry = list[i];
+					if (entry.get_type() != sol::type::string)
+					{
+						throw sol::error("Nav.area_mask: every area name must be a string");
+					}
+					const std::string name = entry.as<std::string>();
+					const int id = nav_area_id(settings, name);
+					if (id < 0)
+					{
+						throw sol::error("Nav.area_mask: the project has no area called \"" + name + "\"");
+					}
+					mask += static_cast<double>(1u << id);
+				}
+				return mask;
+			});
+
 		// { status = "complete" | "partial" | "failed", length = metres, points = { vec3, ... } }. Partial: the walk ends where it comes closest to the
 		// target. No navmesh, or no mesh near a point: failed, no points.
 		nav.set_function("find_path", [&context](const sol::object& from, const sol::object& to, const sol::object& mask, sol::this_state state)
