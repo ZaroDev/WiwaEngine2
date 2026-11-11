@@ -39,6 +39,8 @@ project "wiwa"
 		"%{IncludeDirs.sol2}",
 		"%{IncludeDirs.Jolt}",
 		"%{IncludeDirs.miniaudio}",
+		"%{IncludeDirs.Detour}",
+		"%{IncludeDirs.DetourCrowd}",
 	}
 
 	links
@@ -55,7 +57,9 @@ project "wiwa"
 		"vk-bootstrap",
 		"ImGui",
 		"lua",
-		"Jolt"
+		"Jolt",
+		"Detour",
+		"DetourCrowd"
 		-- "Optick",
 		-- "ImGuizmo",
 	}
