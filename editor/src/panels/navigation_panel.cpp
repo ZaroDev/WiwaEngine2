@@ -202,14 +202,15 @@ void NavigationPanel::draw_overlay(wiwa::DebugDraw& draw)
 
 bool NavigationPanel::handle_ray_click(glm::vec3 origin, glm::vec3 direction, bool shift)
 {
-	if (!m_PathTest || !m_OverlayQuery || m_OverlayView.empty())
+	// Only while the tool can be seen: a closed panel or a hidden overlay must not eat the clicks that select.
+	if (!m_PathTest || !is_active() || !m_ShowOverlay || !m_OverlayQuery || m_OverlayView.empty())
 	{
 		return false;
 	}
 	const std::optional<glm::vec3> hit = wiwa::NavPathTool::pick(m_OverlayView, origin, direction);
 	if (!hit)
 	{
-		return true; // the path test is on: a click that misses the mesh selects nothing either
+		return false; // a click beside the mesh selects as usual
 	}
 	if (shift)
 	{

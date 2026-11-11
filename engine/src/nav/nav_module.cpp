@@ -175,7 +175,10 @@ namespace wiwa
 			m_Queued.clear();
 			for (const auto& [entity, destination] : queued)
 			{
-				m_Agents->set_destination(*scene, entity, destination);
+				if (!m_Agents->set_destination(*scene, entity, destination) && m_Agents->OnState)
+				{
+					m_Agents->OnState(entity, NavAgentState::NoPath); // asked for while loading: the script waits for an answer
+				}
 			}
 		}
 	}
@@ -194,8 +197,16 @@ namespace wiwa
 			break;
 		case LoadState::Failed:
 			m_Loading = false;
-			m_Queued.clear();
 			WI_NAV_LOG(Error, "Navigation: the navmesh asset failed to load; rebake it in the Navigation panel");
+			for (const auto& [entity, destination] : m_Queued)
+			{
+				const auto listeners = m_Listeners;
+				for (const auto& [id, listener] : listeners)
+				{
+					listener(entity, NavAgentState::NoPath);
+				}
+			}
+			m_Queued.clear();
 			break;
 		default:
 			break;

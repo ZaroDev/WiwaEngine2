@@ -629,6 +629,64 @@ namespace wiwa
 				check(!module.start_world(nullptr), "nav_no_volume: no scene, no world");
 			}
 
+			// Several agents sent to one point all arrive (they cannot overlap, the crowd settles them near it).
+			{
+				const NavMeshData mesh = baked(check, floor_fixture(false));
+				NavModule module;
+				module.set_auto_start(false);
+				Ref<Scene> scene = CreateRef<Scene>();
+				std::vector<entt::entity> walkers;
+				for (int i = 0; i < 4; i++)
+				{
+					walkers.push_back(add_agent(*scene, glm::vec3(-8.0f, 0.0f, -3.0f + 2.0f * static_cast<float>(i))));
+				}
+				module.start_world_with_mesh(scene, mesh);
+				run_frames(module, 2);
+				for (const entt::entity walker : walkers)
+				{
+					module.set_destination(walker, glm::vec3(6.0f, 0.0f, 0.0f));
+				}
+				for (int i = 0; i < 2400; i++)
+				{
+					run_frames(module, 1);
+					bool all = true;
+					for (const entt::entity walker : walkers)
+					{
+						all = all && module.state(walker) != NavAgentState::Moving;
+					}
+					if (all)
+					{
+						break;
+					}
+				}
+				bool arrived = true;
+				for (const entt::entity walker : walkers)
+				{
+					arrived = arrived && module.state(walker) == NavAgentState::Arrived;
+				}
+				check(arrived, "agent_shared_destination: four agents sent to one point all arrive");
+			}
+
+			// A destination asked for while the navmesh loads gets an answer when the load fails.
+			{
+				NavModule module;
+				module.set_auto_start(false);
+				Ref<Scene> scene = CreateRef<Scene>();
+				const entt::entity agent = add_agent(*scene, west);
+				const entt::entity volume = scene->create("Volume");
+				scene->registry().emplace<NavMeshVolume>(volume).NavMesh.Guid = AssetGuid{ 0x3333u, 0x4444u };
+				std::vector<NavAgentState> events;
+				module.add_listener([&](entt::entity, NavAgentState state) { events.push_back(state); });
+				module.start_world(scene);
+				check(module.loading() && module.set_destination(agent, east), "queued_destination: a destination is accepted while the mesh loads");
+				for (int i = 0; i < 600 && events.empty(); i++)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(5));
+					module.tick(nullptr, true, 1.0f / 60.0f);
+				}
+				check(events.size() == 1 && events[0] == NavAgentState::NoPath && !module.loading(), "queued_destination: a mesh that fails to load tells the waiting agent NoPath");
+			}
+
 			// Two enabled volumes: the first wins, the other is counted.
 			{
 				NavModule module;
@@ -763,6 +821,7 @@ namespace wiwa
 
 				check(h.fails("Nav.find_path(vec3(0/0,0,0), vec3(1,0,0))", "finite"), "lua_nan: a NaN vector is an error that says finite");
 				check(h.fails("Nav.nearest_point(vec3(1,1/0,1))", "finite"), "lua_inf: an infinite vector is an error");
+				check(h.fails("Nav.agent(find_entity('Walker')).state()", "colon") && h.fails("Nav.agent(find_entity('Walker')).stop()", "colon"), "lua_dot_call: an agent method called with a dot is a Lua error, not a crash");
 				check(h.fails("Nav.agent(find_entity('Bare'))", "NavAgent"), "lua_no_agent: an entity without a NavAgent is an error that names the component");
 				check(h.fails("Nav.find_path(5, 6)", "vec3") && h.fails("Nav.agent(5)", "entity") && h.fails("Nav.random_point(vec3(0,0,0), {})", "number") && h.fails("Nav.agent(find_entity('Walker')):warp('x')", "vec3"), "lua_bad_args: a number, a table or a string where a vector, an entity or a number goes is a Lua error, not a crash");
 

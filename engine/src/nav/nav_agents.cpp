@@ -56,6 +56,7 @@ namespace wiwa
 			ParamsKey Last{};
 			glm::vec3 Velocity{ 0.0f };
 			bool WarnedFull = false;
+			float Settled = 0.0f;           // seconds the agent has hardly moved while walking
 		};
 	}
 
@@ -295,7 +296,11 @@ namespace wiwa
 			{
 				const bool failed = crowdAgent->targetState == DT_CROWDAGENT_TARGET_FAILED;
 				const float arrival = std::max(agent.StoppingDistance, 0.1f);
-				if (failed || glm::distance(position, entry.Target) <= arrival)
+				const float distance = glm::distance(position, entry.Target);
+				// Agents that share a destination cannot overlap: those that cannot get closer, near it, have arrived.
+				entry.Settled = glm::length(glm::vec2(entry.Velocity.x, entry.Velocity.z)) < 0.15f ? entry.Settled + dt : 0.0f;
+				const bool crowded = entry.Settled > 1.0f && distance <= std::max(arrival, key_of(agent).Radius * 4.0f);
+				if (failed || distance <= arrival || crowded)
 				{
 					impl.Crowd->resetMoveTarget(entry.Index);
 					entry.State = (failed || entry.Partial) ? NavAgentState::NoPath : NavAgentState::Arrived;

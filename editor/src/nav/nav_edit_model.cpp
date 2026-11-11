@@ -38,6 +38,7 @@ namespace wiwa
 			return false;
 		}
 		wait(); // a finished worker that has not been collected
+		m_Meshes.refresh();
 
 		std::string error;
 		NavSnapshot snapshot = capture_nav_snapshot(scene, volume, &error);
@@ -172,6 +173,7 @@ namespace wiwa
 		{
 			return std::nullopt;
 		}
+		m_Meshes.refresh();
 		std::string error;
 		const NavSnapshot snapshot = capture_nav_snapshot(scene, volume, &error);
 		if (!error.empty())

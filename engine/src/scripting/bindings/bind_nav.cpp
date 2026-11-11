@@ -57,8 +57,19 @@ namespace wiwa
 			return static_cast<u32>(static_cast<u64>(mask.as<double>()));
 		}
 
-		entt::entity agent_entity(ScriptContext& context, const LuaNavAgent& agent)
+		// `self` of an agent method: called with a dot instead of a colon it is not an agent, and sol2 (no safety defines) would read it unchecked.
+		const LuaNavAgent& self_of(const sol::object& self)
 		{
+			if (!self.is<LuaNavAgent>())
+			{
+				throw sol::error("call agent methods with a colon: agent:state()");
+			}
+			return self.as<LuaNavAgent&>();
+		}
+
+		entt::entity agent_entity(ScriptContext& context, const sol::object& self)
+		{
+			const LuaNavAgent& agent = self_of(self);
 			const entt::entity entity = agent.Entity.resolve();
 			if (entity == entt::null)
 			{
@@ -89,33 +100,33 @@ namespace wiwa
 
 		lua.new_usertype<LuaNavAgent>("NavAgent", sol::no_constructor,
 			// Starts a walk to the nearest point of the navmesh to the destination; false if there is no navmesh, none near it, or no route.
-			"set_destination", [&context](const LuaNavAgent& agent, const sol::object& destination) -> bool
+			"set_destination", [&context](const sol::object& agent, const sol::object& destination) -> bool
 			{
 				const glm::vec3 target = vec3_arg(destination, "agent:set_destination", "the destination");
 				return nav_of(context).set_destination(agent_entity(context, agent), target);
 			},
-			"stop", [&context](const LuaNavAgent& agent) { nav_of(context).stop(agent_entity(context, agent)); },
-			"warp", [&context](const LuaNavAgent& agent, const sol::object& position) -> bool
+			"stop", [&context](const sol::object& agent) { nav_of(context).stop(agent_entity(context, agent)); },
+			"warp", [&context](const sol::object& agent, const sol::object& position) -> bool
 			{
 				const glm::vec3 target = vec3_arg(position, "agent:warp", "the position");
 				return nav_of(context).warp(agent_entity(context, agent), target);
 			},
 			// "idle", "moving", "arrived" or "no_path".
-			"state", [&context](const LuaNavAgent& agent) { return std::string(state_name(nav_of(context).state(agent_entity(context, agent)))); },
-			"remaining_distance", [&context](const LuaNavAgent& agent) { return nav_of(context).remaining_distance(agent_entity(context, agent)); },
-			"velocity", [&context](const LuaNavAgent& agent) { return LuaVec3{ nav_of(context).velocity(agent_entity(context, agent)), {} }; });
+			"state", [&context](const sol::object& agent) { return std::string(state_name(nav_of(context).state(agent_entity(context, agent)))); },
+			"remaining_distance", [&context](const sol::object& agent) { return nav_of(context).remaining_distance(agent_entity(context, agent)); },
+			"velocity", [&context](const sol::object& agent) { return LuaVec3{ nav_of(context).velocity(agent_entity(context, agent)), {} }; });
 
 		sol::table nav = lua.create_table();
 
 		// The handle of the NavAgent of an entity (an error when it has none).
-		nav.set_function("agent", [&context](const sol::object& entity)
+		nav.set_function("agent", [&context](const sol::object& entity, sol::this_state state)
 			{
 				if (!entity.is<EntityHandle>())
 				{
 					throw sol::error("Nav.agent: the argument must be an entity");
 				}
 				LuaNavAgent agent{ entity.as<EntityHandle>() };
-				agent_entity(context, agent);
+				agent_entity(context, sol::make_object(sol::state_view(state), agent));
 				return agent;
 			});
 

@@ -39,6 +39,8 @@ namespace wiwa
 	public:
 		virtual ~INavMeshSource() = default;
 		virtual const MeshData* get(const AssetRef& ref, const std::atomic<bool>* cancel) = 0;
+		// Forget what was loaded, so that the next get() reads meshes that were re-imported since (called on the main thread, before a bake starts).
+		virtual void refresh() {}
 	};
 
 	// The meshes of the asset manager: loads them and waits for those loads only (never for every load pending in the editor), up to a minute each.
@@ -47,6 +49,7 @@ namespace wiwa
 	public:
 		explicit AssetNavMeshSource(AssetManager& assets) : m_Assets(assets) {}
 		virtual const MeshData* get(const AssetRef& ref, const std::atomic<bool>* cancel) override;
+		virtual void refresh() override { m_Handles.clear(); }
 
 	private:
 		AssetManager& m_Assets;
