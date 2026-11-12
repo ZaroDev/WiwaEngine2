@@ -125,6 +125,7 @@ namespace wiwa
 			register_skinning_checks();
 			register_material_checks();
 			register_ui_checks();
+			register_video_checks();
 
 			register_render_check("copy_queue_roundtrip", [](RenderCheckContext& context)
 				{

@@ -10,6 +10,7 @@
 
 #include <assets/asset_guid.h>
 #include <core/module.h>
+#include <video/video_types.h>
 
 #include "debug/debug_draw.h"
 #include "imgui_layer.h"
@@ -156,6 +157,11 @@ namespace wiwa
 		// thread has uploaded the image, a frame or two later. release_ui_image() frees it. 0 for an image with no pixels. Main thread.
 		u32 create_ui_image(const ImageData& image);
 		void release_ui_image(u32 id);
+
+		// The pictures of a playing video (video/video_module.h): the render thread keeps one texture per stream, the UI draws it by
+		// view_video_texture_id(stream). A picture is written a frame or two after the call; the frame stays alive until then.
+		void upload_video_frame(u32 stream, std::shared_ptr<const VideoFrame> frame);
+		void release_video_stream(u32 stream);
 
 		GraphicsApi get_api() const { return m_Description.Api; }
 		// False if the renderer could not start or has failed since.

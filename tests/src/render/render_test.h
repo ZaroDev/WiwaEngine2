@@ -85,6 +85,8 @@ namespace wiwa
 	void register_material_checks();
 	// The UI pass: quads, clipping, images, SDF text (ui_checks.cpp).
 	void register_ui_checks();
+	// The picture of a playing video on the screen (video_checks.cpp).
+	void register_video_checks();
 
 	// `--render-test`: runs every check once on the render thread. True when all passed.
 	bool run_render_checks(RenderWorld& world);

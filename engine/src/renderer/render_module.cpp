@@ -14,6 +14,7 @@
 #include "passes/forward_pass.h"
 #include "passes/imgui_pass.h"
 #include "passes/ui_pass.h"
+#include "video/video_texture.h"
 #include "passes/decal_pass.h"
 #include "passes/light_cull_pass.h"
 #include "passes/particle_render_pass.h"
@@ -364,6 +365,30 @@ namespace wiwa
 				world.get_renderer().get_textures().set(id, texture);
 			});
 		return id;
+	}
+
+	void RenderModule::upload_video_frame(u32 stream, std::shared_ptr<const VideoFrame> frame)
+	{
+		if (!m_Started || !frame)
+		{
+			return;
+		}
+		submit([stream, frame = std::move(frame)](RenderWorld& world)
+			{
+				upload_video_picture(world, stream, *frame);
+			});
+	}
+
+	void RenderModule::release_video_stream(u32 stream)
+	{
+		if (!m_Started)
+		{
+			return;
+		}
+		submit([stream](RenderWorld& world)
+			{
+				release_video_picture(world, stream);
+			});
 	}
 
 	void RenderModule::release_ui_image(u32 id)

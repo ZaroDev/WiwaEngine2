@@ -17,6 +17,7 @@
 #include <scene/scene_module.h>
 #include <scripting/script_module.h>
 #include <ui/ui_module.h>
+#include <video/video_module.h>
 
 
 
@@ -62,6 +63,7 @@ namespace wiwa
 		m_ModuleManager.add_module<RenderModule>();
 		m_ModuleManager.add_module<UiModule>(); // before the scripts: the clicks of a frame reach them in that frame
 		m_ModuleManager.add_module<AnimationModule>(); // runs after the scripts (priority 10) but must exist when they start: they ask for it
+		m_ModuleManager.add_module<VideoModule>(); // after the UI (it gives the UI the pictures of Video widgets) and the audio; scripts ask for it, so it must exist when they start
 		m_ModuleManager.add_module<AudioModule>(); // must exist when the scripts start: they ask for it. It runs after them and the animation (priority 20)
 		m_ModuleManager.add_module<NavModule>(); // must exist when the scripts start: they ask for it. It runs after them (priority 5) and before the animation
 		m_ModuleManager.add_module<AIModule>(); // must exist when the scripts start: they ask for it. It runs after them and the NavModule (priority 6)

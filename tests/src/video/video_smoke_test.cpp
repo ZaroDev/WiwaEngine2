@@ -11,10 +11,17 @@
 #include <mutex>
 #include <thread>
 
+#include <assets/asset_manager.h>
+#include <renderer/view/view_types.h>
+#include <scene/components.h>
+#include <scene/scene.h>
+#include <ui/ui_draw_list.h>
+#include <ui/ui_module.h>
 #include <video/null_decoder.h>
 #include <video/video_audio.h>
 #include <video/video_clock.h>
 #include <video/video_decoder.h>
+#include <video/video_module.h>
 #include <video/video_player.h>
 #include <video/video_types.h>
 
@@ -703,6 +710,374 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// A scene with canvases that show panels of Video widgets, the UI module that runs them and a video module with the Null decoder: the same
+		// calls the engine makes each frame (UI interaction, then the video module, then the draw list), by hand.
+		struct ModuleRig
+		{
+			Ref<Scene> TheScene = std::make_shared<Scene>();
+			UiModule Ui{};
+			VideoModule Video{};
+			std::unordered_map<AssetGuid, Ref<AssetSlot>> Slots{};
+			VideoData Data{};
+			u32 LoadingPolls = 0; // the video asset says Loading this many times first
+			bool LoadFails = false;
+			NullDecoderConfig Decoder{};
+			std::vector<std::pair<u32, std::shared_ptr<const VideoFrame>>> Uploads{};
+			std::vector<u32> Releases{};
+			i64 Wall = 0;
+			glm::vec2 Canvas{ 1920.0f, 1080.0f };
+
+			ModuleRig()
+			{
+				Ui.set_panel_loader([this](const AssetRef& ref) -> Handle<UiPanelData>
+				{
+					const auto it = Slots.find(ref.Guid);
+					return it == Slots.end() ? Handle<UiPanelData>{} : Handle<UiPanelData>(ref, it->second);
+				});
+				Data.Name = "clip";
+				Data.Bytes.assign(16, std::byte{ 1 });
+				Video.set_ui_module(&Ui);
+				Video.set_audio_mode(VideoAudioMode::Off);
+				Video.set_decoder_factory([this]() { return create_null_decoder(Decoder); });
+				Video.set_video_loader([this](const AssetRef&) -> VideoAssetBytes
+				{
+					if (LoadFails)
+					{
+						return { LoadState::Failed, nullptr };
+					}
+					if (LoadingPolls > 0)
+					{
+						LoadingPolls--;
+						return { LoadState::Loading, nullptr };
+					}
+					return { LoadState::Ready, &Data };
+				});
+				Video.set_frame_sink([this](u32 stream, std::shared_ptr<const VideoFrame> frame) { Uploads.emplace_back(stream, std::move(frame)); });
+				Video.set_release_sink([this](u32 stream) { Releases.push_back(stream); });
+				Video.init(); // the UI module asks it for the pictures of Video widgets
+			}
+
+			AssetRef add_panel(std::vector<UiWidget> widgets)
+			{
+				UiPanelData data;
+				data.Widgets = std::move(widgets);
+				for (const UiWidget& widget : data.Widgets)
+				{
+					data.NextId = std::max(data.NextId, widget.Id + 1);
+				}
+				const AssetRef ref{ AssetGuid::generate(), 0 };
+				auto slot = std::make_shared<AssetSlot>();
+				slot->Guid = ref.Guid;
+				slot->Data = std::make_shared<UiPanelData>(data);
+				slot->State = LoadState::Ready;
+				Slots[ref.Guid] = slot;
+				return ref;
+			}
+
+			EntityGuid add_canvas(const AssetRef& panel, bool visible = true)
+			{
+				const entt::entity entity = TheScene->create("Canvas");
+				TheScene->registry().emplace<UICanvas>(entity, UICanvas{ panel, 0, visible });
+				return TheScene->registry().get<Id>(entity).Guid;
+			}
+
+			static UiWidget video_widget(UiId id, const char* name, bool autoPlay, const AssetRef& video)
+			{
+				UiWidget widget;
+				widget.Id = id;
+				widget.Kind = WidgetKind::Video;
+				widget.Name = name;
+				widget.AnchorMin = { 0.0f, 0.0f };
+				widget.AnchorMax = { 1.0f, 1.0f };
+				widget.OffsetMin = { 0.0f, 0.0f };
+				widget.OffsetMax = { 0.0f, 0.0f };
+				widget.AutoPlay = autoPlay;
+				widget.Video = video;
+				return widget;
+			}
+
+			UiDrawList frame(bool playing = true, const Ref<Scene>* active = nullptr)
+			{
+				Wall += STEP_US;
+				const Ref<Scene>& scene = active != nullptr ? *active : TheScene;
+				scene->update_world_transforms();
+				Ui.update_interaction(*scene, Canvas);
+				Video.tick(scene, playing, Wall);
+				UiDrawList list;
+				Ui.build_draw_list(*scene, Canvas, list);
+				return list;
+			}
+
+			// Frames until the condition holds (the decode worker is a real thread), or a few seconds pass.
+			bool frames_until(const std::function<bool()>& done, bool playing = true)
+			{
+				const auto start = std::chrono::steady_clock::now();
+				while (std::chrono::steady_clock::now() - start < std::chrono::seconds(3))
+				{
+					frame(playing);
+					if (done())
+					{
+						return true;
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+				return false;
+			}
+
+			UiWidget* widget(const EntityGuid& canvas, UiId id)
+			{
+				UiPanelInstance* instance = Ui.instance_for(*TheScene, canvas);
+				return instance != nullptr ? instance->data().find(id) : nullptr;
+			}
+		};
+
+		void check_module(Check& check)
+		{
+			const AssetRef someVideo{ AssetGuid::generate(), 0 };
+
+			// a widget without a video asset fails with a reason, and says so
+			{
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Intro", false, AssetRef{}) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				rig.frame();
+				const VideoKey key{ canvas, 1 };
+				check(rig.Video.play(key), "module_missing_asset: play on a widget is accepted");
+				rig.frame();
+				check(rig.Video.state(key) == VideoState::Failed && !rig.Video.error(key).empty(), "module_missing_asset: a widget with no video fails with a reason");
+				const auto finished = rig.Video.take_finished();
+				check(finished.size() == 1 && finished[0].second.Failed && finished[0].first == key, "module_missing_asset: and reports Finished{Failed}");
+			}
+
+			// a play on a widget that does not exist
+			{
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Intro", false, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				rig.frame();
+				check(!rig.Video.play(VideoKey{ canvas, 99 }) && !rig.Video.last_error().empty(), "module_no_widget: a widget that is not there is refused with a reason");
+				check(!rig.Video.play(VideoKey{ EntityGuid::generate(), 1 }), "module_no_widget: so is a canvas that is not there");
+				check(rig.Video.state(VideoKey{ canvas, 99 }) == VideoState::Idle && rig.Video.player_count() == 0, "module_no_widget: and nothing plays");
+			}
+
+			// the asset loads: Loading, then it plays
+			{
+				ModuleRig rig;
+				rig.LoadingPolls = 5;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Intro", false, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				rig.frame();
+				const VideoKey key{ canvas, 1 };
+				rig.Video.play(key);
+				rig.frame();
+				check(rig.Video.state(key) == VideoState::Loading, "module_asset_loading: while the asset loads the state is Loading");
+				check(rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Playing; }), "module_asset_loading: once it is loaded the video plays (a play that came first is remembered)");
+			}
+			{
+				ModuleRig rig;
+				rig.LoadFails = true;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Intro", false, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				rig.frame();
+				const VideoKey key{ canvas, 1 };
+				rig.Video.play(key);
+				rig.frame();
+				check(rig.Video.state(key) == VideoState::Failed && !rig.Video.error(key).empty(), "module_asset_failed: an asset that does not load fails with a reason");
+			}
+
+			// no platform decoder
+			{
+				ModuleRig rig;
+				rig.Video.set_decoder_factory([]() -> Scope<IVideoDecoder> { return nullptr; });
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Intro", false, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				rig.frame();
+				const VideoKey key{ canvas, 1 };
+				rig.Video.play(key);
+				rig.frame();
+				check(rig.Video.state(key) == VideoState::Failed && !rig.Video.error(key).empty(), "module_no_decoder: a platform without a decoder fails with a reason");
+			}
+
+			// one active player
+			{
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "A", false, someVideo), ModuleRig::video_widget(2, "B", false, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				rig.frame();
+				const VideoKey a{ canvas, 1 };
+				const VideoKey b{ canvas, 2 };
+				rig.Video.play(a);
+				check(rig.frames_until([&]() { return rig.Video.state(a) == VideoState::Playing; }), "module_one_active_player: the first video plays");
+				const size_t releasedBefore = rig.Releases.size();
+				rig.Video.play(b);
+				rig.frame();
+				check(rig.Video.player_count() == 1, "module_one_active_player: a second play replaces the first: one player");
+				check(rig.Video.state(a) == VideoState::Idle && rig.Releases.size() == releasedBefore + 1, "module_one_active_player: the first one is gone and its picture released");
+				check(rig.frames_until([&]() { return rig.Video.state(b) == VideoState::Playing; }), "module_one_active_player: the second one plays");
+			}
+
+			// auto play
+			{
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Auto", true, someVideo), ModuleRig::video_widget(2, "Manual", false, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				check(rig.frames_until([&]() { return rig.Video.state(VideoKey{ canvas, 1 }) == VideoState::Playing; }), "module_autoplay: a visible AutoPlay widget starts by itself");
+				check(rig.Video.state(VideoKey{ canvas, 2 }) == VideoState::Idle, "module_autoplay: a widget without AutoPlay does not");
+			}
+			{
+				// not while the game clock is stopped (the editor's edit mode)
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Auto", true, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				for (int i = 0; i < 10; i++)
+				{
+					rig.frame(false);
+				}
+				check(rig.Video.player_count() == 0 && rig.Video.state(VideoKey{ canvas, 1 }) == VideoState::Idle, "module_autoplay: nothing starts while the game clock is not playing");
+			}
+
+			// hidden widgets and the game clock
+			{
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Auto", true, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Playing; });
+				rig.widget(canvas, 1)->Visible = false;
+				rig.frame();
+				check(rig.Video.state(key) == VideoState::Paused, "module_hidden_pauses: a hidden widget pauses its video");
+				rig.widget(canvas, 1)->Visible = true;
+				rig.frame();
+				check(rig.Video.state(key) == VideoState::Playing, "module_hidden_pauses: shown again it goes on");
+
+				rig.frame(false);
+				check(rig.Video.state(key) == VideoState::Paused, "module_game_clock_pauses: a stopped game clock pauses the video");
+				rig.frame(true);
+				check(rig.Video.state(key) == VideoState::Playing, "module_game_clock_pauses: and it goes on with the clock");
+
+				// a pause the script asked for is not undone by the clock
+				rig.Video.pause(key);
+				rig.frame(false);
+				rig.frame(true);
+				check(rig.Video.state(key) == VideoState::Paused, "module_game_clock_pauses: a video the script paused stays paused");
+
+				// the canvas hidden
+				rig.Video.play(key);
+				rig.frame();
+				rig.TheScene->registry().get<UICanvas>(rig.TheScene->find(canvas)).Visible = false;
+				rig.frame();
+				check(rig.Video.state(key) == VideoState::Paused, "module_hidden_pauses: a hidden canvas pauses its video");
+			}
+
+			// the pictures go to the renderer, and the widget draws them
+			{
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Auto", true, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				check(rig.frames_until([&]() { return !rig.Uploads.empty(); }), "module_frames_uploaded: a playing video sends its pictures");
+				rig.frames_until([&]() { return rig.Uploads.size() >= 4; });
+				bool sameStream = !rig.Uploads.empty();
+				bool distinct = true;
+				for (size_t i = 0; i < rig.Uploads.size(); i++)
+				{
+					sameStream = sameStream && rig.Uploads[i].first == rig.Uploads[0].first;
+					distinct = distinct && (i == 0 || rig.Uploads[i].second != rig.Uploads[i - 1].second);
+				}
+				check(sameStream, "module_frames_uploaded: all of them to the stream of the player");
+				check(distinct, "module_frames_uploaded: a picture is sent once, not every frame");
+
+				if (!rig.Uploads.empty())
+				{
+					const std::optional<UiVideoView> view = rig.Video.view(key);
+					check(view && view->Texture == view_video_texture_id(rig.Uploads[0].first) && view->Size == glm::vec2(64.0f, 36.0f), "module_view: the widget gets the texture of the stream and the size of the picture");
+					const UiDrawList list = rig.frame();
+					bool drawn = false;
+					for (const UiBatch& batch : list.Batches)
+					{
+						drawn = drawn || (batch.Kind == UiQuadKind::Image && batch.ViewTexture == view_video_texture_id(rig.Uploads[0].first));
+					}
+					check(drawn, "module_view: the draw list draws that texture");
+				}
+				check(!rig.Video.view(VideoKey{ canvas, 77 }).has_value(), "module_view: another widget has no picture");
+			}
+
+			// the scene goes away
+			{
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Auto", true, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Playing && !rig.Uploads.empty(); });
+				const size_t released = rig.Releases.size();
+				Ref<Scene> other = std::make_shared<Scene>();
+				rig.frame(true, &other);
+				check(rig.Video.player_count() == 0 && rig.Video.state(key) == VideoState::Idle, "module_scene_change_stops: another scene stops the video");
+				check(rig.Releases.size() == released + 1, "module_scene_change_stops: and releases its picture, once");
+				rig.frame(true, &other);
+				check(rig.Releases.size() == released + 1, "module_scene_change_stops: not again");
+			}
+			{
+				// the canvas is destroyed
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Auto", true, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Playing; });
+				rig.TheScene->destroy(rig.TheScene->find(canvas));
+				rig.frame();
+				check(rig.Video.player_count() == 0, "module_scene_change_stops: a destroyed canvas stops its video");
+			}
+
+			// a canvas with no area
+			{
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Auto", true, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				rig.Canvas = { 0.0f, 0.0f };
+				for (int i = 0; i < 20; i++)
+				{
+					rig.frame();
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+				check(rig.Video.state(VideoKey{ canvas, 1 }) != VideoState::Failed, "module_zero_canvas: a canvas with no area does not break playback");
+			}
+
+			// the end of a clip
+			{
+				ModuleRig rig;
+				rig.Decoder.DurationSeconds = 0.2;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Auto", true, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				check(rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Ended; }), "module_finished: a short clip ends");
+				const auto finished = rig.Video.take_finished();
+				check(finished.size() == 1 && finished[0].first == key && !finished[0].second.Failed && !finished[0].second.Skipped, "module_finished: and reports Finished{}");
+				check(rig.Video.take_finished().empty(), "module_finished: once");
+			}
+
+			// stop, and shutdown
+			{
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Auto", true, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Playing; });
+				rig.Video.stop(key);
+				rig.frame();
+				const auto finished = rig.Video.take_finished();
+				check(rig.Video.state(key) == VideoState::Idle && finished.size() == 1 && finished[0].second.Skipped, "module_stop: stop ends it Idle with Finished{Skipped}");
+				rig.Video.play(key);
+				const size_t released = rig.Releases.size();
+				rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Playing; });
+				rig.Video.shutdown();
+				check(rig.Video.player_count() == 0 && rig.Releases.size() == released + 1, "module_shutdown: shutting down stops the player and releases its picture");
+			}
+		}
+	}
+
 	bool run_video_smoke_test(AssetPipelineModule&)
 	{
 		Check check;
@@ -716,6 +1091,7 @@ namespace wiwa
 		check_player_lifecycle(check);
 		check_audio_out(check);
 		check_player_audio(check);
+		check_module(check);
 
 		if (check.Failures == 0)
 		{

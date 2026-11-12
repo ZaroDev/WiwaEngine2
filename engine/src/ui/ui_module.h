@@ -66,6 +66,11 @@ namespace wiwa
 		const FontData* font_for(const AssetRef& font) const { return m_Fonts ? m_Fonts(font) : nullptr; }
 		std::optional<glm::vec2> texture_size_for(const AssetRef& texture) const { return m_TextureSizes ? m_TextureSizes(texture) : std::nullopt; }
 
+		// Where the pictures of Video widgets come from (video/video_module.h sets it): for a widget of a canvas, the texture and size of the picture
+		// that is playing in it, or nothing. Without one a Video widget is its bar colour.
+		using VideoProvider = std::function<std::optional<UiVideoView>(const EntityGuid& canvas, UiId widget)>;
+		void set_video_provider(VideoProvider provider) { m_VideoProvider = std::move(provider); }
+
 		// The panel asset was cooked again: its canvases ask for it again.
 		void reload_panel(const AssetRef& panel);
 
@@ -85,6 +90,7 @@ namespace wiwa
 		{
 			UiPanelInstance* Instance = nullptr;
 			bool CanvasVisible = true;
+			EntityGuid Canvas{};
 		};
 
 		std::vector<Active> sync(Scene& scene);
@@ -100,6 +106,7 @@ namespace wiwa
 		std::optional<RenderCamera> m_CameraOverride{};
 		std::optional<glm::vec2> m_CanvasOverride{};
 		PanelLoader m_Loader{};
+		VideoProvider m_VideoProvider{};
 		FontProvider m_Fonts{};
 		std::unordered_set<std::string> m_WarnedViews{}; // names of views a ViewImage asked for that did not exist
 		TextureSizeProvider m_TextureSizes{};
