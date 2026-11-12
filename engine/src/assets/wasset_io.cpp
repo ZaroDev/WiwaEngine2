@@ -788,6 +788,40 @@ namespace wiwa
 		}
 	}
 
+	void archive(BinaryArchive& ar, VideoData& v)
+	{
+		u32 version = 1;
+		ar.value(version);
+		if (ar.reading() && ar.ok() && version != 1)
+		{
+			ar.fail();
+			return;
+		}
+
+		ar.string(v.Name);
+		ar.pod_vector(v.Bytes);
+		u8 hasInfo = v.HasInfo ? 1 : 0;
+		ar.value(hasInfo);
+		v.HasInfo = hasInfo != 0;
+		if (v.HasInfo)
+		{
+			ar.value(v.Info.Width);
+			ar.value(v.Info.Height);
+			ar.value(v.Info.Fps);
+			ar.value(v.Info.DurationSeconds);
+			u8 hasAudio = v.Info.HasAudio ? 1 : 0;
+			ar.value(hasAudio);
+			v.Info.HasAudio = hasAudio != 0;
+			ar.value(v.Info.SampleRate);
+			ar.value(v.Info.Channels);
+		}
+
+		if (ar.reading() && ar.ok() && (v.Name.empty() || v.Bytes.empty() || ar.remaining() != 0))
+		{
+			ar.fail();
+		}
+	}
+
 	void archive(BinaryArchive& ar, AudioClipData& v)
 	{
 		u32 version = 1;

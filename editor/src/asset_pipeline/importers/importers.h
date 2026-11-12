@@ -26,6 +26,7 @@ namespace wiwa
 	Scope<IImporter> create_particle_file_importer(); // .wfx
 	Scope<IImporter> create_sound_bank_importer();    // .bnk
 	Scope<IImporter> create_audio_clip_importer();    // .wav .mp3 .flac .ogg
+	Scope<IImporter> create_video_importer();         // .mp4 .m4v .mov
 	Scope<IImporter> create_nav_mesh_importer();      // .wnav
 	Scope<IImporter> create_behavior_tree_importer(); // .wbt
 }

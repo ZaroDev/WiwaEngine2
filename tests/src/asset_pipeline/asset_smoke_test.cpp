@@ -105,6 +105,7 @@ namespace wiwa
 			case AssetType::AudioClip: { auto h = manager.load<AudioClipData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::NavMesh: { auto h = manager.load<NavMeshData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::BehaviorTree: { auto h = manager.load<BehaviorTreeData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::Video: { auto h = manager.load<VideoData>(ref); return [h]() { return h.state(); }; }
 			default: return []() { return LoadState::Failed; };
 			}
 		}
@@ -819,6 +820,123 @@ namespace wiwa
 			database.scan();
 		}
 
+
+		// 6b. video assets (.mp4): the bytes are cooked as they are, a file that is not a video is refused, a panel that names a video depends on it
+		{
+			check(static_cast<u32>(AssetType::Video) == static_cast<u32>(AssetType::BehaviorTree) + 1 && static_cast<u32>(AssetType::Last) == static_cast<u32>(AssetType::Video) + 1,
+				"video_asset_type_appended: Video follows the last older type, so no number in an existing file changes");
+
+			VideoData payload;
+			payload.Name = "clip";
+			payload.Bytes = { std::byte{ 1 }, std::byte{ 2 }, std::byte{ 3 } };
+			payload.Info.Width = 64;
+			payload.Info.Height = 36;
+			payload.Info.Fps = 30.0f;
+			payload.Info.DurationSeconds = 2.5;
+			payload.Info.HasAudio = true;
+			payload.Info.SampleRate = 48000;
+			payload.Info.Channels = 2;
+			payload.HasInfo = true;
+			const std::vector<std::byte> payloadBytes = serialize(payload);
+			const std::optional<VideoData> payloadBack = deserialize<VideoData>(payloadBytes);
+			check(payloadBack && payloadBack->Name == "clip" && payloadBack->Bytes == payload.Bytes && payloadBack->HasInfo && payloadBack->Info.Width == 64 &&
+				payloadBack->Info.Height == 36 && payloadBack->Info.DurationSeconds == 2.5 && payloadBack->Info.SampleRate == 48000, "video_payload_roundtrip: the bytes and the info survive");
+			bool truncatedVideoAccepted = false;
+			for (size_t length = 0; length < payloadBytes.size(); length++)
+			{
+				truncatedVideoAccepted = truncatedVideoAccepted || deserialize<VideoData>(std::span<const std::byte>(payloadBytes.data(), length)).has_value();
+			}
+			check(!truncatedVideoAccepted, "video_payload_roundtrip: a truncated payload is rejected");
+			VideoData empty;
+			empty.Name = "clip";
+			check(!deserialize<VideoData>(serialize(empty)).has_value(), "video_payload_roundtrip: a payload without bytes is rejected");
+
+			const std::filesystem::path dir = database.get_assets_root() / "zz_video_smoke";
+			std::filesystem::remove_all(dir, error);
+			std::filesystem::create_directories(dir, error);
+
+			// the start of an mp4: an ftyp box
+			std::vector<unsigned char> mp4 = { 0, 0, 0, 24, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 0, 0, 2, 0, 'i', 's', 'o', 'm', 'm', 'p', '4', '1' };
+			for (unsigned char i = 0; i < 100; i++)
+			{
+				mp4.push_back(i);
+			}
+			const std::filesystem::path clip = dir / "clip.mp4";
+			{
+				std::ofstream out(clip, std::ios::binary);
+				out.write(reinterpret_cast<const char*>(mp4.data()), static_cast<std::streamsize>(mp4.size()));
+			}
+			const std::filesystem::path notVideo = dir / "notvideo.mp4";
+			{
+				std::ofstream out(notVideo, std::ios::binary);
+				out << "this is not a video file at all";
+			}
+			WI_ASSET_LOG(Info, "Smoke test: the next video import error is expected");
+			database.scan();
+
+			const auto cooked_video = [&](const std::filesystem::path& source, std::vector<AssetGuid>* dependencies = nullptr) -> std::optional<VideoData>
+			{
+				std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(source));
+				if (!meta)
+				{
+					return std::nullopt;
+				}
+				for (const CookedFile& file : read_library(database.get_library_root()))
+				{
+					std::span<const std::byte> filePayload;
+					if (file.Guid == meta->Guid && file.Type == AssetType::Video && parse_wasset_header(file.Bytes, filePayload))
+					{
+						if (dependencies != nullptr)
+						{
+							*dependencies = file.Dependencies;
+						}
+						return deserialize<VideoData>(filePayload);
+					}
+				}
+				return std::nullopt;
+			};
+
+			const std::optional<VideoData> cooked = cooked_video(clip);
+			check(cooked.has_value(), "video_import_cooks: the .mp4 is cooked as a Video asset");
+			check(cooked && cooked->Name == "clip" && cooked->Bytes.size() == mp4.size() && std::memcmp(cooked->Bytes.data(), mp4.data(), mp4.size()) == 0, "video_import_cooks: the bytes are cooked unchanged");
+			check(!cooked_video(notVideo).has_value(), "video_bad_header_fails_import: a file that is not an mp4 is refused");
+
+			if (std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(clip)))
+			{
+				UiPanelData panel;
+				UiWidget widget;
+				widget.Id = 1;
+				widget.Kind = WidgetKind::Video;
+				widget.Name = "Intro";
+				widget.Video = AssetRef{ meta->Guid, 0 };
+				panel.Widgets.push_back(widget);
+				panel.NextId = 2;
+				{
+					std::ofstream out(dir / "intro.wuipanel", std::ios::binary);
+					out << ui_panel_to_json(panel).dump(2);
+				}
+				database.scan();
+
+				std::vector<AssetGuid> dependencies;
+				std::optional<MetaFile> panelMeta = MetaFile::load(MetaFile::meta_path_for(dir / "intro.wuipanel"));
+				bool dependsOnVideo = false;
+				for (const CookedFile& file : read_library(database.get_library_root()))
+				{
+					if (panelMeta && file.Guid == panelMeta->Guid)
+					{
+						dependsOnVideo = std::find(file.Dependencies.begin(), file.Dependencies.end(), meta->Guid) != file.Dependencies.end();
+					}
+				}
+				check(dependsOnVideo, "video_followed_by_packer: a panel that names a video lists it as a dependency, so the packer includes it");
+			}
+			else
+			{
+				check(false, "video_followed_by_packer: the clip has no .meta file");
+			}
+
+			std::filesystem::remove_all(dir, error);
+			database.scan();
+		}
 
 		// 7. model materials become .wmat files
 		{

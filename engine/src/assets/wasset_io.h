@@ -152,6 +152,9 @@ namespace wiwa
 	void archive(BinaryArchive& ar, SoundBankData& v);
 	// A version, the clip name, then the encoded bytes. Refuses another version, an empty name or empty bytes and trailing bytes.
 	void archive(BinaryArchive& ar, AudioClipData& v);
+	// A version, the file name, the encoded bytes, then whether Info follows and the info (size, frame rate, duration, sound format). Refuses another
+	// version, an empty name or empty bytes and trailing bytes.
+	void archive(BinaryArchive& ar, VideoData& v);
 	// Magic, a version, then the Detour tiles (nav/nav_mesh_asset.h is the one description of the format).
 	void archive(BinaryArchive& ar, NavMeshData& v);
 	// A version, then the .wbt JSON text (ai/bt_file.h is the one description of it); refuses another version, an empty text, trailing bytes and text read_bt_file refuses.
@@ -182,6 +185,7 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<AudioClipData>() { return AssetType::AudioClip; }
 	template<> constexpr AssetType asset_type_of<NavMeshData>() { return AssetType::NavMesh; }
 	template<> constexpr AssetType asset_type_of<BehaviorTreeData>() { return AssetType::BehaviorTree; }
+	template<> constexpr AssetType asset_type_of<VideoData>() { return AssetType::Video; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)

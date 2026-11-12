@@ -12,6 +12,7 @@
 #include <audio/audio_bank_info.h>
 #include <math/math.h>
 #include <scene/scene_data.h>
+#include <video/video_types.h>
 #include "asset_guid.h"
 
 // CPU-side data of every asset type. Nothing here knows about the GPU: the renderer builds its own resources
@@ -427,6 +428,16 @@ namespace wiwa
 	{
 		std::string Name{};          // the file name without extension: what an event is called
 		std::vector<std::byte> Bytes{};
+	};
+
+	// A video file (.mp4) as it was imported: the encoded bytes, which the platform decoder reads from memory while it plays (video/video_decoder.h).
+	// Info is what the importer's probe found (HasInfo false when the platform decoder could not read the file); the player asks the decoder again.
+	struct VideoData
+	{
+		std::string Name{};          // the file name without extension
+		std::vector<std::byte> Bytes{};
+		VideoInfo Info{};
+		bool HasInfo = false;
 	};
 
 	// A node that is the root of an instance of another prefab: the inner prefab's nodes are its children (see scene/prefab_expander.h).
