@@ -556,7 +556,11 @@ function input.save_bindings() end
 -- UI
 --------------------------------------------------------------------------------------------------------------------------------
 
----@alias UiEvent "click"|"value_changed"|"hover_enter"|"hover_exit"|"focus"
+---@alias UiEvent "click"|"value_changed"|"hover_enter"|"hover_exit"|"focus"|"finished"
+---@alias VideoState "idle"|"loading"|"playing"|"paused"|"ended"|"failed"
+---@class VideoFinishedInfo
+---@field skipped boolean a script stopped the video (video_stop)
+---@field failed boolean the video could not play, or broke
 ---@alias UiNav "up"|"down"|"left"|"right"|"submit"|"cancel"
 
 --- A widget of a UI panel as one canvas shows it. Reading a widget whose canvas is gone gives nil, and writing it does nothing. The
@@ -578,10 +582,11 @@ function input.save_bindings() end
 ---@field world_offset vec3 world units from the entity
 ---@field [string] any
 local UiWidget = {}
---- Calls `handler(self, ...)` when the widget raises the event. `self` is the script instance; `value_changed` also passes the new value.
+--- Calls `handler(self, ...)` when the widget raises the event. `self` is the script instance; `value_changed` also passes the new value, and
+--- `finished` (a Video widget's video ended, was stopped or failed) passes a table `{ skipped, failed }`.
 --- Call it from a hook (on_init, on_update, ...): the handler goes away with the script instance.
 ---@param event UiEvent
----@param handler fun(self: ScriptClass, value?: number)
+---@param handler fun(self: ScriptClass, value?: number|VideoFinishedInfo)
 function UiWidget:on(event, handler) end
 --- Removes this script's handlers for the event, or only `handler`.
 ---@param event UiEvent
@@ -589,6 +594,31 @@ function UiWidget:on(event, handler) end
 function UiWidget:off(event, handler) end
 --- Stops the widget following an entity.
 function UiWidget:clear_world_anchor() end
+
+--- Video widgets only (any other widget is an error; a widget whose canvas is gone reads nil and does nothing). One video plays at a time:
+--- playing another stops the first.
+--- Starts the video, or goes on from a pause, or starts again from the end. False when the widget is gone.
+---@return boolean
+function UiWidget:video_play() end
+--- Pauses the video. `video_play` goes on from there.
+function UiWidget:video_pause() end
+--- Stops the video and shows its first picture; `finished` is raised with `skipped = true`.
+function UiWidget:video_stop() end
+--- Moves the video to a time in seconds (clamped to its length); the picture waits for the first frame at that time.
+---@param seconds number
+function UiWidget:video_seek(seconds) end
+--- "idle", "loading" (the asset or the decoder is not ready), "playing", "paused", "ended" or "failed".
+---@return VideoState?
+function UiWidget:video_state() end
+--- The position in seconds.
+---@return number?
+function UiWidget:video_time() end
+--- The length in seconds (0 until the file has opened).
+---@return number?
+function UiWidget:video_duration() end
+--- Why the video failed, or an empty string.
+---@return string?
+function UiWidget:video_error() end
 
 --- The panel shown by a UICanvas.
 ---@class UiPanel

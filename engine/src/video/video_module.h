@@ -75,7 +75,8 @@ namespace wiwa
 
 		// Control, from the scripts and the checks. play() false (with last_error()) when the widget does not exist; a widget that has no video asset
 		// or whose asset cannot be played is Failed, with the reason in error(), and reports Finished{Failed}.
-		bool play(const VideoKey& key);
+		// `scene` is the scene the key's canvas is in (scripts pass theirs); without one the scene of the last tick, then the engine's active scene.
+		bool play(const VideoKey& key, const Ref<Scene>& scene = nullptr);
 		void pause(const VideoKey& key);
 		void stop(const VideoKey& key); // Finished{Skipped}
 		void seek(const VideoKey& key, double seconds);

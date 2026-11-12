@@ -468,7 +468,9 @@ namespace wiwa
 				{
 					sol::protected_function_result result = event.Kind == UiEventKind::ValueChanged
 						? m_Runtime.call(handler.Function, handler.Owner, event.Value)
-						: m_Runtime.call(handler.Function, handler.Owner);
+						: event.Kind == UiEventKind::Finished
+							? m_Runtime.call(handler.Function, handler.Owner, m_Runtime.state().create_table_with("skipped", event.Skipped, "failed", event.Failed))
+							: m_Runtime.call(handler.Function, handler.Owner);
 					if (!result.valid())
 					{
 						// the handler that failed is dropped; the others and the script's hooks go on

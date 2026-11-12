@@ -42,6 +42,8 @@
 #include <asset_pipeline/builtin_importers.h>
 #include <asset_pipeline/file_utils.h>
 #include <asset_pipeline/lua_stubs.h>
+#include <video/null_decoder.h>
+#include <video/video_module.h>
 #include <asset_pipeline/packager.h>
 #include <play/play_mode.h>
 #include <scene/scene_editor.h>
@@ -2957,6 +2959,256 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// The UI harness with a Video widget ("Intro", 8) added to its panel, a VideoModule on the Null decoder (a real decode worker thread), and
+		// the frame order the engine has: the UI's interaction (which also hands over the videos that finished), the scripts, then the video module.
+		struct VideoLuaRig
+		{
+			UiHarness Ui;
+			VideoModule Video{};
+			VideoData Data{};
+			NullDecoderConfig Decoder{};
+			i64 Wall = 0;
+
+			explicit VideoLuaRig(bool loop = false, bool withAsset = true, double seconds = 0.2)
+			{
+				Decoder.DurationSeconds = seconds;
+				auto panel = std::static_pointer_cast<UiPanelData>(Ui.Slots[Ui.Panel.Guid]->Data);
+				UiWidget intro = ui_widget(8, 0, WidgetKind::Video, "Intro", { 320.0f, 180.0f });
+				intro.Video = withAsset ? AssetRef{ AssetGuid::generate(), 0 } : AssetRef{};
+				intro.AutoPlay = false;
+				intro.Loop = loop;
+				panel->Widgets.push_back(intro);
+				panel->NextId = 9;
+
+				Data.Name = "clip";
+				Data.Bytes.assign(16, std::byte{ 1 });
+				Video.set_ui_module(&Ui.Module);
+				Video.set_audio_mode(VideoAudioMode::Off);
+				Video.set_decoder_factory([this]() { return create_null_decoder(Decoder); });
+				Video.set_video_loader([this](const AssetRef&) -> VideoAssetBytes { return { LoadState::Ready, &Data }; });
+				Video.set_frame_sink([](u32, std::shared_ptr<const VideoFrame>) {});
+				Video.set_release_sink([](u32) {});
+				Video.init();
+				Ui.H.Instances.context().Video = &Video;
+			}
+
+			void frame()
+			{
+				Ui.frame();
+				Wall += 16667;
+				Video.tick(Ui.H.TheScene, true, Wall);
+			}
+
+			bool frames_until(const std::function<bool()>& done)
+			{
+				const auto start = std::chrono::steady_clock::now();
+				while (std::chrono::steady_clock::now() - start < std::chrono::seconds(4))
+				{
+					frame();
+					if (done())
+					{
+						return true;
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+				return false;
+			}
+		};
+
+		void check_video_ui(Check& check)
+		{
+			// play, a finished event, the state and the numbers
+			{
+				VideoLuaRig rig;
+				rig.Ui.script("player", R"(return Script:extend{
+					on_init = function(self)
+						self.w = UI.panel(find_entity('Hud')):find('Intro')
+						self.w:on('finished', function(me, info) record('finished:' .. tostring(info.skipped) .. ':' .. tostring(info.failed)) end)
+						record('initial:' .. self.w:video_state())
+						self.n = 0
+					end,
+					on_update = function(self, dt)
+						self.n = self.n + 1
+						if self.n == 1 then
+							record('accepted:' .. tostring(self.w:video_play()))
+						end
+						local s = self.w:video_state()
+						record('s:' .. s)
+						if s == 'playing' and not self.seeked then
+							self.seeked = true
+							self.w:video_seek(0.05)
+							self.w.volume = 0.5
+							record('duration:' .. string.format('%.2f', self.w:video_duration()))
+						end
+					end })");
+				rig.Ui.H.Instances.start(rig.Ui.H.TheScene);
+				check(rig.frames_until([&]() { return rig.Ui.H.count("finished:false:false") >= 1; }), "video_lua_play_finished: a clip that plays out raises finished");
+				for (int i = 0; i < 10; i++)
+				{
+					rig.frame();
+				}
+				check(rig.Ui.H.count("finished:false:false") == 1, "video_lua_play_finished: once");
+				check(rig.Ui.H.count("initial:idle") == 1, "video_lua_state: a widget that plays nothing is idle");
+				check(rig.Ui.H.count("accepted:true") == 1, "video_lua_play_finished: video_play says it was accepted");
+				check(rig.Ui.H.count("s:playing") >= 1, "video_lua_state: and then it is playing");
+				check(rig.Ui.H.count("s:ended") >= 1, "video_lua_state: and ended");
+				check(rig.Ui.H.count("duration:0.20") == 1, "video_lua_duration: the duration is the clip's");
+			}
+
+			// stop from a script: finished with skipped
+			{
+				VideoLuaRig rig(false, true, 5.0);
+				rig.Ui.script("skipper", R"(return Script:extend{
+					on_init = function(self)
+						self.w = UI.panel(find_entity('Hud')):find('Intro')
+						self.w:on('finished', function(me, info) record('finished:' .. tostring(info.skipped) .. ':' .. tostring(info.failed)) end)
+						self.n = 0
+					end,
+					on_update = function(self, dt)
+						self.n = self.n + 1
+						if self.n == 1 then self.w:video_play() end
+						if self.w:video_state() == 'playing' and not self.stopped then
+							self.stopped = true
+							self.w:video_stop()
+						end
+						if self.stopped then record('after_stop:' .. self.w:video_state()) end
+					end })");
+				rig.Ui.H.Instances.start(rig.Ui.H.TheScene);
+				check(rig.frames_until([&]() { return rig.Ui.H.count("finished:true:false") >= 1; }), "video_lua_skip: video_stop raises finished with skipped");
+				for (int i = 0; i < 5; i++)
+				{
+					rig.frame();
+				}
+				check(rig.Ui.H.count("finished:true:false") == 1 && rig.Ui.H.count("finished:false:false") == 0, "video_lua_skip: once, and not as a natural end");
+				check(rig.Ui.H.count("after_stop:idle") >= 1, "video_lua_skip: the video is idle afterwards");
+			}
+
+			// a widget without a video fails with a reason
+			{
+				VideoLuaRig rig(false, false);
+				rig.Ui.script("failer", R"(return Script:extend{
+					on_init = function(self)
+						self.w = UI.panel(find_entity('Hud')):find('Intro')
+						self.w:on('finished', function(me, info) record('finished:' .. tostring(info.skipped) .. ':' .. tostring(info.failed)) end)
+						self.n = 0
+					end,
+					on_update = function(self, dt)
+						self.n = self.n + 1
+						if self.n == 1 then self.w:video_play() end
+						if self.n == 3 then
+							record('state:' .. self.w:video_state())
+							record('error_set:' .. tostring(#self.w:video_error() > 0))
+						end
+					end })");
+				rig.Ui.H.Instances.start(rig.Ui.H.TheScene);
+				check(rig.frames_until([&]() { return rig.Ui.H.count("finished:false:true") >= 1; }), "video_lua_failed: a widget with no video raises finished with failed");
+				for (int i = 0; i < 4; i++)
+				{
+					rig.frame();
+				}
+				check(rig.Ui.H.count("state:failed") == 1 && rig.Ui.H.count("error_set:true") == 1, "video_lua_failed: its state is failed and video_error says why");
+			}
+
+			// the wrong kind of widget, and a stale handle
+			{
+				VideoLuaRig rig;
+				rig.Ui.script("wrong", R"(return Script:extend{
+					on_init = function(self)
+						self.panel = UI.panel(find_entity('Hud'))
+						self.button = self.panel:find('Menu/Start')
+						self.n = 0
+					end,
+					on_update = function(self, dt)
+						self.n = self.n + 1
+						if self.n == 1 then
+							local ok, message = pcall(function() self.button:video_play() end)
+							record('wrong_ok:' .. tostring(ok))
+							record('wrong_message:' .. tostring(string.find(tostring(message), 'Video', 1, true) ~= nil))
+							self.w = self.panel:find('Intro')
+							kill(find_entity('Hud'))
+						elseif self.n == 3 then
+							record('stale_state:' .. tostring(self.w:video_state()))
+							record('stale_play:' .. tostring(self.w:video_play()))
+							record('stale_time:' .. tostring(self.w:video_time()))
+							record('stale_done')
+						end
+					end })");
+				rig.Ui.H.Instances.start(rig.Ui.H.TheScene);
+				for (int i = 0; i < 5; i++)
+				{
+					rig.frame();
+				}
+				check(rig.Ui.H.count("wrong_ok:false") == 1 && rig.Ui.H.count("wrong_message:true") == 1, "video_lua_wrong_widget: a video method on a Button is a Lua error that names Video");
+				check(rig.Ui.H.count("stale_state:nil") == 1 && rig.Ui.H.count("stale_play:false") == 1 && rig.Ui.H.count("stale_done") == 1, "video_lua_stale_handle: a widget whose canvas is gone reads nil, plays nothing and does not raise");
+			}
+
+			// a looping video does not finish
+			{
+				VideoLuaRig rig(true, true, 0.2);
+				rig.Ui.script("looper", R"(return Script:extend{
+					on_init = function(self)
+						self.w = UI.panel(find_entity('Hud')):find('Intro')
+						self.w:on('finished', function() record('finished') end)
+						self.n = 0
+					end,
+					on_update = function(self, dt)
+						self.n = self.n + 1
+						if self.n == 1 then self.w:video_play() end
+						if self.w:video_state() == 'playing' then record('playing') end
+					end })");
+				rig.Ui.H.Instances.start(rig.Ui.H.TheScene);
+				const auto start = std::chrono::steady_clock::now();
+				while (std::chrono::steady_clock::now() - start < std::chrono::milliseconds(900))
+				{
+					rig.frame();
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+				check(rig.Ui.H.count("playing") > 5 && rig.Ui.H.count("finished") == 0, "video_lua_loop: a looping video keeps playing and does not finish");
+			}
+
+			// off("finished"), and the event name list
+			{
+				VideoLuaRig rig;
+				rig.Ui.script("remover", R"(return Script:extend{
+					on_init = function(self)
+						self.w = UI.panel(find_entity('Hud')):find('Intro')
+						self.w:on('finished', function() record('finished') end)
+						self.w:off('finished')
+						local ok, message = pcall(function() self.w:on('finish', function() end) end)
+						record('bad_event:' .. tostring(ok))
+						record('names_finished:' .. tostring(string.find(tostring(message), 'finished', 1, true) ~= nil))
+						self.n = 0
+					end,
+					on_update = function(self, dt)
+						self.n = self.n + 1
+						if self.n == 1 then self.w:video_play() end
+					end })");
+				rig.Ui.H.Instances.start(rig.Ui.H.TheScene);
+				for (int i = 0; i < 80; i++)
+				{
+					rig.frame();
+					std::this_thread::sleep_for(std::chrono::milliseconds(3));
+				}
+				check(rig.Ui.H.count("finished") == 0, "video_lua_off: a handler that was removed is not called");
+				check(rig.Ui.H.count("bad_event:false") == 1 && rig.Ui.H.count("names_finished:true") == 1, "video_lua_event_names: an unknown event is an error that lists finished");
+			}
+
+			// the stubs know the API
+			{
+				std::ifstream file("engine/lua/wiwa.lua", std::ios::binary);
+				const std::string stub((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+				bool all = !stub.empty();
+				for (const char* name : { "video_play", "video_pause", "video_stop", "video_seek", "video_state", "video_time", "video_duration", "video_error", "\"finished\"" })
+				{
+					all = all && stub.find(name) != std::string::npos;
+				}
+				check(all, "video_lua_stubs: wiwa.lua declares the video methods and the finished event");
+			}
+		}
+	}
+
 	bool run_script_smoke_test(AssetPipelineModule& pipeline)
 	{
 		Check check;
@@ -2985,6 +3237,7 @@ namespace wiwa
 		check_editor_document(check);
 		check_play_mode(check);
 		check_ui(check);
+		check_video_ui(check);
 		check_physics_scripts(check);
 		check_joint_scripts(check);
 		check_character_scripts(check);

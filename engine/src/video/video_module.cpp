@@ -56,6 +56,15 @@ namespace wiwa
 		if (UiModule* ui = this->ui())
 		{
 			ui->set_video_provider([this](const EntityGuid& canvas, UiId widget) { return view(VideoKey{ canvas, widget }); });
+			ui->set_video_event_source([this]()
+				{
+					std::vector<UiModule::UiVideoEvent> events;
+					for (const auto& [key, how] : take_finished())
+					{
+						events.push_back(UiModule::UiVideoEvent{ key.Canvas, key.Widget, how.Skipped, how.Failed });
+					}
+					return events;
+				});
 		}
 	}
 
@@ -64,6 +73,7 @@ namespace wiwa
 		if (UiModule* ui = this->ui())
 		{
 			ui->set_video_provider({});
+			ui->set_video_event_source({});
 		}
 		destroy_entry();
 		m_Handles.clear();
@@ -198,9 +208,9 @@ namespace wiwa
 		}
 	}
 
-	bool VideoModule::play(const VideoKey& key)
+	bool VideoModule::play(const VideoKey& key, const Ref<Scene>& sceneOfCaller)
 	{
-		Ref<Scene> scene = current_scene();
+		Ref<Scene> scene = sceneOfCaller ? sceneOfCaller : current_scene();
 		if (!scene)
 		{
 			m_LastError = "there is no scene to play a video in";
@@ -475,13 +485,13 @@ namespace wiwa
 	{
 		m_WallUs = wallUs;
 
-		// another scene: whatever played in the one before goes with it
+		// another scene: the widgets of AutoPlay are new to it
 		if (m_Scene.lock() != active)
 		{
-			destroy_entry();
 			m_WasVisible.clear();
 			m_Scene = active;
 		}
+		// what plays belongs to the scene it was started in (a script can start a video before the first tick has seen the scene)
 		if (m_Entry)
 		{
 			const Ref<Scene> scene = m_Entry->SceneRef.lock();

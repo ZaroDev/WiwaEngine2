@@ -130,8 +130,9 @@ panel:find("Menu/Volume"):on("value_changed", function(self, value) self.volume 
   `world_anchor`, `world_offset`, ... all the fields the editor's inspector shows). A name that is not a property is an error; `name` is
   read only. Assign vectors whole (`w.color = vec4(1, 0, 0, 1)`). A handle to a widget whose canvas is gone reads `nil` and ignores
   writes. `panel.visible = false` hides the whole panel; `panel.ready` tells whether the asset has loaded.
-- **Events.** `widget:on(event, fn)` with `click`, `value_changed`, `hover_enter`, `hover_exit` and `focus`; `fn(self, value)` gets the
-  script instance first (and the new value for `value_changed`). Register from a hook (`on_init`, ...): handlers belong to the instance
+- **Events.** `widget:on(event, fn)` with `click`, `value_changed`, `hover_enter`, `hover_exit`, `focus` and `finished` (a Video widget's video
+  ended, see [Video](#video)); `fn(self, value)` gets the script instance first (and the new value for `value_changed`, a table
+  `{ skipped, failed }` for `finished`). Register from a hook (`on_init`, ...): handlers belong to the instance
   and go away with it (destroy, stop, reload that restarts it). `widget:off(event)` removes this script's handlers for the event, or
   `widget:off(event, fn)` one of them. A handler that raises an error is logged and removed; the others and your hooks carry on.
 - **Order in a frame.** The UI looks at the input and raises its events *before* the scripts update, so a click in a frame runs its
@@ -145,6 +146,34 @@ panel:find("Menu/Volume"):on("value_changed", function(self, value) self.volume 
   has the focus or the pointer (`Escape` or `Shift+F1` hands them back, a click on the image takes them again). `UI.input` (`move_to`,
   `press`, `release`, `nav`, `scroll`, `clear_pointer`) writes to a scripted input source, which only reaches the UI while it is the one in
   use (tests and tools).
+
+## Video
+
+A `Video` widget (in the UI editor) plays an mp4 (H.264 and AAC), picture in the widget and sound through the audio device. Its fields are the
+widget's `video` (the asset), `fit` (`Stretch`, `Letterbox`, `Cover`), `loop`, `auto_play`, `volume` and `letterbox_color`. Scripts control it
+with methods on the widget (any other kind of widget is an error; a handle to a widget whose canvas is gone reads `nil`):
+
+```lua
+local intro = UI.panel(find_entity("Hud")):find("Intro")
+intro:on("finished", function(self, info)               -- the video ended, was stopped, or failed
+    if info.failed then log("Video", intro:video_error()) end
+    intro.visible = false
+end)
+intro.visible = true
+intro:video_play()                                      -- false if the widget is gone
+```
+
+- `video_play()` starts, goes on from a pause, or starts again from the end. `video_pause()`, `video_stop()` (back to the first picture, `finished`
+  with `skipped = true`), `video_seek(seconds)` (clamped to the length), `video_state()` (`"idle"`, `"loading"`, `"playing"`, `"paused"`,
+  `"ended"`, `"failed"`), `video_time()`, `video_duration()` and `video_error()` (why it failed, else an empty string).
+- **One video at a time.** Playing another stops the first. A video follows its widget: hiding the widget or its canvas, or a game clock that
+  does not play, pauses it; a scene change or a destroyed canvas stops it. Nothing starts while the game clock does not play (the editor's edit
+  mode). A widget with `auto_play` starts when it becomes visible.
+- **`finished`** is raised for a video that played to its end (`skipped` and `failed` false; never for a looping one), for `video_stop()`
+  (`skipped`), and for a video that could not play or broke (`failed`, with the reason in `video_error()`). Like the other widget events it
+  reaches the handlers at the start of the frame after the video module saw it, before that frame's `on_update`.
+- **Files.** Import `.mp4`, `.m4v` or `.mov` into the project; Windows decodes them with Media Foundation (H.264 and AAC ship with Windows, other
+  codecs may need an extension). Details and limits: `docs/superpowers/documentation/video.md`.
 
 ## Views (3D widgets)
 

@@ -757,6 +757,7 @@ namespace wiwa
 				Video.set_frame_sink([this](u32 stream, std::shared_ptr<const VideoFrame> frame) { Uploads.emplace_back(stream, std::move(frame)); });
 				Video.set_release_sink([this](u32 stream) { Releases.push_back(stream); });
 				Video.init(); // the UI module asks it for the pictures of Video widgets
+				Ui.set_video_event_source({}); // the checks read take_finished() themselves: the UI must not drain it
 			}
 
 			AssetRef add_panel(std::vector<UiWidget> widgets)
@@ -898,6 +899,18 @@ namespace wiwa
 				rig.Video.play(key);
 				rig.frame();
 				check(rig.Video.state(key) == VideoState::Failed && !rig.Video.error(key).empty(), "module_no_decoder: a platform without a decoder fails with a reason");
+			}
+
+			// a script starts a video in the first frame: the UI has run, the video module has not ticked yet
+			{
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Intro", false, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				rig.TheScene->update_world_transforms();
+				rig.Ui.update_interaction(*rig.TheScene, rig.Canvas);
+				check(rig.Video.play(key, rig.TheScene), "module_play_before_first_tick: a play before the video module has seen the scene is accepted");
+				check(rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Playing; }), "module_play_before_first_tick: and it plays (the first tick must not drop it)");
 			}
 
 			// one active player

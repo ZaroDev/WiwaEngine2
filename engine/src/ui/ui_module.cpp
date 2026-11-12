@@ -230,6 +230,19 @@ namespace wiwa
 			item.Instance->events().clear();
 			item.Instance->poll(m_Loader);
 		}
+		if (m_VideoEvents)
+		{
+			for (const UiVideoEvent& finished : m_VideoEvents())
+			{
+				for (const Active& item : active)
+				{
+					if (item.Canvas == finished.Canvas)
+					{
+						item.Instance->events().push_back(UiEvent{ UiEventKind::Finished, finished.Widget, 0.0f, finished.Skipped, finished.Failed });
+					}
+				}
+			}
+		}
 
 		const bool hasArea = canvasSize.x > 0.0f && canvasSize.y > 0.0f;
 		UiInputFrame input = m_Input != nullptr ? m_Input->poll() : UiInputFrame{};

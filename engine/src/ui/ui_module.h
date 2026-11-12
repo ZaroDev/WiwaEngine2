@@ -71,6 +71,19 @@ namespace wiwa
 		using VideoProvider = std::function<std::optional<UiVideoView>(const EntityGuid& canvas, UiId widget)>;
 		void set_video_provider(VideoProvider provider) { m_VideoProvider = std::move(provider); }
 
+		// A video that finished (video/video_module.h): its widget and how it ended.
+		struct UiVideoEvent
+		{
+			EntityGuid Canvas{};
+			UiId Widget = 0;
+			bool Skipped = false;
+			bool Failed = false;
+		};
+		// The videos that finished since the last frame (the video module hands them over and forgets them). They are raised as Finished events at the
+		// start of update_interaction, after the events of the last frame were cleared, so scripts see them in the frame after the video module ran.
+		using VideoEventSource = std::function<std::vector<UiVideoEvent>()>;
+		void set_video_event_source(VideoEventSource source) { m_VideoEvents = std::move(source); }
+
 		// The panel asset was cooked again: its canvases ask for it again.
 		void reload_panel(const AssetRef& panel);
 
@@ -107,6 +120,7 @@ namespace wiwa
 		std::optional<glm::vec2> m_CanvasOverride{};
 		PanelLoader m_Loader{};
 		VideoProvider m_VideoProvider{};
+		VideoEventSource m_VideoEvents{};
 		FontProvider m_Fonts{};
 		std::unordered_set<std::string> m_WarnedViews{}; // names of views a ViewImage asked for that did not exist
 		TextureSizeProvider m_TextureSizes{};

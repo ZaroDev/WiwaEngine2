@@ -7,6 +7,7 @@
 #include <ai/bt_lua_host.h>
 #include <nav/nav_module.h>
 #include <ui/ui_module.h>
+#include <video/video_module.h>
 
 #include <algorithm>
 
@@ -38,6 +39,7 @@ namespace wiwa
 		context.Input = Engine::get().get_module<InputModule>();
 		context.Animation = Engine::get().get_module<AnimationModule>();
 		context.Audio = Engine::get().get_module<AudioModule>();
+		context.Video = Engine::get().get_module<VideoModule>();
 		context.Nav = Engine::get().get_module<NavModule>();
 		context.AI = Engine::get().get_module<AIModule>();
 		context.RequestQuit = []() { Engine::get().request_quit(); };

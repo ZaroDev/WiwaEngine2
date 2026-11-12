@@ -21,6 +21,7 @@ namespace wiwa
 	class SceneModule;
 	class UiHandlerTable;
 	class UiModule;
+	class VideoModule;
 	class ScriptRuntime;
 
 	// What the Lua bindings reach besides the Lua state: the scene scripts are running on. Set by ScriptInstances.
@@ -38,6 +39,7 @@ namespace wiwa
 		AIModule* AI = nullptr;         // null where there is no such module (a test): the AI calls are Lua errors
 		NavModule* Nav = nullptr;       // null where there is no such module (a test): the Nav calls are Lua errors
 		AudioModule* Audio = nullptr;   // null where there is no such module (a test): the Audio calls are Lua errors
+		VideoModule* Video = nullptr;   // null where there is no such module (a test): the video_* methods of a Video widget are Lua errors
 		AnimHandlerTable* AnimHandlers = nullptr; // the Lua functions that listen to clip events, owned by the script instances
 		Ref<Scene> ActiveSceneRef{};    // the same scene as ActiveScene, for the calls that need to share it
 		bool GamePlaying = true;        // false while the game clock does not play: the input queries then read false / zero
