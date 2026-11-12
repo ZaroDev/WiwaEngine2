@@ -5,7 +5,7 @@
     1080
   ],
   "match": 0.5,
-  "nextId": 28,
+  "nextId": 33,
   "widgets": [
     {
       "id": 2,
@@ -781,6 +781,163 @@
         -24
       ],
       "ViewName": "wizard_portrait"
+    },
+    {
+      "id": 28,
+      "kind": "Button",
+      "Name": "PlayIntro",
+      "AnchorMin": [
+        0.5,
+        1
+      ],
+      "AnchorMax": [
+        0.5,
+        1
+      ],
+      "OffsetMin": [
+        -110,
+        -108
+      ],
+      "OffsetMax": [
+        110,
+        -64
+      ],
+      "Color": [
+        0.15,
+        0.45,
+        0.35,
+        1
+      ],
+      "HoverColor": [
+        0.25,
+        0.65,
+        0.5,
+        1
+      ],
+      "PressedColor": [
+        0.1,
+        0.3,
+        0.25,
+        1
+      ]
+    },
+    {
+      "id": 29,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 28,
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        9
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Play intro",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Align": "Center"
+    },
+    {
+      "id": 30,
+      "kind": "Video",
+      "Name": "Intro",
+      "AnchorMin": [
+        0,
+        0
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        0
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Visible": false,
+      "AutoPlay": false,
+      "Fit": "Letterbox",
+      "Video": {
+        "guid": "7a7512927c24f288e4510fc646934f99",
+        "localId": 0
+      }
+    },
+    {
+      "id": 31,
+      "kind": "Button",
+      "Name": "Skip",
+      "parent": 30,
+      "AnchorMin": [
+        1,
+        1
+      ],
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        -184,
+        -72
+      ],
+      "OffsetMax": [
+        -24,
+        -24
+      ],
+      "Color": [
+        0.5,
+        0.25,
+        0.15,
+        1
+      ],
+      "HoverColor": [
+        0.7,
+        0.4,
+        0.25,
+        1
+      ],
+      "PressedColor": [
+        0.35,
+        0.18,
+        0.1,
+        1
+      ]
+    },
+    {
+      "id": 32,
+      "kind": "Text",
+      "Name": "Label",
+      "parent": 31,
+      "AnchorMax": [
+        1,
+        1
+      ],
+      "OffsetMin": [
+        0,
+        9
+      ],
+      "OffsetMax": [
+        0,
+        0
+      ],
+      "Text": "Skip",
+      "Font": {
+        "guid": "040bcce9663dc28cc887d812d60a1b15",
+        "localId": 0
+      },
+      "FontSize": 22,
+      "Align": "Center"
     }
   ]
 }

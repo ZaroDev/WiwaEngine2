@@ -189,6 +189,11 @@ namespace wiwa
 			ClickOn,
 			Slide,
 			Release,
+			IntroClick,    // the Play intro button shows the full screen Video widget and plays it (video.md)
+			IntroPlaying,  // the clip plays, its picture is in the draw list; the Skip button is clicked
+			IntroSkipped,  // the video stopped and its widget hid itself; the intro is played again
+			IntroReplay,   // it plays again; the clip is moved to near its end
+			IntroEnded,    // it ends on its own and the script hides the widget
 			Finish,
 		};
 		UiStep m_UiStep = UiStep::Setup;

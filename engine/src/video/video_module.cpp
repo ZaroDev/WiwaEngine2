@@ -101,8 +101,15 @@ namespace wiwa
 
 	void VideoModule::update(float)
 	{
+		// Without a playing game clock and without a video there is nothing to do: the scene is not touched (an edit mode, or a check that loads
+		// scenes from another thread, sees no extra access from this module).
+		const bool playing = Engine::get().get_time().get_game_clock().IsPlaying;
+		if (!playing && !m_Entry)
+		{
+			return;
+		}
 		SceneModule* scenes = Engine::get().get_module<SceneModule>();
-		tick(scenes != nullptr ? scenes->get_active() : nullptr, Engine::get().get_time().get_game_clock().IsPlaying, wall_clock_us());
+		tick(scenes != nullptr ? scenes->get_active() : nullptr, playing, wall_clock_us());
 	}
 
 	const UiWidget* VideoModule::find_widget(Scene& scene, const VideoKey& key, bool* visible) const
@@ -441,8 +448,10 @@ namespace wiwa
 
 	void VideoModule::autoplay(const Ref<Scene>& scene, bool playing)
 	{
+		// Nothing starts while the game clock stands still (the editor's edit mode, and the headless checks that load scenes from another thread):
+		// the scene is not even looked at then.
 		UiModule* ui = this->ui();
-		if (ui == nullptr)
+		if (!playing || ui == nullptr)
 		{
 			return;
 		}
@@ -460,10 +469,6 @@ namespace wiwa
 				if (widget.Kind != WidgetKind::Video)
 				{
 					continue;
-				}
-				if (!playing)
-				{
-					continue; // nothing starts while the game clock stands still, and a clock that starts later finds the widget as new
 				}
 				const VideoKey key{ id.Guid, widget.Id };
 				const bool visible = canvasVisible && widget_shown(instance->data(), widget);

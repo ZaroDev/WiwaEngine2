@@ -1,5 +1,5 @@
 -- The HUD (assets/ui/demo_hud.wuipanel) on the entity that has the UICanvas: change a widget (score, health bar, beacon bar),
--- listen to one (the button switches the light, the slider sets its intensity) and use a widget that follows an entity on the screen.
+-- listen to one (the button switches the light, the slider sets its intensity), use a widget that follows an entity on the screen and play a video.
 local DemoUi = Script:extend{
   properties = {},
 }
@@ -32,6 +32,22 @@ function DemoUi:setup()
     me:apply_light()
   end)
 
+  -- Video (see "Video" in docs/scripting.md): the Play intro button shows the full screen Video widget and plays it; the widget hides itself when
+  -- the video ends, is skipped (the Skip button, or Cancel: Escape / pad B) or fails.
+  self.intro = panel:find("Intro")
+  panel:find("PlayIntro"):on("click", function(me)
+    Audio.post("UI_Click")
+    me.intro.visible = true
+    me.intro:video_play()
+  end)
+  panel:find("Intro/Skip"):on("click", function(me) me.intro:video_stop() end)
+  self.intro:on("finished", function(me, info)
+    me.intro.visible = false
+    if info.failed then
+      log("Video", "the intro could not play: " .. me.intro:video_error())
+    end
+  end)
+
   self.ready = true
   self:apply_light()
 end
@@ -49,6 +65,10 @@ function DemoUi:on_update(dt)
       return
     end
     self:setup()
+  end
+
+  if self.intro.visible and input.action("UI", "Cancel"):pressed() then
+    self.intro:video_stop()
   end
 
   self.t = self.t + dt

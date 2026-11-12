@@ -19,6 +19,8 @@
 #include <scripting/script_names.h>
 #include <ui/ui_draw_list.h>
 #include <ui/ui_module.h>
+#include <renderer/view/view_types.h>
+#include <video/video_module.h>
 
 namespace wiwa
 {
@@ -620,7 +622,7 @@ namespace wiwa
 				restore_ui();
 				return true;
 			}
-			if (!wait(2400, "the HUD checks", failure))
+			if (!wait(4000, "the HUD checks", failure))
 			{
 				restore_ui();
 				return true;
@@ -778,6 +780,8 @@ namespace wiwa
 		const glm::vec4 BEACON_TRACK_COLOR{ 0.9f, 0.2f, 0.9f, 0.8f };  // BeaconBar, which follows the Beacon entity
 
 		const glm::vec4 REBIND_COLOR{ 0.55f, 0.2f, 0.5f, 1.0f };       // RebindJump, while the pointer is not on it
+		const glm::vec4 INTRO_BUTTON_COLOR{ 0.15f, 0.45f, 0.35f, 1.0f }; // PlayIntro, while the pointer is not on it
+		const glm::vec4 SKIP_BUTTON_COLOR{ 0.5f, 0.25f, 0.15f, 1.0f };   // Intro/Skip, while the pointer is not on it
 		const char* const INPUT_OVERRIDES_FILE = "input_overrides.json";
 
 		const glm::vec2 HUD_CANVAS{ 1920.0f, 1080.0f };
@@ -962,7 +966,126 @@ namespace wiwa
 		{
 			if (m_UiStepFrames > 3)
 			{
+				m_UiStep = UiStep::IntroClick;
+				m_UiStepFrames = 0;
+			}
+			return UiResult::Running;
+		}
+
+		// The intro video: the real clip, decoded by the platform decoder on its worker, uploaded to the real renderer and drawn by the HUD.
+		case UiStep::IntroClick:
+		case UiStep::IntroPlaying:
+		case UiStep::IntroSkipped:
+		case UiStep::IntroReplay:
+		case UiStep::IntroEnded:
+		{
+			VideoModule* video = Engine::get().get_module<VideoModule>();
+			UiPanelInstance* instance = ui->instance_for(play, hudGuid);
+			const std::optional<UiId> introId = instance != nullptr ? instance->find("Intro") : std::nullopt;
+			const UiWidget* intro = introId ? instance->data().find(*introId) : nullptr;
+			if (video == nullptr || intro == nullptr || intro->Kind != WidgetKind::Video)
+			{
+				failure = "the HUD has no Intro video widget (assets/ui/demo_hud.wuipanel, written by scripts/gen_demo_scene.py)";
+				return UiResult::Failed;
+			}
+			const VideoKey key{ hudGuid, *introId };
+			const VideoState state = video->state(key);
+			const UiDrawList list = draw();
+			const bool picture = std::any_of(list.Batches.begin(), list.Batches.end(), [](const UiBatch& batch)
+				{
+					return batch.Kind == UiQuadKind::Image && batch.ViewTexture >= FIRST_VIDEO_TEXTURE_ID;
+				});
+			if (state == VideoState::Failed)
+			{
+				failure = "the intro video failed: " + video->error(key);
+				return UiResult::Failed;
+			}
+			const auto center = [](const UiRect& rect) { return (rect.Min + rect.Max) * 0.5f; };
+
+			if (m_UiStep == UiStep::IntroClick)
+			{
+				const std::optional<UiRect> button = find_quad(list, INTRO_BUTTON_COLOR);
+				if (!button)
+				{
+					failure = "the HUD shows no Play intro button";
+					return UiResult::Failed;
+				}
+				if (intro->Visible || state != VideoState::Idle || picture)
+				{
+					failure = "the intro is showing or playing before anybody asked for it";
+					return UiResult::Failed;
+				}
+				click_at(center(*button));
+				m_UiStep = UiStep::IntroPlaying;
+				m_UiStepFrames = 0;
+				return UiResult::Running;
+			}
+
+			if (m_UiStep == UiStep::IntroPlaying || m_UiStep == UiStep::IntroReplay)
+			{
+				const bool replay = m_UiStep == UiStep::IntroReplay;
+				if (state == VideoState::Playing && intro->Visible && picture && video->time(key) > 0.3)
+				{
+					if (!replay)
+					{
+						const std::optional<UiRect> skip = find_quad(list, SKIP_BUTTON_COLOR);
+						if (!skip)
+						{
+							failure = "the playing intro shows no Skip button";
+							return UiResult::Failed;
+						}
+						click_at(center(*skip));
+						m_UiStep = UiStep::IntroSkipped;
+					}
+					else
+					{
+						// near the end: the video plays out on its own in a moment
+						video->seek(key, std::max(0.0, video->duration(key) - 0.4));
+						m_UiStep = UiStep::IntroEnded;
+					}
+					m_UiStepFrames = 0;
+				}
+				else if (m_UiStepFrames > 900)
+				{
+					failure = std::string(replay ? "the intro did not play again" : "the intro did not play") + " (state " + std::to_string(static_cast<int>(state)) + ", widget " + (intro->Visible ? "shown" : "hidden") +
+						", picture in the HUD " + (picture ? "yes" : "no") + ", time " + std::to_string(video->time(key)) + " s): is Intro.mp4 imported and is there a decoder?";
+					return UiResult::Failed;
+				}
+				return UiResult::Running;
+			}
+
+			if (m_UiStep == UiStep::IntroSkipped)
+			{
+				if (state == VideoState::Idle && !intro->Visible && !picture)
+				{
+					const std::optional<UiRect> button = find_quad(list, INTRO_BUTTON_COLOR);
+					if (!button)
+					{
+						failure = "the HUD shows no Play intro button after the skip";
+						return UiResult::Failed;
+					}
+					click_at(center(*button));
+					m_UiStep = UiStep::IntroReplay;
+					m_UiStepFrames = 0;
+				}
+				else if (m_UiStepFrames > 300)
+				{
+					failure = std::string("clicking Skip did not stop the intro and hide it (state ") + std::to_string(static_cast<int>(state)) + ", widget " + (intro->Visible ? "shown" : "hidden") + ")";
+					return UiResult::Failed;
+				}
+				return UiResult::Running;
+			}
+
+			// IntroEnded
+			if (state == VideoState::Ended && !intro->Visible && !picture)
+			{
 				m_UiStep = UiStep::Finish;
+				m_UiStepFrames = 0;
+			}
+			else if (m_UiStepFrames > 900)
+			{
+				failure = std::string("the intro did not end and hide itself (state ") + std::to_string(static_cast<int>(state)) + ", widget " + (intro->Visible ? "shown" : "hidden") + ", time " + std::to_string(video->time(key)) + " s)";
+				return UiResult::Failed;
 			}
 			return UiResult::Running;
 		}
