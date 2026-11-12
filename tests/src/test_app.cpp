@@ -14,6 +14,7 @@
 #include "scene/scene_smoke_test.h"
 #include "scripting/script_smoke_test.h"
 #include "ui/ui_smoke_test.h"
+#include "video/video_smoke_test.h"
 
 #include <renderer/render_module.h>
 
@@ -85,6 +86,7 @@ protected:
 			{ "--nav-smoke", &wiwa::run_nav_smoke_test },
 			{ "--ai-smoke", &wiwa::run_ai_smoke_test },
 			{ "--anim-smoke", &wiwa::run_anim_smoke_test },
+			{ "--video-smoke", &wiwa::run_video_smoke_test },
 		};
 		for (const auto& [flag, run] : smokes)
 		{
@@ -108,7 +110,7 @@ private:
 
 	bool has_headless_smoke() const
 	{
-		for (const char* flag : { "--asset-smoke", "--scene-smoke", "--script-smoke", "--ui-smoke", "--physics-smoke", "--input-smoke", "--audio-smoke", "--nav-smoke", "--ai-smoke", "--anim-smoke" })
+		for (const char* flag : { "--asset-smoke", "--scene-smoke", "--script-smoke", "--ui-smoke", "--physics-smoke", "--input-smoke", "--audio-smoke", "--nav-smoke", "--ai-smoke", "--anim-smoke", "--video-smoke" })
 		{
 			if (has_argument(flag))
 			{
