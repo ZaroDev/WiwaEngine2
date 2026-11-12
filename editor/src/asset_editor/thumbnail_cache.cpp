@@ -36,6 +36,7 @@ namespace wiwa
 	{
 		constexpr float FOV = 35.0f;
 		constexpr int MAX_JOB_FRAMES = 900;
+		constexpr std::chrono::seconds MAX_JOB_TIME{ 15 }; // frames alone are no measure: at 1000 fps they are under a second
 		constexpr int KEYS_PER_FRAME = 6;
 
 		u64 fnv(u64 hash, const void* data, size_t size)
@@ -702,7 +703,7 @@ namespace wiwa
 			end_job();
 			return;
 		}
-		if (++job.Frames > MAX_JOB_FRAMES)
+		if (++job.Frames > MAX_JOB_FRAMES && std::chrono::steady_clock::now() - job.Started > MAX_JOB_TIME)
 		{
 			fail(job.Source, "its assets did not load in time");
 			end_job();

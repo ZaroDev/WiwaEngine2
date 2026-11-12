@@ -5,6 +5,7 @@
 #include <sstream>
 
 #include <editor_module.h>
+#include <imgui.h>
 #include <ai/bt_edit_model.h>
 #include <ai/bt_editor.h>
 #include <animation/animation_panel.h>
@@ -67,8 +68,28 @@ void EditorSmokeDriver::update(EditorModule& editor)
 	auto& m_NavPanel = editor.m_NavPanel;
 	auto& m_AssetEditor = editor.m_AssetEditor;
 	auto& m_Thumbnails = editor.m_Thumbnails;
+	// The panel open flags and the dock layout come from editor/imgui.ini (the user's own): a panel they closed would never be drawn, and the run would
+	// write its state back. Once ImGui has read the file (frame 3), a smoke opens the panels it checks and the run stops saving the layout.
+	if (m_Frame == 3)
+	{
+		ImGui::GetIO().IniFilename = nullptr;
+		for (Panel* panel : std::initializer_list<Panel*>{ m_PhysicsPanel, m_InputPanel, m_AnimationPanel, m_AudioPanel, m_NavPanel })
+		{
+			if (panel != nullptr)
+			{
+				panel->set_open(true);
+			}
+		}
+	}
+
 	if (m_DemoSmokeRequested && m_DemoSmoke == nullptr && !m_DemoSmokeDone)
 	{
+		// the startup scan may still be cooking the scene the demo opens: wait for it, or the smoke plays the previous cook
+		const Ref<wiwa::JobProgress> scan = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().scan_progress();
+		if (scan && !scan->finished())
+		{
+			return;
+		}
 		m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
 	}
 

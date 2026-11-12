@@ -209,12 +209,14 @@ namespace wiwa
 			check(back && back->find("engine\\shaders\\x.hlsl") && back->find("engine/shaders/x.hlsl")->Guid == guid, "the catalog round-trips and finds a path");
 			check(back && !back->find("engine/shaders/missing.hlsl"), "the catalog does not find an unknown path");
 
-			bool truncatedAccepted = false;
+			// A catalog written before redirects existed ends after the entries and is still valid (see archive()): exactly one cut, the one that
+			// drops the empty redirect list, is accepted.
+			size_t truncatedAccepted = 0;
 			for (size_t length = 0; length < bytes.size(); length++)
 			{
-				truncatedAccepted = truncatedAccepted || deserialize<AssetCatalog>(std::span<const std::byte>(bytes.data(), length)).has_value();
+				truncatedAccepted += deserialize<AssetCatalog>(std::span<const std::byte>(bytes.data(), length)).has_value() ? 1 : 0;
 			}
-			check(!truncatedAccepted, "a truncated catalog is rejected");
+			check(truncatedAccepted == 1, "a truncated catalog is rejected (but the one that ends after the entries)");
 		}
 
 		// The build info (which scene a pack starts with) survives a round trip, and no truncated copy of it is accepted.

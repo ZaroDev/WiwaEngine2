@@ -1,15 +1,17 @@
 # CLAUDE.md
 
-Guidance for Claude Code in this repository. Per-area design (what exists, why, traps) is in `docs/superpowers/specs/` - read the matching doc before changing an area. Fix the doc in the same change when code and doc disagree.
+Guidance for Claude Code in this repository. Per-area documentation (what exists, why, traps) is in `docs/superpowers/documentation/` - read the matching doc before changing an area. Fix the doc in the same change when code and doc disagree.
 
 ## Build and run
 
 Windows only (VS 2022, x64, `VULKAN_SDK` must be set). Premake generates the solution; `*.sln`/`*.vcxproj` are git-ignored. Re-run the generator after adding or deleting files.
 
 ```bat
-scripts\GenerateProjects2022.bat        :: premake5 vs2022 -> Wiwa2.sln  (GenerateProjects2026.bat for VS2026)
-msbuild Wiwa2.sln /p:Configuration=Debug /p:Platform=x64
+vendor\premake\premake5.exe vs2022        :: from the repo root -> Wiwa2.sln  (vs2026 for VS2026)
+msbuild Wiwa2.sln /p:Configuration=Release /p:Platform=x64
 ```
+
+The `scripts\GenerateProjects*.bat` files do `cd ..` first: run them from `scripts\`, never from the root (from the root they generate nothing and msbuild builds the stale projects without a word). Build Release to verify; Debug only to debug a problem.
 
 Configurations `Debug`, `Release`, `Shipping`; output in `bin/<cfg>-windows-x86_64/<project>`. `scripts/Build*2022.bat` are stale, don't use them. Projects: `wiwa` (static lib, `engine/`), `wiwa_editor` (`editor/`, debugdir `editor/`), `wiwa_game` (`game/`, debugdir `game/`), `wiwa_tests` (`tests/`, debugdir `editor/`). The game links only the engine, never editor code. The editor and the game contain no test code: every check lives in `wiwa_tests`, which compiles `editor/src` (minus `editor.cpp`) next to its own sources and links the engine.
 
@@ -28,10 +30,11 @@ The test sources are in `tests/src/<area>/` (`*_smoke_test.cpp`, `anim_*_checks.
 | `--physics-smoke` / `--physics-panel-smoke` | tests | Jolt behaviour, queries, dispatch, repeatability / Physics panel for 130 frames |
 | `--input-smoke` / `--input-panel-smoke` | tests | input, actions, rebinding, `.winput`, Lua API / Input panel for 130 frames |
 | `--audio-smoke` / `--audio-panel-smoke` | tests | audio module on the Null backend, soundbank asset and metadata, emitters and play-mode sync, settings, Lua API, event browser model, audition (and the Wwise backend in a `WWISESDK` build, with banks in `editor/assets/audio`) / Audio panel for 130 frames |
-| `--ai-smoke` / `--ai-panel-smoke` | tests | behaviour tree format and validator, node semantics, blackboard, MoveTo on a baked navmesh, controllers, Lua leaves and the `AI` API, perception, the edit model, gizmo shapes / the tree editor in the Asset Editor for 120 frames. The tests exe often crashes at shutdown: read the log line |
-| `--nav-smoke` / `--nav-panel-smoke` | tests | `.wnav` format, components and settings, Recast bake, Detour queries, crowd agents, Lua API and arrival hooks, the bake model (worker, stale check, cancel), overlay shapes, path tool / Navigation panel for 130 frames. The tests exe often crashes at shutdown: read the log line, not the exit code |
+| `--ai-smoke` / `--ai-panel-smoke` | tests | behaviour tree format and validator, node semantics, blackboard, MoveTo on a baked navmesh, controllers, Lua leaves and the `AI` API, perception, the edit model, gizmo shapes / the tree editor in the Asset Editor for 120 frames. |
+| `--nav-smoke` / `--nav-panel-smoke` | tests | `.wnav` format, components and settings, Recast bake, Detour queries, crowd agents, Lua API and arrival hooks, the bake model (worker, stale check, cancel), overlay shapes, path tool / Navigation panel for 130 frames. |
 | `--anim-smoke` / `--anim-panel-smoke` | tests | skeleton import, pose math and nodes, Animator module, sockets, extraction, Lua API, animation graphs (file, state machine, blend spaces, layers, edit model) / Animation panel for 130 frames and the Graph editor on the demo warrior's graph |
-| `--play-smoke` / `--demo-smoke` | tests | play mode / the demo scene end to end |
+| `--play-smoke` / `--demo-smoke` | tests | play mode / the demo scene end to end (it waits for the startup scan, so it never plays a stale cook) |
+| `--vfx-editor-smoke` | tests | the VFX editor panel: edit model, preview, readback, effect thumbnail |
 | `--render-test` | tests | GPU pixel checks in `tests/src/render/*_checks.cpp`, run on the render thread |
 | `--render-smoke <frames>` | any (engine) | render N frames then exit (1 if a validation message or error was logged) |
 | `--scene-smoke-load` | game | load the `--scene` (or the pak's default scene) and quit |
@@ -40,7 +43,7 @@ Other flags: `--nav-bake <file>` (editor, with `--scene`: bakes the scene's firs
 
 ## Architecture in one page
 
-Modules (`IModule`, registered in `Engine`, [engine.cpp](engine/src/core/engine.cpp)), by update priority: `AssetManager` -100, `AssetPipelineModule` (editor) -90, `SceneModule` -80, `RenderModule` -50, `InputModule` -30, `PhysicsModule` -20, `UiModule` -10, `ScriptingModule` 0, `NavModule` 5, `AIModule` 6, `AnimationModule` 10, `AudioModule` 20, plus `Window` and the editor's `EditorModule`. Reach a module with `Engine::get_module`, except from the render and physics threads, which must never call it.
+Modules (`IModule`, registered in `Engine`, [engine.cpp](engine/src/core/engine.cpp)), by update priority: `AssetManager` -100, `AssetPipelineModule` (editor) -90, `SceneModule` -80, `RenderModule` -50, `InputModule` -30, `PhysicsModule` -20, `UiModule` -10, `ScriptingModule` 0, `NavModule` 5, `AIModule` 6, `AnimationModule` 10, `DecalModule` 11, `ParticleModule` 12, `AudioModule` 20, plus `Window` and the editor's `EditorModule`. Reach a module with `Engine::get_module`, except from the render and physics threads, which must never call it.
 
 Rules that cut across areas:
 
@@ -53,32 +56,35 @@ Rules that cut across areas:
 
 | Area | Doc | Entry points |
 | --- | --- | --- |
-| Assets, packing, settings files | [assets.md](docs/superpowers/specs/assets.md) | `engine/src/assets`, `editor/src/asset_pipeline` |
-| Scene, reflection, prefabs, loading | [scene.md](docs/superpowers/specs/scene.md) | `engine/src/scene` |
-| Rendering, shaders, post, TAA, debug draw | [rendering.md](docs/superpowers/specs/rendering.md) | `engine/src/renderer`, `editor/engine/shaders` |
-| Materials, surface shaders | [materials.md](docs/superpowers/specs/materials.md) | `.wmat`, `.wshader` |
-| Lua scripting (user API: [docs/scripting.md](docs/scripting.md)) | [scripting.md](docs/superpowers/specs/scripting.md) | `engine/src/scripting` |
-| Physics (Jolt) | [physics.md](docs/superpowers/specs/physics.md) | `engine/src/physics`, vendored `engine/vendor/JoltPhysics`; `JPH::` stays inside it |
-| Animation (skeletons, GPU skinning, `Animator`, animation graphs `.wgraph`, Lua `Animation`) | [animation.md](docs/superpowers/specs/animation.md) | `engine/src/animation`, `editor/src/animation` |
-| Offscreen views (previews, 3D UI widgets, readback; `ViewHost`, `ViewImage`) | [views.md](docs/superpowers/specs/views.md) | `engine/src/renderer/view`, `engine/src/scene/preview_scene.*` |
-| Asset Editor, asset thumbnails (skeleton/mesh editors, sockets, joint rename) | [editor.md](docs/superpowers/specs/editor.md) | `editor/src/asset_editor` |
-| Audio (Wwise behind a vendor-neutral backend, soundbanks, emitters) | [audio.md](docs/superpowers/specs/audio.md) | `engine/src/audio`, `engine/src/audio/wwise` (`AK::` stays inside it), `editor/src/audio` |
-| Behaviour trees and perception (`.wbt`, `AIController`, Lua leaves `BtAction`/`BtCondition`, `Perceiver`, the tree editor) | [behavior-trees.md](docs/superpowers/specs/behavior-trees.md) | `engine/src/ai`, `editor/src/ai` |
-| Navigation (Recast bake in the editor, Detour queries and DetourCrowd agents, `.wnav`, the `Nav` Lua API) | [navigation.md](docs/superpowers/specs/navigation.md) | `engine/src/nav`, `editor/src/asset_pipeline/nav_bake.*`, `editor/src/nav`; vendored `engine/vendor/recastnavigation`; `dt*` stays in `engine/src/nav`, `rc*` in the editor |
-| Input | [input.md](docs/superpowers/specs/input.md) | `engine/src/input` |
-| Game UI | [ui.md](docs/superpowers/specs/ui.md) | `engine/src/ui`, `editor/src/ui` |
-| Project settings, Settings page | [project-settings.md](docs/superpowers/specs/project-settings.md) | `engine/src/core/project_settings.*`, `editor/src/settings` |
-| Editor, play mode, gizmos, performance stats | [editor.md](docs/superpowers/specs/editor.md) | `editor/src` |
+| Assets, packing, settings files | [assets.md](docs/superpowers/documentation/assets.md) | `engine/src/assets`, `editor/src/asset_pipeline` |
+| Scene, reflection, prefabs, loading | [scene.md](docs/superpowers/documentation/scene.md) | `engine/src/scene` |
+| Rendering, shaders, post, TAA, debug draw | [rendering.md](docs/superpowers/documentation/rendering.md) | `engine/src/renderer`, `editor/engine/shaders` |
+| Materials, surface shaders | [materials.md](docs/superpowers/documentation/materials.md) | `.wmat`, `.wshader` |
+| Decals (projected `Decal` component, decal pass, `Decal.spawn`) | [decals.md](docs/superpowers/documentation/decals.md) | `engine/src/scene/decal_*`, `engine/src/renderer/passes/decal_pass.*`, `editor/engine/shaders/decal.hlsl` |
+| VFX (GPU particles, `.wfx` effects, `ParticleSystem`, the VFX editor, `Vfx` Lua API) | [vfx.md](docs/superpowers/documentation/vfx.md) | `engine/src/scene/particle_*`, `engine/src/renderer/particles`, `engine/src/renderer/passes/particle_*`, `editor/src/asset_editor/vfx_*` |
+| Lua scripting (user API: [docs/scripting.md](docs/scripting.md)) | [scripting.md](docs/superpowers/documentation/scripting.md) | `engine/src/scripting` |
+| Physics (Jolt) | [physics.md](docs/superpowers/documentation/physics.md) | `engine/src/physics`, vendored `engine/vendor/JoltPhysics`; `JPH::` stays inside it |
+| Animation (skeletons, GPU skinning, `Animator`, animation graphs `.wgraph`, Lua `Animation`) | [animation.md](docs/superpowers/documentation/animation.md) | `engine/src/animation`, `editor/src/animation` |
+| Offscreen views (previews, 3D UI widgets, readback; `ViewHost`, `ViewImage`) | [views.md](docs/superpowers/documentation/views.md) | `engine/src/renderer/view`, `engine/src/scene/preview_scene.*` |
+| Asset Editor, asset thumbnails (skeleton, mesh, clip, graph, VFX and behaviour tree editors, sockets, joint rename) | [editor.md](docs/superpowers/documentation/editor.md) | `editor/src/asset_editor` |
+| Audio (Wwise behind a vendor-neutral backend, soundbanks, emitters) | [audio.md](docs/superpowers/documentation/audio.md) | `engine/src/audio`, `engine/src/audio/wwise` (`AK::` stays inside it), `editor/src/audio` |
+| Behaviour trees and perception (`.wbt`, `AIController`, Lua leaves `BtAction`/`BtCondition`, `Perceiver`, the tree editor) | [behavior-trees.md](docs/superpowers/documentation/behavior-trees.md) | `engine/src/ai`, `editor/src/ai` |
+| Navigation (Recast bake in the editor, Detour queries and DetourCrowd agents, `.wnav`, the `Nav` Lua API) | [navigation.md](docs/superpowers/documentation/navigation.md) | `engine/src/nav`, `editor/src/asset_pipeline/nav_bake.*`, `editor/src/nav`; vendored `engine/vendor/recastnavigation`; `dt*` stays in `engine/src/nav`, `rc*` in the editor |
+| Input | [input.md](docs/superpowers/documentation/input.md) | `engine/src/input` |
+| Game UI | [ui.md](docs/superpowers/documentation/ui.md) | `engine/src/ui`, `editor/src/ui` |
+| Project settings, Settings page | [project-settings.md](docs/superpowers/documentation/project-settings.md) | `engine/src/core/project_settings.*`, `editor/src/settings` |
+| Editor, play mode, gizmos, performance stats | [editor.md](docs/superpowers/documentation/editor.md) | `editor/src` |
 
 Animation in one line (the warrior of the demo plays `Warrior_animation/warrior.wgraph`, written by `scripts/gen_demo_graph.py`, run before `gen_demo_scene.py`): `AnimationModule` (after the scripts) evaluates a tree of pose nodes per `Animator` into a joint palette; palettes ride the scene delta to the render thread, which keeps the previous palette like `PrevWorld`, and vertex shaders skin through their own last binding set (`t22`/`t23`). The demo hall (`editor/assets/scenes/demo.wscene`) is written by `scripts/gen_demo_scene.py`, with CC0 FBX characters (the warrior's footstep events live in its `.wanim` clips, extracted from the model once, `<Model>_animation/`; the scene points at the GUIDs and legacy sub-asset ids in the models' `.meta` files, which redirect to the extracted assets, so the `.meta` files and the extracted files are force-added although `.meta` files are ignored).
 
-Renderer in one line: the render thread owns all GPU state and a GUID-keyed `GpuResourceCache`, is fed per-frame deltas through a bounded queue, and runs Forward+ (shadows, depth/normal/velocity prepass, light culling, AO, forward, sky, TAA, motion blur, exposure, bloom, tonemap, FXAA, UI, outline, debug, blit, ImGui).
+Renderer in one line: the render thread owns all GPU state and a GUID-keyed `GpuResourceCache`, is fed per-frame deltas through a bounded queue, and runs Forward+ (shadows, depth/normal/velocity prepass, light culling, AO, decals, particle simulation, forward, sky, particles, TAA, motion blur, exposure, bloom, tonemap, FXAA, UI, outline, debug, blit, ImGui).
 
 ## Conventions
 
 - `wiwa` namespace, tabs, `#include <pch.h>` first in engine files (`<editor_common.h>` in editor files), `Ref`/`Scope` smart pointers.
 - Log with `WI_LOG` and its area variants (`WI_RENDER_LOG`, `WI_PHYSICS_LOG`, `WI_ASSET_LOG`...), never `std::cout`/`printf`.
 - `near` and `far` are Windows macros: don't use them as identifiers.
+- Compile definitions that change how shared headers compile must be identical in every project that includes them: `JoltDefines()` (Jolt) and `SolDefines()` (`SOL_ALL_SAFETIES_ON`, so Lua argument checks behave the same in Release and Debug) in the root `premake5.lua`. A new project that includes Jolt or sol headers calls them.
 - Premake only (no CMake). Third-party code is vendored under `engine/vendor/`; don't edit it except the patched NVRHI (rendering.md). The workspace `premake5.lua` still lists some stale `Wiwa/vendor/...` paths from an older project.
 - Every new feature must be showcased in `editor/assets/scenes/demo.wscene` and covered by `--demo-smoke` (`tests/src/play/demo_smoke.cpp`).
-- `docs/superpowers/specs/` is committed; `docs/superpowers/plans/` and `PROMPT.md` are git-ignored and never committed. Plans are scratch and may be stale.
+- `docs/superpowers/documentation/` is committed; `docs/superpowers/plans/` and `PROMPT.md` are git-ignored and never committed. Plans are scratch and may be stale.

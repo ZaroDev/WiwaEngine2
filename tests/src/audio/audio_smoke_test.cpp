@@ -724,7 +724,12 @@ namespace wiwa
 			const std::optional<AssetRef> shot = database.ensure_imported(dir / "zz_smoke_shot.wav");
 			const std::optional<AssetRef> hum = database.ensure_imported(dir / "zz_smoke_hum_loop.wav");
 			WI_AUDIO_LOG(Info, "Smoke test: the next import error is expected");
-			check(!database.ensure_imported(dir / "zz_smoke_fake.wav").has_value(), "clip_import_bad: a file that is not a sound fails the import");
+			// A failed import still answers with the reference (the guid stays valid), so the proof is that nothing was cooked: the catalog, which the
+			// editor writes when a scan has finished, lists the two sounds and not the fake one. The backend finds its clips there.
+			database.ensure_imported(dir / "zz_smoke_fake.wav");
+			database.scan();
+			assets->refresh_catalog();
+			check(!assets->find_asset("assets/zz_audio_smoke/zz_smoke_fake.wav").has_value(), "clip_import_bad: a file that is not a sound fails the import");
 			check(shot && hum, "clip_import: wav files import as AudioClip assets");
 
 			if (shot && hum)

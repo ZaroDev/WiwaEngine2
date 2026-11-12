@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -95,6 +96,7 @@ namespace wiwa
 			std::unique_ptr<PreviewModel> Model{}; // Prefab
 			entt::entity Entity = entt::null;
 			int Frames = 0;
+			std::chrono::steady_clock::time_point Started = std::chrono::steady_clock::now(); // a job also ends by the clock: frames can be a millisecond each
 			int Settled = 0;
 			int Attempts = 0;
 			bool Posed = false;

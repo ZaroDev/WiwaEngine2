@@ -741,6 +741,8 @@ void EditorModule::shutdown()
 {
 	// the views and scenes these hold belong to modules that shut down after this one
 	m_Thumbnails.reset();
+	// its scan reads the asset database, which is gone by the time this module is destroyed: end it here (it was the shutdown crash of every smoke)
+	m_SkeletonIndex.reset();
 	if (m_AssetEditor != nullptr)
 	{
 		m_AssetEditor->close_preview();

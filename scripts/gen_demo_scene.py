@@ -249,7 +249,7 @@ CHARS_URL = "https://opengameart.org/sites/default/files/rpg_characters_-_nov_20
 MONSTERS_URL = "https://opengameart.org/sites/default/files/cute_animated_monsters_-_aug_2020.zip"
 HDRI_URL = "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloppenheim_06_puresky_1k.hdr"
 TEXTURES = {"bricks": "Bricks059", "paving": "PavingStones070", "metal": "Metal032"}
-# Sounds, all CC0: events are the file names (docs/superpowers/specs/audio.md, MiniAudio backend). Kenney's packs through their Godot mirrors, pinned to a commit.
+# Sounds, all CC0: events are the file names (docs/superpowers/documentation/audio.md, MiniAudio backend). Kenney's packs through their Godot mirrors, pinned to a commit.
 KENNEY_UI = "https://raw.githubusercontent.com/Calinou/kenney-interface-sounds/4596a49eaf5a533948d49a47467f606bcdea70ff/addons/kenney_interface_sounds/"
 KENNEY_IMPACT = "https://raw.githubusercontent.com/Boyquotes/kenney-impact-sounds-for-godot/999dd1684873f8b020a3aa5b26e713da21688924/addons/kenney%20impact%20sounds/"
 OGA_WIND = "https://opengameart.org/sites/default/files/Birds%20and%20Wind%20-%20Ambient_0.ogg"
@@ -1415,7 +1415,7 @@ def decal_materials():
 
 
 def add_decals(s, g):
-	"""The decals of the demo (see docs/superpowers/specs/decals.md): a rune circle that glows on the ground, bullet holes with a normal map on a
+	"""The decals of the demo (see docs/superpowers/documentation/decals.md): a rune circle that glows on the ground, bullet holes with a normal map on a
 	column, a scorch mark across the ground and a crate, and (scripts/decal_footprints.lua on the warrior) footprints at its footsteps."""
 	def decal(material, size, sort_order=0, **extra):
 		return {"Decal": dict({"Material": ref(g["decals"][material]), "Size": list(size), "SortOrder": sort_order}, **extra)}
@@ -1646,7 +1646,7 @@ def vfx_effects():
 
 
 def add_vfx(s, g):
-	"""The particle effects of the demo (see docs/superpowers/specs/vfx.md): a campfire (flames, smoke, embers), a spark fountain that bounces off the ground
+	"""The particle effects of the demo (see docs/superpowers/documentation/vfx.md): a campfire (flames, smoke, embers), a spark fountain that bounces off the ground
 	through the depth buffer, motes rising from the rune circle of the decals station, impact sparks spawned from a script, and (scripts/vfx_footsteps.lua on
 	the warrior) dust at its footsteps."""
 	def system(effect):
@@ -1677,7 +1677,7 @@ NAV_GOALS = [(NAV_CENTER - 4 + 4 * i, -8) for i in range(3)]  # (x, z) of where 
 
 
 def add_navigation(s, g):
-	"""The navigation station (docs/superpowers/specs/navigation.md): a wall across an arena with an open way round each end, mud over the west way (the cost
+	"""The navigation station (docs/superpowers/documentation/navigation.md): a wall across an arena with an open way round each end, mud over the west way (the cost
 	is in editor/nav.wsettings), and three agents that walk from the north side to the south side and back, round the wall, with nav_patrol.lua. The navmesh
 	is baked by the editor from this scene (wiwa_editor --scene assets/scenes/demo.wscene --nav-bake <file>) into NAV_FILE; the volume refers to it."""
 	cx = NAV_CENTER
@@ -1728,7 +1728,7 @@ AI_TREE_FILE = "ai/guard.wbt"
 
 
 def guard_tree():
-	"""The guard of the navigation station (docs/superpowers/specs/behavior-trees.md): a reactive Selector that chases what it sees, goes to look at a noise
+	"""The guard of the navigation station (docs/superpowers/documentation/behavior-trees.md): a reactive Selector that chases what it sees, goes to look at a noise
 	it heard (a Lua condition leaf says whether there is one), and otherwise patrols between two points. Perception fills target (seen_target),
 	can_see_target, last_seen_position, heard_position and heard_kind of its blackboard."""
 	cx = NAV_CENTER

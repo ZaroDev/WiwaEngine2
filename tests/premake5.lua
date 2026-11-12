@@ -76,6 +76,7 @@ project "wiwa_tests"
 	}
 
 	JoltDefines()
+	SolDefines()
 	WwiseDefines()
 	WwiseLinks()
 

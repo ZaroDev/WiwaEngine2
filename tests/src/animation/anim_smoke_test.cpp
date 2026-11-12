@@ -107,7 +107,7 @@ namespace wiwa
 			{
 				if (i > 0)
 				{
-					big.Nodes.push_back(make_node("n", static_cast<i32>(i) - 1, glm::vec3(0.0f)));
+					big.Nodes.push_back(make_node(("n" + std::to_string(i)).c_str(), static_cast<i32>(i) - 1, glm::vec3(0.0f))); // unique names: a repeated joint name is a warning of its own
 				}
 				bigSkeleton.Joints.push_back(i);
 				bigSkeleton.InverseBind.push_back(glm::mat4(1.0f));

@@ -127,6 +127,13 @@ namespace wiwa
 	{
 		const RenameMap none;
 		std::unordered_map<AssetGuid, SkeletonUsers> index;
+		// read once: redirected() would walk the whole import cache again for every file
+		const std::unordered_map<AssetGuid, AssetGuid> redirects = database.redirect_map();
+		const auto redirected = [&redirects](AssetRef ref)
+		{
+			const auto found = ref.valid() ? redirects.find(ref.resolved()) : redirects.end();
+			return found == redirects.end() ? ref.Guid : found->second; // as AssetDatabase::redirected: unchanged when nothing redirects it
+		};
 		for (const AssetDatabase::SourceRoot& root : database.get_roots())
 		{
 			std::error_code error;
@@ -150,7 +157,7 @@ namespace wiwa
 				const Reading reading = isMesh ? read_mesh(file, none) : read_clip(file, none);
 				if (reading.Ok && reading.Skeleton.valid())
 				{
-					SkeletonUsers& users = index[database.redirected(reading.Skeleton).Guid];
+					SkeletonUsers& users = index[redirected(reading.Skeleton)];
 					(isMesh ? users.Meshes : users.Clips).push_back(file);
 				}
 			}

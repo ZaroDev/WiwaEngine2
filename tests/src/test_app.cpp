@@ -51,7 +51,7 @@ protected:
 		}
 		if (m_Driver.input_panel_smoke())
 		{
-			setup.InputSettings = temp / "wiwa_input_panel_smoke.wsettings";
+			setup.InputSettings = scratch("wiwa_input_panel_smoke.wsettings");
 		}
 		if (m_Driver.nav_panel_smoke())
 		{
@@ -90,7 +90,14 @@ protected:
 		{
 			if (argument == flag)
 			{
-				m_CommandThread = std::thread([this, assets, run]() { m_CommandResult = run(*assets) ? 0 : 1; });
+				if (m_CommandThread.joinable())
+				{
+					// one headless smoke per run: starting a second would overwrite the running thread (std::terminate)
+					WI_ERROR("Tests", "{0}: only one headless smoke can run at a time", flag);
+					m_Rejected = true; // the running smoke may still pass: the run must not
+					return;
+				}
+				m_CommandThread = std::thread([this, assets, run]() { m_CommandResult = run(*assets) && !m_Rejected ? 0 : 1; });
 				return;
 			}
 		}
@@ -112,6 +119,7 @@ private:
 	}
 
 	EditorSmokeDriver m_Driver;
+	std::atomic<bool> m_Rejected{ false };
 };
 
 wiwa::Engine* wiwa::create_engine(int argc, char** argv)

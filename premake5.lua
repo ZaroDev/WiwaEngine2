@@ -151,6 +151,12 @@ function WwiseLinks()
 	end
 end
 
+-- sol2 checks the types of the arguments a script passes (a string where a number or an entity goes is a Lua error) only in debug builds unless told
+-- to: without this a Release build coerces them or casts unchecked. Every project that includes sol needs the same define.
+function SolDefines()
+	defines { "SOL_ALL_SAFETIES_ON=1" }
+end
+
 -- Jolt compile definitions: identical for the Jolt lib and for every project that includes Jolt headers (a mismatch is an ODR bug).
 -- JPH_OBJECT_STREAM is deliberately not defined and cross-platform determinism is off.
 function JoltDefines()

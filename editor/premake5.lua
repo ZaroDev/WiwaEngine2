@@ -68,6 +68,8 @@ project "wiwa_editor"
 
 	debugdir "%{wks.location}/editor"
 
+	SolDefines()
+
 	filter "system:windows"
 		staticruntime "Off"
 		systemversion "latest"

@@ -71,6 +71,7 @@ project "wiwa"
 
 	-- must match the Jolt library defines
 	JoltDefines()
+	SolDefines()
 	WwiseDefines()
 
 	filter "files:vendor/imguizmo/**.cpp"
