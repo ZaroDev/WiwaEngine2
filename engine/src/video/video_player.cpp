@@ -519,6 +519,11 @@ namespace wiwa
 			}
 		}
 
+		if (!m_Audio)
+		{
+			m_Decoder->disable_audio(); // nobody reads the sound: a decoder must not queue it
+		}
+
 		const i64 frameDurationUs = static_cast<i64>(1e6 / info.Fps);
 		for (;;)
 		{

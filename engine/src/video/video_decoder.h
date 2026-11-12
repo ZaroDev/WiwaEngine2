@@ -24,8 +24,11 @@ namespace wiwa
 		// The next run of sound. Only valid when the file has audio.
 		virtual DecodeStatus read_audio(AudioChunk& out) = 0;
 
-		// Moves both streams to the first sample at or after the time. False if the file cannot seek.
+		// Moves both streams to a point at or shortly before the time (a platform decoder seeks to a keyframe): the caller drops what is earlier.
+		// False if the file cannot seek.
 		virtual bool seek(i64 us) = 0;
+		// Called once after open when nothing will read the sound: a decoder that queues the streams it is not asked for stops doing so.
+		virtual void disable_audio() {}
 		virtual void close() = 0;
 	};
 }

@@ -3,6 +3,8 @@
 
 #include <cstring>
 
+#include <video/video_factory.h>
+
 #include "../file_utils.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
@@ -31,7 +33,7 @@ namespace wiwa
 		}
 
 		// .mp4, .m4v, .mov: a video the video system plays in a UI Video widget. The bytes are cooked as they are (nothing is transcoded: the
-		// platform decoder reads the file at run time); a file that is not an mp4 fails the import (the previous cook, if any, stays).
+		// platform decoder reads the file at run time, the importer only records what it finds); a file that is not an mp4 fails the import (the previous cook, if any, stays).
 		class VideoImporter final : public IImporter
 		{
 		public:
@@ -57,6 +59,15 @@ namespace wiwa
 
 				VideoData data;
 				data.Name = ctx.source().stem().string();
+
+				// What the platform decoder finds in it. A file it cannot read is still cooked (another platform, or a codec that is installed later,
+				// may read it); the widget reports the reason when it plays.
+				std::string probeError;
+				data.HasInfo = probe_video(*bytes, data.Info, probeError);
+				if (!data.HasInfo)
+				{
+					WI_ASSET_LOG(Warning, "{0}: the platform decoder cannot read it: {1}", file, probeError);
+				}
 				data.Bytes = std::move(*bytes);
 				ctx.emit(ctx.main_asset(), data, {});
 				return true;

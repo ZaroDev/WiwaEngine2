@@ -90,9 +90,22 @@ project "wiwa"
 	filter "files:src/scripting/bindings/**.cpp"
 		buildoptions { "/bigobj" }
 
+	-- the video decoder of Windows (Media Foundation) lives in src/video/mf and is built only there; another platform adds its own folder and its case in
+	-- src/video/video_factory.cpp
+	filter "system:not windows"
+		removefiles { "src/video/mf/**" }
+
 	filter "system:windows"
 		staticruntime "Off"
 		systemversion "latest"
+		links
+		{
+			"mfplat",
+			"mfreadwrite",
+			"mfuuid",
+			"ole32",
+			"shlwapi"
+		}
 		defines
 		{
 			"WI_PLATFORM_WINDOWS",
