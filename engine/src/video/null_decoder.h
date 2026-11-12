@@ -19,6 +19,8 @@ namespace wiwa
 		u32 Channels = 2;
 
 		bool FailOpen = false;       // open() fails
+		u32 OpenDelayMs = 0;         // open() takes this long (a file that is slow to open)
+		i64 AudioSeekBackUs = 0;     // after a seek the sound restarts this much before the time (a decoder that seeks to a keyframe)
 		i64 FailAfterFrames = -1;    // read_video gives Error once this many frames were read (-1: never)
 		u32 PendingEvery = 0;        // every Nth read_video call gives Pending without advancing (0: never)
 	};

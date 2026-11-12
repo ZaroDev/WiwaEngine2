@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <memory>
@@ -80,6 +81,8 @@ namespace wiwa
 
 		void set_volume(float volume);
 		bool uses_audio() const { return m_Audio != nullptr; }
+		// Frames of sound that were decoded for a time before a seek target and dropped instead of played.
+		u64 audio_frames_dropped() const { return m_AudioDropped.load(std::memory_order_relaxed); }
 		VideoAudioOut* audio() const { return m_Audio.get(); }
 
 	private:
@@ -128,10 +131,10 @@ namespace wiwa
 		u64 m_FrameSerial = 0;
 		i64 m_WallUs = 0;
 		i64 m_FrameDurationUs = 33333;
-		bool m_PlayWanted = false;
 		bool m_Opened = false;       // poll_open consumed the worker's answer
 		bool m_AwaitingSeek = false; // a seek was requested and its first picture has not arrived: the clock waits
 		bool m_Started = false;      // open() ran
+		i64 m_AwaitTargetUs = 0;     // the target of the seek whose first picture has not arrived
 
 		// shared, under m_Mutex
 		std::mutex m_Mutex{};
@@ -160,5 +163,7 @@ namespace wiwa
 		u32 m_PassFrames = 0;
 		AudioChunk m_Chunk{};        // the sound being moved into the ring
 		u32 m_ChunkUsed = 0;         // frames of m_Chunk already written
+		i64 m_AudioSkipUntilUs = -1; // after a seek: sound before this time is dropped
+		std::atomic<u64> m_AudioDropped{ 0 };
 	};
 }

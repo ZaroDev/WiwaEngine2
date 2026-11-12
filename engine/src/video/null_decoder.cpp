@@ -1,8 +1,10 @@
 #include <pch.h>
 #include "null_decoder.h"
 
+#include <chrono>
 #include <cmath>
 #include <cstring>
+#include <thread>
 
 namespace wiwa
 {
@@ -17,6 +19,10 @@ namespace wiwa
 
 			virtual bool open(std::span<const std::byte>, VideoInfo& info, std::string& error) override
 			{
+				if (m_Config.OpenDelayMs > 0)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(m_Config.OpenDelayMs));
+				}
 				if (m_Config.FailOpen)
 				{
 					error = "null decoder: open failed (FailOpen)";
@@ -110,7 +116,7 @@ namespace wiwa
 				}
 				us = std::max<i64>(us, 0);
 				m_NextFrame = static_cast<i64>(std::ceil(static_cast<double>(us) * m_Config.Fps / 1e6 - 1e-9));
-				m_AudioPos = us * m_Config.SampleRate / 1'000'000;
+				m_AudioPos = std::max<i64>(0, us - m_Config.AudioSeekBackUs) * m_Config.SampleRate / 1'000'000;
 				m_Failed = false;
 				return true;
 			}

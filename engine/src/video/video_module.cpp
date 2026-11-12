@@ -231,10 +231,16 @@ namespace wiwa
 			return false;
 		}
 
+		m_EndedKey.reset();
 		if (m_Entry && !(m_Entry->Key == key))
 		{
 			WI_VIDEO_LOG(Warning, "A second video was started: only one plays at a time, the first one is stopped");
+			m_Finished.push_back({ m_Entry->Key, VideoFinished{ true, false } }); // whoever waited for the first one hears that it was cut short
 			destroy_entry();
+		}
+		if (m_Entry && (!(m_Entry->Asset == widget->Video) || m_Entry->Loop != widget->Loop))
+		{
+			destroy_entry(); // the script changed what the widget plays: this play is of the new video
 		}
 		if (m_Entry)
 		{
@@ -246,6 +252,7 @@ namespace wiwa
 			else if (m_Entry->Fallback == VideoState::Loading)
 			{
 				m_Entry->PlayWanted = true;
+				m_Entry->PauseWanted = false;
 			}
 			return true;
 		}
@@ -274,7 +281,10 @@ namespace wiwa
 			{
 				m_Entry->Player->pause();
 			}
-			m_Entry->PlayWanted = false;
+			else
+			{
+				m_Entry->PauseWanted = true; // applied when the player exists, after the play that is waiting
+			}
 			m_Entry->PausedByUs = false; // a pause the script asked for is its own: the clock and the widget do not undo it
 		}
 	}
@@ -305,9 +315,16 @@ namespace wiwa
 
 	void VideoModule::seek(const VideoKey& key, double seconds)
 	{
-		if (m_Entry && m_Entry->Key == key && m_Entry->Player)
+		if (m_Entry && m_Entry->Key == key)
 		{
-			m_Entry->Player->seek(seconds);
+			if (m_Entry->Player)
+			{
+				m_Entry->Player->seek(seconds);
+			}
+			else
+			{
+				m_Entry->PendingSeek = seconds;
+			}
 		}
 	}
 
@@ -315,7 +332,7 @@ namespace wiwa
 	{
 		if (!m_Entry || !(m_Entry->Key == key))
 		{
-			return VideoState::Idle;
+			return m_EndedKey && *m_EndedKey == key ? VideoState::Ended : VideoState::Idle;
 		}
 		return m_Entry->Player ? m_Entry->Player->state() : m_Entry->Fallback;
 	}
@@ -391,6 +408,14 @@ namespace wiwa
 					{
 						entry.Player->play();
 					}
+					if (entry.PendingSeek)
+					{
+						entry.Player->seek(*entry.PendingSeek);
+					}
+					if (entry.PauseWanted)
+					{
+						entry.Player->pause();
+					}
 				}
 			}
 		}
@@ -435,6 +460,10 @@ namespace wiwa
 		{
 			m_Finished.push_back({ entry.Key, *finished });
 		}
+		if (entry.Player->state() == VideoState::Failed && m_LastError != entry.Player->error())
+		{
+			m_LastError = entry.Player->error();
+		}
 
 		if (entry.Player->frame_serial() != entry.UploadedSerial)
 		{
@@ -443,6 +472,18 @@ namespace wiwa
 			{
 				send(entry.Stream, std::move(frame));
 			}
+		}
+
+		// A video that is over (or was stopped) and is not shown any more has nothing left to do: its decoder, sound device, picture buffers and
+		// texture (and the copies of the file) are let go. Playing it again makes a new player.
+		const VideoState now = entry.Player->state();
+		if (!visible && (now == VideoState::Ended || now == VideoState::Idle))
+		{
+			if (now == VideoState::Ended)
+			{
+				m_EndedKey = entry.Key;
+			}
+			destroy_entry();
 		}
 	}
 
@@ -493,6 +534,7 @@ namespace wiwa
 		// another scene: the widgets of AutoPlay are new to it
 		if (m_Scene.lock() != active)
 		{
+			m_EndedKey.reset();
 			m_WasVisible.clear();
 			m_Scene = active;
 		}

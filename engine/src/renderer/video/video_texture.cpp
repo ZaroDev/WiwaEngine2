@@ -1,12 +1,13 @@
 #include <pch.h>
 #include "video_texture.h"
 
+#include "../passes/ui_pass.h"
 #include "../render_world.h"
 #include "../view/view_types.h"
 
 namespace wiwa
 {
-	void upload_video_picture(RenderWorld& world, u32 stream, const VideoFrame& frame)
+	void upload_video_picture(RenderWorld& world, u32 stream, const VideoFrame& frame, UiRenderPass* ui)
 	{
 		if (frame.Width == 0 || frame.Height == 0 || frame.Width > VIDEO_MAX_DIMENSION || frame.Height > VIDEO_MAX_DIMENSION ||
 			frame.Bgra.size() < static_cast<size_t>(frame.Width) * frame.Height * 4)
@@ -23,12 +24,17 @@ namespace wiwa
 		TextureRegistry& textures = world.get_renderer().get_textures();
 
 		nvrhi::TextureHandle texture;
+		nvrhi::ITexture* replaced = nullptr;
 		if (nvrhi::ITexture* existing = textures.get(id))
 		{
 			const nvrhi::TextureDesc& description = existing->getDesc();
 			if (description.width == frame.Width && description.height == frame.Height)
 			{
 				texture = existing;
+			}
+			else
+			{
+				replaced = existing;
 			}
 		}
 		if (!texture)
@@ -46,6 +52,10 @@ namespace wiwa
 				return;
 			}
 			textures.set(id, texture); // the registry holds it (and drops the one of another size)
+			if (replaced != nullptr && ui != nullptr)
+			{
+				ui->forget_texture(replaced); // the pass's cached set would keep the old one on the GPU
+			}
 		}
 
 		nvrhi::CommandListHandle upload = device->createCommandList();
@@ -55,8 +65,14 @@ namespace wiwa
 		device->executeCommandList(upload);
 	}
 
-	void release_video_picture(RenderWorld& world, u32 stream)
+	void release_video_picture(RenderWorld& world, u32 stream, UiRenderPass* ui)
 	{
-		world.get_renderer().get_textures().remove(view_video_texture_id(stream));
+		TextureRegistry& textures = world.get_renderer().get_textures();
+		const u32 id = view_video_texture_id(stream);
+		if (ui != nullptr)
+		{
+			ui->forget_texture(textures.get(id));
+		}
+		textures.remove(id);
 	}
 }

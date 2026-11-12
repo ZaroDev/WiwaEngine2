@@ -117,19 +117,26 @@ namespace wiwa
 		}
 		if (m_State == VideoState::Loading)
 		{
-			// requests wait for the open; a play is remembered by poll_open
+			// The requests wait for the open and are applied in order once it is done (a seek and a pause are not lost). A stop discards what came
+			// before it, and a stop of a video that was asked to play is a skip like any other.
+			std::vector<Request> kept;
+			bool playWanted = false;
 			for (const Request& request : m_Requests)
 			{
-				if (request.What == Request::Kind::Play)
+				if (request.What == Request::Kind::Stop)
 				{
-					m_PlayWanted = true;
+					if (playWanted)
+					{
+						finish({ true, false });
+					}
+					playWanted = false;
+					kept.clear();
+					continue;
 				}
-				else if (request.What == Request::Kind::Stop)
-				{
-					m_PlayWanted = false;
-				}
+				playWanted = playWanted || request.What == Request::Kind::Play;
+				kept.push_back(request);
 			}
-			m_Requests.clear();
+			m_Requests.swap(kept);
 			return;
 		}
 
@@ -217,11 +224,6 @@ namespace wiwa
 
 		m_State = VideoState::Idle;
 		clock_hold(0);
-		if (m_PlayWanted)
-		{
-			m_PlayWanted = false;
-			m_Requests.insert(m_Requests.begin(), { Request::Kind::Play, 0.0 });
-		}
 	}
 
 	void VideoPlayer::begin_seek(i64 us)
@@ -242,6 +244,7 @@ namespace wiwa
 			m_Clock.set_audio_master(true); // a clock that fell back to the wall goes back to the sound
 		}
 		m_AwaitingSeek = true;
+		m_AwaitTargetUs = us;
 		clock_hold(us);
 	}
 
@@ -376,8 +379,31 @@ namespace wiwa
 			errored = m_Errored;
 			streamError = m_StreamError;
 		}
-		if (!ringEmpty || m_AwaitingSeek || (!ended && !errored))
+		if (!ringEmpty || (!ended && !errored))
 		{
+			return;
+		}
+		if (m_AwaitingSeek)
+		{
+			// The seek went to the end of the stream (past the last picture: its duration can be that of a longer sound track): no picture will
+			// come. A looping video starts over; any other ends there.
+			m_AwaitingSeek = false;
+			if (errored)
+			{
+				m_State = VideoState::Failed;
+				m_Error = streamError;
+				clock_hold(m_AwaitTargetUs);
+				finish({ false, true });
+				return;
+			}
+			if (m_Desc.Loop)
+			{
+				begin_seek(0);
+				return;
+			}
+			m_State = VideoState::Ended;
+			clock_hold(m_AwaitTargetUs);
+			finish({ false, false });
 			return;
 		}
 
@@ -459,6 +485,27 @@ namespace wiwa
 					std::lock_guard<std::mutex> lock(m_Mutex);
 					m_AudioEnded = true;
 					return;
+				}
+
+				// A decoder seeks to a point at or before the target: the sound before the target is dropped, so that it is heard with its picture.
+				if (m_AudioSkipUntilUs >= 0 && m_Chunk.Frames > 0)
+				{
+					const i64 rate = m_Audio->sample_rate();
+					const i64 endUs = m_Chunk.TimestampUs + static_cast<i64>(m_Chunk.Frames) * 1'000'000 / rate;
+					if (endUs <= m_AudioSkipUntilUs)
+					{
+						m_AudioDropped.fetch_add(m_Chunk.Frames, std::memory_order_relaxed);
+						m_Chunk.Frames = 0;
+						continue;
+					}
+					if (m_Chunk.TimestampUs < m_AudioSkipUntilUs)
+					{
+						const u32 drop = std::min<u32>(m_Chunk.Frames, static_cast<u32>((m_AudioSkipUntilUs - m_Chunk.TimestampUs) * rate / 1'000'000));
+						m_Chunk.Samples.erase(m_Chunk.Samples.begin(), m_Chunk.Samples.begin() + static_cast<size_t>(drop) * channels);
+						m_Chunk.Frames -= drop;
+						m_AudioDropped.fetch_add(drop, std::memory_order_relaxed);
+					}
+					m_AudioSkipUntilUs = -1;
 				}
 			}
 			m_ChunkUsed += m_Audio->write(m_Chunk.Samples.data() + static_cast<size_t>(m_ChunkUsed) * channels, m_Chunk.Frames - m_ChunkUsed);
@@ -546,6 +593,11 @@ namespace wiwa
 					lock.unlock();
 					m_Decoder->seek(target);
 					m_SkipUntilUs = target;
+					m_AudioSkipUntilUs = target;
+					{
+						std::lock_guard<std::mutex> audioLock(m_Mutex);
+						m_AudioEnded = false; // an End that was read for the sound before the seek is not the end of the sound after it
+					}
 					m_LoopBaseUs = 0;
 					m_PassFrames = 0;
 					m_Chunk.Frames = 0;
@@ -571,7 +623,10 @@ namespace wiwa
 			std::shared_ptr<VideoFrame> frame = acquire_frame();
 			if (!frame)
 			{
-				continue; // every buffer is in use (the ring, the screen, an upload): the wait above polls again
+				// every buffer is in use (the ring, the screen, an upload on its way to the render thread): the wait above would not block (the ring
+				// has room), so wait here for one to come back
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				continue;
 			}
 
 			switch (m_Decoder->read_video(*frame))

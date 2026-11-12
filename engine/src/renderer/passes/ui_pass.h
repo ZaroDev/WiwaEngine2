@@ -35,6 +35,9 @@ namespace wiwa
 		void set_preview(UiDrawList list, u32 width, u32 height, const glm::vec4& background);
 		// Stops the preview and lets go of its texture (its id is not registered any more).
 		void clear_preview();
+		// Lets go of the binding set (and the strong reference to the texture it holds) of a texture that is leaving the registry: a video's picture
+		// when its stream is released or made again at another size. Render thread.
+		void forget_texture(nvrhi::ITexture* texture) { m_BindingSets.erase(texture); }
 
 	private:
 		// Mirrors PushConstantsData in ui.hlsl.

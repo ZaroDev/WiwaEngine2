@@ -117,6 +117,8 @@ namespace wiwa
 			VideoState Fallback = VideoState::Loading; // the state while there is no player: Loading, or Failed
 			std::string FallbackError{};
 			bool PlayWanted = false;
+			bool PauseWanted = false;           // a pause and a seek that came before the player existed (the asset was still loading)
+			std::optional<double> PendingSeek{};
 			bool PausedByUs = false; // the widget is hidden or the game clock stands still
 			u32 Stream = 0;
 			u64 UploadedSerial = 0;
@@ -143,6 +145,7 @@ namespace wiwa
 		bool m_Initialized = false;
 
 		std::optional<Entry> m_Entry{};
+		std::optional<VideoKey> m_EndedKey{}; // the video that played out and whose player was let go: its state is still Ended
 		std::vector<std::pair<VideoKey, VideoFinished>> m_Finished{};
 		std::string m_LastError{};
 		std::weak_ptr<Scene> m_Scene{};

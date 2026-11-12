@@ -405,6 +405,71 @@ namespace wiwa
 			}
 		}
 
+		// the findings of the final review
+		void check_player_review(Check& check)
+		{
+			// a seek to the end (or past it) of a playing video ends it: no waiting forever on a picture that does not exist
+			{
+				NullDecoderConfig config;
+				Rig rig(config);
+				rig.opened();
+				rig.Player->play();
+				play_in_steps(rig, 200000, check, "player before the seek to the end");
+				rig.Player->seek(1e9);
+				i64 wall = 200000;
+				const bool ended = pump(*rig.Player, wall, [&]() { wall += STEP_US; rig.Player->update(wall); return rig.Player->state() == VideoState::Ended; }, 5000);
+				check(ended, "player_seek_to_end: a seek past the end of a playing video ends it");
+				const std::optional<VideoFinished> finished = rig.Player->take_finished();
+				check(finished && !finished->Skipped && !finished->Failed, "player_seek_to_end: with Finished{}");
+			}
+			{
+				NullDecoderConfig config;
+				config.DurationSeconds = 0.5;
+				Rig rig(config, true);
+				rig.opened();
+				rig.Player->play();
+				rig.Player->update(0);
+				rig.Player->seek(1e9);
+				i64 wall = 0;
+				const bool restarted = pump(*rig.Player, wall, [&]() { wall += STEP_US; rig.Player->update(wall); return rig.Player->current_frame() && rig.Player->time() < 0.3 && rig.Player->state() == VideoState::Playing; }, 5000);
+				check(restarted && !rig.Player->take_finished(), "player_seek_to_end: a looping video seeked past its end starts over and does not finish");
+			}
+
+			// requests made while the file is still opening are kept, not dropped
+			{
+				NullDecoderConfig config;
+				config.OpenDelayMs = 150;
+				Rig rig(config);
+				rig.Player->play();
+				rig.Player->seek(1.0);
+				rig.Player->update(0);
+				check(rig.Player->state() == VideoState::Loading, "player_requests_while_loading: the file is still opening");
+				check(pump(*rig.Player, 0, [&]() { return rig.Player->state() == VideoState::Playing; }), "player_requests_while_loading: the play that came first happens");
+				check(pump(*rig.Player, 0, [&]() { return rig.index() >= 30; }), "player_requests_while_loading: and so does the seek (the first picture is at or after 1 s)");
+			}
+			{
+				NullDecoderConfig config;
+				config.OpenDelayMs = 150;
+				Rig rig(config);
+				rig.Player->play();
+				rig.Player->pause();
+				rig.Player->update(0);
+				check(pump(*rig.Player, 0, [&]() { return rig.Player->state() != VideoState::Loading; }) && rig.Player->state() == VideoState::Paused, "player_requests_while_loading: a pause after the play leaves it paused");
+			}
+			{
+				NullDecoderConfig config;
+				config.OpenDelayMs = 150;
+				Rig rig(config);
+				rig.Player->play();
+				rig.Player->update(0);
+				rig.Player->stop();
+				rig.Player->update(0);
+				const std::optional<VideoFinished> finished = rig.Player->take_finished();
+				check(finished && finished->Skipped, "player_requests_while_loading: stopping a video that was asked to play reports Finished{Skipped}");
+				check(pump(*rig.Player, 0, [&]() { return rig.Player->state() == VideoState::Idle; }), "player_requests_while_loading: and it is idle once open");
+			}
+		}
+
 		void check_player_failures(Check& check)
 		{
 			{
@@ -623,6 +688,20 @@ namespace wiwa
 
 		void check_player_audio(Check& check)
 		{
+			// the sound after a seek starts at the target, however early the decoder restarts it
+			{
+				NullDecoderConfig config;
+				config.AudioSeekBackUs = 500000;
+				AudioRig rig(config);
+				pump(*rig.Player, 0, [&]() { return rig.Player->state() != VideoState::Loading; });
+				rig.Player->play();
+				rig.Player->update(0);
+				rig.Player->seek(1.0);
+				const u64 before = rig.Player->frame_serial();
+				pump(*rig.Player, 0, [&]() { return rig.Player->frame_serial() != before; });
+				pump(*rig.Player, 0, [&]() { return rig.Player->audio_frames_dropped() >= 20000; }, 3000);
+				check(rig.Player->audio_frames_dropped() >= 20000 && rig.Player->audio_frames_dropped() <= 26000, "player_audio_trim: the half second of sound before the seek target is dropped, not played");
+			}
 			{
 				// players with sound destroyed mid decode, with and without a real device thread: no hang, no callback on a freed ring
 				for (int i = 0; i < 40; i++)
@@ -726,6 +805,7 @@ namespace wiwa
 			NullDecoderConfig Decoder{};
 			std::vector<std::pair<u32, std::shared_ptr<const VideoFrame>>> Uploads{};
 			std::vector<u32> Releases{};
+			std::vector<AssetGuid> Loaded{}; // the video assets the module asked for
 			i64 Wall = 0;
 			glm::vec2 Canvas{ 1920.0f, 1080.0f };
 
@@ -741,8 +821,9 @@ namespace wiwa
 				Video.set_ui_module(&Ui);
 				Video.set_audio_mode(VideoAudioMode::Off);
 				Video.set_decoder_factory([this]() { return create_null_decoder(Decoder); });
-				Video.set_video_loader([this](const AssetRef&) -> VideoAssetBytes
+				Video.set_video_loader([this](const AssetRef& asset) -> VideoAssetBytes
 				{
+					Loaded.push_back(asset.Guid);
 					if (LoadFails)
 					{
 						return { LoadState::Failed, nullptr };
@@ -899,6 +980,85 @@ namespace wiwa
 				rig.Video.play(key);
 				rig.frame();
 				check(rig.Video.state(key) == VideoState::Failed && !rig.Video.error(key).empty(), "module_no_decoder: a platform without a decoder fails with a reason");
+			}
+
+			// a widget whose video or loop is changed from a script plays what it says now
+			{
+				ModuleRig rig;
+				const AssetRef first{ AssetGuid::generate(), 0 };
+				const AssetRef second{ AssetGuid::generate(), 0 };
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Intro", false, first) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				rig.frame();
+				rig.Video.play(key);
+				rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Playing; });
+				check(!rig.Loaded.empty() && rig.Loaded.back() == first.Guid, "module_widget_changed: the first video is the one asked for");
+				rig.widget(canvas, 1)->Video = second;
+				rig.Video.play(key);
+				rig.frames_until([&]() { return !rig.Loaded.empty() && rig.Loaded.back() == second.Guid; });
+				check(!rig.Loaded.empty() && rig.Loaded.back() == second.Guid, "module_widget_changed: after the widget names another video, play asks for that one");
+			}
+
+			// a video that is over (or stopped) and whose widget is hidden lets go of its decoder, sound and picture
+			{
+				ModuleRig rig;
+				rig.Decoder.DurationSeconds = 0.2;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Auto", true, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Ended; });
+				check(rig.Video.player_count() == 1, "module_release_on_end: while the widget still shows the end the player is kept");
+				const size_t released = rig.Releases.size();
+				rig.widget(canvas, 1)->Visible = false;
+				rig.frame();
+				rig.frame();
+				check(rig.Video.player_count() == 0 && rig.Releases.size() == released + 1, "module_release_on_end: hidden, the player and its picture are let go");
+				check(rig.Video.state(key) == VideoState::Ended, "module_release_on_end: and the widget still reports that it ended");
+				rig.widget(canvas, 1)->Visible = true;
+				rig.Video.play(key);
+				check(rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Playing; }), "module_release_on_end: and it can play again");
+			}
+			{
+				ModuleRig rig;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Auto", true, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Playing; });
+				rig.Video.stop(key);
+				rig.frame();
+				rig.widget(canvas, 1)->Visible = false;
+				rig.frame();
+				rig.frame();
+				check(rig.Video.player_count() == 0 && rig.Video.state(key) == VideoState::Idle, "module_release_on_end: a stopped video whose widget is hidden is let go too");
+			}
+
+			// a seek and a pause that come while the asset is still loading are not lost
+			{
+				ModuleRig rig;
+				rig.LoadingPolls = 4;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Intro", false, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				rig.frame();
+				rig.Video.play(key);
+				rig.Video.seek(key, 1.0);
+				double timeWhenPlaying = -1.0;
+				check(rig.frames_until([&]() {
+					if (timeWhenPlaying < 0.0 && rig.Video.state(key) == VideoState::Playing) { timeWhenPlaying = rig.Video.time(key); }
+					return timeWhenPlaying >= 0.0; }), "module_requests_while_loading: the video plays");
+				check(timeWhenPlaying >= 0.9, "module_requests_while_loading: a seek made while the asset loads is applied (it starts at the target, not at 0)");
+			}
+			{
+				ModuleRig rig;
+				rig.LoadingPolls = 4;
+				const AssetRef panel = rig.add_panel({ ModuleRig::video_widget(1, "Intro", false, someVideo) });
+				const EntityGuid canvas = rig.add_canvas(panel);
+				const VideoKey key{ canvas, 1 };
+				rig.frame();
+				rig.Video.play(key);
+				rig.Video.pause(key);
+				check(rig.frames_until([&]() { return rig.Video.state(key) == VideoState::Paused; }), "module_requests_while_loading: a pause made while the asset loads is applied (it does not play on)");
 			}
 
 			// a script starts a video in the first frame: the UI has run, the video module has not ticked yet
@@ -1101,6 +1261,7 @@ namespace wiwa
 		check_player_sync(check);
 		check_player_seek_and_loop(check);
 		check_player_failures(check);
+		check_player_review(check);
 		check_player_lifecycle(check);
 		check_audio_out(check);
 		check_player_audio(check);

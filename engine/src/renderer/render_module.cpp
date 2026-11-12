@@ -373,9 +373,10 @@ namespace wiwa
 		{
 			return;
 		}
-		submit([stream, frame = std::move(frame)](RenderWorld& world)
+		UiRenderPass* pass = m_UiPass;
+		submit([stream, pass, frame = std::move(frame)](RenderWorld& world)
 			{
-				upload_video_picture(world, stream, *frame);
+				upload_video_picture(world, stream, *frame, pass);
 			});
 	}
 
@@ -385,9 +386,10 @@ namespace wiwa
 		{
 			return;
 		}
-		submit([stream](RenderWorld& world)
+		UiRenderPass* pass = m_UiPass;
+		submit([stream, pass](RenderWorld& world)
 			{
-				release_video_picture(world, stream);
+				release_video_picture(world, stream, pass);
 			});
 	}
 
