@@ -1,0 +1,57 @@
+# Video
+
+Code: `engine/src/video` (module, player, clock, audio feed, decoder interface, Null decoder, factory), `engine/src/video/mf` (the Windows decoder on Media Foundation and a test-clip writer; **`IMF*`/COM never leave this folder**), `engine/src/renderer/video` (the GPU texture of a picture), `engine/src/ui/ui_video_fit.*` and `draw_video` in `ui_draw_list.cpp` (fit math and quads), `Video` in `ui_widget.*`, `VideoData` in `assets/asset_data.h`, importer `editor/src/asset_pipeline/importers/video_importer.cpp`, Lua in `scripting/bindings/bind_ui.cpp` (user API: `docs/scripting.md`, "Video"). Verified by `--video-smoke`, `--video-mf-smoke`, `--render-test` (`render/video_checks.cpp`), `--ui-smoke`, `--asset-smoke`, `--script-smoke` and `--demo-smoke`.
+
+## Shape
+
+A `Video` widget (a `WidgetKind`, fields `Video` AssetRef, `Fit`, `Loop`, `AutoPlay`, `Volume`, `LetterboxColor`; `Color` tints the picture) plays an mp4 (`AssetType::Video`: `.mp4`, `.m4v`, `.mov`, the bytes cooked as they are). One **video at a time** (a cutscene or an intro); playing another stops the first.
+
+```
+UI Video widget  (Lua video_play(), AutoPlay)         main thread
+VideoModule      (priority 13: after the UI's interaction and the scripts, before the UI builds its draw list)
+  VideoPlayer    (state machine, clock, picture ring, seek, loop)
+    decode worker (the only thread that touches the decoder) + VideoAudioOut (miniaudio)
+      IVideoDecoder: MfVideoDecoder (Windows) | NullVideoDecoder (checks)
+```
+
+- **`IVideoDecoder`** (`video_decoder.h`) is the platform seam: pull based, plain data, called from one thread. `open(bytes, info, error)`, `read_video(VideoFrame&)` (BGRA, top row first, `Width*Height*4`), `read_audio(AudioChunk&)` (interleaved float), `seek(us)` (to a keyframe **at or before** the time: the caller drops what is earlier, as `VideoPlayer` does), `disable_audio()`, `close()`. A new platform is one class, a folder like `video/mf` (removed from the build elsewhere in `engine/premake5.lua`) and a case in `create_platform_decoder()` (`video_factory.cpp`). The importer's probe (`probe_video`) goes through the same factory.
+- **`MfVideoDecoder`**: Media Foundation's source reader on a `SHCreateMemStream` of the bytes (a copy: the file is in memory up to three times while it plays: the asset, the player's copy and the stream), RGB32 and float PCM output types, the display aperture applied, alpha forced to 255 (the fourth RGB32 byte is not alpha). COM (multithreaded) and `MFStartup` are started by `open` and ended by `close` **on the same thread**: open and close from one thread. H.264 and AAC ship with Windows; other codecs may need an extension (a codec that cannot be decoded is `Failed` with the reason).
+- **`VideoModule`** (`video_module.h`) owns the one player, keyed by `VideoKey { canvas entity, widget id }`. Every dependency has a setter (decoder factory, asset loader, UI module, frame and release sinks, audio mode), so the checks run it standalone. `init` hands the UI module two callbacks: where a Video widget's picture is (`set_video_provider`) and where finished videos are (`set_video_event_source`).
+- **Rules the module follows**: nothing starts while the game clock is not playing (the editor's edit mode; the UI editor canvas shows the widget's `LetterboxColor` only); a hidden widget or canvas or a stopped game clock **pauses** the video (a pause a script asked for is not undone by either); another scene, a destroyed canvas or widget **stops** it (the entry carries its own scene reference: a script may start a video before the module has ticked); `AutoPlay` starts a widget when it becomes visible (while the clock plays); the widget's `Volume` is applied every frame. `VideoModule::update` does nothing, and does not touch the scene, while the clock is stopped and nothing plays.
+
+## Clock and sync
+
+The clock is `VideoClock`: with sound, the **played audio frames** (`add_audio_frames` from the device thread, counting only frames that really came out of the ring, never the silence of an underrun); without, a monotonic wall time the caller passes in (`update(wallUs)`: a check drives it). Each frame shows `choose_frame`: the newest picture whose timestamp is not after the clock; older ones are dropped, and a decoder that falls behind leaves the last picture up (the sound goes on). A sound that ends before the picture hands the clock to the wall clock (`use_wall_from`) so the last pictures finish; a seek puts it back on the sound.
+
+`VideoPlayerDesc::AudioMode`: `Off` (the default of the class: wall clock, no sound), `Device` (miniaudio's device; **the module's default**: if no device opens it is logged and the player falls back to `Off`), `Manual` (no device: checks drain the ring with `audio()->render(frames)`). The device runs from `init` on and outputs silence while stopped (start/stop only gate whether the callback takes frames), so pause and seek cost nothing. Video sound goes through its own `ma_device`, **not `IAudioBackend`**: it works the same under Wwise, MiniAudio and Null, is not spatialised and ignores the audio settings' buses.
+
+## Threads and shutdown
+
+The decode worker owns the decoder and fills two bounded buffers: up to 4 `shared_ptr<VideoFrame>` (a mutex-guarded ring, buffers recycled from a pool of 6 whose free ones are told by `use_count() == 1`, so playback allocates nothing per picture) and a lock-free single producer / single consumer ring of float sound (half a second). The main thread never decodes. A seek bumps a **serial**; whatever was decoded or queued for an older one is dropped, so nothing from before a seek is ever shown; the first picture at or after the target releases the clock. A loop seeks to 0 and adds the length of the pass to the timestamps, so the clock never goes back. `~VideoPlayer` sets the stop flag, wakes and **joins the worker before** shutting the sound down (the device callback reads the ring and the clock); `VideoModule` destroys the player, which releases the picture's GPU texture.
+
+Errors are never silent: a file that does not open, has no video stream, a size of 0 or over 8192 px, or an absurd frame rate is `Failed` with a reason (`error()`, `last_error()`, the log); a stream that breaks plays out what was decoded and then fails; the widget draws its `LetterboxColor`. A widget with no video asset, an asset that does not load or a platform without a decoder fails the same way, and each reports `Finished{failed}`.
+
+## The picture on screen
+
+`VideoModule` sends each new picture (`frame_serial` changed) through `RenderModule::upload_video_frame(stream, frame)`, a render command holding the frame; the render thread (`renderer/video/video_texture.*`) writes it into one `BGRA8_UNORM` texture per stream (made again when the size changes) registered in the `TextureRegistry` under `view_video_texture_id(stream)` (`FIRST_VIDEO_TEXTURE_ID = 1 << 23`, above the view textures). `UiModule` asks `VideoModule::view(key)` per canvas (`UiLayoutInput::Video`) and `draw_video` makes a `UiBatch` with that texture in `ViewTexture`: the picture fitted by `ui_video_fit` (`Stretch`, `Letterbox`, `Cover`: rects and uv, finite for any input) and two bars in `LetterboxColor`; with no picture yet the whole rect is the bar colour. A batch whose texture is not on the GPU yet is skipped by the UI pass, so the first picture appears a frame or two after it was decoded. Assets stay CPU-side: the widget holds an `AssetRef`.
+
+## Lua and events
+
+`widget:video_play() / video_pause() / video_stop() / video_seek(s) / video_state() / video_time() / video_duration() / video_error()` and the `finished` widget event (`{ skipped, failed }`). `play` takes the scene of the script (`ScriptContext::ActiveSceneRef`). **`finished` is raised at the start of the frame after the module saw it**: the module runs after the scripts (priority 13), and `UiModule::update_interaction` clears the events of the frame before it raises these (through the source `VideoModule::init` registered), so a handler runs before that frame's `on_update`.
+
+## Demo and checks
+
+`editor/assets/video/Intro.mp4` (CC0, generated: bars, a moving square, 440 Hz then 660 Hz, 6 s; `*.mp4` is a Git LFS file) is written by **`wiwa_tests --write-demo-video`** with `mf_clip_writer`; the importer re-imports it when it changes. The HUD of the demo (`ui/demo_hud.wuipanel`, `demo_ui.lua`) has a "Play intro" button, a hidden full-screen `Intro` Video widget and a "Skip" button inside it (Cancel also skips). `--demo-smoke` plays the **real** clip through Media Foundation, the real renderer and the real sound device: click Play intro, wait for time, picture and widget, click Skip, play again, seek near the end, check the script hid the widget on a natural end.
+
+- `--video-smoke` (no GPU, no sound card, no files): decoder, clock, frame choice, player (states, sync, seek, loop, failures, lifecycle with a watchdog), audio ring, and the module on a standalone scene + UI rig.
+- `--video-mf-smoke`: the platform decoder on the demo clip, on a clip generated in the check (the picture is the right way up and in the right channels; the tones decode as 440 and 660 Hz), damaged and foreign files, the importer's probe, and a `VideoPlayer` on the worker. **Without the clip it logs "skipped" and passes: read the log.**
+- `--render-test`: a known BGRA picture reaches the screen (colours, orientation, a size change, the same size again, a bad picture, release).
+
+## Traps
+
+- Windows only today; the whole file is held in memory (no file streaming); one video at a time; no alpha, speed, subtitles or rotation metadata; a clip that is not H.264/AAC may not decode (a missing codec is reported, not silent).
+- The MDN `flower.mp4` that was tried first has an **encoded-silence** AAC track (2 distinct frames in 237): a clip is not proof of the sound path unless its audio is audible, which is why the demo clip is generated.
+- A script that calls `video_play()` on a **hidden** widget gets a video that pauses at once.
+- `Video.init()` must run for the UI to see pictures and finished events: a rig that builds a `VideoModule` by hand calls it (and detaches the event source if it wants to read `take_finished()` itself).
+- `--scene-smoke` is flaky here (a race between its thread and the editor loop, with or without this work: 5 crashes in 45 runs on the commit before it); it is not a video check.
+- `scripts/gen_demo_scene.py` rewrites git-ignored `.meta` files (see the memory notes) and its scene output has drifted from the committed `demo.wscene`: the HUD panel and `demo_ui.lua` were taken from a run into a scratch directory.

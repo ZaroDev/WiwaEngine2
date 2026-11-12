@@ -6,7 +6,7 @@ Code: `engine/src/audio` (module, backend interface, Null backend, scene sync, b
 
 `AudioModule` (priority 20, after the scripts and animation; added before `ScriptingModule` because scripts read its pointer in their init) is main thread only. It owns one `IAudioBackend`. Everything else (components, Lua, the editor) talks to that interface; **`AK::` never leaves `engine/src/audio/wwise/`**. Adding a vendor (FMOD) means one new `IAudioBackend`, an `AudioBackendKind` value (append, it is written to files) and a case in `AudioModule::select_backend`.
 
-`IAudioBackend` is event-centric (events, RTPCs, switches, states, banks, emitters, one listener): the model Wwise and FMOD share. Names are the vendor's own. `NullAudioBackend` plays nothing and records every call (`calls()`); it is the fallback and what the smokes run on.
+`IAudioBackend` is event-centric (events, RTPCs, switches, states, banks, emitters, one listener): the model Wwise and FMOD share. Names are the vendor's own. The **sound of a video does not go through `IAudioBackend`** (video.md): `VideoAudioOut` plays it on a miniaudio device of its own, so it is heard under Wwise, MiniAudio and Null alike. `NullAudioBackend` plays nothing and records every call (`calls()`); it is the fallback and what the smokes run on.
 
 ## Backend choice and the SDK
 

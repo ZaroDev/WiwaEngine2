@@ -4,7 +4,7 @@ Code: `engine/src/ui`, render pass `renderer/passes/ui_pass.*` + `editor/engine/
 
 ## Data
 
-A `UICanvas` component (`Panel` AssetRef, `SortOrder`, `Visible`) shows a `.wuipanel` asset: a **flat** widget tree stored by `UiId` and `Parent` (`UiPanelData`, `ui_widget.h`). Kinds: Panel, HStack, VStack, Text, Image, Button, Slider, Toggle, Bar, ViewImage (the picture of an offscreen view named by `ViewName`, views.md; the UI editor canvas does not draw it). `UiWidget` is one reflected struct for every kind; fields a kind does not use keep defaults (`ui_field_visible`). **Fields are described once by `ui_fields()`**, which the panel files, the UI editor's inspector and the Lua bindings all read - add a field there, not in three places. Ids are stable inside a panel and never reused by the editor; widget names are unique among siblings and scripts find widgets by name path. A panel with more than `UI_MAX_WIDGETS` is rejected as corrupt.
+A `UICanvas` component (`Panel` AssetRef, `SortOrder`, `Visible`) shows a `.wuipanel` asset: a **flat** widget tree stored by `UiId` and `Parent` (`UiPanelData`, `ui_widget.h`). Kinds: Panel, HStack, VStack, Text, Image, Button, Slider, Toggle, Bar, ViewImage (the picture of an offscreen view named by `ViewName`, views.md; the UI editor canvas does not draw it), Video (an mp4 asset playing in the widget, with its own `Fit`, `Loop`, `AutoPlay`, `Volume` and `LetterboxColor`; the UI editor canvas shows the bar colour; video.md). `UiWidget` is one reflected struct for every kind; fields a kind does not use keep defaults (`ui_field_visible`). **Fields are described once by `ui_fields()`**, which the panel files, the UI editor's inspector and the Lua bindings all read - add a field there, not in three places. Ids are stable inside a panel and never reused by the editor; widget names are unique among siblings and scripts find widgets by name path. A panel with more than `UI_MAX_WIDGETS` is rejected as corrupt.
 
 Fonts (`.ttf`/`.otf`) import to a `Font` asset: an SDF atlas built with `stb_truetype` and glyph metrics. Text layout (`ui_font.*`): wrap, align, missing glyphs fall back, invalid UTF-8 and very long words do not loop.
 
@@ -12,7 +12,7 @@ Fonts (`.ttf`/`.otf`) import to a `Font` asset: an SDF atlas built with `stb_tru
 
 `UiModule` (priority -10: after scene and renderer, before the scripts) keeps one `UiPanelInstance` (a mutable copy of the panel) per canvas.
 
-1. `update()` feeds the input frame to the interaction state machine (the topmost canvas first): hover, press, focus, keyboard/gamepad navigation for Button, Slider, Toggle; events (`Click`, `ValueChanged`, `HoverEnter`, `HoverExit`, `Focus`) are kept on the instance. This runs before the scripts, so a script sees this frame's clicks.
+1. `update()` feeds the input frame to the interaction state machine (the topmost canvas first): hover, press, focus, keyboard/gamepad navigation for Button, Slider, Toggle; events (`Click`, `ValueChanged`, `HoverEnter`, `HoverExit`, `Focus`, and `Finished` for a Video widget, raised from `VideoModule`'s queue right after the previous frame's events are cleared) are kept on the instance. This runs before the scripts, so a script sees this frame's clicks.
 2. `ScriptInstances::update` dispatches the events to Lua handlers registered through `UiHandlerTable` (a handler belongs to the script instance's `self` and disappears with it).
 3. `pre_render_update()` (after scripts moved things): layout, build a flat `UiDrawList`, hand it to `RenderModule`.
 
@@ -22,7 +22,7 @@ Rect resolution is anchors (fractions of the parent) plus pixel offsets at a ref
 
 ## Rendering
 
-`UiRenderPass` (render thread) draws the draw list into the LDR image after FXAA (so post never touches the UI) with SDF text from `ui.hlsl`; it also draws the UI editor's canvas into its own texture (`set_ui_preview`). Font atlases are uploaded by `GpuResourceCache`. No depth-tested/3D canvases, no MSDF.
+A `Video` widget makes a `UiBatch` whose `ViewTexture` is the texture of its stream (`view_video_texture_id`, the picture the video module uploaded) and bars in `LetterboxColor`, through `UiLayoutInput::Video`. `UiRenderPass` (render thread) draws the draw list into the LDR image after FXAA (so post never touches the UI) with SDF text from `ui.hlsl`; it also draws the UI editor's canvas into its own texture (`set_ui_preview`). Font atlases are uploaded by `GpuResourceCache`. No depth-tested/3D canvases, no MSDF.
 
 ## Input
 

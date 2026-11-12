@@ -35,15 +35,16 @@ The test sources are in `tests/src/<area>/` (`*_smoke_test.cpp`, `anim_*_checks.
 | `--anim-smoke` / `--anim-panel-smoke` | tests | skeleton import, pose math and nodes, Animator module, sockets, extraction, Lua API, animation graphs (file, state machine, blend spaces, layers, edit model) / Animation panel for 130 frames and the Graph editor on the demo warrior's graph |
 | `--play-smoke` / `--demo-smoke` | tests | play mode / the demo scene end to end (it waits for the startup scan, so it never plays a stale cook) |
 | `--vfx-editor-smoke` | tests | the VFX editor panel: edit model, preview, readback, effect thumbnail |
+| `--video-smoke` / `--video-mf-smoke` | tests | the video system on the Null decoder (decoder, clock, player, sync, seek, loop, failures, audio ring, module on a UI rig, Lua `finished`/`video_*` run in `--script-smoke`) / Media Foundation on the demo clip, a generated clip with known tones, damaged files, the importer probe and a player on the worker (**logs "skipped" and passes without `editor/assets/video/Intro.mp4`**) |
 | `--render-test` | tests | GPU pixel checks in `tests/src/render/*_checks.cpp`, run on the render thread |
 | `--render-smoke <frames>` | any (engine) | render N frames then exit (1 if a validation message or error was logged) |
 | `--scene-smoke-load` | game | load the `--scene` (or the pak's default scene) and quit |
 
-Other flags: `--nav-bake <file>` (editor, with `--scene`: bakes the scene's first navmesh volume to the file), `--debug-draw` (game: a game starts with debug draw off), `--scene <path>`, `--pack <outdir>`, `--api=vulkan|d3d11|d3d12` (default Vulkan, no silent fallback), `--gpu-validation`, `--no-copy-queue`. Panel smokes run with ImGui asserts on.
+Other flags: `--write-demo-video` (tests: writes the demo clip `editor/assets/video/Intro.mp4` with Media Foundation), `--nav-bake <file>` (editor, with `--scene`: bakes the scene's first navmesh volume to the file), `--debug-draw` (game: a game starts with debug draw off), `--scene <path>`, `--pack <outdir>`, `--api=vulkan|d3d11|d3d12` (default Vulkan, no silent fallback), `--gpu-validation`, `--no-copy-queue`. Panel smokes run with ImGui asserts on.
 
 ## Architecture in one page
 
-Modules (`IModule`, registered in `Engine`, [engine.cpp](engine/src/core/engine.cpp)), by update priority: `AssetManager` -100, `AssetPipelineModule` (editor) -90, `SceneModule` -80, `RenderModule` -50, `InputModule` -30, `PhysicsModule` -20, `UiModule` -10, `ScriptingModule` 0, `NavModule` 5, `AIModule` 6, `AnimationModule` 10, `DecalModule` 11, `ParticleModule` 12, `AudioModule` 20, plus `Window` and the editor's `EditorModule`. Reach a module with `Engine::get_module`, except from the render and physics threads, which must never call it.
+Modules (`IModule`, registered in `Engine`, [engine.cpp](engine/src/core/engine.cpp)), by update priority: `AssetManager` -100, `AssetPipelineModule` (editor) -90, `SceneModule` -80, `RenderModule` -50, `InputModule` -30, `PhysicsModule` -20, `UiModule` -10, `ScriptingModule` 0, `NavModule` 5, `AIModule` 6, `AnimationModule` 10, `DecalModule` 11, `ParticleModule` 12, `VideoModule` 13, `AudioModule` 20, plus `Window` and the editor's `EditorModule`. Reach a module with `Engine::get_module`, except from the render and physics threads, which must never call it.
 
 Rules that cut across areas:
 
@@ -70,6 +71,7 @@ Rules that cut across areas:
 | Audio (Wwise behind a vendor-neutral backend, soundbanks, emitters) | [audio.md](docs/superpowers/documentation/audio.md) | `engine/src/audio`, `engine/src/audio/wwise` (`AK::` stays inside it), `editor/src/audio` |
 | Behaviour trees and perception (`.wbt`, `AIController`, Lua leaves `BtAction`/`BtCondition`, `Perceiver`, the tree editor) | [behavior-trees.md](docs/superpowers/documentation/behavior-trees.md) | `engine/src/ai`, `editor/src/ai` |
 | Navigation (Recast bake in the editor, Detour queries and DetourCrowd agents, `.wnav`, the `Nav` Lua API) | [navigation.md](docs/superpowers/documentation/navigation.md) | `engine/src/nav`, `editor/src/asset_pipeline/nav_bake.*`, `editor/src/nav`; vendored `engine/vendor/recastnavigation`; `dt*` stays in `engine/src/nav`, `rc*` in the editor |
+| Video (`Video` UI widget, mp4 playback with sound, `IVideoDecoder` platform seam, Media Foundation, `video_*` Lua API) | [video.md](docs/superpowers/documentation/video.md) | `engine/src/video`, `engine/src/video/mf` (`IMF*` stays inside it), `engine/src/renderer/video`, `engine/src/ui/ui_video_fit.*`, `editor/src/asset_pipeline/importers/video_importer.cpp` |
 | Input | [input.md](docs/superpowers/documentation/input.md) | `engine/src/input` |
 | Game UI | [ui.md](docs/superpowers/documentation/ui.md) | `engine/src/ui`, `editor/src/ui` |
 | Project settings, Settings page | [project-settings.md](docs/superpowers/documentation/project-settings.md) | `engine/src/core/project_settings.*`, `editor/src/settings` |
