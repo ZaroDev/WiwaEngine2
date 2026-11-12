@@ -54,6 +54,17 @@ namespace wiwa
 		m_Running = false;
 	}
 
+	void VideoClock::use_wall_from(i64 wallUs)
+	{
+		if (!m_AudioMaster)
+		{
+			return;
+		}
+		m_BaseUs = now_us(wallUs);
+		m_ResumeWallUs = wallUs;
+		m_AudioMaster = false;
+	}
+
 	i64 VideoClock::now_us(i64 wallUs) const
 	{
 		if (m_AudioMaster)

@@ -33,6 +33,9 @@ namespace wiwa
 			m_AudioFrames.fetch_add(frames, std::memory_order_release);
 		}
 
+		// The sound ended before the picture: carry on from the current time by the wall clock.
+		void use_wall_from(i64 wallUs);
+
 		i64 now_us(i64 wallUs) const;
 		bool running() const { return m_Running; }
 

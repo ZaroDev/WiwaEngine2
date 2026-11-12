@@ -11,6 +11,7 @@
 
 #include <core/common.h>
 
+#include "video_audio.h"
 #include "video_clock.h"
 #include "video_decoder.h"
 
@@ -25,11 +26,19 @@ namespace wiwa
 		bool Failed = false;
 	};
 
+	// What plays the sound of a file that has some.
+	enum class VideoAudioMode : u32
+	{
+		Off,    // no sound: the picture runs on the wall clock (the default, and what a file without a sound track gets)
+		Device, // the sound card, through miniaudio; the played sound is the clock. If no device opens the player logs it and falls back to Off
+		Manual, // no sound card: the checks drain the sound with audio()->render()
+	};
+
 	struct VideoPlayerDesc
 	{
 		bool Loop = false;
 		float Volume = 1.0f;
-		bool NoAudioDevice = true; // no sound card: the player runs on the wall clock (headless checks); see video_audio.h
+		VideoAudioMode AudioMode = VideoAudioMode::Off;
 	};
 
 	// One video: a decode worker that owns the decoder, a short ring of decoded pictures, and the clock that says which picture is due. The main
@@ -69,6 +78,10 @@ namespace wiwa
 
 		std::optional<VideoFinished> take_finished();
 
+		void set_volume(float volume);
+		bool uses_audio() const { return m_Audio != nullptr; }
+		VideoAudioOut* audio() const { return m_Audio.get(); }
+
 	private:
 		struct Request
 		{
@@ -93,6 +106,11 @@ namespace wiwa
 		void take_frames(i64 wallUs);
 		void check_end(i64 wallUs);
 		void finish(VideoFinished how) { m_Finished.push_back(how); }
+		void clock_run(i64 wallUs);   // the clock (and the sound) go
+		void clock_stop(i64 wallUs);  // the clock and the sound stand still
+		void clock_hold(i64 us);      // the clock stands at this time (a seek, the end)
+		void check_audio_end(i64 wallUs);
+		void service_audio();         // worker: moves decoded sound into the ring
 
 		Scope<IVideoDecoder> m_Decoder;
 		VideoPlayerDesc m_Desc;
@@ -103,6 +121,7 @@ namespace wiwa
 		VideoInfo m_Info{};
 		std::string m_Error{};
 		VideoClock m_Clock{};
+		Scope<VideoAudioOut> m_Audio{};
 		std::vector<Request> m_Requests{};
 		std::deque<VideoFinished> m_Finished{};
 		std::shared_ptr<const VideoFrame> m_Current{};
@@ -127,6 +146,8 @@ namespace wiwa
 		u64 m_Serial = 0;            // bumped by every seek
 		bool m_SeekPending = false;
 		i64 m_SeekTargetUs = 0;
+		bool m_AudioDecided = false; // poll_open has made (or declined) the audio output: the worker may use m_Audio
+		bool m_AudioEnded = false;   // the decoder is out of sound
 		bool m_Ended = false;        // the decoder is out of pictures (never set while looping)
 		bool m_Errored = false;
 		std::string m_StreamError{};
@@ -137,5 +158,7 @@ namespace wiwa
 		i64 m_LoopBaseUs = 0;
 		i64 m_LastRawUs = 0;
 		u32 m_PassFrames = 0;
+		AudioChunk m_Chunk{};        // the sound being moved into the ring
+		u32 m_ChunkUsed = 0;         // frames of m_Chunk already written
 	};
 }

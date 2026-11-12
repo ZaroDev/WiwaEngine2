@@ -13,6 +13,7 @@ namespace wiwa
 		u32 Height = 36;
 		float Fps = 30.0f;
 		double DurationSeconds = 2.0;
+		double AudioDurationSeconds = -1.0; // the length of the sound when it is not the length of the picture (-1: the same)
 		bool HasAudio = true;
 		u32 SampleRate = 48000;
 		u32 Channels = 2;

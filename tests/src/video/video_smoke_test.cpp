@@ -12,6 +12,7 @@
 #include <thread>
 
 #include <video/null_decoder.h>
+#include <video/video_audio.h>
 #include <video/video_clock.h>
 #include <video/video_decoder.h>
 #include <video/video_player.h>
@@ -519,6 +520,189 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		std::vector<float> ramp(u32 frames, u32 channels)
+		{
+			std::vector<float> data(static_cast<size_t>(frames) * channels, 0.5f);
+			return data;
+		}
+
+		struct AudioRig
+		{
+			Scope<VideoPlayer> Player;
+
+			explicit AudioRig(const NullDecoderConfig& config)
+			{
+				VideoPlayerDesc desc;
+				desc.AudioMode = VideoAudioMode::Manual;
+				Player = CreateScope<VideoPlayer>(create_null_decoder(config), desc);
+				Player->open(std::vector<std::byte>(16));
+			}
+		};
+
+		void check_audio_out(Check& check)
+		{
+			{
+				VideoAudioOut out;
+				std::string error;
+				check(out.init(48000, 2, true, error), "audio out: init without a device");
+				const std::vector<float> data = ramp(1000, 2);
+				check(out.write(data.data(), 1000) == 1000, "audio out: a write that fits is accepted whole");
+				out.start();
+				out.render(600);
+				check(out.played_frames() == 600, "audio out: render consumes what was written");
+				out.render(600);
+				check(out.played_frames() == 1000, "audio out: render plays only what is there");
+				out.shutdown();
+			}
+			{
+				VideoAudioOut out;
+				std::string error;
+				out.init(48000, 2, true, error);
+				const std::vector<float> data = ramp(100000, 2);
+				const u32 accepted = out.write(data.data(), 100000);
+				check(accepted > 0 && accepted < 100000, "audio out: a full ring accepts a part of the write");
+				check(out.write(data.data(), 10) == 0, "audio out: a full ring accepts nothing");
+				out.shutdown();
+			}
+			{
+				VideoAudioOut out;
+				std::string error;
+				out.init(48000, 2, true, error);
+				const std::vector<float> data = ramp(1000, 2);
+				out.write(data.data(), 1000);
+				out.flush();
+				out.start();
+				out.render(1000);
+				check(out.played_frames() == 0, "audio out: flushed sound is never played");
+				out.write(data.data(), 500);
+				out.render(1000);
+				check(out.played_frames() == 500, "audio out: sound written after a flush is played");
+				out.shutdown();
+			}
+			{
+				VideoAudioOut out;
+				VideoClock clock;
+				clock.set_audio_master(true);
+				std::string error;
+				out.init(48000, 2, true, error);
+				out.set_clock(&clock);
+				clock.start(0);
+				out.start();
+				out.render(1000); // nothing was written: an underrun
+				check(out.played_frames() == 0 && clock.now_us(0) == 0, "audio out: an underrun does not advance the clock");
+				out.shutdown();
+			}
+			{
+				VideoAudioOut out;
+				std::string error;
+				if (out.init(48000, 2, false, error))
+				{
+					const std::vector<float> data = ramp(480, 2);
+					out.write(data.data(), 480);
+					out.start();
+					out.stop();
+					out.set_volume(0.0f);
+					out.shutdown();
+					check(true, "audio out: a real device starts and stops");
+				}
+				else
+				{
+					WI_VIDEO_LOG(Warning, "Video smoke test: no sound device here ({0}): the real device check was skipped", error);
+				}
+			}
+		}
+
+		void check_player_audio(Check& check)
+		{
+			{
+				// players with sound destroyed mid decode, with and without a real device thread: no hang, no callback on a freed ring
+				for (int i = 0; i < 40; i++)
+				{
+					NullDecoderConfig config;
+					VideoPlayerDesc desc;
+					desc.AudioMode = i % 2 == 0 ? VideoAudioMode::Manual : VideoAudioMode::Device;
+					desc.Loop = i % 3 == 0;
+					VideoPlayer player(create_null_decoder(config), desc);
+					player.open(std::vector<std::byte>(16));
+					pump(player, 0, [&]() { return player.state() != VideoState::Loading; }, 500);
+					player.play();
+					player.update(0);
+					if (player.audio() != nullptr && i % 2 == 0)
+					{
+						player.audio()->render(256);
+					}
+					if (i % 5 == 0)
+					{
+						player.seek(0.5);
+						player.update(STEP_US);
+					}
+				}
+				check(true, "audio player: destroying players with sound mid decode does not hang");
+			}
+			{
+				NullDecoderConfig config;
+				AudioRig rig(config);
+				check(pump(*rig.Player, 0, [&]() { return rig.Player->state() != VideoState::Loading; }), "audio player: opens");
+				check(rig.Player->uses_audio(), "audio player: a file with sound uses the audio feed");
+				rig.Player->play();
+				rig.Player->update(0);
+				VideoAudioOut* audio = rig.Player->audio();
+				bool reached = false;
+				const auto start = std::chrono::steady_clock::now();
+				while (std::chrono::steady_clock::now() - start < std::chrono::seconds(5))
+				{
+					rig.Player->update(0);
+					audio->render(512);
+					const auto frame = rig.Player->current_frame();
+					if (audio->played_frames() >= 24000 && frame && frame_index(*frame) == 15)
+					{
+						reached = true;
+						break;
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
+				check(reached, "audio player: after 0.5 s of sound has played the picture is frame 15");
+				rig.Player->update(900'000'000'000); // the wall clock is far ahead and must not matter
+				const auto frame = rig.Player->current_frame();
+				check(frame && frame_index(*frame) < 20, "audio player: the wall clock does not move the picture when sound is the master");
+			}
+			{
+				NullDecoderConfig config;
+				config.HasAudio = false;
+				AudioRig rig(config);
+				pump(*rig.Player, 0, [&]() { return rig.Player->state() != VideoState::Loading; });
+				check(!rig.Player->uses_audio(), "audio player: a file without a sound track opens no audio feed");
+				rig.Player->play();
+				rig.Player->update(0);
+				check(pump(*rig.Player, 500000, [&]() { return rig.Player->current_frame() && frame_index(*rig.Player->current_frame()) >= 10; }), "audio player: a file without sound runs on the wall clock");
+			}
+			{
+				// sound shorter than the picture: the clock must not stop with the sound
+				NullDecoderConfig config;
+				config.DurationSeconds = 2.0;
+				config.AudioDurationSeconds = 0.25;
+				AudioRig rig(config);
+				pump(*rig.Player, 0, [&]() { return rig.Player->state() != VideoState::Loading; });
+				rig.Player->play();
+				rig.Player->update(0);
+				VideoAudioOut* audio = rig.Player->audio();
+				const auto start = std::chrono::steady_clock::now();
+				while (std::chrono::steady_clock::now() - start < std::chrono::seconds(5) && audio->played_frames() < 12000)
+				{
+					rig.Player->update(0);
+					audio->render(512);
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
+				check(audio->played_frames() >= 12000, "audio player: the short sound played out");
+				i64 wall = 0;
+				const bool ended = pump(*rig.Player, wall, [&]() { wall += STEP_US * 4; rig.Player->update(wall); return rig.Player->state() == VideoState::Ended; }, 8000);
+				check(ended, "audio player: when the sound ends first the picture goes on by the wall clock and finishes");
+			}
+		}
+	}
+
 	bool run_video_smoke_test(AssetPipelineModule&)
 	{
 		Check check;
@@ -530,6 +714,8 @@ namespace wiwa
 		check_player_seek_and_loop(check);
 		check_player_failures(check);
 		check_player_lifecycle(check);
+		check_audio_out(check);
+		check_player_audio(check);
 
 		if (check.Failures == 0)
 		{

@@ -79,7 +79,8 @@ namespace wiwa
 				{
 					return DecodeStatus::Error;
 				}
-				const i64 total = static_cast<i64>(m_Config.DurationSeconds * m_Config.SampleRate);
+				const double audioSeconds = m_Config.AudioDurationSeconds >= 0.0 ? m_Config.AudioDurationSeconds : m_Config.DurationSeconds;
+				const i64 total = static_cast<i64>(audioSeconds * m_Config.SampleRate);
 				if (m_AudioPos >= total)
 				{
 					return DecodeStatus::End;
