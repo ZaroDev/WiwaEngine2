@@ -1,12 +1,20 @@
 #include <editor_common.h>
 #include "video_smoke_test.h"
 
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstring>
+#include <functional>
+#include <limits>
+#include <mutex>
+#include <thread>
 
 #include <video/null_decoder.h>
 #include <video/video_clock.h>
 #include <video/video_decoder.h>
+#include <video/video_player.h>
 #include <video/video_types.h>
 
 #define WI_VIDEO_LOG(level, ...) WI_LOG(level, "Video", __VA_ARGS__)
@@ -170,12 +178,358 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		constexpr i64 STEP_US = 33333; // one frame at 30 fps
+
+		// The worker is a real thread, the clock is driven by hand: update at this wall time until the condition holds (or a second passes).
+		bool pump(VideoPlayer& player, i64 wallUs, const std::function<bool()>& done, u32 timeoutMs = 2000)
+		{
+			const auto start = std::chrono::steady_clock::now();
+			for (;;)
+			{
+				player.update(wallUs);
+				if (done())
+				{
+					return true;
+				}
+				if (std::chrono::steady_clock::now() - start > std::chrono::milliseconds(timeoutMs))
+				{
+					return false;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+		}
+
+		struct Rig
+		{
+			Scope<VideoPlayer> Player;
+
+			explicit Rig(const NullDecoderConfig& config = {}, bool loop = false)
+			{
+				VideoPlayerDesc desc;
+				desc.Loop = loop;
+				Player = CreateScope<VideoPlayer>(create_null_decoder(config), desc);
+				Player->open(std::vector<std::byte>(16));
+			}
+
+			// Waits for the open to finish; returns whether the state left Loading.
+			bool opened(i64 wallUs = 0) { return pump(*Player, wallUs, [this]() { return Player->state() != VideoState::Loading; }); }
+			i64 index() const { const auto frame = Player->current_frame(); return frame ? static_cast<i64>(frame_index(*frame)) : -1; }
+		};
+
+		// The newest frame of a 30 fps Null stream that is due at this time (frame k is at round(k * 1e6 / 30)).
+		i64 due_frame(i64 wallUs)
+		{
+			i64 k = wallUs * 30 / 1'000'000;
+			while (std::llround(static_cast<double>(k + 1) * 1e6 / 30.0) <= wallUs)
+			{
+				k++;
+			}
+			return k;
+		}
+
+		// Plays from wall 0 in frame steps up to endUs; at each step waits until the picture shown is the expected one. Returns the last index shown.
+		i64 play_in_steps(Rig& rig, i64 endUs, Check& check, const char* what)
+		{
+			for (i64 wall = 0; wall <= endUs; wall += STEP_US)
+			{
+				const i64 expected = due_frame(wall);
+				const bool reached = pump(*rig.Player, wall, [&]() { return rig.index() >= expected; });
+				check(reached, std::string(what) + ": the expected frame arrives");
+				check(rig.index() <= expected, std::string(what) + ": the picture is never ahead of the clock");
+			}
+			return rig.index();
+		}
+
+		void check_player_basic(Check& check)
+		{
+			{
+				NullDecoderConfig config;
+				config.DurationSeconds = 1.0;
+				Rig rig(config);
+				check(rig.Player->state() == VideoState::Loading, "player starts Loading");
+				check(rig.opened() && rig.Player->state() == VideoState::Idle, "player: open leaves Loading for Idle");
+				check(std::abs(rig.Player->duration() - 1.0) < 1e-9, "player reports the duration");
+				check(pump(*rig.Player, 0, [&]() { return rig.index() == 0; }), "player shows the first frame while idle");
+
+				rig.Player->play();
+				rig.Player->update(0);
+				check(rig.Player->state() == VideoState::Playing, "player: play -> Playing");
+
+				play_in_steps(rig, 400000, check, "player play");
+				rig.Player->pause();
+				rig.Player->update(400000);
+				check(rig.Player->state() == VideoState::Paused, "player: pause -> Paused");
+				const double frozen = rig.Player->time();
+				rig.Player->update(900000);
+				check(std::abs(rig.Player->time() - frozen) < 1e-6, "player: time stands still while paused");
+				rig.Player->play();
+				rig.Player->update(900000);
+				check(rig.Player->state() == VideoState::Playing, "player: play after pause -> Playing");
+				check(std::abs(rig.Player->time() - frozen) < 0.01, "player: resume continues from the paused time");
+
+				// let it run to the end: the clock moves in frame steps from 0.4 s
+				i64 wall = 900000;
+				const bool ended = pump(*rig.Player, wall, [&]() { wall += STEP_US; rig.Player->update(wall); return rig.Player->state() == VideoState::Ended; }, 5000);
+				check(ended, "player: a non looping video ends");
+				const std::optional<VideoFinished> finished = rig.Player->take_finished();
+				check(finished && !finished->Skipped && !finished->Failed, "player: Finished{} after the natural end");
+				check(!rig.Player->take_finished(), "player: Finished is delivered once");
+			}
+			{
+				NullDecoderConfig config;
+				Rig rig(config);
+				rig.opened();
+				rig.Player->play();
+				play_in_steps(rig, 450000, check, "player right frame");
+				check(pump(*rig.Player, 500000, [&]() { return rig.index() == 15; }), "player: at 0.5 s the picture is frame 15");
+			}
+		}
+
+		void check_player_sync(Check& check)
+		{
+			{
+				// a jump of the clock: the frames in between are dropped, never shown
+				NullDecoderConfig config;
+				Rig rig(config);
+				rig.opened();
+				rig.Player->play();
+				rig.Player->update(0);
+				pump(*rig.Player, 0, [&]() { return rig.index() == 0; });
+				std::vector<i64> shown;
+				i64 last = -1;
+				const bool reached = pump(*rig.Player, 1'000'000, [&]() {
+					if (rig.index() != last) { last = rig.index(); shown.push_back(last); }
+					return rig.index() == 30; });
+				check(reached, "player: after a clock jump the picture catches up");
+				check(shown.size() < 20, "player: frames older than the clock are dropped, not shown");
+				bool ascending = true;
+				for (size_t i = 1; i < shown.size(); i++)
+				{
+					ascending = ascending && shown[i] > shown[i - 1];
+				}
+				check(ascending, "player: pictures only move forward");
+			}
+			{
+				// a decoder that is behind: the last picture stays up
+				NullDecoderConfig config;
+				config.PendingEvery = 2;
+				Rig rig(config);
+				rig.opened();
+				rig.Player->play();
+				rig.Player->update(0);
+				pump(*rig.Player, 0, [&]() { return rig.index() == 0; });
+				i64 previous = rig.index();
+				bool held = true;
+				for (i64 wall = 200000; wall <= 2'000'000; wall += 200000)
+				{
+					rig.Player->update(wall);
+					held = held && rig.Player->current_frame() != nullptr && rig.index() >= previous;
+					previous = rig.index();
+					std::this_thread::sleep_for(std::chrono::milliseconds(2));
+				}
+				check(held, "player: a decoder that is behind never leaves the screen empty or goes back");
+			}
+		}
+
+		void check_player_seek_and_loop(Check& check)
+		{
+			{
+				NullDecoderConfig config;
+				Rig rig(config);
+				rig.opened();
+				rig.Player->play();
+				play_in_steps(rig, 200000, check, "player before seek");
+				rig.Player->seek(1.0);
+				const u64 before = rig.Player->frame_serial();
+				const bool arrived = pump(*rig.Player, 200000, [&]() { return rig.Player->frame_serial() != before; });
+				check(arrived, "player: a picture arrives after a seek");
+				check(rig.index() >= 30, "player: after a seek no picture from before the target is shown");
+				check(std::abs(rig.Player->time() - 1.0) < 0.05, "player: the clock holds at the seek target");
+
+				// stale pictures never come back
+				bool stale = false;
+				for (int i = 0; i < 50; i++)
+				{
+					rig.Player->update(200000 + (i + 1) * STEP_US);
+					stale = stale || rig.index() < 30;
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
+				check(!stale, "player: pictures from before the seek never reappear");
+			}
+			{
+				NullDecoderConfig config;
+				Rig rig(config);
+				rig.opened();
+				for (const double bad : { std::nan(""), -5.0, 1e9, -std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity() })
+				{
+					rig.Player->seek(bad);
+					pump(*rig.Player, 0, []() { return true; });
+					const double t = rig.Player->time();
+					check(std::isfinite(t) && t >= 0.0 && t <= rig.Player->duration() + 1e-6, "player: a seek to NaN, a negative, infinity or past the end is clamped");
+				}
+			}
+			{
+				NullDecoderConfig config;
+				config.DurationSeconds = 0.5;
+				Rig rig(config, true);
+				rig.opened();
+				rig.Player->play();
+				rig.Player->update(0);
+				double previous = -1.0;
+				bool monotonic = true;
+				bool wrapped = false;
+				i64 lastIndex = -1;
+				for (i64 wall = 0; wall <= 1'600'000; wall += STEP_US)
+				{
+					pump(*rig.Player, wall, [&]() { return rig.index() >= std::min<i64>(14, wall * 30 / 1'000'000 % 15); }, 200);
+					const double t = rig.Player->time();
+					monotonic = monotonic && t >= previous;
+					previous = t;
+					wrapped = wrapped || (rig.index() < lastIndex);
+					lastIndex = rig.index();
+				}
+				check(monotonic, "player: the clock never goes back across a loop");
+				check(wrapped, "player: a looping video starts over");
+				check(!rig.Player->take_finished(), "player: a looping video does not finish");
+				check(rig.Player->state() == VideoState::Playing, "player: a looping video keeps playing");
+			}
+		}
+
+		void check_player_failures(Check& check)
+		{
+			{
+				NullDecoderConfig config;
+				config.FailOpen = true;
+				Rig rig(config);
+				check(rig.opened() && rig.Player->state() == VideoState::Failed, "player: a file that does not open is Failed");
+				check(!rig.Player->error().empty(), "player: Failed has a reason");
+				const std::optional<VideoFinished> finished = rig.Player->take_finished();
+				check(finished && finished->Failed, "player: Finished{Failed} for a file that does not open");
+			}
+			const std::vector<std::pair<u32, u32>> badSizes = { { 0, 36 }, { 64, 0 }, { 9000, 36 }, { 64, 9000 } };
+			for (const auto& [w, h] : badSizes)
+			{
+				NullDecoderConfig config;
+				config.Width = w;
+				config.Height = h;
+				Rig rig(config);
+				check(rig.opened() && rig.Player->state() == VideoState::Failed && !rig.Player->error().empty(), "player: a picture of 0 or over 8192 pixels is refused with a reason");
+			}
+			{
+				NullDecoderConfig config;
+				config.Fps = 100000.0f;
+				Rig rig(config);
+				check(rig.opened() && rig.Player->state() == VideoState::Failed, "player: an absurd frame rate is refused");
+			}
+			{
+				NullDecoderConfig config;
+				config.FailAfterFrames = 5;
+				Rig rig(config);
+				rig.opened();
+				rig.Player->play();
+				i64 wall = 0;
+				i64 maxIndex = -1;
+				const bool failed = pump(*rig.Player, wall, [&]() { wall += STEP_US; maxIndex = std::max(maxIndex, rig.index()); rig.Player->update(wall); return rig.Player->state() == VideoState::Failed; }, 5000);
+				check(failed, "player: a stream that breaks ends Failed");
+				check(maxIndex == 4, "player: the pictures decoded before the break are shown first");
+				const std::optional<VideoFinished> finished = rig.Player->take_finished();
+				check(finished && finished->Failed, "player: Finished{Failed} for a stream that breaks");
+			}
+			{
+				NullDecoderConfig config;
+				config.Width = 321;
+				config.Height = 181;
+				Rig rig(config);
+				rig.opened();
+				check(pump(*rig.Player, 0, [&]() { return rig.Player->current_frame() != nullptr; }), "player: odd sized pictures arrive");
+				const auto frame = rig.Player->current_frame();
+				check(frame && frame->Width == 321 && frame->Height == 181 && frame->Bgra.size() == 321u * 181u * 4u, "player: odd sizes keep Width*Height*4");
+			}
+			{
+				NullDecoderConfig config;
+				config.HasAudio = false;
+				config.DurationSeconds = 0.5;
+				Rig rig(config);
+				rig.opened();
+				rig.Player->play();
+				play_in_steps(rig, 300000, check, "player without audio");
+				check(rig.Player->state() == VideoState::Playing, "player: a file without sound plays");
+			}
+		}
+
+		void check_player_lifecycle(Check& check)
+		{
+			// Whatever hangs here would hang the smoke: a guard thread ends the process after ten seconds instead.
+			std::mutex guardMutex;
+			std::condition_variable guardCv;
+			bool finishedTest = false;
+			std::thread guard([&]() {
+				std::unique_lock<std::mutex> lock(guardMutex);
+				if (!guardCv.wait_for(lock, std::chrono::seconds(10), [&]() { return finishedTest; }))
+				{
+					WI_VIDEO_LOG(Error, "Video smoke test FAILED: the player lifecycle checks hung (a worker was not joined)");
+					std::abort();
+				}
+			});
+
+			for (int i = 0; i < 100; i++)
+			{
+				NullDecoderConfig config;
+				config.PendingEvery = static_cast<u32>(i % 3);
+				Rig rig(config, i % 2 == 0);
+				rig.Player->play();
+				rig.Player->update(0);
+				if (i % 4 == 0)
+				{
+					rig.Player->seek(0.3);
+				}
+				rig.Player->update(STEP_US);
+				// the rig goes out of scope with the worker mid decode
+			}
+			check(true, "player: destroying a player mid decode does not hang");
+
+			{
+				NullDecoderConfig config;
+				Rig rig(config);
+				rig.opened();
+				u32 skipped = 0;
+				for (int i = 0; i < 50; i++)
+				{
+					rig.Player->play();
+					rig.Player->update(i * 1000);
+					rig.Player->stop();
+					rig.Player->update(i * 1000 + 500);
+					check(rig.Player->state() == VideoState::Idle, "player: stop -> Idle");
+					const std::optional<VideoFinished> finished = rig.Player->take_finished();
+					if (finished && finished->Skipped)
+					{
+						skipped++;
+					}
+				}
+				check(skipped == 50, "player: stopping a playing video reports Finished{Skipped} every time");
+			}
+			{
+				std::lock_guard<std::mutex> lock(guardMutex);
+				finishedTest = true;
+			}
+			guardCv.notify_all();
+			guard.join();
+		}
+	}
+
 	bool run_video_smoke_test(AssetPipelineModule&)
 	{
 		Check check;
 		check_null_decoder(check);
 		check_frame_choice(check);
 		check_clock(check);
+		check_player_basic(check);
+		check_player_sync(check);
+		check_player_seek_and_loop(check);
+		check_player_failures(check);
+		check_player_lifecycle(check);
 
 		if (check.Failures == 0)
 		{
