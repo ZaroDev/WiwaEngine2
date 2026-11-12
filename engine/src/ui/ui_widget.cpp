@@ -11,7 +11,7 @@ namespace wiwa
 {
 	namespace
 	{
-		constexpr const char* KIND_NAMES[] = { "Panel", "HStack", "VStack", "Text", "Image", "Button", "Slider", "Toggle", "Bar", "ViewImage" };
+		constexpr const char* KIND_NAMES[] = { "Panel", "HStack", "VStack", "Text", "Image", "Button", "Slider", "Toggle", "Bar", "ViewImage", "Video" };
 		static_assert(std::size(KIND_NAMES) == static_cast<size_t>(WidgetKind::Last));
 
 		template<typename Accessor>
@@ -88,6 +88,13 @@ namespace wiwa
 			UI_FIELD(SliceBorders);
 			UI_FIELD(ViewName);
 
+			UI_FIELD_META(Video, FieldMeta::asset(AssetType::Video));
+			UI_FIELD_META(Fit, FieldMeta::enumeration({ "Stretch", "Letterbox", "Cover" }));
+			UI_FIELD(Loop);
+			UI_FIELD(AutoPlay);
+			UI_FIELD_META(Volume, unit_range());
+			UI_FIELD_META(LetterboxColor, color_meta());
+
 			UI_FIELD(Value);
 			UI_FIELD(MinValue);
 			UI_FIELD(MaxValue);
@@ -133,6 +140,7 @@ namespace wiwa
 				"Color", "BackgroundColor", "ClipChildren",
 				"Text", "Font", "FontSize", "Align", "Wrap", "Outline", "OutlineColor", "Shadow",
 				"Texture", "Slice9", "SliceBorders", "ViewName",
+				"Video", "Fit", "Loop", "AutoPlay", "Volume", "LetterboxColor",
 				"Value", "MinValue", "MaxValue", "Step", "Direction",
 				"Spacing", "Padding", "ChildAlign", "ForceExpand",
 				"HoverColor", "PressedColor", "DisabledColor" };
@@ -152,6 +160,7 @@ namespace wiwa
 				{ WidgetKind::Toggle, { "Color", "BackgroundColor", "Value" } },
 				{ WidgetKind::Bar, { "Color", "BackgroundColor", "Value", "Direction" } },
 				{ WidgetKind::ViewImage, { "Color", "ViewName" } },
+				{ WidgetKind::Video, { "Color", "Video", "Fit", "Loop", "AutoPlay", "Volume", "LetterboxColor" } },
 			};
 			return table;
 		}

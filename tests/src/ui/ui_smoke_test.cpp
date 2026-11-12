@@ -25,6 +25,7 @@
 #include <renderer/scene/render_scene.h>
 #include <scene/scene.h>
 #include <ui/ui_panel_io.h>
+#include <ui/ui_video_fit.h>
 #include <ui/ui_widget.h>
 
 #define WI_UI_LOG(level, ...) WI_LOG(level, "UI", __VA_ARGS__)
@@ -112,7 +113,16 @@ namespace wiwa
 			background.Opacity = 0.5f;
 			panel.Widgets.push_back(background);
 
-			panel.NextId = 9;
+			UiWidget video = make_widget(9, 0, WidgetKind::Video, "Intro");
+			video.Video = AssetRef{ AssetGuid::generate(), 0 };
+			video.Fit = UiVideoFit::Cover;
+			video.Loop = true;
+			video.AutoPlay = false;
+			video.Volume = 0.4f;
+			video.LetterboxColor = { 0.1f, 0.2f, 0.3f, 0.9f };
+			panel.Widgets.push_back(video);
+
+			panel.NextId = 10;
 			return panel;
 		}
 
@@ -1735,6 +1745,101 @@ namespace wiwa
 			}
 		}
 
+		bool near_vec4(const glm::vec4& a, const glm::vec4& b, float tolerance = 0.01f) { return glm::length(a - b) <= tolerance; }
+
+		bool finite_vec4(const glm::vec4& v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) && std::isfinite(v.w); }
+
+		void check_video_widget(Check& check)
+		{
+			// the kind and its fields
+			check(std::string(widget_kind_name(WidgetKind::Video)) == "Video", "video_kind_name: the kind is called Video");
+			check(widget_kind_from_name("Video") == WidgetKind::Video, "video_kind_name: a Video is found by name");
+			check(ui_field_visible(WidgetKind::Video, "Video") && ui_field_visible(WidgetKind::Video, "Fit") && ui_field_visible(WidgetKind::Video, "Loop")
+				&& ui_field_visible(WidgetKind::Video, "AutoPlay") && ui_field_visible(WidgetKind::Video, "Volume") && ui_field_visible(WidgetKind::Video, "LetterboxColor")
+				&& ui_field_visible(WidgetKind::Video, "Color"), "video_fields_visible: a Video shows its fields");
+			check(!ui_field_visible(WidgetKind::Text, "Video") && !ui_field_visible(WidgetKind::Bar, "LetterboxColor") && !ui_field_visible(WidgetKind::Video, "Text"), "video_fields_visible: other kinds do not show them, and a Video does not show text");
+			const UiField* fit = find_ui_field("Fit");
+			check(fit != nullptr && fit->Type == FieldType::Enum, "video_fields: Fit is an enum field");
+			const UiWidget defaults;
+			check(defaults.Fit == UiVideoFit::Letterbox && !defaults.Loop && defaults.AutoPlay && defaults.Volume == 1.0f && defaults.LetterboxColor == glm::vec4(0, 0, 0, 1), "video_defaults: letterbox, no loop, auto play, full volume, black bars");
+
+			// fit math
+			const glm::vec4 square{ 0.0f, 0.0f, 1000.0f, 1000.0f };
+			const glm::vec2 wide{ 1920.0f, 1080.0f };
+			UiVideoRects r = ui_video_fit(square, wide, UiVideoFit::Letterbox);
+			check(near_vec4(r.Picture, { 0.0f, 218.75f, 1000.0f, 781.25f }) && near_vec4(r.Uv, { 0, 0, 1, 1 }), "video_fit_letterbox: 16:9 in a square is a centred band with the whole picture");
+			check(near_vec4(r.BarA, { 0.0f, 0.0f, 1000.0f, 218.75f }) && near_vec4(r.BarB, { 0.0f, 781.25f, 1000.0f, 1000.0f }), "video_fit_letterbox: the bars are the rest of the rect");
+			r = ui_video_fit({ 0.0f, 0.0f, 2000.0f, 500.0f }, wide, UiVideoFit::Letterbox);
+			check(near_vec4(r.Picture, { 555.5556f, 0.0f, 1444.4444f, 500.0f }, 0.1f) && r.BarA.z - r.BarA.x > 0.0f && r.BarB.z - r.BarB.x > 0.0f, "video_fit_letterbox: a wide rect gets bars at the sides");
+			r = ui_video_fit(square, wide, UiVideoFit::Cover);
+			check(near_vec4(r.Picture, square) && near_vec4(r.Uv, { 0.21875f, 0.0f, 0.78125f, 1.0f }), "video_fit_cover: the picture fills the rect and the uv crops the sides");
+			check(r.BarA.z - r.BarA.x <= 0.0f && r.BarB.z - r.BarB.x <= 0.0f || (r.BarA == glm::vec4(0.0f) && r.BarB == glm::vec4(0.0f)), "video_fit_cover: no bars");
+			r = ui_video_fit(square, wide, UiVideoFit::Stretch);
+			check(near_vec4(r.Picture, square) && near_vec4(r.Uv, { 0, 0, 1, 1 }) && r.BarA == glm::vec4(0.0f) && r.BarB == glm::vec4(0.0f), "video_fit_stretch: the whole picture over the whole rect");
+			bool allFinite = true;
+			const float bad[] = { 0.0f, -5.0f, std::nanf(""), std::numeric_limits<float>::infinity(), 1e30f };
+			for (const UiVideoFit mode : { UiVideoFit::Stretch, UiVideoFit::Letterbox, UiVideoFit::Cover })
+			{
+				for (const float v : bad)
+				{
+					for (const glm::vec2 size : { glm::vec2(v, 1080.0f), glm::vec2(1920.0f, v), glm::vec2(v, v) })
+					{
+						for (const glm::vec4 rect : { square, glm::vec4(0, 0, 0, 0), glm::vec4(10, 10, 5, 5), glm::vec4(0, 0, v, v) })
+						{
+							const UiVideoRects out = ui_video_fit(rect, size, mode);
+							allFinite = allFinite && finite_vec4(out.Picture) && finite_vec4(out.Uv) && finite_vec4(out.BarA) && finite_vec4(out.BarB);
+						}
+					}
+				}
+			}
+			check(allFinite, "video_fit_degenerate: a video or rect of size 0, negative, NaN, infinite or huge gives finite rects");
+
+			// drawing
+			const glm::vec2 canvas{ 1920.0f, 1080.0f };
+			UiLayoutInput input;
+			input.CanvasSize = canvas;
+			constexpr u32 TEXTURE = 1u << 23;
+			bool hasView = true;
+			input.Video = [&](UiId id) -> std::optional<UiVideoView>
+			{
+				return id == 1 && hasView ? std::optional<UiVideoView>(UiVideoView{ TEXTURE, wide }) : std::nullopt;
+			};
+			const auto build = [&](UiWidget widget)
+			{
+				UiPanelData panel;
+				panel.Widgets = { widget };
+				const UiLayoutResult layout = compute_layout(panel, input);
+				UiDrawList list;
+				append_panel(list, panel, std::vector<UiInteractionState>(1, UiInteractionState::Normal), layout, input);
+				return list;
+			};
+			UiWidget widget = layout_widget(1, 0, WidgetKind::Video, "Intro", { 0, 0 }, { 0, 0 }, { 0, 0 }, { 1000, 1000 });
+			widget.LetterboxColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+			UiDrawList list = build(widget);
+			u32 imageBatches = 0;
+			u32 solidBatches = 0;
+			for (const UiBatch& batch : list.Batches)
+			{
+				imageBatches += batch.Kind == UiQuadKind::Image && batch.ViewTexture == TEXTURE ? 1 : 0;
+				solidBatches += batch.Kind == UiQuadKind::Solid ? 1 : 0;
+			}
+			check(imageBatches == 1 && solidBatches >= 1 && list.Vertices.size() == 12, "video_draw: a letterboxed video is the picture and two bars");
+			widget.Fit = UiVideoFit::Stretch;
+			list = build(widget);
+			check(list.Vertices.size() == 4 && list.Batches.size() == 1 && list.Batches[0].ViewTexture == TEXTURE, "video_draw_stretch: a stretched video is one picture quad");
+			widget.Fit = UiVideoFit::Letterbox;
+			hasView = false;
+			list = build(widget);
+			check(list.Vertices.size() == 4 && list.Batches.size() == 1 && list.Batches[0].Kind == UiQuadKind::Solid && list.Batches[0].ViewTexture == 0, "video_draw_no_picture: with no picture the rect is the bar colour");
+			widget.LetterboxColor.a = 0.0f;
+			check(build(widget).empty(), "video_draw_no_picture: a clear bar colour draws nothing");
+			widget.LetterboxColor.a = 1.0f;
+			input.Video = nullptr;
+			check(build(widget).Vertices.size() == 4, "video_draw_no_module: without a video source the widget is still its bar colour");
+			widget.Visible = false;
+			check(build(widget).empty(), "video_draw: a hidden video draws nothing");
+		}
+
 		void check_field_table(Check& check)
 		{
 			const UiWidget defaults;
@@ -1796,6 +1901,7 @@ namespace wiwa
 		Check check;
 
 		check_field_table(check);
+		check_video_widget(check);
 		check_panel_files(check);
 		Handle<FontData> fontHandle;
 		check_fonts(check, pipeline, fontHandle);

@@ -32,10 +32,12 @@ namespace wiwa
 		Toggle,
 		Bar,
 		ViewImage, // an offscreen view (a ViewHost of the scene), by name
+		Video,     // a playing video (an mp4 asset), see video/video_module.h
 
 		Last
 	};
 
+	enum class UiVideoFit : u32 { Stretch, Letterbox, Cover }; // how a video's picture fills the widget's rect
 	enum class UiTextAlign : u32 { Left, Center, Right };
 	enum class UiDirection : u32 { LeftToRight, RightToLeft, BottomToTop, TopToBottom };
 	enum class UiChildAlign : u32 { Start, Center, End };
@@ -88,6 +90,15 @@ namespace wiwa
 
 		// ViewImage: the Name of the ViewHost whose picture this shows
 		std::string ViewName{};
+
+		// Video: the file, how the picture fits the rect, and what happens on its own. Color tints the picture; LetterboxColor fills the bars (and
+		// the whole rect while nothing is playing).
+		AssetRef Video{};
+		UiVideoFit Fit = UiVideoFit::Letterbox;
+		bool Loop = false;
+		bool AutoPlay = true;
+		float Volume = 1.0f; // 0..1
+		glm::vec4 LetterboxColor{ 0.0f, 0.0f, 0.0f, 1.0f };
 
 		// Slider, toggle (Value > 0.5 is on) and bar (0..1)
 		float Value = 0.0f;

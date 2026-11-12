@@ -30,6 +30,7 @@ namespace wiwa
 		AudioClip,
 		NavMesh,
 		BehaviorTree,
+		Video,
 
 		Last
 	};
@@ -61,6 +62,7 @@ namespace wiwa
 		case AssetType::AudioClip: return "AudioClip";
 		case AssetType::NavMesh: return "NavMesh";
 		case AssetType::BehaviorTree: return "BehaviorTree";
+		case AssetType::Video: return "Video";
 		default: return "None";
 		}
 	}

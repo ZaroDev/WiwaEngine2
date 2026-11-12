@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "ui_font.h"
+#include "ui_video_fit.h"
 
 namespace wiwa
 {
@@ -85,6 +86,10 @@ namespace wiwa
 
 				case WidgetKind::ViewImage:
 					draw_view_image(widget, rect, with_opacity(widget.Color, opacity), clip);
+					break;
+
+				case WidgetKind::Video:
+					draw_video(widget, rect, opacity, clip);
 					break;
 
 				case WidgetKind::Button:
@@ -212,6 +217,37 @@ namespace wiwa
 				}
 				m_ViewTexture = texture;
 				quad(UiQuadKind::Image, AssetRef{}, clip, SdfParameters{}, rect, glm::vec2(0.0f), glm::vec2(1.0f), color);
+				m_ViewTexture = 0;
+			}
+
+			// The picture that is playing, fitted into the rect, with the bar colour around it; with no picture (not loaded yet, stopped before the
+			// first frame, no video module) the whole rect in the bar colour. The UI editor has no player: it shows that.
+			void draw_video(const UiWidget& widget, const UiRect& rect, float opacity, const glm::vec4& clip)
+			{
+				const glm::vec4 bars = with_opacity(widget.LetterboxColor, opacity);
+				std::optional<UiVideoView> view;
+				if (m_Input.Video)
+				{
+					view = m_Input.Video(widget.Id);
+				}
+				if (!view || view->Texture == 0 || !(view->Size.x > 0.0f) || !(view->Size.y > 0.0f))
+				{
+					fill(rect, bars, AssetRef{}, clip);
+					return;
+				}
+
+				const UiVideoRects fit = ui_video_fit(glm::vec4(rect.Min, rect.Max), view->Size, widget.Fit);
+				fill(UiRect{ { fit.BarA.x, fit.BarA.y }, { fit.BarA.z, fit.BarA.w } }, bars, AssetRef{}, clip);
+				fill(UiRect{ { fit.BarB.x, fit.BarB.y }, { fit.BarB.z, fit.BarB.w } }, bars, AssetRef{}, clip);
+
+				const glm::vec4 tint = with_opacity(widget.Color, opacity);
+				if (!(tint.a > 0.0f))
+				{
+					return;
+				}
+				m_ViewTexture = view->Texture;
+				quad(UiQuadKind::Image, AssetRef{}, clip, SdfParameters{}, UiRect{ { fit.Picture.x, fit.Picture.y }, { fit.Picture.z, fit.Picture.w } },
+					glm::vec2(fit.Uv.x, fit.Uv.y), glm::vec2(fit.Uv.z, fit.Uv.w), tint);
 				m_ViewTexture = 0;
 			}
 

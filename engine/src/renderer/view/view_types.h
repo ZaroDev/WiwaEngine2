@@ -19,6 +19,11 @@ namespace wiwa
 	constexpr u32 FIRST_VIEW_TEXTURE_ID = 1u << 22;
 	constexpr u32 view_texture_id(ViewId id) { return FIRST_VIEW_TEXTURE_ID + id; }
 
+	// The id a playing video's picture has in the TextureRegistry (the game UI draws a Video widget by it). Chosen by the video module from a
+	// per-player stream number, so the main thread knows it without asking the render thread. Above the view ids.
+	constexpr u32 FIRST_VIDEO_TEXTURE_ID = 1u << 23;
+	constexpr u32 view_video_texture_id(u32 stream) { return FIRST_VIDEO_TEXTURE_ID + stream; }
+
 	enum class ViewProfile : u32 { Full, Preview, Thumbnail };
 	enum class ViewMode : u32 { Continuous, OneShot };
 
