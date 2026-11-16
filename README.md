@@ -89,6 +89,11 @@ scripts/   project generation and the demo scene generators
 docs/      scripting API (docs/scripting.md) and per-area design notes (docs/superpowers/documentation)
 ```
 
+## License
+
+Wiwa2 is released under the [MIT License](LICENSE). Third-party code under `engine/vendor/` and the CC0 demo
+models keep their own licenses.
+
 ## Dependencies
 
 - [GLFW](https://github.com/glfw/glfw)
