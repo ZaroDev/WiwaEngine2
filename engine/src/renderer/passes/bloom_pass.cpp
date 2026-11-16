@@ -172,7 +172,7 @@ namespace wiwa
 			state.addBindingSet(c.DownSets[level]);
 			commandList->setComputeState(state);
 			commandList->setPushConstants(&constants, sizeof(constants));
-			commandList->dispatch((viewport.bloom_width(level) + GROUP_SIZE - 1) / GROUP_SIZE, (viewport.bloom_height(level) + GROUP_SIZE - 1) / GROUP_SIZE, 1);
+			commandList->dispatch(ceil_div(viewport.bloom_width(level), GROUP_SIZE), ceil_div(viewport.bloom_height(level), GROUP_SIZE), 1);
 		}
 
 		// Up: the deepest level spreads into the one above it, and so on until level 0, which is the finished bloom.
@@ -182,7 +182,7 @@ namespace wiwa
 			state.pipeline = m_UpPipeline;
 			state.addBindingSet(level == count - 2 ? c.UpDeepestSets[level] : c.UpSets[level]);
 			commandList->setComputeState(state);
-			commandList->dispatch((viewport.bloom_width(level) + GROUP_SIZE - 1) / GROUP_SIZE, (viewport.bloom_height(level) + GROUP_SIZE - 1) / GROUP_SIZE, 1);
+			commandList->dispatch(ceil_div(viewport.bloom_width(level), GROUP_SIZE), ceil_div(viewport.bloom_height(level), GROUP_SIZE), 1);
 		}
 	}
 }

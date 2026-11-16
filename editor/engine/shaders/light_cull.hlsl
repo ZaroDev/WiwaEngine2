@@ -13,7 +13,7 @@ float SquaredDistanceToBox(float3 point3, float3 boxMin, float3 boxMax)
 	return dot(delta, delta);
 }
 
-[numthreads(4, 3, 4)]
+[numthreads(WI_LIGHT_CULL_GROUP_X, WI_LIGHT_CULL_GROUP_Y, WI_LIGHT_CULL_GROUP_Z)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= CLUSTERS_X || id.y >= CLUSTERS_Y || id.z >= CLUSTERS_Z)

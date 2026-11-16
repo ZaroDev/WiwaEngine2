@@ -13,15 +13,10 @@ namespace wiwa
 	bool FxaaPass::initialize(const PassInitializationDescription& description)
 	{
 		m_Device = description.Device;
-		m_Shaders = description.Shaders;
-		if (m_Shaders == nullptr)
+		if (!m_Shaders.initialize(description, "FXAA", { { engine_assets::FXAA_SHADER, ShaderStage::Vertex }, { engine_assets::FXAA_SHADER, ShaderStage::Pixel } }))
 		{
-			WI_FXAA_LOG(Error, "The FXAA pass needs the shader library");
 			return false;
 		}
-
-		m_Shaders->request(engine_assets::FXAA_SHADER, ShaderStage::Vertex);
-		m_Shaders->request(engine_assets::FXAA_SHADER, ShaderStage::Pixel);
 
 		m_Sampler = m_Device->createSampler(nvrhi::SamplerDesc().setAllFilters(true).setAllAddressModes(nvrhi::SamplerAddressMode::Clamp));
 
@@ -43,12 +38,12 @@ namespace wiwa
 
 	bool FxaaPass::is_ready() const
 	{
-		return m_Shaders->get(engine_assets::FXAA_SHADER, ShaderStage::Vertex) != nullptr && m_Shaders->get(engine_assets::FXAA_SHADER, ShaderStage::Pixel) != nullptr;
+		return m_Shaders.ready();
 	}
 
 	void FxaaPass::update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer)
 	{
-		if (m_Shaders->has_failed(engine_assets::FXAA_SHADER, ShaderStage::Vertex) || m_Shaders->has_failed(engine_assets::FXAA_SHADER, ShaderStage::Pixel))
+		if (m_Shaders.failed())
 		{
 			m_Failed = true;
 		}
@@ -63,10 +58,8 @@ namespace wiwa
 		}
 
 		ViewportTarget& viewport = *frame.Scene->viewport();
-		const u32 shaderGeneration = m_Shaders->get_generation();
-		if (shaderGeneration != m_BuiltShaderGeneration)
+		if (m_Shaders.take_generation_change())
 		{
-			m_BuiltShaderGeneration = shaderGeneration;
 
 			nvrhi::GraphicsPipelineDesc description;
 			description.primType = nvrhi::PrimitiveType::TriangleList;

@@ -13,7 +13,7 @@ PUSH_CONSTANTS(SortStepData, Step, b1);
 
 RWStructuredBuffer<uint2> uSort : register(u3);
 
-[numthreads(64, 1, 1)]
+[numthreads(WI_PARTICLE_GROUP_SIZE, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
 	const uint i = id.x;

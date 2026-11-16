@@ -554,8 +554,8 @@ namespace wiwa
 				const u32 tile = spotShadows++;
 				const glm::mat4 matrix = compute_spot_shadow_matrix(*sources[i], tanHalf);
 				constants.ShadowMatrices[MAX_CASCADES + tile] = matrix;
-				constants.SpotShadowRects[tile] = glm::vec4(static_cast<float>((tile % 4) * SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE,
-					static_cast<float>((tile / 4) * SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE, static_cast<float>(SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE,
+				constants.SpotShadowRects[tile] = glm::vec4(static_cast<float>((tile % SPOT_GRID) * SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE,
+					static_cast<float>((tile / SPOT_GRID) * SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE, static_cast<float>(SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE,
 					static_cast<float>(SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE);
 				constants.SpotShadowInfo[tile] = glm::vec4(tanHalf, 0.0f, 0.0f, 0.0f);
 				m_Lights[i].ShadowIndex = tile + 1;

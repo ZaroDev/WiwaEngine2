@@ -16,7 +16,7 @@ namespace wiwa
 {
 	namespace
 	{
-		constexpr u32 GROUP_SIZE = 64; // [numthreads] of the particle compute shaders
+		constexpr u32 GROUP_SIZE = PARTICLE_GROUP_SIZE;
 		constexpr float MAX_STEP = 0.1f;
 		constexpr float ALIVE_MARGIN = 0.1f; // seconds an emitter is still drawn after its last particle should be dead
 
@@ -208,7 +208,7 @@ namespace wiwa
 		commandList->setComputeState(fill);
 		const SortPush fillPush{ offset, draw.Capacity, count, draw.Id };
 		commandList->setPushConstants(&fillPush, sizeof(fillPush));
-		commandList->dispatch((count + GROUP_SIZE - 1) / GROUP_SIZE, 1, 1);
+		commandList->dispatch(ceil_div(count, GROUP_SIZE), 1, 1);
 			commandList->setBufferState(pool.sort_buffer(), nvrhi::ResourceStates::UnorderedAccess); // the next step reads what this one wrote
 			commandList->commitBarriers();
 
@@ -222,7 +222,7 @@ namespace wiwa
 				commandList->setComputeState(step);
 				const SortPush stepPush{ offset, k, j, count };
 				commandList->setPushConstants(&stepPush, sizeof(stepPush));
-				commandList->dispatch((count + GROUP_SIZE - 1) / GROUP_SIZE, 1, 1);
+				commandList->dispatch(ceil_div(count, GROUP_SIZE), 1, 1);
 			commandList->setBufferState(pool.sort_buffer(), nvrhi::ResourceStates::UnorderedAccess); // the next step reads what this one wrote
 			commandList->commitBarriers();
 			}
@@ -526,7 +526,7 @@ namespace wiwa
 			state.pipeline = m_SpawnPipeline;
 			state.addBindingSet(view.BindingSet);
 			commandList->setComputeState(state);
-			commandList->dispatch((totalSpawn + GROUP_SIZE - 1) / GROUP_SIZE, 1, 1);
+			commandList->dispatch(ceil_div(totalSpawn, GROUP_SIZE), 1, 1);
 		}
 
 		if (constants.SlotEnd > 0)
@@ -535,7 +535,7 @@ namespace wiwa
 			state.pipeline = m_SimPipeline;
 			state.addBindingSet(view.BindingSet);
 			commandList->setComputeState(state);
-			commandList->dispatch((constants.SlotEnd + GROUP_SIZE - 1) / GROUP_SIZE, 1, 1);
+			commandList->dispatch(ceil_div(constants.SlotEnd, GROUP_SIZE), 1, 1);
 		}
 
 		for (const ParticleDraw& draw : pool.Draws)

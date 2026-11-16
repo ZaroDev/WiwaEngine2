@@ -196,12 +196,6 @@ namespace wiwa
 		return found == m_InstanceIndex.end() ? std::nullopt : std::optional<size_t>(found->second);
 	}
 
-	std::optional<size_t> RenderScene::find_light(EntityGuid guid) const
-	{
-		const auto found = m_LightIndex.find(guid);
-		return found == m_LightIndex.end() ? std::nullopt : std::optional<size_t>(found->second);
-	}
-
 	std::optional<size_t> RenderScene::find_particle_system(EntityGuid guid) const
 	{
 		const auto found = m_ParticleIndex.find(guid);

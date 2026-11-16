@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../render_constants.h"
 #include "../render_pass.h"
 #include "../shader_library.h"
 #include "scene_pass_utils.h"
@@ -35,8 +36,7 @@ namespace wiwa
 		nvrhi::GraphicsPipelineHandle m_OpaqueNoDecals[2]{};
 		nvrhi::GraphicsPipelineHandle m_MaskedNoDecals[2]{};
 		scene_pass::SurfacePipelines m_SurfaceNoDecals{};
-		// Bit 2 of the stencil (value 4): the selection outline owns bits 0 and 1 (value 3) and runs later.
-		static constexpr u8 DECAL_STENCIL_BIT = 4;
+		// DECAL_STENCIL_BIT (render_constants.h) is bit 2 of the stencil: the selection outline owns bits 0 and 1 (value 3) and runs later.
 		u32 m_BuiltShaderGeneration = ~0u;
 	};
 }

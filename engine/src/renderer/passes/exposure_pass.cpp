@@ -146,7 +146,7 @@ namespace wiwa
 		resolve.CompensationEv = settings.CompensationEv;
 		resolve.MinEv = settings.MinEv;
 		resolve.MaxEv = std::max(settings.MaxEv, settings.MinEv);
-		resolve.DeltaSeconds = std::clamp(frame.DeltaTime, 0.0f, MAX_DELTA);
+		resolve.DeltaSeconds = std::clamp(frame.DeltaSeconds, 0.0f, MAX_DELTA);
 		resolve.Speed = settings.AdaptSpeed;
 		resolve.Reset = reset ? 1.0f : 0.0f;
 		c.WasActive = true;
@@ -158,7 +158,7 @@ namespace wiwa
 			state.addBindingSet(c.HistogramSet);
 			commandList->setComputeState(state);
 			commandList->setPushConstants(&histogram, sizeof(histogram));
-			commandList->dispatch((viewport.width() + 15) / 16, (viewport.height() + 15) / 16, 1);
+			commandList->dispatch(ceil_div(viewport.width(), EXPOSURE_GROUP_SIZE), ceil_div(viewport.height(), EXPOSURE_GROUP_SIZE), 1);
 		}
 		{
 			nvrhi::ComputeState state;

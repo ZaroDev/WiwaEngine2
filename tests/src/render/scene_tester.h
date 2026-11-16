@@ -222,7 +222,6 @@ namespace wiwa
 		{
 			RenderBatch batch;
 			batch.FrameIndex = m_Frame++;
-			batch.DeltaTime = m_Delta;
 			batch.DeltaSeconds = m_Delta;
 			batch.Width = m_Renderer.get_width();
 			batch.Height = m_Renderer.get_height();

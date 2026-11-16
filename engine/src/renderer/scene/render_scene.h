@@ -157,7 +157,6 @@ namespace wiwa
 		const std::vector<RenderLight>& lights() const { return m_Lights; }
 		const std::vector<RenderDecal>& decals() const { return m_Decals; }
 		std::optional<size_t> find_instance(EntityGuid guid) const;
-		std::optional<size_t> find_light(EntityGuid guid) const;
 		std::optional<size_t> find_decal(EntityGuid guid) const;
 
 		size_t particle_system_count() const { return m_ParticleCount; }

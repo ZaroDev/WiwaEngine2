@@ -9,6 +9,7 @@
 
 #include "../resources/gpu_resource_cache.h"
 #include "../environment/environment_cache.h"
+#include "../render_constants.h"
 #include "../render_quality.h"
 #include "../view/view_types.h"
 #include "../viewport_target.h"
@@ -17,17 +18,8 @@
 namespace wiwa
 {
 	class Frustum;
-	// The cluster grid lights are sorted into (mirrored in scene_common.hlsli).
-	constexpr u32 CLUSTERS_X = 16;
-	constexpr u32 CLUSTERS_Y = 9;
-	constexpr u32 CLUSTERS_Z = 24;
-	constexpr u32 CLUSTER_COUNT = CLUSTERS_X * CLUSTERS_Y * CLUSTERS_Z;
-	constexpr u32 MAX_LIGHTS_PER_CLUSTER = 64;
+	// The cluster grid, the shadow map sizes and NO_PALETTE are in render_constants.h, which the shaders read too.
 	constexpr u32 MAX_LIGHTS = 1024;
-
-	constexpr u32 MAX_SPOT_SHADOWS = 4;
-	constexpr u32 SPOT_TILE_SIZE = 1024;
-	constexpr u32 SPOT_ATLAS_SIZE = 4096;
 
 	// One point or spot light as the shaders read it (GpuLight in scene_common.hlsli).
 	struct GpuLight
@@ -62,8 +54,6 @@ namespace wiwa
 		float Depth = 0.0f; // view-space distance of the primitive's bounds center (for sorting blended draws)
 	};
 
-	constexpr u32 NO_PALETTE = ~0u; // GpuInstance::Skin.x of an instance that is not skinned (mirrored in scene_common.hlsli)
-
 	// One scene instance as the shaders read it (SceneInstance in scene_common.hlsli): the world matrix, the matrix for normals and the
 	// world matrix of the previous frame, each as four columns.
 	struct GpuInstance
@@ -90,13 +80,13 @@ namespace wiwa
 		glm::vec4 ViewportSize{ 1.0f };   // width, height, 1 / width, 1 / height
 		glm::vec4 ClusterParams{ 0.0f };  // x = slice scale, y = slice bias, z = 1 when the camera is orthographic
 		glm::uvec4 LightInfo{ 0 };        // x = number of lights
-		glm::mat4 ShadowMatrices[8]{};    // 0..3 the sun's cascades, 4..7 the shadowed spot lights
+		glm::mat4 ShadowMatrices[MAX_CASCADES + MAX_SPOT_SHADOWS]{};    // 0..3 the sun's cascades, 4..7 the shadowed spot lights
 		glm::vec4 CascadeSplits{ 0.0f };  // view depth at which each cascade ends
 		glm::vec4 CascadeTexels{ 0.0f };  // world size of a texel of each cascade
 		glm::vec4 ShadowParams{ 0.0f };   // x = 1 when the sun casts shadows, y = cascade count, z = depth bias, w = normal bias (texels)
 		glm::vec4 ShadowParams2{ 0.0f };  // x = spot depth bias
-		glm::vec4 SpotShadowRects[4]{};   // atlas tile of each shadowed spot light: offset xy, scale zw
-		glm::vec4 SpotShadowInfo[4]{};    // x = tan(half the cone angle)
+		glm::vec4 SpotShadowRects[MAX_SPOT_SHADOWS]{};   // atlas tile of each shadowed spot light: offset xy, scale zw
+		glm::vec4 SpotShadowInfo[MAX_SPOT_SHADOWS]{};    // x = tan(half the cone angle)
 		glm::vec4 EnvSH[9]{};             // the environment's diffuse light (rgb in xyz)
 		glm::vec4 EnvParams{ 0.0f };      // x = 1 when an environment lights the scene, y = highest mip, z = brightness * ambient intensity, w = 1 when the BRDF table exists
 		glm::vec4 EnvRotation{ 1.0f, 0.0f, 1.0f, 0.0f }; // cos, sin of the rotation about +Y, the brightness of the sky seen
@@ -190,7 +180,6 @@ namespace wiwa
 		// The decal targets of the viewport exist and are the ones bound in ao_bindings() (decals are visible this frame).
 		bool decals_active() const { return m_DecalsActive; }
 		// An environment (a file's, ready) lights the scene this frame.
-		bool has_environment() const { return m_FrameEnvironment != nullptr; }
 		// What the sky pass draws behind the scene this frame.
 		enum class SkyKind { None, Environment, Atmosphere };
 		SkyKind sky_kind() const { return m_SkyKind; }

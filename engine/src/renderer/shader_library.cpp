@@ -133,7 +133,7 @@ namespace wiwa
 	void ShaderLibrary::finish(Entry& entry)
 	{
 		const ShaderData* data = entry.Pending.get();
-		const ShaderTarget target = (m_Api == GraphicsApi::Vulkan) ? ShaderTarget::Spirv : ShaderTarget::Dxbc;
+		const ShaderTarget target = shader_target_for(m_Api);
 		const ShaderBinary* binary = data->find(entry.Stage, target);
 
 		nvrhi::ShaderHandle shader;

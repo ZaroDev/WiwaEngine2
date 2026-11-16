@@ -170,7 +170,7 @@ namespace wiwa
 			return true; // nothing to show; resumes with the first normal batch
 		}
 
-		m_Time += batch.DeltaTime;
+		m_Time += batch.DeltaSeconds;
 
 		if (batch.Width != m_Backend->get_width() || batch.Height != m_Backend->get_height())
 		{
@@ -369,7 +369,6 @@ namespace wiwa
 		frame.Width = m_Backend->get_width();
 		frame.Height = m_Backend->get_height();
 		frame.Time = m_Time;
-		frame.DeltaTime = batch.DeltaTime;
 		frame.DeltaSeconds = batch.DeltaSeconds;
 		frame.FrameIndex = m_FrameIndex;
 		frame.ImGui = &batch.ImGui;
@@ -804,11 +803,6 @@ namespace wiwa
 		{
 			WI_RENDER_LOG(Error, "Resizing the swapchain to {0}x{1} failed", width, height);
 			return false;
-		}
-
-		for (const Scope<IRenderPass>& pass : m_Passes)
-		{
-			pass->on_resize(m_Backend->get_device(), m_Backend->get_width(), m_Backend->get_height());
 		}
 
 		return true;

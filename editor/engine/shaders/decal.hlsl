@@ -31,7 +31,7 @@ VK_BINDING(34, 2) Texture2D<float2> uPrepassNormal : register(t34);
 VK_BINDING(35, 2) StructuredBuffer<DecalRecord> uDecals : register(t35);
 
 // Bit 4 of the stencil marks the pixels of meshes that do not receive decals (the depth prepass writes it).
-static const uint STENCIL_NO_DECALS = 4u;
+static const uint STENCIL_NO_DECALS = WI_DECAL_STENCIL_BIT; // the bit the depth prepass writes
 
 // The 12 triangles of a unit cube, counter-clockwise seen from outside. Corner bits: x = 1, y = 2, z = 4 (set = +0.5).
 static const uint CUBE_INDICES[36] =

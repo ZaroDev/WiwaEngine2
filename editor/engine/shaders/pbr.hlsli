@@ -269,7 +269,7 @@ float SpotShadow(GpuLight light, float3 worldPosition, float3 normal)
 	float texelWorld = 2.0 * distanceToLight * SpotShadowInfo[slot].x / SPOT_TILE_SIZE;
 	float3 receiver = worldPosition + normal * (texelWorld * ShadowParams.w);
 
-	float4 clip = mul(ShadowMatrices[4 + slot], float4(receiver, 1.0));
+	float4 clip = mul(ShadowMatrices[WI_MAX_CASCADES + slot], float4(receiver, 1.0));
 	if (clip.w <= 0.0)
 	{
 		return 1.0;

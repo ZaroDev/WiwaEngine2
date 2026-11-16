@@ -171,28 +171,6 @@ glm::vec3 sample_cube(const CubeMap& cube, const glm::vec3& direction)
 	return glm::mix(top, bottom, fy);
 }
 
-CubeMap make_procedural_environment(u32 size)
-{
-	const glm::vec3 zenith(0.30f, 0.50f, 0.95f);
-	const glm::vec3 horizon(0.75f, 0.80f, 0.90f);
-	const glm::vec3 ground(0.10f, 0.09f, 0.08f);
-
-	// The default sun (azimuth 35, elevation 50 degrees, see SunLightDescription).
-	const float azimuth = glm::radians(35.0f);
-	const float elevation = glm::radians(50.0f);
-	const glm::vec3 sun(std::cos(elevation) * std::cos(azimuth), std::sin(elevation), std::cos(elevation) * std::sin(azimuth));
-
-	return make_cube(size, [=](const glm::vec3& d)
-	{
-		const glm::vec3 sky = glm::mix(horizon, zenith, saturate(d.y));
-		const glm::vec3 below = glm::mix(horizon * 0.35f, ground, saturate(-d.y * 2.0f));
-		glm::vec3 color = (d.y >= 0.0f) ? sky : below;
-
-		const float glow = std::pow(std::max(glm::dot(d, sun), 0.0f), 6.0f) * 0.8f;
-		return color + glow * glm::vec3(1.0f, 0.85f, 0.6f);
-	});
-}
-
 CubeMap equirect_to_cube(const float* rgb, u32 width, u32 height, u32 size)
 {
 	std::vector<glm::vec3> image(static_cast<size_t>(width) * height);

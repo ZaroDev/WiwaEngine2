@@ -71,7 +71,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE | UpdateFlags::UPDATE_RENDERER; }
 		virtual std::string get_name() const override { return "Renderer"; }
-		virtual int get_priority() const override { return -50; }
+		virtual int get_priority() const override { return ModulePriority::Render; }
 
 		// Main thread: queues a command for the next batch; it runs on the render thread against the render-side state.
 		void submit(RenderCommand command) { m_PendingCommands.push_back(std::move(command)); }
@@ -212,8 +212,7 @@ namespace wiwa
 		std::mutex m_ReloadMutex{};
 		std::vector<AssetGuid> m_ReloadedAssets{};
 		u32 m_ReloadListenerId = 0;
-		u32 m_RequestedViewportWidth = 0; // main thread: what was last sent
-		u32 m_RequestedViewportHeight = 0;
+		glm::uvec2 m_RequestedViewport{ 0, 0 }; // main thread: what was last sent
 		bool m_SentSceneInViewport = false;
 		RenderQuality m_Quality{};
 		std::optional<RenderCamera> m_SentCameraOverride{};

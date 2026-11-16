@@ -81,7 +81,6 @@ namespace wiwa
 
 		// Views: the main one (the Viewport panel, or the window) is always there; the others are made for RenderViews and drawn into targets of
 		// their own with the same passes. add_view returns INVALID_VIEW at MAX_VIEWS live views or when the view cannot be set up.
-		ViewState& get_main_view() { return m_MainView; }
 		ViewState* find_view(ViewId id);
 		ViewId add_view(ViewId id, const ViewDesc& desc);
 		void remove_view(ViewId id);
@@ -101,13 +100,12 @@ namespace wiwa
 		// The size the scene is rendered at (the Viewport panel's size). The target is made, or made again, at the start of the next
 		// frame. 0 in either dimension changes nothing (a hidden panel keeps its target).
 		void set_viewport_size(u32 width, u32 height);
-		// True: the scene is drawn into the viewport target at the size requested above and the UI shows it (the editor). False, the
-		// default: the viewport target follows the window and the blit pass draws it fullscreen (a game).
 		// Applies the quality settings (render thread; commands run between frames). Vsync and the copy queue take effect at once.
 		void set_quality(const RenderQuality& quality);
 		const RenderQuality& get_quality() const { return m_Quality; }
+		// True: the scene is drawn into the viewport target at the size requested above and the UI shows it (the editor). False, the
+		// default: the viewport target follows the window and the blit pass draws it fullscreen (a game).
 		void set_scene_in_viewport(bool inViewport) { m_SceneInViewport = inViewport; }
-		bool is_scene_in_viewport() const { return m_SceneInViewport; }
 		GraphicsApi get_api() const { return m_Description.Api; }
 		std::string get_adapter_name() const { return m_Backend ? m_Backend->get_adapter_name() : std::string{}; }
 		u32 get_width() const { return m_Backend ? m_Backend->get_width() : 0; }

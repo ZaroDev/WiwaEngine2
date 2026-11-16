@@ -3,7 +3,7 @@
 // Spreads a smaller bloom level back up and adds it to this level's own downsampled image
 // (the 9-tap tent of bloom_up_taps() in bloom_math.h, copied here).
 
-#define GROUP_SIZE 8
+#define GROUP_SIZE WI_BLOOM_GROUP_SIZE
 
 Texture2D uSmaller : register(t1); // the level below: read with the tent filter
 Texture2D uOwn : register(t2);     // this level, as the downsample made it

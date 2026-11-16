@@ -13,7 +13,7 @@ RWStructuredBuffer<Particle> uParticles : register(u3);
 Texture2D<float> uDepth : register(t4);
 Texture2D<float2> uNormal : register(t5);
 
-[numthreads(64, 1, 1)]
+[numthreads(WI_PARTICLE_GROUP_SIZE, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= SlotEnd)

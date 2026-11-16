@@ -2,6 +2,7 @@
 
 #include <array>
 
+#include "../render_constants.h"
 #include "../render_pass.h"
 #include "../shader_library.h"
 #include "../view/per_view.h"
@@ -26,7 +27,7 @@ namespace wiwa
 		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return flags.Bloom; }
 
 	private:
-		static constexpr u32 GROUP_SIZE = 8;
+		static constexpr u32 GROUP_SIZE = BLOOM_GROUP_SIZE;
 
 		// Mirrors BloomDownData in bloom_down.hlsl.
 		struct DownConstants

@@ -11,7 +11,7 @@
 //      history keeps less the faster the pixel moves and the further it had to be pulled.
 // Writes the resolved color and this frame's depth (the next frame's disocclusion test) into the textures of this frame.
 
-#define GROUP_SIZE 8
+#define GROUP_SIZE WI_TAA_GROUP_SIZE
 #define CLIP_GAMMA 1.25
 #define DEPTH_TOLERANCE 0.02
 

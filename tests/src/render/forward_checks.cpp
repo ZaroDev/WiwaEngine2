@@ -128,7 +128,7 @@ namespace wiwa
 				std::optional<AssetRef> model = assets->find_asset("Assets/models/torus_knot.glb");
 				if (!model)
 				{
-					WI_LOG(Info, "RenderTest", "culling_real_model: no Assets/models/torus_knot.glb, skipped");
+					WI_LOG(Info, "RenderTest", "SKIPPED: culling_real_model: no Assets/models/torus_knot.glb in the asset catalog");
 					return;
 				}
 				Handle<PrefabData> prefab = assets->load<PrefabData>(*model);

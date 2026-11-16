@@ -6,6 +6,7 @@
 
 #include <renderer/scene/render_scene.h>
 #include <renderer/scene/scene_extractor.h>
+#include <test_kit.h>
 
 // Checks of the scene to render-thread path. They are plain logic (no GPU), run in the same list.
 namespace wiwa
@@ -24,11 +25,6 @@ namespace wiwa
 			const entt::entity entity = scene.create(name);
 			scene.registry().emplace<MeshRenderer>(entity, MeshRenderer{ make_ref(meshId), {} });
 			return entity;
-		}
-
-		bool near_equal(float a, float b)
-		{
-			return std::abs(a - b) < 1e-4f;
 		}
 	}
 

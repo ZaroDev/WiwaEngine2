@@ -204,15 +204,15 @@ namespace wiwa
 		data.Settings = glm::vec4(settings.Radius, settings.Power, static_cast<float>(quality.AoSlices), static_cast<float>(quality.AoSteps));
 		commandList->writeBuffer(m_ConstantBuffer, &data, sizeof(data));
 
-		const u32 groupsX = (viewport.width() + GROUP_SIZE - 1) / GROUP_SIZE;
-		const u32 groupsY = (viewport.height() + GROUP_SIZE - 1) / GROUP_SIZE;
+		const u32 groupsX = ceil_div(viewport.width(), GROUP_SIZE);
+		const u32 groupsY = ceil_div(viewport.height(), GROUP_SIZE);
 
 		// The distance of every pixel with its mips: one dispatch.
 		nvrhi::ComputeState depthState;
 		depthState.pipeline = m_DepthPipeline;
 		depthState.addBindingSet(c.DepthSet);
 		commandList->setComputeState(depthState);
-		commandList->dispatch((viewport.width() + DEPTH_GROUP_SIZE - 1) / DEPTH_GROUP_SIZE, (viewport.height() + DEPTH_GROUP_SIZE - 1) / DEPTH_GROUP_SIZE, 1);
+		commandList->dispatch(ceil_div(viewport.width(), DEPTH_GROUP_SIZE), ceil_div(viewport.height(), DEPTH_GROUP_SIZE), 1);
 
 		nvrhi::ComputeState aoState;
 		aoState.pipeline = m_AoPipeline;
