@@ -1,8 +1,0 @@
-The sounds in this folder are all CC0 1.0 (public domain):
-
-- Beacon_Blip.wav (bong_001), UI_Click.wav (click_001): Kenney, "Interface Sounds", https://kenney.nl/assets/interface-sounds
-- Footstep_1..3.ogg (footstep_concrete_000..002), Impact_Soft.ogg (impact_soft_medium_000): Kenney, "Impact Sounds", https://kenney.nl/assets/impact-sounds
-- Amb_Hall_loop.ogg ("Birds and Wind - Ambient.ogg"): Spring Spring, "Birds and Wind - Ambient, Birds, Wind and Synth", https://opengameart.org/content/birds-and-wind-ambient-birds-wind-and-synth
-  (bird sounds in it by isaiah658, syncopika and pauliuw, public domain)
-
-They are copied under the names the demo scripts post as events. scripts/gen_demo_scene.py downloads them.
