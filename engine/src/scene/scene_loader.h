@@ -31,6 +31,9 @@ namespace wiwa
 		std::vector<std::string> Warnings{};
 	};
 
+	// The Prefab an entity record holds a PrefabInstance for, if it has one (and names a valid asset).
+	std::optional<AssetRef> prefab_of(const EntityRecord& entity);
+
 	// Returns the prefab a PrefabInstance names, or null if it is not available (it did not load).
 	using PrefabLookup = PrefabResolver;
 

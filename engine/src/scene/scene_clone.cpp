@@ -1,7 +1,6 @@
 #include <pch.h>
 #include "scene_clone.h"
 
-#include <algorithm>
 #include <unordered_map>
 
 #include "reflection/component_registry.h"
@@ -20,6 +19,16 @@ namespace wiwa
 				to.emplace_or_replace<T>(target, *value);
 			}
 		}
+
+		// Every component that is not reflected (so not in the ComponentRegistry). A new one is added here, and to
+		// scene_records.cpp if it is saved.
+		void copy_extra_components(entt::registry& from, entt::entity source, entt::registry& to, entt::entity target)
+		{
+			copy_value<ValueBags>(from, source, to, target);
+			copy_value<PrefabInstance>(from, source, to, target);
+			copy_value<PrefabChild>(from, source, to, target);
+			copy_value<UnknownComponents>(from, source, to, target);
+		}
 	}
 
 	Ref<Scene> clone_scene(Scene& source)
@@ -31,46 +40,27 @@ namespace wiwa
 		std::unordered_map<entt::entity, entt::entity> made; // source entity -> its copy
 
 		// parents before children, siblings in order, roots in order: the copy is built in the order it has to have
-		std::vector<entt::entity> stack;
-		for (auto root = source.roots().rbegin(); root != source.roots().rend(); ++root)
-		{
-			stack.push_back(*root);
-		}
-
-		while (!stack.empty())
-		{
-			const entt::entity entity = stack.back();
-			stack.pop_back();
-
-			const entt::entity parent = from.get<Hierarchy>(entity).Parent;
-			const entt::entity copy = clone->create(from.get<Id>(entity).Guid, from.get<Name>(entity).Value, parent == entt::null ? entt::null : made.at(parent));
-			made[entity] = copy;
-
-			for (const ComponentInfo* info : ComponentRegistry::get().all())
+		source.for_each_in_order([&](entt::entity entity)
 			{
-				if (info->Name == "Id" || !info->Has(from, entity))
-				{
-					continue;
-				}
-				info->Add(to, copy);
-				for (size_t field = 0; field < info->Fields.size(); field++)
-				{
-					info->Set(to, copy, field, info->Get(from, entity, field));
-				}
-			}
+				const entt::entity parent = from.get<Hierarchy>(entity).Parent;
+				const entt::entity copy = clone->create(from.get<Id>(entity).Guid, from.get<Name>(entity).Value, parent == entt::null ? entt::null : made.at(parent));
+				made[entity] = copy;
 
-			copy_value<ValueBags>(from, entity, to, copy);
-			copy_value<PrefabInstance>(from, entity, to, copy);
-			copy_value<PrefabChild>(from, entity, to, copy);
-			copy_value<UnknownComponents>(from, entity, to, copy);
+				for (const ComponentInfo* info : ComponentRegistry::get().all())
+				{
+					if (info->Name == ID_COMPONENT || !info->Has(from, entity))
+					{
+						continue;
+					}
+					info->Add(to, copy);
+					for (size_t field = 0; field < info->Fields.size(); field++)
+					{
+						info->Set(to, copy, field, info->Get(from, entity, field));
+					}
+				}
 
-			const size_t first = stack.size();
-			for (entt::entity child = from.get<Hierarchy>(entity).FirstChild; child != entt::null; child = from.get<Hierarchy>(child).NextSibling)
-			{
-				stack.push_back(child);
-			}
-			std::reverse(stack.begin() + static_cast<std::ptrdiff_t>(first), stack.end());
-		}
+				copy_extra_components(from, entity, to, copy);
+			});
 
 		clone->set_settings(source.settings());
 		clone->update_world_transforms();

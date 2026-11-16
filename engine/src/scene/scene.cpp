@@ -54,14 +54,8 @@ namespace wiwa
 
 		unlink(entity);
 
-		std::vector<entt::entity> subtree{ entity };
-		for (size_t i = 0; i < subtree.size(); i++)
-		{
-			for (entt::entity child = m_Registry.get<Hierarchy>(subtree[i]).FirstChild; child != entt::null; child = m_Registry.get<Hierarchy>(child).NextSibling)
-			{
-				subtree.push_back(child);
-			}
-		}
+		std::vector<entt::entity> subtree;
+		for_each_descendant(entity, [&](entt::entity member) { subtree.push_back(member); });
 
 		m_Registry.destroy(subtree.begin(), subtree.end());
 	}
@@ -179,15 +173,8 @@ namespace wiwa
 
 	void Scene::update_world_transforms()
 	{
-		std::vector<entt::entity> stack;
-		for (const entt::entity root : m_Roots)
-		{
-			stack.push_back(root);
-			while (!stack.empty())
+		for_each_in_order([&](entt::entity entity)
 			{
-				const entt::entity entity = stack.back();
-				stack.pop_back();
-
 				const Transform& local = m_Registry.get<Transform>(entity);
 				glm::mat4 matrix = glm::translate(glm::mat4(1.0f), local.Position) * glm::mat4_cast(local.Rotation) * glm::scale(glm::mat4(1.0f), local.Scale);
 
@@ -197,13 +184,7 @@ namespace wiwa
 					matrix = m_Registry.get<WorldTransform>(link.Parent).Matrix * matrix;
 				}
 				m_Registry.get<WorldTransform>(entity).Matrix = matrix;
-
-				for (entt::entity child = link.FirstChild; child != entt::null; child = m_Registry.get<Hierarchy>(child).NextSibling)
-				{
-					stack.push_back(child);
-				}
-			}
-		}
+			});
 	}
 
 	size_t Scene::destroy_some(size_t maxEntities)

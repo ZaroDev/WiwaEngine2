@@ -7,31 +7,27 @@
 
 namespace wiwa
 {
-	namespace
+	std::optional<AssetRef> prefab_of(const EntityRecord& entity)
 	{
-		// The Prefab an entity record holds a PrefabInstance for, if it has one.
-		std::optional<AssetRef> prefab_of(const EntityRecord& entity)
+		for (const ComponentRecord& component : entity.Components)
 		{
-			for (const ComponentRecord& component : entity.Components)
+			if (component.Name != PREFAB_INSTANCE_COMPONENT)
 			{
-				if (component.Name != "PrefabInstance")
-				{
-					continue;
-				}
+				continue;
+			}
 
-				for (const FieldRecord& field : component.Fields)
+			for (const FieldRecord& field : component.Fields)
+			{
+				if (field.Name == "Prefab")
 				{
-					if (field.Name == "Prefab")
+					if (const AssetRef* ref = std::get_if<AssetRef>(&field.Value); ref != nullptr && ref->valid())
 					{
-						if (const AssetRef* ref = std::get_if<AssetRef>(&field.Value); ref != nullptr && ref->valid())
-						{
-							return *ref;
-						}
+						return *ref;
 					}
 				}
 			}
-			return std::nullopt;
 		}
+		return std::nullopt;
 	}
 
 	SceneBlueprint build_blueprint(const SceneData& data, const PrefabLookup& prefabs)

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -41,6 +43,46 @@ namespace wiwa
 		// Destroys up to maxEntities entities in no particular order (the hierarchy is not kept consistent: the scene is being thrown
 		// away). Returns how many entities are left. For taking a big scene down over several frames.
 		size_t destroy_some(size_t maxEntities);
+
+		// Calls visit(entity) for the entity and everything below it: parents before children, siblings in order. A visit that
+		// returns bool (rather than nothing) says whether to go on below that entity: false leaves its children out. The hierarchy
+		// must not change during the walk.
+		template<typename F>
+		void for_each_descendant(entt::entity entity, F&& visit) const
+		{
+			std::vector<entt::entity> stack{ entity };
+			while (!stack.empty())
+			{
+				const entt::entity current = stack.back();
+				stack.pop_back();
+				if constexpr (std::is_void_v<std::invoke_result_t<F&, entt::entity>>)
+				{
+					visit(current);
+				}
+				else if (!visit(current))
+				{
+					continue;
+				}
+
+				// children are pushed in reverse so that they come out in sibling order
+				const size_t first = stack.size();
+				for (entt::entity child = m_Registry.get<Hierarchy>(current).FirstChild; child != entt::null; child = m_Registry.get<Hierarchy>(child).NextSibling)
+				{
+					stack.push_back(child);
+				}
+				std::reverse(stack.begin() + static_cast<std::ptrdiff_t>(first), stack.end());
+			}
+		}
+
+		// for_each_descendant of every top-level entity, in order: the whole scene, parents before children.
+		template<typename F>
+		void for_each_in_order(F&& visit) const
+		{
+			for (const entt::entity root : m_Roots)
+			{
+				for_each_descendant(root, visit);
+			}
+		}
 
 		// The top-level entities in the order they were made (or last moved to the top level), whatever was destroyed since.
 		const std::vector<entt::entity>& roots() const { return m_Roots; }

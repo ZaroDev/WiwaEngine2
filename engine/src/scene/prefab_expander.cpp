@@ -30,8 +30,8 @@ namespace wiwa
 		EntityRecord node_record(const PrefabNode& node)
 		{
 			EntityRecord record;
-			record.Components.push_back(ComponentRecord{ "Name", { FieldRecord{ "Value", FieldValue(node.Name) } } });
-			record.Components.push_back(ComponentRecord{ "Transform", {
+			record.Components.push_back(ComponentRecord{ NAME_COMPONENT, { FieldRecord{ "Value", FieldValue(node.Name) } } });
+			record.Components.push_back(ComponentRecord{ TRANSFORM_COMPONENT, {
 				FieldRecord{ "Position", FieldValue(node.Translation) },
 				FieldRecord{ "Rotation", FieldValue(node.Rotation) },
 				FieldRecord{ "Scale", FieldValue(node.Scale) } } });
@@ -221,7 +221,7 @@ namespace wiwa
 		add_animator(result.Entities[0], prefab);
 
 		Expansion expansion{ resolve, instanceRoot.Id, result };
-		if (const ComponentRecord* link = find_component(instanceRoot, "PrefabInstance"))
+		if (const ComponentRecord* link = find_component(instanceRoot, PREFAB_INSTANCE_COMPONENT))
 		{
 			for (const FieldRecord& field : link->Fields)
 			{
@@ -421,12 +421,14 @@ namespace wiwa
 		return prefab_value(prefab, nodeId, component, field, PrefabResolver{});
 	}
 
+	bool is_field_override(const PrefabOverride& override, u64 nodeId, std::string_view component, std::string_view field)
+	{
+		return override.Kind == OverrideKind::SetField && override.NodeId == nodeId && override.Component == component && override.Field == field;
+	}
+
 	void revert_field(EntityRecord& instanceRoot, u64 nodeId, std::string_view component, std::string_view field)
 	{
-		std::erase_if(instanceRoot.Overrides, [&](const PrefabOverride& override)
-			{
-				return override.Kind == OverrideKind::SetField && override.NodeId == nodeId && override.Component == component && override.Field == field;
-			});
+		std::erase_if(instanceRoot.Overrides, [&](const PrefabOverride& override) { return is_field_override(override, nodeId, component, field); });
 	}
 
 	void revert_all(EntityRecord& instanceRoot)
@@ -439,7 +441,7 @@ namespace wiwa
 		ExpandResult expanded = expand_prefab(instanceRoot, prefab, resolve);
 		EntityRecord& root = expanded.Entities[0];
 		root.Overrides.clear();
-		std::erase_if(root.Components, [](const ComponentRecord& component) { return component.Name == "PrefabInstance"; });
+		std::erase_if(root.Components, [](const ComponentRecord& component) { return component.Name == PREFAB_INSTANCE_COMPONENT; });
 		return std::move(expanded.Entities);
 	}
 

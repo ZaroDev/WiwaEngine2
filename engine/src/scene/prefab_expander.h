@@ -54,6 +54,9 @@ namespace wiwa
 	std::optional<FieldValue> prefab_value(const PrefabData& prefab, u64 nodeId, std::string_view component, std::string_view field, const PrefabResolver& resolve);
 	std::optional<FieldValue> prefab_value(const PrefabData& prefab, u64 nodeId, std::string_view component, std::string_view field);
 
+	// Whether the override sets that field of that node (the match every lookup, replace and revert of a field override uses).
+	bool is_field_override(const PrefabOverride& override, u64 nodeId, std::string_view component, std::string_view field);
+
 	// Removes the overrides that set that field of that node.
 	void revert_field(EntityRecord& instanceRoot, u64 nodeId, std::string_view component, std::string_view field);
 	void revert_all(EntityRecord& instanceRoot);

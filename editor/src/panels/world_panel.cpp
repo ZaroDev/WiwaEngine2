@@ -12,6 +12,19 @@ namespace
 		std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 		return text;
 	}
+
+	// The widgets offer the range the sanitizer allows (scene_settings.h), so a value is never one it would change.
+	bool slider(const wiwa::SceneSettings& settings, const char* label, float& value, const char* format = "%.3f", ImGuiSliderFlags flags = 0)
+	{
+		const wiwa::SettingRange range = wiwa::settings_range(settings, value);
+		return ImGui::SliderFloat(label, &value, range.Min, range.Max, format, flags);
+	}
+
+	bool drag(const wiwa::SceneSettings& settings, const char* label, float& value, float speed)
+	{
+		const wiwa::SettingRange range = wiwa::settings_range(settings, value);
+		return ImGui::DragFloat(label, &value, speed, range.Min, range.Max);
+	}
 }
 
 bool WorldPanel::matches(const char* text) const
@@ -84,8 +97,9 @@ void WorldPanel::environment_rows(wiwa::SceneSettings& settings)
 	field("Source", [&]()
 		{
 			const char* sources[] = { "None", "Environment asset", "Atmosphere" };
+				static_assert(IM_ARRAYSIZE(sources) == wiwa::ENVIRONMENT_SOURCE_NAMES.size());
 			int source = static_cast<int>(settings.Source);
-			if (ImGui::Combo("Source", &source, sources, 3))
+			if (ImGui::Combo("Source", &source, sources, IM_ARRAYSIZE(sources)))
 			{
 				settings.Source = static_cast<wiwa::EnvironmentSource>(source);
 			}
@@ -128,8 +142,8 @@ void WorldPanel::environment_rows(wiwa::SceneSettings& settings)
 
 	if (settings.Source != wiwa::EnvironmentSource::None)
 	{
-		field("Rotation", [&]() { ImGui::SliderFloat("Rotation", &settings.RotationDegrees, 0.0f, 360.0f, "%.0f deg"); });
-		field("Brightness", [&]() { ImGui::DragFloat("Brightness", &settings.Brightness, 0.01f, 0.0f, 64.0f); });
+		field("Rotation", [&]() { slider(settings, "Rotation", settings.RotationDegrees, "%.0f deg"); });
+		field("Brightness", [&]() { drag(settings, "Brightness", settings.Brightness, 0.01f); });
 	}
 
 	if (settings.Source == wiwa::EnvironmentSource::Atmosphere)
@@ -137,15 +151,15 @@ void WorldPanel::environment_rows(wiwa::SceneSettings& settings)
 		group("Atmosphere");
 		wiwa::AtmosphereParameters& a = settings.Atmosphere;
 		field("Sun source", [&]() { ImGui::TextDisabled("The sun is the first directional light."); });
-		field("Rayleigh", [&]() { ImGui::SliderFloat("Rayleigh", &a.RayleighScale, 0.0f, 4.0f); });
-		field("Mie", [&]() { ImGui::SliderFloat("Mie", &a.MieScale, 0.0f, 4.0f); });
-		field("Ozone", [&]() { ImGui::SliderFloat("Ozone", &a.OzoneScale, 0.0f, 4.0f); });
-		field("Mie anisotropy", [&]() { ImGui::SliderFloat("Mie anisotropy", &a.MieAnisotropy, 0.0f, 0.99f); });
-		field("Multiple scattering", [&]() { ImGui::SliderFloat("Multiple scattering", &a.MultipleScattering, 0.0f, 1.0f); });
+		field("Rayleigh", [&]() { slider(settings, "Rayleigh", a.RayleighScale); });
+		field("Mie", [&]() { slider(settings, "Mie", a.MieScale); });
+		field("Ozone", [&]() { slider(settings, "Ozone", a.OzoneScale); });
+		field("Mie anisotropy", [&]() { slider(settings, "Mie anisotropy", a.MieAnisotropy); });
+		field("Multiple scattering", [&]() { slider(settings, "Multiple scattering", a.MultipleScattering); });
 		field("Ground albedo", [&]() { ImGui::ColorEdit3("Ground albedo", &a.GroundAlbedo.x); });
-		field("Sun illuminance", [&]() { ImGui::DragFloat("Sun illuminance", &a.SunIlluminance, 0.05f, 0.0f, 64.0f); });
-		field("Sky brightness", [&]() { ImGui::DragFloat("Sky brightness", &a.SkyBrightness, 0.05f, 0.0f, 64.0f); });
-		field("Sun disc boost", [&]() { ImGui::DragFloat("Sun disc boost", &a.SunDiscBoost, 1.0f, 0.0f, 10000.0f); });
+		field("Sun illuminance", [&]() { drag(settings, "Sun illuminance", a.SunIlluminance, 0.05f); });
+		field("Sky brightness", [&]() { drag(settings, "Sky brightness", a.SkyBrightness, 0.05f); });
+		field("Sun disc boost", [&]() { drag(settings, "Sun disc boost", a.SunDiscBoost, 1.0f); });
 	}
 
 	group("");
@@ -163,7 +177,7 @@ void WorldPanel::environment_rows(wiwa::SceneSettings& settings)
 
 void WorldPanel::lighting_rows(wiwa::SceneSettings& settings)
 {
-	field("Ambient intensity", [&]() { ImGui::DragFloat("Ambient intensity", &settings.AmbientIntensity, 0.01f, 0.0f, 16.0f); });
+	field("Ambient intensity", [&]() { drag(settings, "Ambient intensity", settings.AmbientIntensity, 0.01f); });
 	field("Hemisphere sky", [&]() { ImGui::ColorEdit3("Hemisphere sky", &settings.HemisphereSky.x); });
 	field("Hemisphere ground", [&]() { ImGui::ColorEdit3("Hemisphere ground", &settings.HemisphereGround.x); });
 	note("The hemisphere lights the scene when there is no environment.");
@@ -171,8 +185,9 @@ void WorldPanel::lighting_rows(wiwa::SceneSettings& settings)
 	field("Background", [&]()
 		{
 			const char* backgrounds[] = { "Sky", "Solid color" };
+				static_assert(IM_ARRAYSIZE(backgrounds) == wiwa::BACKGROUND_MODE_NAMES.size());
 			int background = static_cast<int>(settings.Background);
-			if (ImGui::Combo("Background", &background, backgrounds, 2))
+			if (ImGui::Combo("Background", &background, backgrounds, IM_ARRAYSIZE(backgrounds)))
 			{
 				settings.Background = static_cast<wiwa::BackgroundMode>(background);
 			}
@@ -187,16 +202,16 @@ void WorldPanel::exposure_rows(wiwa::SceneSettings& settings)
 	field("Automatic", [&]() { ImGui::Checkbox("Automatic", &exposure.Auto); });
 	if (!exposure.Auto)
 	{
-		field("Exposure (EV)", [&]() { ImGui::SliderFloat("Exposure (EV)", &settings.ExposureEv, -10.0f, 10.0f); });
+		field("Exposure (EV)", [&]() { slider(settings, "Exposure (EV)", settings.ExposureEv); });
 		return;
 	}
 
-	field("Compensation (EV)", [&]() { ImGui::SliderFloat("Compensation (EV)", &exposure.CompensationEv, -6.0f, 6.0f); });
-	field("Key", [&]() { ImGui::SliderFloat("Key", &exposure.Key, 0.02f, 2.0f, "%.2f", ImGuiSliderFlags_Logarithmic); });
+	field("Compensation (EV)", [&]() { slider(settings, "Compensation (EV)", exposure.CompensationEv); });
+	field("Key", [&]() { slider(settings, "Key", exposure.Key, "%.2f", ImGuiSliderFlags_Logarithmic); });
 	note("The brightness the average of the scene is brought to.");
-	field("Limits (EV)", [&]() { ImGui::DragFloatRange2("Limits (EV)", &exposure.MinEv, &exposure.MaxEv, 0.1f, -10.0f, 10.0f); });
-	field("Adaptation speed", [&]() { ImGui::SliderFloat("Adaptation speed", &exposure.AdaptSpeed, 0.0f, 20.0f, "%.1f", ImGuiSliderFlags_Logarithmic); });
-	field("Measured range", [&]() { ImGui::DragFloatRange2("Measured range", &exposure.LowPercent, &exposure.HighPercent, 0.01f, 0.0f, 1.0f, "%.2f"); });
+	field("Limits (EV)", [&]() { ImGui::DragFloatRange2("Limits (EV)", &exposure.MinEv, &exposure.MaxEv, 0.1f, wiwa::settings_range(settings, exposure.MinEv).Min, wiwa::settings_range(settings, exposure.MaxEv).Max); });
+	field("Adaptation speed", [&]() { slider(settings, "Adaptation speed", exposure.AdaptSpeed, "%.1f", ImGuiSliderFlags_Logarithmic); });
+	field("Measured range", [&]() { ImGui::DragFloatRange2("Measured range", &exposure.LowPercent, &exposure.HighPercent, 0.01f, wiwa::settings_range(settings, exposure.LowPercent).Min, wiwa::settings_range(settings, exposure.HighPercent).Max, "%.2f"); });
 	note("The darkest and brightest pixels outside it do not count.");
 }
 
@@ -207,19 +222,20 @@ void WorldPanel::tonemap_rows(wiwa::SceneSettings& settings)
 	field("Operator", [&]()
 		{
 			const char* operators[] = { "ACES", "Reinhard", "Neutral", "None (clamp)" };
+				static_assert(IM_ARRAYSIZE(operators) == wiwa::TONEMAP_OPERATOR_NAMES.size());
 			int current = static_cast<int>(tonemap.Operator);
-			if (ImGui::Combo("Operator", &current, operators, 4))
+			if (ImGui::Combo("Operator", &current, operators, IM_ARRAYSIZE(operators)))
 			{
 				tonemap.Operator = static_cast<wiwa::TonemapOperator>(current);
 			}
 		});
 
 	group("Grading");
-	field("Contrast", [&]() { ImGui::SliderFloat("Contrast", &tonemap.Contrast, 0.2f, 2.5f); });
-	field("Saturation", [&]() { ImGui::SliderFloat("Saturation", &tonemap.Saturation, 0.0f, 2.5f); });
-	field("Temperature", [&]() { ImGui::SliderFloat("Temperature", &tonemap.Temperature, -1.0f, 1.0f); });
-	field("Tint", [&]() { ImGui::SliderFloat("Tint", &tonemap.Tint, -1.0f, 1.0f); });
-	field("Vignette", [&]() { ImGui::SliderFloat("Vignette", &tonemap.Vignette, 0.0f, 1.0f); });
+	field("Contrast", [&]() { slider(settings, "Contrast", tonemap.Contrast); });
+	field("Saturation", [&]() { slider(settings, "Saturation", tonemap.Saturation); });
+	field("Temperature", [&]() { slider(settings, "Temperature", tonemap.Temperature); });
+	field("Tint", [&]() { slider(settings, "Tint", tonemap.Tint); });
+	field("Vignette", [&]() { slider(settings, "Vignette", tonemap.Vignette); });
 	field("Reset grading", [&]()
 		{
 			if (ImGui::Button("Reset grading"))
@@ -239,9 +255,9 @@ void WorldPanel::bloom_rows(wiwa::SceneSettings& settings)
 	wiwa::BloomSettings& bloom = settings.Bloom;
 
 	field("Enabled", [&]() { ImGui::Checkbox("Enabled", &bloom.Enabled); });
-	field("Threshold", [&]() { ImGui::SliderFloat("Threshold", &bloom.Threshold, 0.0f, 4.0f); });
-	field("Knee", [&]() { ImGui::SliderFloat("Knee", &bloom.Knee, 0.0f, 1.0f); });
-	field("Intensity", [&]() { ImGui::SliderFloat("Intensity", &bloom.Intensity, 0.0f, 0.3f, "%.3f"); });
+	field("Threshold", [&]() { slider(settings, "Threshold", bloom.Threshold); });
+	field("Knee", [&]() { slider(settings, "Knee", bloom.Knee); });
+	field("Intensity", [&]() { slider(settings, "Intensity", bloom.Intensity, "%.3f"); });
 	note("The reach of the glow is the bloom levels in the Settings panel (Renderer).");
 }
 
@@ -250,8 +266,8 @@ void WorldPanel::ao_rows(wiwa::SceneSettings& settings)
 	wiwa::AoSettings& ao = settings.Ao;
 
 	field("Enabled", [&]() { ImGui::Checkbox("Enabled", &ao.Enabled); });
-	field("Radius", [&]() { ImGui::SliderFloat("Radius", &ao.Radius, 0.01f, 10.0f, "%.2f", ImGuiSliderFlags_Logarithmic); });
-	field("Power", [&]() { ImGui::SliderFloat("Power", &ao.Power, 0.1f, 8.0f); });
+	field("Radius", [&]() { slider(settings, "Radius", ao.Radius, "%.2f", ImGuiSliderFlags_Logarithmic); });
+	field("Power", [&]() { slider(settings, "Power", ao.Power); });
 	note("It darkens the ambient light only. The quality is in the Settings panel (Renderer).");
 }
 
@@ -268,7 +284,7 @@ void WorldPanel::taa_rows(wiwa::SceneSettings& settings, wiwa::RenderModule* ren
 	field("Feedback", [&]()
 		{
 			ImGui::BeginDisabled(!taaOn);
-			ImGui::SliderFloat("Feedback", &settings.Taa.Feedback, 0.8f, 0.98f);
+			slider(settings, "Feedback", settings.Taa.Feedback);
 			ImGui::EndDisabled();
 		});
 	note("Higher is smoother, lower reacts faster.");
@@ -288,9 +304,9 @@ void WorldPanel::motion_blur_rows(wiwa::SceneSettings& settings, wiwa::RenderMod
 	wiwa::MotionBlurSettings& blur = settings.MotionBlur;
 
 	field("Enabled", [&]() { ImGui::Checkbox("Enabled", &blur.Enabled); });
-	field("Exposure time (s)", [&]() { ImGui::SliderFloat("Exposure time (s)", &blur.ExposureTime, 0.0005f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic); });
-	field("Strength", [&]() { ImGui::SliderFloat("Strength", &blur.Strength, 0.0f, 4.0f); });
-	field("Max blur (pixels)", [&]() { ImGui::SliderFloat("Max blur (pixels)", &blur.MaxBlurPixels, 1.0f, 100.0f); });
+	field("Exposure time (s)", [&]() { slider(settings, "Exposure time (s)", blur.ExposureTime, "%.4f", ImGuiSliderFlags_Logarithmic); });
+	field("Strength", [&]() { slider(settings, "Strength", blur.Strength); });
+	field("Max blur (pixels)", [&]() { slider(settings, "Max blur (pixels)", blur.MaxBlurPixels); });
 	field("Show velocity", [&]()
 		{
 			if (ImGui::Checkbox("Show velocity", &m_ShowVelocity) && render != nullptr)

@@ -13,6 +13,6 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE; }
 		virtual std::string get_name() const override { return "DecalModule"; }
-		virtual int get_priority() const override { return 11; }
+		virtual int get_priority() const override { return ModulePriority::Decal; }
 	};
 }

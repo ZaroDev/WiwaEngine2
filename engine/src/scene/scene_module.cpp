@@ -251,21 +251,10 @@ namespace wiwa
 		std::vector<std::pair<AssetRef, Handle<PrefabData>>> prefabs;
 		for (const EntityRecord& entity : data.Entities)
 		{
-			for (const ComponentRecord& component : entity.Components)
+			const std::optional<AssetRef> prefab = prefab_of(entity);
+			if (prefab && std::none_of(prefabs.begin(), prefabs.end(), [&](const auto& known) { return known.first == *prefab; }))
 			{
-				if (component.Name != "PrefabInstance")
-				{
-					continue;
-				}
-				for (const FieldRecord& field : component.Fields)
-				{
-					const AssetRef* prefab = std::get_if<AssetRef>(&field.Value);
-					if (field.Name == "Prefab" && prefab != nullptr && prefab->valid()
-						&& std::none_of(prefabs.begin(), prefabs.end(), [&](const auto& known) { return known.first == *prefab; }))
-					{
-						prefabs.emplace_back(*prefab, m_Assets->load<PrefabData>(*prefab));
-					}
-				}
+				prefabs.emplace_back(*prefab, m_Assets->load<PrefabData>(*prefab));
 			}
 		}
 		for (size_t i = 0; i < prefabs.size(); i++) // grows: what a prefab instantiates is loaded too

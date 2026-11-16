@@ -23,7 +23,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE; }
 		virtual std::string get_name() const override { return "ParticleModule"; }
-		virtual int get_priority() const override { return 12; }
+		virtual int get_priority() const override { return ModulePriority::Particle; }
 
 		// The effect a reference names; null while it loads or when it cannot be loaded. Scripts and the editor ask it too.
 		const ParticleEffectData* effect(const AssetRef& ref);

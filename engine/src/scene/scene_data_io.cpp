@@ -137,83 +137,42 @@ namespace wiwa
 
 	namespace
 	{
-		template<typename E>
-		void archive_enum_value(BinaryArchive& ar, E& value, u32 count)
+		// The file order of the settings is the order of the list in scene_settings.h.
+		struct SettingsArchiver
 		{
-			u32 raw = static_cast<u32>(value);
-			ar.value(raw);
-			if (ar.reading())
+			BinaryArchive& Ar;
+
+			template<typename E, size_t N>
+			void choice(const char*, E& value, const E&, const std::array<const char*, N>&)
 			{
-				if (raw >= count)
+				u32 raw = static_cast<u32>(value);
+				Ar.value(raw);
+				if (Ar.reading())
 				{
-					ar.fail();
-					return;
+					if (raw >= N)
+					{
+						Ar.fail();
+						return;
+					}
+					value = static_cast<E>(raw);
 				}
-				value = static_cast<E>(raw);
 			}
-		}
+
+			void asset(const char*, AssetRef& value) { Ar.value(value); }
+			void angle(const char*, float& value, const float&) { Ar.value(value); }
+			void number(const char*, float& value, const float&, float, float) { Ar.value(value); }
+			void vec3(const char*, glm::vec3& value, const glm::vec3&, float, float) { Ar.value(value); }
+			void flag(const char*, bool& value, const bool&) { Ar.value(value); }
+			void count(const char*, u32& value, const u32&, u32, u32) { Ar.value(value); }
+			void scripts(const char*, std::vector<AssetRef>& list) { Ar.pod_vector(list); }
+
+			template<typename F>
+			void group(const char*, F fn) { fn(); }
+		};
 
 		void archive_settings(BinaryArchive& ar, SceneSettings& s)
 		{
-			archive_enum_value(ar, s.Source, 3);
-			ar.value(s.EnvironmentAsset);
-			ar.value(s.RotationDegrees);
-			ar.value(s.Brightness);
-			ar.value(s.AmbientIntensity);
-			ar.value(s.HemisphereSky);
-			ar.value(s.HemisphereGround);
-			AtmosphereParameters& a = s.Atmosphere;
-			ar.value(a.RayleighScale);
-			ar.value(a.MieScale);
-			ar.value(a.OzoneScale);
-			ar.value(a.MieAnisotropy);
-			ar.value(a.MultipleScattering);
-			ar.value(a.SunIlluminance);
-			ar.value(a.SkyBrightness);
-			ar.value(a.SunDiscBoost);
-			ar.value(a.GroundAlbedo);
-			archive_enum_value(ar, s.Background, 2);
-			ar.value(s.BackgroundColor);
-			ar.value(s.ExposureEv);
-			ExposureSettings& e = s.Exposure;
-			ar.value(e.Auto);
-			ar.value(e.CompensationEv);
-			ar.value(e.Key);
-			ar.value(e.MinEv);
-			ar.value(e.MaxEv);
-			ar.value(e.AdaptSpeed);
-			ar.value(e.LowPercent);
-			ar.value(e.HighPercent);
-			BloomSettings& b = s.Bloom;
-			ar.value(b.Enabled);
-			ar.value(b.Threshold);
-			ar.value(b.Knee);
-			ar.value(b.Intensity);
-			TonemapSettings& t = s.Tonemap;
-			archive_enum_value(ar, t.Operator, 4);
-			ar.value(t.Contrast);
-			ar.value(t.Saturation);
-			ar.value(t.Temperature);
-			ar.value(t.Tint);
-			ar.value(t.Vignette);
-			AoSettings& ao = s.Ao;
-			ar.value(ao.Enabled);
-			ar.value(ao.Radius);
-			ar.value(ao.Power);
-			ar.value(s.Taa.Feedback);
-			MotionBlurSettings& mb = s.MotionBlur;
-			ar.value(mb.Enabled);
-			ar.value(mb.ExposureTime);
-			ar.value(mb.Strength);
-			ar.value(mb.MaxBlurPixels);
-			ar.pod_vector(s.Scripts);
-			PhysicsSettings& ph = s.Physics;
-			ar.value(ph.Gravity);
-			ar.value(ph.FixedRateHz);
-			ar.value(ph.MaxStepsPerWake);
-			ar.value(ph.VelocityIterations);
-			ar.value(ph.PositionIterations);
-			ar.value(ph.SleepThreshold);
+			visit_scene_settings(s, SceneSettings{}, SettingsArchiver{ ar });
 		}
 	}
 

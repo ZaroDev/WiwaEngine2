@@ -15,15 +15,7 @@ PhysicsPanel::PhysicsPanel(wiwa::SceneEditor& editor, std::filesystem::path laye
 
 void PhysicsPanel::on_draw()
 {
-	m_Frames++; // counted even while the window is a hidden tab: the smoke check wants to know the panel was run
-	if (m_Focus)
-	{
-		ImGui::SetNextWindowFocus();
-		m_Focus = false;
-	}
-	ImGui::SetNextWindowPos(ImVec2(984.0f, 60.0f), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(420.0f, 480.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin(get_name(), &m_Open))
+	if (begin_window(ImVec2(984.0f, 60.0f), ImVec2(420.0f, 480.0f)))
 	{
 		if (ImGui::BeginTabBar("##physics_tabs"))
 		{
@@ -66,29 +58,36 @@ void PhysicsPanel::settings_tab()
 	wiwa::SceneSettings settings = before;
 	wiwa::PhysicsSettings& physics = settings.Physics;
 
+	// the ranges are the ones the sanitizer allows (scene_settings.h)
+	const auto count_range = [&](const wiwa::u32& field)
+	{
+		const wiwa::SettingRange range = wiwa::settings_range(settings, field);
+		return std::pair<int, int>(static_cast<int>(range.Min), static_cast<int>(range.Max));
+	};
+
 	ImGui::DragFloat3("Gravity", &physics.Gravity.x, 0.05f);
 	int rate = static_cast<int>(physics.FixedRateHz);
-	if (ImGui::DragInt("Fixed rate (Hz)", &rate, 1.0f, 1, 240))
+	if (ImGui::DragInt("Fixed rate (Hz)", &rate, 1.0f, count_range(physics.FixedRateHz).first, count_range(physics.FixedRateHz).second))
 	{
 		physics.FixedRateHz = static_cast<wiwa::u32>(std::max(rate, 1));
 	}
 	int maxSteps = static_cast<int>(physics.MaxStepsPerWake);
-	if (ImGui::DragInt("Max steps per wake", &maxSteps, 0.1f, 1, 16))
+	if (ImGui::DragInt("Max steps per wake", &maxSteps, 0.1f, count_range(physics.MaxStepsPerWake).first, count_range(physics.MaxStepsPerWake).second))
 	{
 		physics.MaxStepsPerWake = static_cast<wiwa::u32>(std::max(maxSteps, 1));
 	}
 	ImGui::TextDisabled("Past this many steps in one go the simulation falls behind real time.");
 	int velocity = static_cast<int>(physics.VelocityIterations);
-	if (ImGui::DragInt("Velocity iterations", &velocity, 0.1f, 1, 64))
+	if (ImGui::DragInt("Velocity iterations", &velocity, 0.1f, count_range(physics.VelocityIterations).first, count_range(physics.VelocityIterations).second))
 	{
 		physics.VelocityIterations = static_cast<wiwa::u32>(std::max(velocity, 1));
 	}
 	int position = static_cast<int>(physics.PositionIterations);
-	if (ImGui::DragInt("Position iterations", &position, 0.1f, 1, 64))
+	if (ImGui::DragInt("Position iterations", &position, 0.1f, count_range(physics.PositionIterations).first, count_range(physics.PositionIterations).second))
 	{
 		physics.PositionIterations = static_cast<wiwa::u32>(std::max(position, 1));
 	}
-	ImGui::DragFloat("Sleep threshold (m/s)", &physics.SleepThreshold, 0.001f, 0.0f, 5.0f, "%.3f");
+	ImGui::DragFloat("Sleep threshold (m/s)", &physics.SleepThreshold, 0.001f, wiwa::settings_range(settings, physics.SleepThreshold).Min, wiwa::settings_range(settings, physics.SleepThreshold).Max, "%.3f");
 
 	if (!(settings == before))
 	{

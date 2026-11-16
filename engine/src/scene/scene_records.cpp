@@ -116,7 +116,7 @@ namespace wiwa
 
 		for (const ComponentInfo* info : ComponentRegistry::get().all())
 		{
-			if (info->Name == "Id" || !info->Has(registry, entity))
+			if (info->Name == ID_COMPONENT || !info->Has(registry, entity))
 			{
 				continue;
 			}
@@ -176,7 +176,7 @@ namespace wiwa
 
 		for (const ComponentRecord& component : record.Components)
 		{
-			if (component.Name == "Id")
+			if (component.Name == ID_COMPONENT)
 			{
 				continue;
 			}
@@ -240,35 +240,15 @@ namespace wiwa
 		data.Name = std::move(name);
 		data.Settings = scene.settings();
 
-		std::vector<entt::entity> order;
-		std::vector<entt::entity> stack;
-		for (const entt::entity root : scene.roots())
-		{
-			stack.push_back(root);
-			while (!stack.empty())
+		scene.for_each_in_order([&](entt::entity entity)
 			{
-				const entt::entity entity = stack.back();
-				stack.pop_back();
 				if (skipGenerated && registry.all_of<PrefabChild>(entity))
 				{
-					continue; // and everything below it is generated too
+					return false; // and everything below it is generated too
 				}
-				order.push_back(entity);
-
-				// children are pushed in reverse so that they come out in sibling order
-				const size_t first = stack.size();
-				for (entt::entity child = registry.get<Hierarchy>(entity).FirstChild; child != entt::null; child = registry.get<Hierarchy>(child).NextSibling)
-				{
-					stack.push_back(child);
-				}
-				std::reverse(stack.begin() + static_cast<std::ptrdiff_t>(first), stack.end());
-			}
-		}
-
-		for (const entt::entity entity : order)
-		{
-			data.Entities.push_back(record_from_entity(scene, entity));
-		}
+				data.Entities.push_back(record_from_entity(scene, entity));
+				return true;
+			});
 		return data;
 	}
 
