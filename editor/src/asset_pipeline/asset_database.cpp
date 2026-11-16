@@ -642,49 +642,72 @@ namespace wiwa
 	// guid. The paths start with the name of the source root, as the root was given ("assets", "engine").
 	void AssetDatabase::write_catalog()
 	{
-		AssetCatalog catalog;
+		// What the import cache says, copied under the lock: the lock is also taken by the main thread (path_of, every frame an asset field
+		// is drawn), so the file system checks and the string work below must not run while it is held.
+		struct CachedSource
+		{
+			std::string GuidText{};
+			std::string Source{};
+			nlohmann::json Redirects{};
+		};
+		std::vector<CachedSource> cached;
+		std::vector<SourceRoot> roots;
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex);
+			cached.reserve(m_ImportCache.size());
 			for (auto& [guidText, entry] : m_ImportCache.items())
 			{
-				const std::optional<AssetGuid> guid = AssetGuid::from_string(guidText);
-				const std::string source = entry.value("source", std::string{});
-				std::error_code error;
-				if (!guid || source.empty() || !std::filesystem::exists(source, error))
-				{
-					continue;
-				}
-
+				CachedSource item;
+				item.GuidText = guidText;
+				item.Source = entry.value("source", std::string{});
 				if (const auto list = entry.find("redirects"); list != entry.end() && list->is_array())
 				{
-					for (const nlohmann::json& pair : *list)
+					item.Redirects = *list;
+				}
+				cached.push_back(std::move(item));
+			}
+			roots = m_Roots;
+		}
+
+		AssetCatalog catalog;
+		for (const CachedSource& item : cached)
+		{
+			const std::optional<AssetGuid> guid = AssetGuid::from_string(item.GuidText);
+			std::error_code error;
+			if (!guid || item.Source.empty() || !std::filesystem::exists(item.Source, error))
+			{
+				continue;
+			}
+
+			if (item.Redirects.is_array())
+			{
+				for (const nlohmann::json& pair : item.Redirects)
+				{
+					if (!pair.is_array() || pair.size() != 2 || !pair[0].is_string() || !pair[1].is_string())
 					{
-						if (!pair.is_array() || pair.size() != 2 || !pair[0].is_string() || !pair[1].is_string())
-						{
-							continue;
-						}
-						const std::optional<AssetGuid> from = AssetGuid::from_string(pair[0].get<std::string>());
-						const std::optional<AssetGuid> to = AssetGuid::from_string(pair[1].get<std::string>());
-						if (from && to)
-						{
-							catalog.Redirects.push_back({ *from, *to });
-						}
+						continue;
+					}
+					const std::optional<AssetGuid> from = AssetGuid::from_string(pair[0].get<std::string>());
+					const std::optional<AssetGuid> to = AssetGuid::from_string(pair[1].get<std::string>());
+					if (from && to)
+					{
+						catalog.Redirects.push_back({ *from, *to });
 					}
 				}
+			}
 
-				for (const SourceRoot& root : m_Roots)
+			for (const SourceRoot& root : roots)
+			{
+				const std::string prefix = key_of(root.Source) + "/";
+				if (item.Source.starts_with(prefix))
 				{
-					const std::string prefix = key_of(root.Source) + "/";
-					if (source.starts_with(prefix))
+					std::string name = root.Source.generic_string();
+					while (name.ends_with("/"))
 					{
-						std::string name = root.Source.generic_string();
-						while (name.ends_with("/"))
-						{
-							name.pop_back();
-						}
-						catalog.Entries.push_back({ name + "/" + source.substr(prefix.size()), *guid });
-						break;
+						name.pop_back();
 					}
+					catalog.Entries.push_back({ name + "/" + item.Source.substr(prefix.size()), *guid });
+					break;
 				}
 			}
 		}
