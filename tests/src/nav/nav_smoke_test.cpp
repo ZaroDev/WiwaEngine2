@@ -36,23 +36,18 @@
 #include <nav/nav_path_tool.h>
 #include <asset_pipeline/nav_settings_file.h>
 
+#include <test_kit.h>
+
 namespace wiwa
 {
 	namespace
 	{
-		struct Check
+		struct CheckLog
 		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_NAV_LOG(Error, "Nav smoke test FAILED: {0}", what);
-				}
-			}
+			static constexpr const char* Area = "Nav";
+			static constexpr const char* Prefix = "Nav smoke test";
 		};
+		using Check = BasicCheck<CheckLog>;
 
 		NavMeshData sample_mesh()
 		{

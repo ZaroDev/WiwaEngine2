@@ -25,28 +25,18 @@
 
 #define WI_SCENE_LOG(level, ...) WI_LOG(level, "Scene", __VA_ARGS__)
 
+#include <test_kit.h>
+
 namespace wiwa
 {
 	namespace
 	{
-		struct Check
+		struct CheckLog
 		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_SCENE_LOG(Error, "Scene smoke test FAILED: {0}", what);
-				}
-			}
+			static constexpr const char* Area = "Scene";
+			static constexpr const char* Prefix = "Scene smoke test";
 		};
-
-		bool approx_equal(const glm::vec3& a, const glm::vec3& b)
-		{
-			return glm::length(a - b) < 1e-4f;
-		}
+		using Check = BasicCheck<CheckLog>;
 
 		void check_scene_basics(Check& check)
 		{
@@ -72,7 +62,7 @@ namespace wiwa
 			scene.registry().get<Transform>(child).Position = glm::vec3(0, 2, 0);
 			scene.update_world_transforms();
 			const glm::vec3 world = glm::vec3(scene.registry().get<WorldTransform>(child).Matrix[3]);
-			check(approx_equal(world, glm::vec3(1, 4, 0)), "a child's world position goes through its parent's scale");
+			check(near_equal(world, glm::vec3(1, 4, 0)), "a child's world position goes through its parent's scale");
 
 			const entt::entity other = scene.create("Other");
 			check(scene.set_parent(child, other), "a child can move to another parent");

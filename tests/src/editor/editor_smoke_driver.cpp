@@ -82,15 +82,11 @@ void EditorSmokeDriver::update(EditorModule& editor)
 		}
 	}
 
-	if (m_DemoSmokeRequested && m_DemoSmoke == nullptr && !m_DemoSmokeDone)
+	if (m_DemoSmokeRequested && !m_DemoSmokeQueued)
 	{
 		// the startup scan may still be cooking the scene the demo opens: wait for it, or the smoke plays the previous cook
-		const Ref<wiwa::JobProgress> scan = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().scan_progress();
-		if (scan && !scan->finished())
-		{
-			return;
-		}
-		m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*m_SceneEditor, *m_PlayMode);
+		m_DemoSmokeQueued = true;
+		editor.when_scan_finished([this, &editor]() { m_DemoSmoke = CreateScope<wiwa::DemoSmoke>(*editor.m_SceneEditor, *editor.m_PlayMode); });
 	}
 
 	if (m_UiEditorSmoke && m_UiEditor != nullptr)
@@ -118,8 +114,8 @@ void EditorSmokeDriver::update(EditorModule& editor)
 		if (m_Frame == 40)
 		{
 			// a click in the matrix: layers 0 and 1 stop colliding (a layer is named first so that the matrix shows it)
-			m_PhysicsPanel->set_layer_name(1, "Smoke");
-			m_PhysicsPanel->set_collides(0, 1, false);
+			m_PhysicsPanel->section()->set_layer_name(1, "Smoke");
+			m_PhysicsPanel->section()->set_collides(0, 1, false);
 		}
 		if (m_Frame == 130)
 		{
@@ -128,8 +124,8 @@ void EditorSmokeDriver::update(EditorModule& editor)
 			const bool read = wiwa::load_physics_layers(m_PhysicsPanelFile, saved, error);
 			wiwa::PhysicsModule* physics = wiwa::Engine::get().get_module<wiwa::PhysicsModule>();
 			const bool passed = m_PhysicsPanel->frames_drawn() >= 100 && read && saved.Names[1] == "Smoke" && !saved.collides(0, 1) && saved.collides(0, 0) && saved.collides(1, 1) &&
-				physics != nullptr && !physics->layers().collides(0, 1) && m_PhysicsPanel->last_error().empty();
-			WI_INFO("Editor", "Physics panel smoke test {0} (frames {1}, read {2}, layer 1 \"{3}\", 0-1 collide {4}, error \"{5}\")", passed ? "passed" : "FAILED", m_PhysicsPanel->frames_drawn(), read, saved.Names[1], saved.collides(0, 1), m_PhysicsPanel->last_error());
+				physics != nullptr && !physics->layers().collides(0, 1) && m_PhysicsPanel->section()->last_error().empty();
+			WI_INFO("Editor", "Physics panel smoke test {0} (frames {1}, read {2}, layer 1 \"{3}\", 0-1 collide {4}, error \"{5}\")", passed ? "passed" : "FAILED", m_PhysicsPanel->frames_drawn(), read, saved.Names[1], saved.collides(0, 1), m_PhysicsPanel->section()->last_error());
 			std::error_code removed;
 			std::filesystem::remove(m_PhysicsPanelFile, removed);
 			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
@@ -140,28 +136,32 @@ void EditorSmokeDriver::update(EditorModule& editor)
 	if (m_AudioPanelSmoke && m_AudioPanel != nullptr)
 	{
 		wiwa::AudioModule* audio = wiwa::Engine::get().get_module<wiwa::AudioModule>();
-		if (m_Frame == 5 && audio != nullptr)
+		// The editor applies audio.wsettings (MiniAudio here) once the first import scan is done, and how late that is depends on the machine: select the Null
+		// backend only after it did, and measure the rest of the run from there.
+		if (audio != nullptr && m_AudioNullFrame == 0 && !editor.m_PendingAudio && m_Frame >= 5)
 		{
 			audio->select_backend(wiwa::AudioBackendKind::Null, wiwa::AudioInitInfo{}); // whatever the project chose: the smoke checks the panel, not a vendor
+			m_AudioNullFrame = m_Frame;
 		}
 		if (m_Frame == 10)
 		{
 			m_AudioPanel->request_focus();
 		}
-		if (m_Frame == 40 && audio != nullptr && audio->active_kind() == wiwa::AudioBackendKind::Null)
+		if (m_AudioNullFrame != 0 && m_Frame == m_AudioNullFrame + 35 && audio != nullptr && audio->active_kind() == wiwa::AudioBackendKind::Null)
 		{
 			// the panel auditions on the Null backend: it plays whatever event it is given when no bank metadata is loaded
 			m_AudioPanelAuditioned = m_AudioPanel->audition("Play_PanelSmoke") && audio->backend().playing_count() == 1 && audio->auditioning();
 		}
-		if (m_Frame == 100 && audio != nullptr && m_AudioPanelAuditioned)
+		if (m_AudioNullFrame != 0 && m_Frame == m_AudioNullFrame + 95 && audio != nullptr && m_AudioPanelAuditioned)
 		{
 			m_AudioPanel->stop_audition();
 		}
-		if (m_Frame == 130)
+		const wiwa::u32 giveUpFrame = 20000; // the scan never finished: report it as a failure instead of waiting for ever
+		if ((m_AudioNullFrame != 0 && m_Frame == std::max<wiwa::u32>(130, m_AudioNullFrame + 125)) || m_Frame == giveUpFrame)
 		{
 			const bool silent = audio != nullptr && audio->backend().playing_count() == 0 && !audio->auditioning();
 			const bool passed = m_AudioPanel->frames_drawn() >= 100 && audio != nullptr && audio->active_kind() == wiwa::AudioBackendKind::Null && m_AudioPanelAuditioned && silent;
-			WI_INFO("Editor", "Audio panel smoke test {0} (frames {1}, auditioned {2}, silent after stop {3})", passed ? "passed" : "FAILED", m_AudioPanel->frames_drawn(), m_AudioPanelAuditioned, silent);
+			WI_INFO("Editor", "Audio panel smoke test {0} (frames {1}, auditioned {2}, silent after stop {3}, backend {4}, Null selected at frame {5})", passed ? "passed" : "FAILED", m_AudioPanel->frames_drawn(), m_AudioPanelAuditioned, silent, audio != nullptr ? wiwa::audio_backend_name(audio->active_kind()) : "none", m_AudioNullFrame);
 			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
 			wiwa::Engine::get().request_quit();
 		}

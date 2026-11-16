@@ -28,25 +28,20 @@
 
 #define WI_INPUT_LOG(level, ...) WI_LOG(level, "Input", __VA_ARGS__)
 
+#include <test_kit.h>
+
 namespace wiwa
 {
 	namespace
 	{
-		struct Check
+		struct CheckLog
 		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_INPUT_LOG(Error, "Input smoke test FAILED: {0}", what);
-				}
-			}
+			static constexpr const char* Area = "Input";
+			static constexpr const char* Prefix = "Input smoke test";
 		};
+		using Check = BasicCheck<CheckLog>;
 
-		bool near_equal(float a, float b)
+		bool near_1e5(float a, float b)
 		{
 			return std::abs(a - b) < 1e-5f;
 		}
@@ -93,21 +88,21 @@ namespace wiwa
 				backend.move_cursor({ 15.0f, 18.0f });
 				backend.scroll({ 0.0f, 2.0f });
 				state.update(backend);
-				check(near_equal(state.mouse_delta().x, 5.0f) && near_equal(state.mouse_delta().y, -2.0f), "raw_mouse: delta is the cursor change between frames");
-				check(near_equal(state.mouse_position().x, 15.0f), "raw_mouse: position");
-				check(near_equal(state.scroll().y, 2.0f) && near_equal(state.value(control(MouseAxis::ScrollY)), 2.0f), "raw_mouse: scroll is reported");
+				check(near_1e5(state.mouse_delta().x, 5.0f) && near_1e5(state.mouse_delta().y, -2.0f), "raw_mouse: delta is the cursor change between frames");
+				check(near_1e5(state.mouse_position().x, 15.0f), "raw_mouse: position");
+				check(near_1e5(state.scroll().y, 2.0f) && near_1e5(state.value(control(MouseAxis::ScrollY)), 2.0f), "raw_mouse: scroll is reported");
 				state.update(backend);
-				check(near_equal(state.scroll().y, 0.0f) && near_equal(state.mouse_delta().x, 0.0f), "raw_mouse: scroll and delta are cleared the next frame");
+				check(near_1e5(state.scroll().y, 0.0f) && near_1e5(state.mouse_delta().x, 0.0f), "raw_mouse: scroll and delta are cleared the next frame");
 
 				// a cursor that is placed (the backend learning where it starts) is not a movement
 				ScriptedInputBackend placed;
 				InputState placedState;
 				placed.place_cursor({ 300.0f, 200.0f });
 				placedState.update(placed);
-				check(near_equal(placedState.mouse_position().x, 300.0f) && near_equal(placedState.mouse_delta().x, 0.0f) && near_equal(placedState.mouse_delta().y, 0.0f), "raw_mouse_place: the first frame has the position and no delta");
+				check(near_1e5(placedState.mouse_position().x, 300.0f) && near_1e5(placedState.mouse_delta().x, 0.0f) && near_1e5(placedState.mouse_delta().y, 0.0f), "raw_mouse_place: the first frame has the position and no delta");
 				placed.move_cursor({ 305.0f, 200.0f });
 				placedState.update(placed);
-				check(near_equal(placedState.mouse_delta().x, 5.0f), "raw_mouse_place: later movement is a delta");
+				check(near_1e5(placedState.mouse_delta().x, 5.0f), "raw_mouse_place: later movement is a delta");
 			}
 
 			{
@@ -118,12 +113,12 @@ namespace wiwa
 				backend.pad_axis(0, PadAxis::LeftX, 0.5f);
 				state.update(backend);
 				check(state.pad_connected(0) && !state.pad_connected(1), "raw_pad: connection");
-				check(near_equal(state.value(padLeftX), 0.5f), "raw_pad: axis value");
+				check(near_1e5(state.value(padLeftX), 0.5f), "raw_pad: axis value");
 
 				backend.connect_pad(1, true);
 				backend.pad_axis(1, PadAxis::LeftX, -0.9f);
 				state.update(backend);
-				check(near_equal(state.value(padLeftX), -0.9f), "raw_pad: with two pads the largest magnitude wins");
+				check(near_1e5(state.value(padLeftX), -0.9f), "raw_pad: with two pads the largest magnitude wins");
 
 				backend.pad_button(1, PadButton::A, true);
 				state.update(backend);
@@ -174,8 +169,8 @@ namespace wiwa
 				state.set_capture(false);
 				state.update(backend);
 				check(!state.down(keyW) && !state.pressed(keyW) && !state.down(mouseLeft), "raw_capture_gate: key and mouse report nothing");
-				check(near_equal(state.mouse_position().x, 0.0f) && near_equal(state.mouse_delta().x, 0.0f), "raw_capture_gate: cursor reports nothing");
-				check(state.down(padA) && near_equal(state.value(padLeftX), 0.7f), "raw_capture_gate: the pad still works");
+				check(near_1e5(state.mouse_position().x, 0.0f) && near_1e5(state.mouse_delta().x, 0.0f), "raw_capture_gate: cursor reports nothing");
+				check(state.down(padA) && near_1e5(state.value(padLeftX), 0.7f), "raw_capture_gate: the pad still works");
 				state.set_capture(true);
 				check(state.down(keyW) && state.down(mouseLeft), "raw_capture_gate: capture back on shows the held state");
 			}
@@ -189,7 +184,7 @@ namespace wiwa
 				backend.pad_axis(1, PadAxis::LeftX, -0.9f);
 				backend.pad_button(1, PadButton::A, true);
 				state.update(backend);
-				check(near_equal(state.value(padLeftX, 0), 0.5f) && near_equal(state.value(padLeftX, 1), -0.9f) && near_equal(state.value(padLeftX, 2), 0.0f) && near_equal(state.value(padLeftX), -0.9f),
+				check(near_1e5(state.value(padLeftX, 0), 0.5f) && near_1e5(state.value(padLeftX, 1), -0.9f) && near_1e5(state.value(padLeftX, 2), 0.0f) && near_1e5(state.value(padLeftX), -0.9f),
 					"raw_pad_select: a pad argument reads that pad only");
 				check(!state.down(padA, 0) && state.down(padA, 1) && state.pressed(padA, 1) && !state.pressed(padA, 0) && state.down(padA), "raw_pad_select: buttons too");
 			}
@@ -287,7 +282,7 @@ namespace wiwa
 			check(input_map_from_text(text, parsed, error), "map_roundtrip: the written text parses (" + error + ")");
 			check(parsed.Maps.size() == 2 && parsed.Maps[0].Actions.size() == 3 && parsed.Maps[1].Consume, "map_roundtrip: structure survives");
 			check(parsed.Maps[0].Actions[2].Bindings.size() == 2 && parsed.Maps[0].Actions[2].Bindings[1].BindingKind == Binding::Kind::Pair2D &&
-				near_equal(parsed.Maps[0].Actions[2].Bindings[1].Deadzone, 0.2f), "map_roundtrip: binding kinds and values survive");
+				near_1e5(parsed.Maps[0].Actions[2].Bindings[1].Deadzone, 0.2f), "map_roundtrip: binding kinds and values survive");
 			check(input_map_to_text(parsed) == text, "map_roundtrip: text -> data -> text is byte-identical");
 
 			// Omitted optional keys take their defaults.
@@ -297,7 +292,7 @@ namespace wiwa
 			if (!defaulted.Maps.empty() && !defaulted.Maps[0].Actions.empty() && !defaulted.Maps[0].Actions[0].Bindings.empty())
 			{
 				const Binding& binding = defaulted.Maps[0].Actions[0].Bindings[0];
-				check(near_equal(binding.Scale, 1.0f) && near_equal(binding.Deadzone, 0.0f) && !binding.Invert && !defaulted.Maps[0].Consume,
+				check(near_1e5(binding.Scale, 1.0f) && near_1e5(binding.Deadzone, 0.0f) && !binding.Invert && !defaulted.Maps[0].Consume,
 					"map_defaults: scale 1, deadzone 0, no invert, no consume");
 			}
 			else
@@ -420,14 +415,14 @@ namespace wiwa
 
 				rig.Backend.key(Key::D, true);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Throttle").Value, 1.0f), "act_axis1d: positive key is +1");
+				check(near_1e5(rig.Actions.state("Gameplay", "Throttle").Value, 1.0f), "act_axis1d: positive key is +1");
 				rig.Backend.key(Key::D, false);
 				rig.Backend.key(Key::A, true);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Throttle").Value, -1.0f), "act_axis1d: negative key is -1");
+				check(near_1e5(rig.Actions.state("Gameplay", "Throttle").Value, -1.0f), "act_axis1d: negative key is -1");
 				rig.Backend.key(Key::D, true);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Throttle").Value, 0.0f), "act_axis1d: both keys cancel");
+				check(near_1e5(rig.Actions.state("Gameplay", "Throttle").Value, 0.0f), "act_axis1d: both keys cancel");
 			}
 
 			{
@@ -439,12 +434,12 @@ namespace wiwa
 				rig.Backend.key(Key::D, true);
 				rig.frame();
 				const ActionState move = rig.Actions.state("Gameplay", "Move");
-				check(near_equal(move.Vector.x, 0.70710678f) && near_equal(move.Vector.y, 0.70710678f) && near_equal(glm::length(move.Vector), 1.0f),
+				check(near_1e5(move.Vector.x, 0.70710678f) && near_1e5(move.Vector.y, 0.70710678f) && near_1e5(glm::length(move.Vector), 1.0f),
 					"act_axis2d_wasd: W+D is a unit diagonal");
 				rig.Backend.key(Key::D, false);
 				rig.frame();
 				const ActionState forward = rig.Actions.state("Gameplay", "Move");
-				check(near_equal(forward.Vector.x, 0.0f) && near_equal(forward.Vector.y, 1.0f), "act_axis2d_wasd: W alone is straight up");
+				check(near_1e5(forward.Vector.x, 0.0f) && near_1e5(forward.Vector.y, 1.0f), "act_axis2d_wasd: W alone is straight up");
 			}
 
 			{
@@ -455,13 +450,13 @@ namespace wiwa
 				rig.Backend.connect_pad(0, true);
 				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.1f);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Look").Value, 0.0f), "act_stick_deadzone: inside the deadzone is zero");
+				check(near_1e5(rig.Actions.state("Gameplay", "Look").Value, 0.0f), "act_stick_deadzone: inside the deadzone is zero");
 				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.6f);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Look").Value, (0.6f - 0.2f) / 0.8f), "act_stick_deadzone: outside is rescaled");
+				check(near_1e5(rig.Actions.state("Gameplay", "Look").Value, (0.6f - 0.2f) / 0.8f), "act_stick_deadzone: outside is rescaled");
 				rig.Backend.pad_axis(0, PadAxis::LeftX, -0.6f);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Look").Value, -(0.6f - 0.2f) / 0.8f), "act_stick_deadzone: keeps the sign");
+				check(near_1e5(rig.Actions.state("Gameplay", "Look").Value, -(0.6f - 0.2f) / 0.8f), "act_stick_deadzone: keeps the sign");
 
 				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.1f);
 				rig.Backend.pad_axis(0, PadAxis::LeftY, 0.1f);
@@ -470,13 +465,13 @@ namespace wiwa
 				rig.Backend.pad_axis(0, PadAxis::LeftX, 0.6f);
 				rig.Backend.pad_axis(0, PadAxis::LeftY, 0.0f);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Aim").Vector.x, 0.5f), "act_stick_deadzone: radial rescale");
+				check(near_1e5(rig.Actions.state("Gameplay", "Aim").Vector.x, 0.5f), "act_stick_deadzone: radial rescale");
 
 				rig.Backend.pad_axis(0, PadAxis::RightX, 0.5f);
 				rig.Backend.key(Key::Up, true);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Boost").Value, -1.0f), "act_scale_invert: scale 2 and invert");
-				check(near_equal(rig.Actions.state("Gameplay", "Slow").Value, 0.5f), "act_scale_invert: a key with scale 0.5");
+				check(near_1e5(rig.Actions.state("Gameplay", "Boost").Value, -1.0f), "act_scale_invert: scale 2 and invert");
+				check(near_1e5(rig.Actions.state("Gameplay", "Slow").Value, 0.5f), "act_scale_invert: a key with scale 0.5");
 			}
 
 			{
@@ -488,11 +483,11 @@ namespace wiwa
 				rig.Backend.key(Key::W, true);
 				rig.Backend.pad_axis(0, PadAxis::LeftY, 0.3f);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Forward").Value, 1.0f), "act_largest_wins: keyboard 1.0 beats stick 0.3");
+				check(near_1e5(rig.Actions.state("Gameplay", "Forward").Value, 1.0f), "act_largest_wins: keyboard 1.0 beats stick 0.3");
 				rig.Backend.key(Key::W, false);
 				rig.Backend.pad_axis(0, PadAxis::LeftY, 0.9f);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Forward").Value, 0.9f), "act_largest_wins: stick 0.9 beats an idle key");
+				check(near_1e5(rig.Actions.state("Gameplay", "Forward").Value, 0.9f), "act_largest_wins: stick 0.9 beats an idle key");
 			}
 
 			{
@@ -518,7 +513,7 @@ namespace wiwa
 
 				const ActionState unknown = rig.Actions.state("Gameplay", "Nope");
 				const ActionState unknownMap = rig.Actions.state("Nope", "Jump");
-				check(!unknown.Down && near_equal(unknown.Value, 0.0f) && !unknownMap.Down && near_equal(unknownMap.Value, 0.0f), "act_unknown: unknown names give a zero state");
+				check(!unknown.Down && near_1e5(unknown.Value, 0.0f) && !unknownMap.Down && near_1e5(unknownMap.Value, 0.0f), "act_unknown: unknown names give a zero state");
 				check(!rig.Actions.has_action("Gameplay", "Nope") && !rig.Actions.has_action("Nope", "Jump") && rig.Actions.has_action("Gameplay", "Jump"), "act_unknown: has_action");
 				check(!rig.Actions.state("UI", "Submit").Down, "act_unknown: an inactive map reads zero");
 			}
@@ -547,7 +542,7 @@ namespace wiwa
 
 				rig.Actions.push_map("UI");
 				rig.frame();
-				check(!rig.Actions.state("Gameplay", "Jump").Down && near_equal(rig.Actions.state("Gameplay", "Jump").Value, 0.0f) && rig.Actions.state("UI", "Submit").Down,
+				check(!rig.Actions.state("Gameplay", "Jump").Down && near_1e5(rig.Actions.state("Gameplay", "Jump").Value, 0.0f) && rig.Actions.state("UI", "Submit").Down,
 					"act_consume: the consuming UI map takes Space from Gameplay");
 				rig.Actions.pop_map("UI");
 				rig.frame();
@@ -591,15 +586,15 @@ namespace wiwa
 				check(rig.Actions.rebind("Gameplay", "Move", 0, control(Key::I), "up"), "rebind_part: rebind the up part");
 				rig.Backend.key(Key::I, true);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Move").Vector.y, 1.0f), "rebind_part: I moves up");
+				check(near_1e5(rig.Actions.state("Gameplay", "Move").Vector.y, 1.0f), "rebind_part: I moves up");
 				rig.Backend.key(Key::I, false);
 				rig.Backend.key(Key::W, true);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Move").Vector.y, 0.0f), "rebind_part: W no longer moves up");
+				check(near_1e5(rig.Actions.state("Gameplay", "Move").Vector.y, 0.0f), "rebind_part: W no longer moves up");
 				rig.Backend.key(Key::W, false);
 				rig.Backend.key(Key::S, true);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Move").Vector.y, -1.0f), "rebind_part: the other parts are untouched");
+				check(near_1e5(rig.Actions.state("Gameplay", "Move").Vector.y, -1.0f), "rebind_part: the other parts are untouched");
 			}
 
 			{
@@ -723,14 +718,14 @@ namespace wiwa
 				rig.Backend.connect_pad(0, true);
 				rig.Backend.pad_axis(0, PadAxis::LeftY, 0.4f);
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Forward").Value, 0.4f), "listen_mutes_actions: the stick drives Forward before listening");
+				check(near_1e5(rig.Actions.state("Gameplay", "Forward").Value, 0.4f), "listen_mutes_actions: the stick drives Forward before listening");
 				rig.Actions.listen_for_control([](const InputControl&) {});
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Forward").Value, 0.0f), "listen_mutes_actions: actions are zero while listening");
+				check(near_1e5(rig.Actions.state("Gameplay", "Forward").Value, 0.0f), "listen_mutes_actions: actions are zero while listening");
 				rig.Actions.cancel_listen();
 				check(!rig.Actions.listening(), "listen_mutes_actions: cancel_listen");
 				rig.frame();
-				check(near_equal(rig.Actions.state("Gameplay", "Forward").Value, 0.4f), "listen_mutes_actions: actions come back");
+				check(near_1e5(rig.Actions.state("Gameplay", "Forward").Value, 0.4f), "listen_mutes_actions: actions come back");
 			}
 		}
 
@@ -761,12 +756,6 @@ namespace wiwa
 			backend.move_cursor({ 30.0f, 30.0f });
 			state.update(backend);
 			check(state.last_device() == LastDevice::KeyboardMouse, "last_device_switch: the mouse moving switches back");
-		}
-
-		void write_text_file(const std::filesystem::path& path, const std::string& text)
-		{
-			std::ofstream file(path, std::ios::binary | std::ios::trunc);
-			file << text;
 		}
 
 		void input_persistence(Check& check, AssetPipelineModule& pipeline)
@@ -889,7 +878,7 @@ namespace wiwa
 				{
 					InputModule garbage;
 					garbage.add_maps(action_test_maps());
-					write_text_file(dir / "garbage.json", content);
+					write_text(dir / "garbage.json", content);
 					garbage.set_overrides_path(dir / "garbage.json");
 					check(!garbage.load_overrides() && garbage.actions().find_map("Gameplay") && !garbage.actions().modified("Gameplay", "Jump"),
 						std::string("overrides_file_garbage: '") + content + "' leaves the defaults");
@@ -914,7 +903,7 @@ namespace wiwa
 				InputProjectSettings none;
 				none.DefaultMap.Guid = AssetGuid::generate();
 				check(load_input_settings(dir / "none.wsettings", none, settingsError) && !none.DefaultMap.valid(), "settings_roundtrip: a missing file is the default");
-				write_text_file(dir / "garbage.wsettings", "{{{");
+				write_text(dir / "garbage.wsettings", "{{{");
 				check(!load_input_settings(dir / "garbage.wsettings", none, settingsError) && !settingsError.empty(), "settings_roundtrip: a damaged file is refused");
 
 				AssetDatabase& database = pipeline.get_database();
@@ -971,7 +960,7 @@ namespace wiwa
 
 			const std::filesystem::path file = dir / "test.winput";
 			const InputMapData sample = sample_map_data();
-			write_text_file(file, input_map_to_text(sample));
+			write_text(file, input_map_to_text(sample));
 
 			std::vector<std::byte> libraryBytes;
 			const std::optional<AssetRef> ref = database.ensure_imported(file);
@@ -1016,7 +1005,7 @@ namespace wiwa
 			// the guid survives an edit and a re-import
 			InputMapData edited = sample;
 			edited.Maps.push_back(ActionMap{ "Extra", false, {} });
-			write_text_file(file, input_map_to_text(edited));
+			write_text(file, input_map_to_text(edited));
 			database.reimport(file);
 			const std::optional<AssetRef> again = database.ensure_imported(file);
 			check(ref && again && again->Guid == ref->Guid, "import_input_map: a re-import keeps the guid");
@@ -1025,13 +1014,13 @@ namespace wiwa
 
 			// a damaged file fails the import and the previous cooked version stays
 			WI_INPUT_LOG(Info, "Smoke test: the next import errors are expected");
-			write_text_file(file, "{{{ not a map");
+			write_text(file, "{{{ not a map");
 			database.reimport(file);
 			const std::optional<InputMapData> kept = cooked_input_map(database, file);
 			check(kept && same_map_data(*kept, edited), "import_input_map_bad: a damaged edit keeps the previous cooked map");
 
 			const std::filesystem::path broken = dir / "broken.winput";
-			write_text_file(broken, R"({"version":1,"maps":[{"name":"M","actions":[{"name":"A","type":"Button","bindings":[{"control":"Key.Nope"}]}]}]})");
+			write_text(broken, R"({"version":1,"maps":[{"name":"M","actions":[{"name":"A","type":"Button","bindings":[{"control":"Key.Nope"}]}]}]})");
 			database.ensure_imported(broken);
 			check(!cooked_input_map(database, broken).has_value(), "import_input_map_bad: an unknown control cooks nothing");
 
@@ -1288,7 +1277,7 @@ namespace wiwa
 				rig.Backend.move_cursor({ 100.0f, 50.0f });
 				rig.Backend.mouse_button(MouseButton::Left, true);
 				UiInputFrame frame = rig.poll();
-				check(frame.PointerValid && near_equal(frame.Pointer.x, 100.0f) && near_equal(frame.Pointer.y, 50.0f), "ui_pointer: the cursor is the pointer");
+				check(frame.PointerValid && near_1e5(frame.Pointer.x, 100.0f) && near_1e5(frame.Pointer.y, 50.0f), "ui_pointer: the cursor is the pointer");
 				check(frame.Down[0] && frame.Pressed[0] && !frame.Released[0] && !frame.Down[1], "ui_pointer: the left button presses");
 				frame = rig.poll();
 				check(frame.Down[0] && !frame.Pressed[0], "ui_pointer: held");
@@ -1299,7 +1288,7 @@ namespace wiwa
 				rig.Backend.mouse_button(MouseButton::Middle, true);
 				rig.Backend.scroll({ 0.0f, 3.0f });
 				frame = rig.poll();
-				check(frame.Down[1] && frame.Down[2] && near_equal(frame.Scroll, 3.0f), "ui_pointer: right and middle buttons and the scroll");
+				check(frame.Down[1] && frame.Down[2] && near_1e5(frame.Scroll, 3.0f), "ui_pointer: right and middle buttons and the scroll");
 			}
 
 			{
@@ -1314,7 +1303,7 @@ namespace wiwa
 				rig.Backend.move_cursor({ 60.0f, 70.0f });
 				rig.Module.ui_source().set_viewport({ 10.0f, 20.0f }, 2.0f, true);
 				const UiInputFrame frame = rig.poll();
-				check(frame.PointerValid && near_equal(frame.Pointer.x, 100.0f) && near_equal(frame.Pointer.y, 100.0f), "ui_viewport_origin: (cursor - origin) * scale");
+				check(frame.PointerValid && near_1e5(frame.Pointer.x, 100.0f) && near_1e5(frame.Pointer.y, 100.0f), "ui_viewport_origin: (cursor - origin) * scale");
 			}
 
 			{
@@ -1377,7 +1366,7 @@ namespace wiwa
 				rig.Backend.connect_pad(0, true);
 				rig.Backend.pad_button(0, PadButton::DPadDown, true);
 				const UiInputFrame frame = rig.poll();
-				check(!frame.PointerValid && !frame.Down[0] && !frame.Pressed[0] && near_equal(frame.Scroll, 0.0f), "ui_capture_off: no pointer, buttons or scroll");
+				check(!frame.PointerValid && !frame.Down[0] && !frame.Pressed[0] && near_1e5(frame.Scroll, 0.0f), "ui_capture_off: no pointer, buttons or scroll");
 				check((frame.NavPressed & ui_nav_bit(UiNav::Submit)) == 0 && (frame.NavPressed & ui_nav_bit(UiNav::Down)) != 0, "ui_capture_off: the keyboard is muted but the pad still navigates");
 			}
 

@@ -11,11 +11,6 @@ namespace wiwa
 {
 	namespace
 	{
-		bool near_equal(float a, float b, float epsilon = 1e-4f)
-		{
-			return std::abs(a - b) < epsilon;
-		}
-
 		float hip_x(const AnimatorInstance& instance)
 		{
 			return instance.pose().T[0].x;

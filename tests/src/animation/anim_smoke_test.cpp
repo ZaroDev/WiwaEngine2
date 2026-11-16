@@ -13,11 +13,6 @@ namespace wiwa
 	{
 		using Check = AnimCheck;
 
-		bool near_equal(float a, float b)
-		{
-			return std::abs(a - b) < 1e-4f;
-		}
-
 		PrefabNode make_node(const char* name, i32 parent, glm::vec3 translation, glm::quat rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f))
 		{
 			PrefabNode node;

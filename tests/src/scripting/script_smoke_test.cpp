@@ -51,23 +51,18 @@
 
 #define WI_SCRIPT_LOG(level, ...) WI_LOG(level, "Scripting", __VA_ARGS__)
 
+#include <test_kit.h>
+
 namespace wiwa
 {
 	namespace
 	{
-		struct Check
+		struct CheckLog
 		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_SCRIPT_LOG(Error, "Smoke test FAILED: {0}", what);
-				}
-			}
+			static constexpr const char* Area = "Scripting";
+			static constexpr const char* Prefix = "Smoke test";
 		};
+		using Check = BasicCheck<CheckLog>;
 
 		void check_script_data(Check& check)
 		{
@@ -340,14 +335,6 @@ namespace wiwa
 				check(childClass != nullptr && baseClass != nullptr && childClass->Properties.size() == 1, "require_shares_class_with_load: inherits properties across files");
 				check(baseClass != nullptr && runtime.dependents_of(base).size() == 1, "require_shares_class_with_load: one dependent");
 			}
-		}
-
-		void write_text(const std::filesystem::path& path, const std::string& text)
-		{
-			std::error_code error;
-			std::filesystem::create_directories(path.parent_path(), error);
-			std::ofstream out(path, std::ios::binary | std::ios::trunc);
-			out << text;
 		}
 
 		// The cooked file of an asset, read back from the Library.
@@ -1149,7 +1136,7 @@ namespace wiwa
 				}
 				else
 				{
-					WI_SCRIPT_LOG(Info, "load_scene_from_script skipped: no scene in the catalog");
+					WI_SCRIPT_LOG(Warning, "SKIPPED: load_scene_from_script: no scene in the catalog");
 				}
 			}
 		}
@@ -1724,7 +1711,7 @@ namespace wiwa
 			SceneModule* scenes = Engine::get().get_module<SceneModule>();
 			if (assets == nullptr || scenes == nullptr)
 			{
-				WI_SCRIPT_LOG(Info, "editor_document checks skipped: no AssetManager or SceneModule");
+				WI_SCRIPT_LOG(Warning, "SKIPPED: editor_document checks: no AssetManager or SceneModule");
 				return;
 			}
 

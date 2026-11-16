@@ -37,11 +37,13 @@ private:
 	bool m_VfxEditorSmokeRequested = false;    // --vfx-editor-smoke
 	bool m_DemoSmokeRequested = false;         // --demo-smoke
 	bool m_DemoSmokeDone = false;
+	bool m_DemoSmokeQueued = false;            // the demo smoke is waiting for the startup scan (EditorModule::when_scan_finished)
 
 	Scope<wiwa::DemoSmoke> m_DemoSmoke{};
 	Scope<wiwa::VfxEditorSmoke> m_VfxEditorSmoke{};
 
 	bool m_AudioPanelAuditioned = false;
+	wiwa::u32 m_AudioNullFrame = 0;            // the frame the audio panel smoke switched to the Null backend (0: not yet)
 	entt::entity m_NavPanelVolume{ entt::null };
 	std::filesystem::path m_AiPanelFile{};
 	std::string m_AiPanelFailure{};

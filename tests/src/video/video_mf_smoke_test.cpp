@@ -14,23 +14,18 @@
 
 #define WI_VIDEO_LOG(level, ...) WI_LOG(level, "Video", __VA_ARGS__)
 
+#include <test_kit.h>
+
 namespace wiwa
 {
 	namespace
 	{
-		struct Check
+		struct CheckLog
 		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_VIDEO_LOG(Error, "Video MF smoke test FAILED: {0}", what);
-				}
-			}
+			static constexpr const char* Area = "Video";
+			static constexpr const char* Prefix = "Video MF smoke test";
 		};
+		using Check = BasicCheck<CheckLog>;
 
 		bool has_picture(const VideoFrame& frame)
 		{

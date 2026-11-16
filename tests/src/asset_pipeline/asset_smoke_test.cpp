@@ -22,23 +22,18 @@
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
+#include <test_kit.h>
+
 namespace wiwa
 {
 	namespace
 	{
-		struct Check
+		struct CheckLog
 		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_ASSET_LOG(Error, "Smoke test FAILED: {0}", what);
-				}
-			}
+			static constexpr const char* Area = "Assets";
+			static constexpr const char* Prefix = "Smoke test";
 		};
+		using Check = BasicCheck<CheckLog>;
 
 		struct CookedFile
 		{
@@ -685,12 +680,6 @@ namespace wiwa
 				out.write(reinterpret_cast<const char*>(png), sizeof(png));
 			}
 
-			const auto write_text = [](const std::filesystem::path& path, const std::string& text)
-			{
-				std::ofstream out(path, std::ios::binary | std::ios::trunc);
-				out << text;
-			};
-
 			// the cooked material of a source file, straight from the Library
 			const auto cooked_material = [&](const std::filesystem::path& source, std::vector<AssetGuid>* dependencies = nullptr) -> std::optional<MaterialData>
 			{
@@ -950,11 +939,6 @@ namespace wiwa
 				out.write(reinterpret_cast<const char*>(png), sizeof(png));
 			}
 
-			const auto write_text = [](const std::filesystem::path& path, const std::string& text)
-			{
-				std::ofstream out(path, std::ios::binary | std::ios::trunc);
-				out << text;
-			};
 			const auto read_text = [](const std::filesystem::path& path)
 			{
 				std::ifstream in(path, std::ios::binary);
@@ -1388,12 +1372,6 @@ namespace wiwa
 			const std::filesystem::path dir = database.get_assets_root() / "zz_surface_smoke";
 			std::filesystem::create_directories(dir, error);
 
-			const auto write_text = [](const std::filesystem::path& path, const std::string& text)
-			{
-				std::ofstream out(path, std::ios::binary | std::ios::trunc);
-				out << text;
-			};
-
 			// the cooked surface shader of a source file, straight from the Library
 			const auto cooked_surface = [&](const std::filesystem::path& source) -> std::optional<SurfaceShaderData>
 			{
@@ -1605,12 +1583,6 @@ namespace wiwa
 				std::ofstream out(dir / "pixel.png", std::ios::binary);
 				out.write(reinterpret_cast<const char*>(png), sizeof(png));
 			}
-
-			const auto write_text = [](const std::filesystem::path& path, const std::string& text)
-			{
-				std::ofstream out(path, std::ios::binary | std::ios::trunc);
-				out << text;
-			};
 
 			const auto cooked_material = [&](const std::filesystem::path& source, std::vector<AssetGuid>* dependencies = nullptr) -> std::optional<MaterialData>
 			{

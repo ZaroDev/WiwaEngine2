@@ -1,23 +1,17 @@
 #pragma once
 
 #include <animation/animation_log.h>
+#include <test_kit.h>
 
 namespace wiwa
 {
 	// The check helper of the animation smoke tests: counts failures and logs each one.
-	struct AnimCheck
+	struct AnimCheckLog
 	{
-		u32 Failures = 0;
-
-		void operator()(bool condition, const std::string& what)
-		{
-			if (!condition)
-			{
-				Failures++;
-				WI_ANIM_LOG(Error, "Animation smoke test FAILED: {0}", what);
-			}
-		}
+		static constexpr const char* Area = "Animation";
+		static constexpr const char* Prefix = "Animation smoke test";
 	};
+	using AnimCheck = BasicCheck<AnimCheckLog>;
 
 	// Checks of the pose math and the pose nodes (anim_pose_checks.cpp); they need no engine.
 	void run_pose_checks(AnimCheck& check);

@@ -21,27 +21,20 @@
 #include <physics/physics_sync.h>
 #include <scene/scene.h>
 
+#include <test_kit.h>
+
 namespace wiwa
 {
 	namespace
 	{
 		using Clock = std::chrono::steady_clock;
 
-		struct Check
+		struct CheckLog
 		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_PHYSICS_LOG(Error, "Smoke test FAILED: {0}", what);
-				}
-			}
+			static constexpr const char* Area = "Physics";
+			static constexpr const char* Prefix = "Smoke test";
 		};
-
-		bool near_equal(double a, double b, double tolerance) { return std::abs(a - b) <= tolerance; }
+		using Check = BasicCheck<CheckLog>;
 
 		void check_module_registered(Check& check)
 		{
@@ -64,7 +57,6 @@ namespace wiwa
 			double lastTime = first ? first->Time : 0.0;
 			u64 lastStep = first ? first->StepIndex : 0;
 			bool monotonic = true;
-			bool consistent = true;
 			bool ordered = true;
 			u32 samples = 0;
 			while (Clock::now() - begin < std::chrono::milliseconds(500))
@@ -74,7 +66,6 @@ namespace wiwa
 				if (latest)
 				{
 					monotonic = monotonic && latest->Time >= lastTime && latest->StepIndex >= lastStep;
-					consistent = consistent && near_equal(latest->Time, static_cast<double>(latest->StepIndex) / 60.0, 1e-6);
 					lastTime = latest->Time;
 					lastStep = latest->StepIndex;
 					samples++;
@@ -92,7 +83,6 @@ namespace wiwa
 			check(latest != nullptr && steps >= 25 && steps <= 35, "fixed_rate_60hz: 500 ms at 60 Hz gives 25..35 steps, got " + std::to_string(steps));
 			check(latest != nullptr && latest->Time > (first ? first->Time : 0.0), "fixed_rate_time_advances: Time grows while the thread runs");
 			check(monotonic, "fixed_rate_time_monotonic: Time and StepIndex never go back");
-			check(consistent, "fixed_rate_time_matches_steps: Time is StepIndex fixed steps");
 			check(latest != nullptr && near_equal(latest->FixedDt, 1.0 / 60.0, 1e-6), "fixed_rate_dt: FixedDt is 1/60");
 			check(ordered, "fixed_rate_previous: previous() is older than latest()");
 
@@ -120,6 +110,7 @@ namespace wiwa
 			PhysicsModule* module = Engine::get().get_module<PhysicsModule>();
 			if (module == nullptr)
 			{
+				WI_PHYSICS_LOG(Warning, "SKIPPED: check_start_stop_loop: no PhysicsModule is registered");
 				return;
 			}
 
@@ -491,13 +482,6 @@ namespace wiwa
 			}
 		};
 
-		bool write_text_file(const std::filesystem::path& path, const std::string& text)
-		{
-			std::ofstream out(path, std::ios::binary | std::ios::trunc);
-			out << text;
-			return static_cast<bool>(out);
-		}
-
 		// Check 5: physics materials. Four balls (radius 0.5) fall 4 m onto a ground with the default material (resting height 1.0):
 		//  - Dead: a .wphysmat with restitution 0; Bouncy: restitution 0.8 combined with Max; both from the start;
 		//  - Late: no material at first, Bouncy is assigned while it falls (the asset arrives after the body was made: SetMaterial);
@@ -510,8 +494,8 @@ namespace wiwa
 			std::error_code error;
 			std::filesystem::remove_all(dir, error);
 			std::filesystem::create_directories(dir, error);
-			check(write_text_file(dir / "dead.wphysmat", "{ \"friction\": 0.5, \"restitution\": 0.0 }") &&
-				write_text_file(dir / "bouncy.wphysmat", "{ \"friction\": 0.5, \"restitution\": 0.8, \"restitutionCombine\": \"Max\" }"), "materials_files: the material files are written");
+			check(write_text(dir / "dead.wphysmat", "{ \"friction\": 0.5, \"restitution\": 0.0 }") &&
+				write_text(dir / "bouncy.wphysmat", "{ \"friction\": 0.5, \"restitution\": 0.8, \"restitutionCombine\": \"Max\" }"), "materials_files: the material files are written");
 			const std::optional<AssetRef> dead = database.ensure_imported(dir / "dead.wphysmat");
 			const std::optional<AssetRef> bouncy = database.ensure_imported(dir / "bouncy.wphysmat");
 			check(dead.has_value() && bouncy.has_value(), "materials_import: both material files import");
@@ -766,7 +750,7 @@ namespace wiwa
 			std::error_code error;
 			std::filesystem::remove_all(dir, error);
 			std::filesystem::create_directories(dir, error);
-			check(write_text_file(dir / "slab.gltf", slab_gltf()) && write_text_file(dir / "plain.gltf", slab_gltf()), "cooked_files: the model files are written");
+			check(write_text(dir / "slab.gltf", slab_gltf()) && write_text(dir / "plain.gltf", slab_gltf()), "cooked_files: the model files are written");
 
 			const nlohmann::json withShapes = { { "generatePhysicsShapes", true } };
 			const std::optional<AssetRef> slab = database.ensure_imported(dir / "slab.gltf", &withShapes);

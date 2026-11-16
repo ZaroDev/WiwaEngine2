@@ -82,7 +82,7 @@ namespace wiwa
 			float hand() { return Module.instance_for(Hero)->pose().T[1].x; }
 		};
 
-		bool near_equal(float a, float b)
+		bool near_1e3(float a, float b)
 		{
 			return std::abs(a - b) < 1e-3f;
 		}
@@ -98,7 +98,7 @@ namespace wiwa
 
 			// the speed is the Animator's
 			h.run("Animation.animator(find_entity('hero')).speed = 2");
-			check(near_equal(h.Active->registry().get<Animator>(h.Hero).Speed, 2.0f) && h.run("return Animation.animator(find_entity('hero')).speed") == "2.0", "speed reads and writes the Animator");
+			check(near_1e3(h.Active->registry().get<Animator>(h.Hero).Speed, 2.0f) && h.run("return Animation.animator(find_entity('hero')).speed") == "2.0", "speed reads and writes the Animator");
 			h.run("Animation.animator(find_entity('hero')).speed = 1");
 		}
 
@@ -108,22 +108,22 @@ namespace wiwa
 			h.Rig.LateLoaded = true; // an unknown name is only known to be unknown once every clip has loaded
 			h.run("a = Animation.animator(find_entity('hero'))");
 			h.frame(0.1f);
-			check(near_equal(h.hip(), 1.0f), "the Clip of the Animator plays on start (Idle)");
+			check(near_1e3(h.hip(), 1.0f), "the Clip of the Animator plays on start (Idle)");
 
 			h.run("a:play('Run', { loop = true, speed = 1.0 })");
 			h.frame(0.5f);
-			check(near_equal(h.hip(), 5.0f), "play by name");
-			check(h.run("return a.playing") == "true" && near_equal(std::stof(h.run("return a.time")), 0.5f), "playing and time");
+			check(near_1e3(h.hip(), 5.0f), "play by name");
+			check(h.run("return a.playing") == "true" && near_1e3(std::stof(h.run("return a.time")), 0.5f), "playing and time");
 
 			h.run("a:crossfade('Idle', 1.0, { loop = true })");
 			h.frame(0.5f);
-			check(near_equal(h.hip(), 0.5f), "a crossfade is halfway after half its time (Run has looped to 0, Idle is at 1): " + std::to_string(h.hip()));
+			check(near_1e3(h.hip(), 0.5f), "a crossfade is halfway after half its time (Run has looped to 0, Idle is at 1): " + std::to_string(h.hip()));
 			h.frame(1.0f);
-			check(near_equal(h.hip(), 1.0f), "and ends on the new one");
+			check(near_1e3(h.hip(), 1.0f), "and ends on the new one");
 
 			h.run("a:stop(0)");
 			h.frame(0.1f);
-			check(near_equal(h.hip(), 0.0f) && h.run("return a.playing") == "false", "stop returns to the rest pose");
+			check(near_1e3(h.hip(), 0.0f) && h.run("return a.playing") == "false", "stop returns to the rest pose");
 
 			check(h.fails("a:play('Nope')", "Nope") && h.fails("a:play('Nope')", "Idle") && h.fails("a:play('Nope')", "Run"), "an unknown clip is an error that lists the clips");
 			check(h.fails("a:play(42)", "clip"), "a clip is a name or an asset");
@@ -135,15 +135,15 @@ namespace wiwa
 			h.run("a = Animation.animator(find_entity('hero')); a:play('Idle')");
 			h.run("up = a:layer('upper', 'Wave', { mask = 'hand', weight = 0.5, additive = false, loop = true })");
 			h.frame(0.1f);
-			check(near_equal(h.hand(), 3.0f) && near_equal(h.hip(), 1.0f), "a masked layer at half weight");
+			check(near_1e3(h.hand(), 3.0f) && near_1e3(h.hip(), 1.0f), "a masked layer at half weight");
 			h.run("up.weight = 1");
 			h.frame(0.1f);
-			check(near_equal(h.hand(), 5.0f) && h.run("return up.weight") == "1.0", "the weight is writable");
+			check(near_1e3(h.hand(), 5.0f) && h.run("return up.weight") == "1.0", "the weight is writable");
 			h.run("up:stop(0)");
 			check(h.run("return tostring(up.weight)") == "nil", "a stopped layer reads nil");
 			h.run("up.weight = 1; up:stop(0); up:crossfade('Wave', 0.1)"); // ignored, no error
 			h.frame(0.1f);
-			check(near_equal(h.hand(), 1.0f), "and ignores writes");
+			check(near_1e3(h.hand(), 1.0f), "and ignores writes");
 		}
 
 		void events(AnimCheck& check)

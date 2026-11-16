@@ -30,23 +30,18 @@
 
 #define WI_UI_LOG(level, ...) WI_LOG(level, "UI", __VA_ARGS__)
 
+#include <test_kit.h>
+
 namespace wiwa
 {
 	namespace
 	{
-		struct Check
+		struct CheckLog
 		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_UI_LOG(Error, "UI smoke test FAILED: {0}", what);
-				}
-			}
+			static constexpr const char* Area = "UI";
+			static constexpr const char* Prefix = "UI smoke test";
 		};
+		using Check = BasicCheck<CheckLog>;
 
 		UiWidget make_widget(UiId id, UiId parent, WidgetKind kind, const char* name)
 		{

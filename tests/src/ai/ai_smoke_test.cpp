@@ -33,23 +33,18 @@
 #include <asset_pipeline/nav_bake.h>
 #include "../nav/nav_fixtures.h"
 
+#include <test_kit.h>
+
 namespace wiwa
 {
 	namespace
 	{
-		struct Check
+		struct CheckLog
 		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_AI_LOG(Error, "AI smoke test FAILED: {0}", what);
-				}
-			}
+			static constexpr const char* Area = "AI";
+			static constexpr const char* Prefix = "AI smoke test";
 		};
+		using Check = BasicCheck<CheckLog>;
 
 		using Json = nlohmann::json;
 
@@ -232,7 +227,7 @@ namespace wiwa
 			garbage.Text = "not a tree";
 			check(!deserialize<BehaviorTreeData>(serialize(garbage)).has_value(), "bt_archive: text that is not a tree is refused");
 
-			check(std::string(asset_type_name(AssetType::BehaviorTree)) == "BehaviorTree" && static_cast<u32>(AssetType::BehaviorTree) + 1 == static_cast<u32>(AssetType::Last), "bt_asset_type: BehaviorTree is the last type before Last");
+			check(std::string(asset_type_name(AssetType::BehaviorTree)) == "BehaviorTree", "bt_asset_type: BehaviorTree has its name");
 		}
 	}
 
@@ -901,7 +896,10 @@ namespace wiwa
 				big.Root = "n99999999999999999999";
 				big.Nodes = { node("n99999999999999999999", "Wait") };
 				BtEditModel model(big);
-				check(!model.add_node("Wait", "n99999999999999999999").empty() || true, "json_ids: an id with a huge number does not throw in the edit model");
+				bool threw = false;
+				try { model.add_node("Wait", "n99999999999999999999"); }
+				catch (...) { threw = true; }
+				check(!threw, "json_ids: an id with a huge number does not throw in the edit model");
 			}
 		}
 

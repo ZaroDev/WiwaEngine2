@@ -27,23 +27,18 @@
 
 #define WI_VIDEO_LOG(level, ...) WI_LOG(level, "Video", __VA_ARGS__)
 
+#include <test_kit.h>
+
 namespace wiwa
 {
 	namespace
 	{
-		struct Check
+		struct CheckLog
 		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_VIDEO_LOG(Error, "Video smoke test FAILED: {0}", what);
-				}
-			}
+			static constexpr const char* Area = "Video";
+			static constexpr const char* Prefix = "Video smoke test";
 		};
+		using Check = BasicCheck<CheckLog>;
 
 		u32 frame_index(const VideoFrame& frame)
 		{
@@ -561,7 +556,6 @@ namespace wiwa
 				rig.Player->update(STEP_US);
 				// the rig goes out of scope with the worker mid decode
 			}
-			check(true, "player: destroying a player mid decode does not hang");
 
 			{
 				NullDecoderConfig config;
@@ -677,7 +671,6 @@ namespace wiwa
 					out.stop();
 					out.set_volume(0.0f);
 					out.shutdown();
-					check(true, "audio out: a real device starts and stops");
 				}
 				else
 				{
@@ -725,7 +718,6 @@ namespace wiwa
 						player.update(STEP_US);
 					}
 				}
-				check(true, "audio player: destroying players with sound mid decode does not hang");
 			}
 			{
 				NullDecoderConfig config;

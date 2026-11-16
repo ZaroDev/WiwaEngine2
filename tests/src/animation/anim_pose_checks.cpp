@@ -9,11 +9,6 @@ namespace wiwa
 {
 	namespace
 	{
-		bool near_equal(float a, float b, float epsilon = 1e-4f)
-		{
-			return std::abs(a - b) < epsilon;
-		}
-
 		// hip -> mid -> tip, the prefab nodes 10, 11 and 12. Rest: hip at (0,1,0), mid 1 along x, tip 1 along z.
 		SkeletonData make_skeleton()
 		{

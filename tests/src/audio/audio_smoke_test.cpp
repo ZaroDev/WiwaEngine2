@@ -29,23 +29,18 @@
 
 #define WI_AUDIO_LOG(level, ...) WI_LOG(level, "Audio", __VA_ARGS__)
 
+#include <test_kit.h>
+
 namespace wiwa
 {
 	namespace
 	{
-		struct Check
+		struct CheckLog
 		{
-			u32 Failures = 0;
-
-			void operator()(bool condition, const std::string& what)
-			{
-				if (!condition)
-				{
-					Failures++;
-					WI_AUDIO_LOG(Error, "Audio smoke test FAILED: {0}", what);
-				}
-			}
+			static constexpr const char* Area = "Audio";
+			static constexpr const char* Prefix = "Audio smoke test";
 		};
+		using Check = BasicCheck<CheckLog>;
 
 		bool has_call(const NullAudioBackend& backend, const std::string& call)
 		{
@@ -639,7 +634,7 @@ namespace wiwa
 			const std::optional<SoundBankData> test = read_test_bank("Test");
 			if (!init || !test)
 			{
-				WI_AUDIO_LOG(Warning, "Audio smoke test: the Wwise playback checks were SKIPPED: editor/assets/audio/Init.bnk and Test.bnk are missing");
+				WI_AUDIO_LOG(Warning, "SKIPPED: the Wwise playback checks: editor/assets/audio/Init.bnk and Test.bnk are missing");
 			}
 			else
 			{
@@ -688,12 +683,6 @@ namespace wiwa
 			return wav + data;
 		}
 
-		void write_file(const std::filesystem::path& path, const std::string& bytes)
-		{
-			std::ofstream out(path, std::ios::binary | std::ios::trunc);
-			out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-		}
-
 		void mini_audio(Check& check, AssetPipelineModule& pipeline)
 		{
 			AudioClipData clip;
@@ -718,9 +707,9 @@ namespace wiwa
 			const std::filesystem::path dir = database.get_assets_root() / "zz_audio_smoke";
 			std::filesystem::remove_all(dir, error);
 			std::filesystem::create_directories(dir, error);
-			write_file(dir / "zz_smoke_shot.wav", make_wav(2400));
-			write_file(dir / "zz_smoke_hum_loop.wav", make_wav(4800));
-			write_file(dir / "zz_smoke_fake.wav", "this is not a sound at all, only text");
+			write_text(dir / "zz_smoke_shot.wav", make_wav(2400));
+			write_text(dir / "zz_smoke_hum_loop.wav", make_wav(4800));
+			write_text(dir / "zz_smoke_fake.wav", "this is not a sound at all, only text");
 			const std::optional<AssetRef> shot = database.ensure_imported(dir / "zz_smoke_shot.wav");
 			const std::optional<AssetRef> hum = database.ensure_imported(dir / "zz_smoke_hum_loop.wav");
 			WI_AUDIO_LOG(Info, "Smoke test: the next import error is expected");

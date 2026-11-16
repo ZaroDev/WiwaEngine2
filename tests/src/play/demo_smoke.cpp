@@ -347,6 +347,7 @@ namespace wiwa
 		NavModule* nav = Engine::get().get_module<NavModule>();
 		if (nav == nullptr)
 		{
+			WI_LOG(Warning, "DemoSmoke", "SKIPPED: sample_nav: no NavModule is registered");
 			return;
 		}
 		m_Nav.HasMesh = m_Nav.HasMesh || nav->has_navmesh();
