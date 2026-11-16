@@ -26,6 +26,8 @@ CLAUDE.md has the one-paragraph map of every area; read the matching doc here be
 
 Files with a date prefix (`2026-11-..-<area>-design.md`) are the design records written before an area was built. They keep the reasoning and the alternatives that were rejected, but not the current state: the doc of the area above is.
 
+Screenshots live in `docs/images/` (`editor.png`: the editor on the demo hall; `demo-hall.png`: the same scene in `wiwa_game`). They are used by the top-level README; retake them when the editor layout or the demo hall changes visibly.
+
 ## Rules for these docs
 
 - Describe what exists. Do not record plans, task lists, acceptance steps or phases.
