@@ -48,7 +48,6 @@ namespace wiwa
 
 	void VideoModule::init()
 	{
-		m_Initialized = true;
 		if (!m_Factory)
 		{
 			m_Factory = []() { return create_platform_decoder(); };
@@ -77,7 +76,6 @@ namespace wiwa
 		}
 		destroy_entry();
 		m_Handles.clear();
-		m_Initialized = false;
 	}
 
 	UiModule* VideoModule::ui() const
@@ -529,8 +527,6 @@ namespace wiwa
 
 	void VideoModule::tick(const Ref<Scene>& active, bool playing, i64 wallUs)
 	{
-		m_WallUs = wallUs;
-
 		// another scene: the widgets of AutoPlay are new to it
 		if (m_Scene.lock() != active)
 		{

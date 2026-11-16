@@ -228,9 +228,7 @@ namespace wiwa
 				{
 					call_hook(instance, "on_destroy", nullptr);
 				}
-				m_UiHandlers.remove_owner(instance.Self);
-				m_AnimHandlers.remove_owner(instance.Self);
-				m_Known.erase({ instance.Entity, instance.Script });
+				drop_owner(instance);
 				instances->erase(instances->begin() + static_cast<std::ptrdiff_t>(i));
 			}
 		}
@@ -412,6 +410,13 @@ namespace wiwa
 		}
 	}
 
+	void ScriptInstances::drop_owner(const Instance& instance)
+	{
+		m_UiHandlers.remove_owner(instance.Self);
+		m_AnimHandlers.remove_owner(instance.Self);
+		m_Known.erase({ instance.Entity, instance.Script });
+	}
+
 	void ScriptInstances::script_reloaded(std::span<const AssetRef> scripts)
 	{
 		for (const AssetRef& script : scripts)
@@ -427,9 +432,7 @@ namespace wiwa
 					const bool reloaded = std::any_of(scripts.begin(), scripts.end(), [&](const AssetRef& script) { return script.resolved() == instance.Script; });
 					if (reloaded && instance.Failed)
 					{
-						m_UiHandlers.remove_owner(instance.Self);
-				m_AnimHandlers.remove_owner(instance.Self);
-						m_Known.erase({ instance.Entity, instance.Script });
+						drop_owner(instance);
 						return true;
 					}
 					return false;

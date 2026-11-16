@@ -48,19 +48,9 @@ namespace wiwa
 
 	void NavModule::tick(const Ref<Scene>& active, bool playing, float dt)
 	{
-		if (m_HasWorld)
-		{
-			const Ref<Scene> scene = m_World.lock();
-			if (!scene || (m_AutoStart && scene != active))
-			{
-				stop_world(); // the scene was replaced or is gone: its agents go with it
-			}
-		}
-		if (m_AutoStart && !m_HasWorld && playing && active != nullptr)
-		{
-			start_world(active);
-		}
-		if (!m_HasWorld)
+		// the scene was replaced or is gone: its agents go with it
+		m_Follow.follow(active, playing, [this] { stop_world(); }, [this](const Ref<Scene>& scene) { start_world(scene); });
+		if (!m_Follow.has_world())
 		{
 			return;
 		}
@@ -68,7 +58,7 @@ namespace wiwa
 		poll_loading();
 		if (playing && m_Agents)
 		{
-			if (const Ref<Scene> scene = m_World.lock())
+			if (const Ref<Scene> scene = m_Follow.scene())
 			{
 				m_Agents->update(*scene, std::clamp(dt, 0.0f, 0.1f));
 			}
@@ -82,8 +72,7 @@ namespace wiwa
 		{
 			return false;
 		}
-		m_World = scene;
-		m_HasWorld = true;
+		m_Follow.bind(scene);
 		m_Warned = false;
 		m_IgnoredVolumes = 0;
 
@@ -141,8 +130,7 @@ namespace wiwa
 		{
 			return false;
 		}
-		m_World = scene;
-		m_HasWorld = true;
+		m_Follow.bind(scene);
 		m_Warned = false;
 		make_data(mesh);
 		return true;
@@ -169,7 +157,7 @@ namespace wiwa
 		};
 
 		// Destinations asked for while it loaded.
-		if (const Ref<Scene> scene = m_World.lock())
+		if (const Ref<Scene> scene = m_Follow.scene())
 		{
 			const auto queued = std::move(m_Queued);
 			m_Queued.clear();
@@ -215,7 +203,7 @@ namespace wiwa
 
 	void NavModule::stop_world()
 	{
-		if (!m_HasWorld)
+		if (!m_Follow.has_world())
 		{
 			return;
 		}
@@ -225,8 +213,16 @@ namespace wiwa
 		m_Handle = {};
 		m_Loading = false;
 		m_Queued.clear();
-		m_World.reset();
-		m_HasWorld = false;
+		m_Follow.release();
+	}
+
+	bool NavModule::ensure_world(const Ref<Scene>& scene, bool playing)
+	{
+		if (m_Follow.auto_start() && playing && scene != nullptr && world_scene() != scene)
+		{
+			start_world(scene);
+		}
+		return scene != nullptr && world_scene() == scene;
 	}
 
 	NavFilter NavModule::filter_for(u32 areaMask) const

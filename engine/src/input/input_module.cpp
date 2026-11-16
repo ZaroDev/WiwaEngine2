@@ -1,5 +1,6 @@
 #include <pch.h>
 #include "input_module.h"
+#include <core/file_io.h>
 
 #include <fstream>
 #include <sstream>
@@ -139,23 +140,10 @@ namespace wiwa
 	{
 		const std::string text = overrides_to_json(m_Actions).dump(1, '\t') + "\n";
 
-		std::filesystem::path temp = m_OverridesPath;
-		temp += ".tmp";
+		std::string error;
+		if (!write_file_atomic(m_OverridesPath, text.data(), text.size(), error))
 		{
-			std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-			file << text;
-			if (!file)
-			{
-				WI_INPUT_LOG(Error, "Cannot write {0}", temp.string());
-				return false;
-			}
-		}
-
-		std::error_code error;
-		std::filesystem::rename(temp, m_OverridesPath, error);
-		if (error)
-		{
-			WI_INPUT_LOG(Error, "Cannot replace {0}: {1}", m_OverridesPath.string(), error.message());
+			WI_INPUT_LOG(Error, "{0}", error);
 			return false;
 		}
 		return true;

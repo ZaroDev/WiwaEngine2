@@ -29,11 +29,7 @@ namespace wiwa
 
 		UiModule& ui_of(ScriptContext& context)
 		{
-			if (context.Ui == nullptr)
-			{
-				throw sol::error("there is no UI module");
-			}
-			return *context.Ui;
+			return require_module(context.Ui, "there is no UI module");
 		}
 
 		// Null when the canvas, its scene or its panel is not there (yet).
@@ -118,11 +114,7 @@ namespace wiwa
 
 		VideoModule& video_of(ScriptContext& context)
 		{
-			if (context.Video == nullptr)
-			{
-				throw sol::error("there is no video module");
-			}
-			return *context.Video;
+			return require_module(context.Video, "there is no video module");
 		}
 
 		// The data of a Video widget, null when the widget (or its canvas) is gone; a widget of another kind is a Lua error.

@@ -146,7 +146,7 @@ namespace wiwa
 		dtQueryFilter detourFilter;
 		fill_detour_filter(detourFilter, filter);
 
-		const glm::vec3 extents{ 0.5f, 2.0f, 0.5f };
+		const glm::vec3 extents = NAV_PROBE_EXTENTS;
 		dtPolyRef startRef = 0;
 		glm::vec3 start{ 0.0f };
 		glm::vec3 probe = extents;
@@ -184,7 +184,7 @@ namespace wiwa
 		dtQueryFilter detourFilter;
 		fill_detour_filter(detourFilter, filter);
 
-		glm::vec3 extents{ 0.5f, 2.0f, 0.5f };
+		glm::vec3 extents = NAV_PROBE_EXTENTS;
 		dtPolyRef startRef = 0;
 		glm::vec3 start{ 0.0f };
 		m_Impl->Query->findNearestPoly(&centre.x, &extents.x, &detourFilter, &startRef, &start.x);
@@ -213,7 +213,7 @@ namespace wiwa
 
 			const glm::vec2 pulled = glm::vec2(start.x, start.z) + offset * (radius * std::sqrt(next_random()) / distance);
 			glm::vec3 candidate(pulled.x, point.y, pulled.y);
-			glm::vec3 reach{ 0.5f, 2.0f, 0.5f };
+			glm::vec3 reach = NAV_PROBE_EXTENTS;
 			dtPolyRef candidateRef = 0;
 			glm::vec3 snapped{ 0.0f };
 			m_Impl->Query->findNearestPoly(&candidate.x, &reach.x, &detourFilter, &candidateRef, &snapped.x);

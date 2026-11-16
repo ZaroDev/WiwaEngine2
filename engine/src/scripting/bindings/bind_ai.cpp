@@ -18,11 +18,7 @@ namespace wiwa
 
 		AIModule& ai_of(ScriptContext& context)
 		{
-			if (context.AI == nullptr)
-			{
-				throw sol::error("the AI module is not available");
-			}
-			return *context.AI;
+			return require_module(context.AI, "the AI module is not available");
 		}
 
 		// `self` of a handle method: called with a dot it is not a handle, and sol2 (no safety defines) would read it unchecked.

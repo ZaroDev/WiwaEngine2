@@ -16,11 +16,7 @@ namespace wiwa
 
 		PhysicsModule& physics_of(ScriptContext& context)
 		{
-			if (context.Physics == nullptr)
-			{
-				throw sol::error("there is no physics module");
-			}
-			return *context.Physics;
+			return require_module(context.Physics, "there is no physics module");
 		}
 
 		PhysicsModule& physics_of(const LuaBody& body)

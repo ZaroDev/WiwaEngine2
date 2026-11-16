@@ -10,6 +10,12 @@
 
 namespace wiwa
 {
+	// How far from a point (half-sizes, metres) the nearest mesh polygon is looked for. Snap: where a destination, a path end or a warp is put on the
+	// mesh (the agents, find_path and Nav.nearest_point). Probe: the tight search of the queries that start from a point they expect to be on the mesh
+	// (raycast, random_point_around).
+	inline const glm::vec3 NAV_SNAP_EXTENTS{ 2.0f, 4.0f, 2.0f };
+	inline const glm::vec3 NAV_PROBE_EXTENTS{ 0.5f, 2.0f, 0.5f };
+
 	// The kind of ground a navmesh polygon is. The id is what Recast and Detour store per polygon (0 is Recast's "not walkable"); the polygon flag
 	// of an area is 1 << id, so an agent's area mask and the cost table are both indexed by it. Written to .wnav files: append, never reorder.
 	enum class NavArea : u8

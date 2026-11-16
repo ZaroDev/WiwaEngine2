@@ -162,7 +162,6 @@ namespace wiwa
 		{
 			const BtNodeDesc& node = *m_Nodes[n];
 			m_HasInput[n] = node.Id != doc.Root;
-			size_t slots = 0;
 			for (size_t c = 0; c < node.Children.size(); c++)
 			{
 				const auto child = m_Index.find(node.Children[c]);
@@ -172,11 +171,9 @@ namespace wiwa
 				}
 				m_Links.push_back(::GraphEditor::Link{ n, std::min(c, MAX_SLOTS - 1), child->second, 0 });
 				m_LinkChild.emplace_back(node.Id, c);
-				slots++;
 			}
 			const int spare = room(node);
 			m_OutCount[n] = std::min(node.Children.size() + (spare != 0 ? 1u : 0u), MAX_SLOTS);
-			(void)slots;
 		}
 	}
 

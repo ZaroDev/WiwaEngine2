@@ -38,7 +38,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE | UpdateFlags::UPDATE_RENDERER; }
 		virtual std::string get_name() const override { return "PhysicsModule"; }
-		virtual int get_priority() const override { return -20; } // after the scene (-80), before the UI (-10) and the scripts (0)
+		virtual int get_priority() const override { return ModulePriority::Physics; }
 
 		// With auto start a world follows the active scene while the game clock plays (a game). The editor turns it off.
 		void set_auto_start(bool autoStart) { m_AutoStart = autoStart; }

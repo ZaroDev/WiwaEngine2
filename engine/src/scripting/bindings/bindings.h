@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cmath>
+#include <string>
+
 #include <sol/sol.hpp>
 
 #include <scene/reflection/field_descriptor.h>
@@ -11,6 +14,42 @@
 // the sandbox the scripts run in).
 namespace wiwa
 {
+	// The module a binding needs, or a Lua error with the module's own message where the host has none (a test).
+	template<typename T>
+	T& require_module(T* module, const char* message)
+	{
+		if (module == nullptr)
+		{
+			throw sol::error(message);
+		}
+		return *module;
+	}
+
+	// Arguments the scripting state cannot type-check (no sol2 safety defines): refused here with the area and function in the message.
+	// A vec3 argument. The scripting state has no sol2 type checks, so a number or a table where a vector goes must be refused here, not read as one.
+	inline glm::vec3 vec3_arg(const char* area, const sol::object& value, const char* function, const char* argument)
+	{
+		if (!value.is<LuaVec3>())
+		{
+			throw sol::error(std::string(area) + "." + function + ": " + argument + " must be a vec3");
+		}
+		const glm::vec3 vector = value.as<LuaVec3&>().Value;
+		if (!std::isfinite(vector.x) || !std::isfinite(vector.y) || !std::isfinite(vector.z))
+		{
+			throw sol::error(std::string(area) + "." + function + ": " + argument + " must be finite numbers (got " + std::to_string(vector.x) + ", " + std::to_string(vector.y) + ", " + std::to_string(vector.z) + ")");
+		}
+		return vector;
+	}
+
+	inline float number_arg(const char* area, const sol::object& value, const char* function, const char* argument)
+	{
+		if (!value.is<double>() || !std::isfinite(value.as<double>()))
+		{
+			throw sol::error(std::string(area) + "." + function + ": " + argument + " must be a finite number");
+		}
+		return static_cast<float>(value.as<double>());
+	}
+
 	// vec2, vec3, vec4, quat, mat4.
 	void bind_math(ScriptRuntime& runtime);
 

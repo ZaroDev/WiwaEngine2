@@ -5,6 +5,7 @@
 
 #include <core/common.h>
 #include <core/module.h>
+#include <core/scene_follower.h>
 
 #include <assets/asset_manager.h>
 #include <assets/handle.h>
@@ -35,13 +36,13 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE; }
 		virtual std::string get_name() const override { return "NavModule"; }
-		virtual int get_priority() const override { return 5; } // after the scripts (0), so a destination set this frame is steered in it; before the animation (10), which reads the moved transforms
+		virtual int get_priority() const override { return ModulePriority::Nav; }
 
 		// The area costs the agents and the queries use. A game reads the packed ones in init(); the editor applies nav.wsettings. Takes effect at the next world.
 		void set_settings(const NavSettings& settings) { m_Settings = sanitized(settings); }
 		const NavSettings& settings() const { return m_Settings; }
 
-		void set_auto_start(bool autoStart) { m_AutoStart = autoStart; }
+		void set_auto_start(bool autoStart) { m_Follow.set_auto_start(autoStart); }
 
 		// Starts a world for the scene: the mesh of its first enabled NavMeshVolume that has a baked asset loads in the background (queries fail, and a
 		// destination is kept for later, until it is there). A second enabled volume is ignored with a warning; none, or one without a baked mesh, logs
@@ -51,7 +52,10 @@ namespace wiwa
 		bool start_world_with_mesh(Ref<Scene> scene, const NavMeshData& mesh);
 		// Destroys the agents and the mesh. Does nothing when no world runs.
 		void stop_world();
-		Ref<Scene> world_scene() const { return m_HasWorld ? m_World.lock() : nullptr; }
+		Ref<Scene> world_scene() const { return m_Follow.scene(); }
+		// Makes the world for `scene` now when the module follows the active scene, the game plays and the world is another one (or none): a script asks
+		// before the module's first tick (a destination in the first frame) and in the frame a scene is replaced. True when a world for that scene runs.
+		bool ensure_world(const Ref<Scene>& scene, bool playing);
 
 		bool has_navmesh() const { return m_Data != nullptr; }
 		// Enabled volumes of the world's scene beyond the first (their meshes are not used).
@@ -86,10 +90,7 @@ namespace wiwa
 		void warn_once(const char* message);
 
 		NavSettings m_Settings{};
-		bool m_AutoStart = true;
-
-		bool m_HasWorld = false;
-		std::weak_ptr<Scene> m_World{};
+		SceneFollower m_Follow{};
 		bool m_Loading = false;
 		Handle<NavMeshData> m_Handle{};
 		Scope<NavData> m_Data{};

@@ -20,7 +20,6 @@ namespace wiwa
 	{
 		constexpr float MAX_AGENT_RADIUS = 2.0f;
 		constexpr float RETRY_SECONDS = 1.0f;
-		const glm::vec3 SNAP_EXTENTS{ 2.0f, 4.0f, 2.0f };
 
 		struct ParamsKey
 		{
@@ -142,7 +141,7 @@ namespace wiwa
 			const ParamsKey key = key_of(agent);
 			dtQueryFilter filter;
 			fill_detour_filter(filter, nav_filter(key.AreaMask));
-			glm::vec3 extents = SNAP_EXTENTS;
+			glm::vec3 extents = NAV_SNAP_EXTENTS;
 			glm::vec3 point = position;
 			dtPolyRef ref = 0;
 			glm::vec3 snapped{ 0.0f };
@@ -171,7 +170,7 @@ namespace wiwa
 		{
 			dtQueryFilter filter;
 			fill_detour_filter(filter, nav_filter(areaMask));
-			glm::vec3 extents = SNAP_EXTENTS;
+			glm::vec3 extents = NAV_SNAP_EXTENTS;
 			glm::vec3 point = position;
 			ref = 0;
 			Query->findNearestPoly(&point.x, &extents.x, &filter, &ref, &snapped.x);

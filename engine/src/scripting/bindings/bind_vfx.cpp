@@ -24,11 +24,7 @@ namespace wiwa
 
 		Scene& scene_of(ScriptContext& context)
 		{
-			if (context.ActiveScene == nullptr)
-			{
-				throw sol::error("there is no active scene");
-			}
-			return *context.ActiveScene;
+			return require_module(context.ActiveScene, "there is no active scene");
 		}
 
 		// The ParticleSystem of an entity; an error that names the call when it has none.

@@ -13,11 +13,7 @@ namespace wiwa
 		// Errors thrown here reach the script as Lua errors (the runtime's exception handler turns them into messages).
 		Scene& scene_of(ScriptContext& context)
 		{
-			if (context.ActiveScene == nullptr)
-			{
-				throw sol::error("there is no active scene");
-			}
-			return *context.ActiveScene;
+			return require_module(context.ActiveScene, "there is no active scene");
 		}
 
 		entt::entity entity_of(const EntityHandle& handle)

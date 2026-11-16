@@ -38,7 +38,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE | UpdateFlags::UPDATE_RENDERER; }
 		virtual std::string get_name() const override { return "AnimationModule"; }
-		virtual int get_priority() const override { return 10; } // after the scripts (0)
+		virtual int get_priority() const override { return ModulePriority::Animation; }
 
 		// How skeletons and clips are found. The default asks the AssetManager; tests and tools put their own.
 		void set_sources(AnimationSources sources) { m_Sources = std::move(sources); }

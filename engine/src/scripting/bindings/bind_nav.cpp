@@ -17,35 +17,7 @@ namespace wiwa
 
 		NavModule& nav_of(ScriptContext& context)
 		{
-			if (context.Nav == nullptr)
-			{
-				throw sol::error("the navigation module is not available");
-			}
-			return *context.Nav;
-		}
-
-		// A vec3 argument. The scripting state has no sol2 type checks, so a number or a table where a vector goes must be refused here, not read as one.
-		glm::vec3 vec3_arg(const sol::object& value, const char* function, const char* argument)
-		{
-			if (!value.is<LuaVec3>())
-			{
-				throw sol::error(std::string("Nav.") + function + ": " + argument + " must be a vec3");
-			}
-			const glm::vec3 vector = value.as<LuaVec3&>().Value;
-			if (!std::isfinite(vector.x) || !std::isfinite(vector.y) || !std::isfinite(vector.z))
-			{
-				throw sol::error(std::string("Nav.") + function + ": " + argument + " must be finite numbers (got " + std::to_string(vector.x) + ", " + std::to_string(vector.y) + ", " + std::to_string(vector.z) + ")");
-			}
-			return vector;
-		}
-
-		float number_arg(const sol::object& value, const char* function, const char* argument)
-		{
-			if (!value.is<double>() || !std::isfinite(value.as<double>()))
-			{
-				throw sol::error(std::string("Nav.") + function + ": " + argument + " must be a finite number");
-			}
-			return static_cast<float>(value.as<double>());
+			return require_module(context.Nav, "the navigation module is not available");
 		}
 
 		u32 mask_of(const sol::object& mask)
@@ -102,13 +74,14 @@ namespace wiwa
 			// Starts a walk to the nearest point of the navmesh to the destination; false if there is no navmesh, none near it, or no route.
 			"set_destination", [&context](const sol::object& agent, const sol::object& destination) -> bool
 			{
-				const glm::vec3 target = vec3_arg(destination, "agent:set_destination", "the destination");
+				const glm::vec3 target = vec3_arg("Nav", destination, "agent:set_destination", "the destination");
+				nav_of(context).ensure_world(context.ActiveSceneRef, context.GamePlaying); // a destination in the first frame, before the module's first tick
 				return nav_of(context).set_destination(agent_entity(context, agent), target);
 			},
 			"stop", [&context](const sol::object& agent) { nav_of(context).stop(agent_entity(context, agent)); },
 			"warp", [&context](const sol::object& agent, const sol::object& position) -> bool
 			{
-				const glm::vec3 target = vec3_arg(position, "agent:warp", "the position");
+				const glm::vec3 target = vec3_arg("Nav", position, "agent:warp", "the position");
 				return nav_of(context).warp(agent_entity(context, agent), target);
 			},
 			// "idle", "moving", "arrived" or "no_path".
@@ -162,8 +135,8 @@ namespace wiwa
 		// target. No navmesh, or no mesh near a point: failed, no points.
 		nav.set_function("find_path", [&context](const sol::object& from, const sol::object& to, const sol::object& mask, sol::this_state state)
 			{
-				const glm::vec3 start = vec3_arg(from, "find_path", "from");
-				const glm::vec3 end = vec3_arg(to, "find_path", "to");
+				const glm::vec3 start = vec3_arg("Nav", from, "find_path", "from");
+				const glm::vec3 end = vec3_arg("Nav", to, "find_path", "to");
 				NavModule& module = nav_of(context);
 				sol::state_view view(state);
 				sol::table result = view.create_table();
@@ -187,8 +160,8 @@ namespace wiwa
 		// The point of the navmesh nearest to the point within extents (default 2 x 4 x 2 m), or nil.
 		nav.set_function("nearest_point", [&context](const sol::object& point, const sol::object& extents, sol::this_state state) -> sol::object
 			{
-				const glm::vec3 position = vec3_arg(point, "nearest_point", "the point");
-				const glm::vec3 reach = extents.valid() && extents.get_type() != sol::type::lua_nil ? vec3_arg(extents, "nearest_point", "the extents") : glm::vec3(2.0f, 4.0f, 2.0f);
+				const glm::vec3 position = vec3_arg("Nav", point, "nearest_point", "the point");
+				const glm::vec3 reach = extents.valid() && extents.get_type() != sol::type::lua_nil ? vec3_arg("Nav", extents, "nearest_point", "the extents") : NAV_SNAP_EXTENTS;
 				NavModule& module = nav_of(context);
 				sol::state_view view(state);
 				if (const NavQuery* query = module.query())
@@ -204,8 +177,8 @@ namespace wiwa
 		// hit, point: whether the line from a to b leaves the navmesh (a wall or an edge) on the way, and where.
 		nav.set_function("raycast", [&context](const sol::object& a, const sol::object& b, sol::this_state state) -> std::tuple<bool, sol::object>
 			{
-				const glm::vec3 start = vec3_arg(a, "raycast", "a");
-				const glm::vec3 end = vec3_arg(b, "raycast", "b");
+				const glm::vec3 start = vec3_arg("Nav", a, "raycast", "a");
+				const glm::vec3 end = vec3_arg("Nav", b, "raycast", "b");
 				NavModule& module = nav_of(context);
 				sol::state_view view(state);
 				if (const NavQuery* query = module.query())
@@ -222,8 +195,8 @@ namespace wiwa
 		// A random point of the navmesh within radius of the centre (which must be on it), or nil.
 		nav.set_function("random_point", [&context](const sol::object& centre, const sol::object& radius, sol::this_state state) -> sol::object
 			{
-				const glm::vec3 position = vec3_arg(centre, "random_point", "the centre");
-				const float distance = number_arg(radius, "random_point", "the radius");
+				const glm::vec3 position = vec3_arg("Nav", centre, "random_point", "the centre");
+				const float distance = number_arg("Nav", radius, "random_point", "the radius");
 				NavModule& module = nav_of(context);
 				sol::state_view view(state);
 				if (const NavQuery* query = module.query())

@@ -68,7 +68,7 @@ namespace wiwa
 	{
 		if (m_Assets == nullptr)
 		{
-			return m_Lookup ? m_Lookup(mesh) : std::nullopt;
+			return std::nullopt;
 		}
 		if (!mesh.valid())
 		{

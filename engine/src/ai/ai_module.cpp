@@ -129,8 +129,7 @@ namespace wiwa
 		{
 			m_Services.Leaf = [this](BtLeafCall& call) { return leaf(call); };
 		}
-		m_World = scene;
-		m_HasWorld = true;
+		m_Follow.bind(scene);
 		m_Time = 0.0;
 		m_Hooks.TheScene = scene.get();
 		return true;
@@ -147,7 +146,7 @@ namespace wiwa
 
 	void AIModule::stop_world()
 	{
-		if (!m_HasWorld)
+		if (!m_Follow.has_world())
 		{
 			return;
 		}
@@ -158,8 +157,7 @@ namespace wiwa
 		m_Controllers.clear();
 		m_Perception.clear();
 		m_Noises.clear();
-		m_World.reset();
-		m_HasWorld = false;
+		m_Follow.release();
 		m_Hooks.TheScene = nullptr;
 	}
 
@@ -267,23 +265,13 @@ namespace wiwa
 
 	void AIModule::tick(const Ref<Scene>& active, bool playing, float dt)
 	{
-		if (m_HasWorld)
-		{
-			const Ref<Scene> scene = m_World.lock();
-			if (!scene || (m_AutoStart && scene != active))
-			{
-				stop_world(); // the scene was replaced or is gone: what runs is aborted
-			}
-		}
-		if (m_AutoStart && !m_HasWorld && playing && active != nullptr)
-		{
-			start_world(active);
-		}
-		if (!m_HasWorld || !playing)
+		// the scene was replaced or is gone: what runs is aborted
+		m_Follow.follow(active, playing, [this] { stop_world(); }, [this](const Ref<Scene>& scene) { start_world(scene); });
+		if (!m_Follow.has_world() || !playing)
 		{
 			return;
 		}
-		const Ref<Scene> scene = m_World.lock();
+		const Ref<Scene> scene = m_Follow.scene();
 		if (!scene)
 		{
 			return;
@@ -332,7 +320,7 @@ namespace wiwa
 
 	bool AIModule::ensure_world(const Ref<Scene>& scene, bool playing)
 	{
-		if (m_AutoStart && playing && scene != nullptr && world_scene() != scene)
+		if (m_Follow.auto_start() && playing && scene != nullptr && world_scene() != scene)
 		{
 			start_world(scene);
 		}
@@ -381,7 +369,7 @@ namespace wiwa
 
 	void AIModule::emit_noise(glm::vec3 position, float loudness, std::string kind)
 	{
-		if (m_HasWorld)
+		if (m_Follow.has_world())
 		{
 			m_Noises.push_back({ position, loudness, std::move(kind) });
 		}

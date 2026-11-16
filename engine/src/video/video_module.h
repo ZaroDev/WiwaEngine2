@@ -68,7 +68,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE; }
 		virtual std::string get_name() const override { return "VideoModule"; }
-		virtual int get_priority() const override { return 13; }
+		virtual int get_priority() const override { return ModulePriority::Video; }
 
 		// One frame, public for tests and tools: the scene that is active, whether the game clock plays, and a monotonic time in microseconds.
 		void tick(const Ref<Scene>& active, bool playing, i64 wallUs);
@@ -142,7 +142,6 @@ namespace wiwa
 		FrameSink m_FrameSink{};
 		ReleaseSink m_ReleaseSink{};
 		VideoAudioMode m_AudioMode = VideoAudioMode::Device;
-		bool m_Initialized = false;
 
 		std::optional<Entry> m_Entry{};
 		std::optional<VideoKey> m_EndedKey{}; // the video that played out and whose player was let go: its state is still Ended
@@ -152,6 +151,5 @@ namespace wiwa
 		std::unordered_map<VideoKey, bool, VideoKeyHash> m_WasVisible{}; // AutoPlay starts a widget when it becomes visible
 		std::unordered_map<AssetGuid, Handle<VideoData>> m_Handles{};
 		u32 m_NextStream = 1;
-		i64 m_WallUs = 0;
 	};
 }

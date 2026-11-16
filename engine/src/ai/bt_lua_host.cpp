@@ -43,67 +43,70 @@ namespace wiwa
 			}
 			return board;
 		}
+	}
 
-		sol::object bt_value_to_lua_impl(sol::state_view lua, ScriptContext* context, const BtValue& value)
+	sol::object bt_value_to_lua(sol::state_view lua, ScriptContext* context, const BtValue& value)
+	{
+		switch (bt_value_type_of(value))
 		{
-			switch (bt_value_type_of(value))
-			{
-			case BtValueType::Bool: return sol::make_object(lua, std::get<bool>(value));
-			case BtValueType::Int: return sol::make_object(lua, static_cast<lua_Integer>(std::get<i32>(value)));
-			case BtValueType::Float: return sol::make_object(lua, static_cast<double>(std::get<float>(value)));
-			case BtValueType::Vec3: return sol::make_object(lua, LuaVec3{ std::get<glm::vec3>(value), {} });
-			case BtValueType::String: return sol::make_object(lua, std::get<std::string>(value));
-			case BtValueType::Entity:
-			{
-				const EntityGuid guid = std::get<EntityGuid>(value);
-				if (!guid.valid())
-				{
-					return sol::object(lua, sol::lua_nil);
-				}
-				return sol::make_object(lua, EntityHandle{ guid, context });
-			}
-			}
-			return sol::object(lua, sol::lua_nil);
-		}
-
-		// A Lua value as the value of a blackboard key of that type. False, with why, if it is not one.
-		bool bt_value_from_lua_impl(BtValueType type, const sol::object& value, BtValue& out, std::string& why)
+		case BtValueType::Bool: return sol::make_object(lua, std::get<bool>(value));
+		case BtValueType::Int: return sol::make_object(lua, static_cast<lua_Integer>(std::get<i32>(value)));
+		case BtValueType::Float: return sol::make_object(lua, static_cast<double>(std::get<float>(value)));
+		case BtValueType::Vec3: return sol::make_object(lua, LuaVec3{ std::get<glm::vec3>(value), {} });
+		case BtValueType::String: return sol::make_object(lua, std::get<std::string>(value));
+		case BtValueType::Entity:
 		{
-			switch (type)
+			const EntityGuid guid = std::get<EntityGuid>(value);
+			if (!guid.valid())
 			{
-			case BtValueType::Bool:
-				if (!value.is<bool>()) { why = "a boolean"; return false; }
-				out = value.as<bool>();
-				return true;
-			case BtValueType::Int:
-			{
-				if (value.get_type() != sol::type::number) { why = "a whole number"; return false; }
-				const double number = value.as<double>();
-				if (!std::isfinite(number) || number != std::floor(number) || std::abs(number) > 2147483647.0) { why = "a whole number"; return false; }
-				out = static_cast<i32>(number);
-				return true;
+				return sol::object(lua, sol::lua_nil);
 			}
-			case BtValueType::Float:
-				if (value.get_type() != sol::type::number || !std::isfinite(value.as<double>())) { why = "a number"; return false; }
-				out = static_cast<float>(value.as<double>());
-				return true;
-			case BtValueType::Vec3:
-				if (!value.is<LuaVec3>()) { why = "a vec3"; return false; }
-				out = value.as<LuaVec3&>().Value;
-				return true;
-			case BtValueType::String:
-				if (value.get_type() != sol::type::string) { why = "a string"; return false; }
-				out = value.as<std::string>();
-				return true;
-			case BtValueType::Entity:
-				if (value.get_type() == sol::type::lua_nil) { out = EntityGuid{}; return true; }
-				if (!value.is<EntityHandle>()) { why = "an entity or nil"; return false; }
-				out = value.as<EntityHandle>().Guid;
-				return true;
-			}
-			return false;
+			return sol::make_object(lua, EntityHandle{ guid, context });
 		}
+		}
+		return sol::object(lua, sol::lua_nil);
+	}
 
+	// A Lua value as the value of a blackboard key of that type. False, with why, if it is not one.
+	bool bt_value_from_lua(BtValueType type, const sol::object& value, BtValue& out, std::string& why)
+	{
+		switch (type)
+		{
+		case BtValueType::Bool:
+			if (!value.is<bool>()) { why = "a boolean"; return false; }
+			out = value.as<bool>();
+			return true;
+		case BtValueType::Int:
+		{
+			if (value.get_type() != sol::type::number) { why = "a whole number"; return false; }
+			const double number = value.as<double>();
+			if (!std::isfinite(number) || number != std::floor(number) || std::abs(number) > 2147483647.0) { why = "a whole number"; return false; }
+			out = static_cast<i32>(number);
+			return true;
+		}
+		case BtValueType::Float:
+			if (value.get_type() != sol::type::number || !std::isfinite(value.as<double>())) { why = "a number"; return false; }
+			out = static_cast<float>(value.as<double>());
+			return true;
+		case BtValueType::Vec3:
+			if (!value.is<LuaVec3>()) { why = "a vec3"; return false; }
+			out = value.as<LuaVec3&>().Value;
+			return true;
+		case BtValueType::String:
+			if (value.get_type() != sol::type::string) { why = "a string"; return false; }
+			out = value.as<std::string>();
+			return true;
+		case BtValueType::Entity:
+			if (value.get_type() == sol::type::lua_nil) { out = EntityGuid{}; return true; }
+			if (!value.is<EntityHandle>()) { why = "an entity or nil"; return false; }
+			out = value.as<EntityHandle>().Guid;
+			return true;
+		}
+		return false;
+	}
+
+	namespace
+	{
 		// A node parameter as the value of a script property of that field type; nullopt if it does not fit.
 		std::optional<FieldValue> param_to_field(const FieldDescriptor& field, const nlohmann::json& value)
 		{
@@ -124,9 +127,6 @@ namespace wiwa
 			return std::nullopt;
 		}
 	}
-
-	sol::object bt_value_to_lua(sol::state_view lua, ScriptContext* context, const BtValue& value) { return bt_value_to_lua_impl(lua, context, value); }
-	bool bt_value_from_lua(BtValueType type, const sol::object& value, BtValue& out, std::string& why) { return bt_value_from_lua_impl(type, value, out, why); }
 
 	void define_bt_lua_bases(ScriptRuntime& runtime)
 	{
@@ -164,7 +164,7 @@ namespace wiwa
 					{
 						throw sol::error("the blackboard has no key \"" + name + "\"");
 					}
-					return bt_value_to_lua_impl(sol::state_view(state), board.Context, *value);
+					return bt_value_to_lua(sol::state_view(state), board.Context, *value);
 				},
 				"has", [](const sol::object& self, const sol::object& key) -> bool
 				{
@@ -186,7 +186,7 @@ namespace wiwa
 					}
 					BtValue converted;
 					std::string why;
-					if (!bt_value_from_lua_impl(*type, value, converted, why))
+					if (!bt_value_from_lua(*type, value, converted, why))
 					{
 						throw sol::error("the key \"" + name + "\" is " + bt_value_type_name(*type) + ": expected " + why);
 					}

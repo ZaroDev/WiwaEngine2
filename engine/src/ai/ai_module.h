@@ -7,6 +7,7 @@
 
 #include <core/common.h>
 #include <core/module.h>
+#include <core/scene_follower.h>
 
 #include <assets/asset_manager.h>
 #include <assets/handle.h>
@@ -43,16 +44,16 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE; }
 		virtual std::string get_name() const override { return "AIModule"; }
-		virtual int get_priority() const override { return 6; }
+		virtual int get_priority() const override { return ModulePriority::AI; }
 
-		void set_auto_start(bool autoStart) { m_AutoStart = autoStart; }
+		void set_auto_start(bool autoStart) { m_Follow.set_auto_start(autoStart); }
 		// The navigation module MoveTo uses (init() takes the engine's; a check gives its own).
 		void set_nav(NavModule* nav) { m_Hooks.Nav = nav; }
 
 		bool start_world(Ref<Scene> scene);
 		// Aborts what runs (once) and forgets the controllers. Does nothing when no world runs.
 		void stop_world();
-		Ref<Scene> world_scene() const { return m_HasWorld ? m_World.lock() : nullptr; }
+		Ref<Scene> world_scene() const { return m_Follow.scene(); }
 
 		// One frame for the given active scene and clock state; dt is the game clock's seconds. update() calls it with the engine's; a check can call it
 		// without an Engine.
@@ -91,11 +92,9 @@ namespace wiwa
 		// before the runtime goes. Detaching aborts every running tree first, while the Lua state is still there.
 		void attach_lua(ScriptRuntime& runtime, ScriptContext& context);
 		void detach_lua();
-		BtLuaHost* lua_host() { return m_Lua.get(); }
 
 		// What a External leaf does besides the built-in ones (the Lua leaves, set by the Lua host).
 		void set_leaf_handler(std::function<BtStatus(BtLeafCall&)> handler) { m_LeafHandler = std::move(handler); }
-		BtServices& services() { return m_Services; }
 
 	private:
 		struct TreeEntry
@@ -125,9 +124,7 @@ namespace wiwa
 		BtInstance* ensure_instance(entt::entity entity, const AIController& ai, Controller& controller, float dt);
 		BtStatus leaf(BtLeafCall& call);
 
-		bool m_AutoStart = true;
-		bool m_HasWorld = false;
-		std::weak_ptr<Scene> m_World{};
+		SceneFollower m_Follow{};
 		double m_Time = 0.0;
 		BtEngineHooks m_Hooks{};
 		BtServices m_Services{};

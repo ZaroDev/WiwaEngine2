@@ -15,11 +15,7 @@ namespace wiwa
 
 		AudioModule& audio_of(ScriptContext& context)
 		{
-			if (context.Audio == nullptr)
-			{
-				throw sol::error("the audio module is not available");
-			}
-			return *context.Audio;
+			return require_module(context.Audio, "the audio module is not available");
 		}
 
 		// The emitter of an entity argument: invalid (the global scope) when there is none. An entity needs an AudioEmitter component to have a

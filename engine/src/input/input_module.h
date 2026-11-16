@@ -27,7 +27,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE; }
 		virtual std::string get_name() const override { return "InputModule"; }
-		virtual int get_priority() const override { return -30; } // after the scene (-80) and the renderer (-50), before the UI (-10) and the scripts (0)
+		virtual int get_priority() const override { return ModulePriority::Input; }
 
 		InputState& state() { return m_State; }
 		const InputState& state() const { return m_State; }
@@ -60,7 +60,6 @@ namespace wiwa
 
 		// The player's rebinds (see input_overrides.h). The path defaults to input_overrides.json in the working directory.
 		void set_overrides_path(std::filesystem::path path) { m_OverridesPath = std::move(path); }
-		const std::filesystem::path& overrides_path() const { return m_OverridesPath; }
 		// Writes the rebinds. False if the file could not be written.
 		bool save_overrides();
 		// Reads and applies the file; stale entries are skipped with a warning. False if the file is missing or is not usable at all,

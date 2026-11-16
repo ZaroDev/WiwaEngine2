@@ -19,11 +19,7 @@ namespace wiwa
 
 		InputModule& input_of(ScriptContext& context)
 		{
-			if (context.Input == nullptr)
-			{
-				throw sol::error("the input module is not available");
-			}
-			return *context.Input;
+			return require_module(context.Input, "the input module is not available");
 		}
 
 		// Queries only mean something while the game clock plays; outside it they read false / zero.

@@ -4,6 +4,7 @@
 
 #include <core/common.h>
 #include <core/module.h>
+#include <core/scene_follower.h>
 
 #include <assets/asset_data.h>
 #include <assets/asset_manager.h>
@@ -30,7 +31,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE; }
 		virtual std::string get_name() const override { return "AudioModule"; }
-		virtual int get_priority() const override { return 20; } // after the scripts (0) and the animation (10): what they did this frame is heard in it
+		virtual int get_priority() const override { return ModulePriority::Audio; }
 
 		// Always valid after init(): the Null backend until another one is selected.
 		IAudioBackend& backend() { return *m_Backend; }
@@ -50,12 +51,12 @@ namespace wiwa
 		// active scene while the game clock plays, and stops when another scene replaces it (the editor's Stop shows the edit scene again). The
 		// world is the emitters and the listener of the scene (AudioSync); a paused game suspends the backend. Without auto start (checks)
 		// start_world/stop_world drive it, and the world ignores which scene is active.
-		void set_auto_start(bool autoStart) { m_AutoStart = autoStart; }
+		void set_auto_start(bool autoStart) { m_Follow.set_auto_start(autoStart); }
 		// Silences the running world and starts a new one for the scene. True; false only without a backend.
 		bool start_world(Ref<Scene> scene);
 		// Destroys the emitters and stops all sound. Does nothing when no world runs.
 		void stop_world();
-		Ref<Scene> world_scene() const { return m_HasWorld ? m_World.lock() : nullptr; }
+		Ref<Scene> world_scene() const { return m_Follow.scene(); }
 		EmitterHandle emitter_of(entt::entity entity) const { return m_Sync.emitter_of(entity); }
 		// The emitter of an entity of the scene that plays, made on the spot if the next frame has not yet (a script that posts in its first frame).
 		// With auto start this also starts the world for the scene, which is only asked for while the game plays. Invalid when the entity has no
@@ -111,9 +112,7 @@ namespace wiwa
 		std::vector<LoadedBank> m_Banks;
 		std::vector<PendingBank> m_Pending;
 		AudioSync m_Sync;
-		std::weak_ptr<Scene> m_World;
-		bool m_HasWorld = false;
-		bool m_AutoStart = true;
+		SceneFollower m_Follow;
 		bool m_BackendPaused = false;
 		EmitterHandle m_AuditionEmitter{};
 	};

@@ -41,7 +41,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE | UpdateFlags::UPDATE_RENDERER; }
 		virtual std::string get_name() const override { return "UiModule"; }
-		virtual int get_priority() const override { return -10; } // after the scene and the renderer, before the scripts (0)
+		virtual int get_priority() const override { return ModulePriority::Ui; }
 
 		// Where the pointer and navigation come from. Null (the default) is no input at all. Not owned.
 		void set_input_source(IUiInputSource* source) { m_Input = source; }
@@ -56,10 +56,9 @@ namespace wiwa
 		// depend on the size of the editor's window). Nothing goes back to the real size.
 		void set_canvas_override(const std::optional<glm::vec2>& size) { m_CanvasOverride = size; }
 
-		// How panels, fonts and texture sizes are found. The defaults ask the AssetManager; tests and tools put their own.
+		// How panels and fonts are found. The defaults ask the AssetManager; tests and tools put their own.
 		void set_panel_loader(PanelLoader loader) { m_Loader = std::move(loader); }
 		void set_font_provider(FontProvider provider) { m_Fonts = std::move(provider); }
-		void set_texture_size_provider(TextureSizeProvider provider) { m_TextureSizes = std::move(provider); }
 
 		// The font and the size of a texture as the UI draws them, for tools that lay a panel out themselves (the UI editor). Null / nothing
 		// while the asset is loading.

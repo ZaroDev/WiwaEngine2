@@ -73,21 +73,11 @@ namespace wiwa
 			return;
 		}
 
-		if (m_HasWorld)
-		{
-			const Ref<Scene> scene = m_World.lock();
-			if (!scene || (m_AutoStart && scene != active))
-			{
-				stop_world(); // the scene was replaced or is gone: its sound goes with it
-			}
-		}
-		// not while banks are still loading: an event posted on start would find no bank and never play
-		if (m_AutoStart && !m_HasWorld && playing && active != nullptr && m_Pending.empty())
-		{
-			start_world(active);
-		}
+		// the scene was replaced or is gone: its sound goes with it. A start waits for the banks to load: an event posted on start would find no bank
+		// and never play.
+		m_Follow.follow(active, playing, [this] { stop_world(); }, [this](const Ref<Scene>& scene) { start_world(scene); }, m_Pending.empty());
 
-		if (m_HasWorld)
+		if (m_Follow.has_world())
 		{
 			if (m_BackendPaused == playing)
 			{
@@ -96,7 +86,7 @@ namespace wiwa
 			}
 			if (playing)
 			{
-				if (const Ref<Scene> scene = m_World.lock())
+				if (const Ref<Scene> scene = m_Follow.scene())
 				{
 					m_Sync.update(*m_Backend, *scene);
 				}
@@ -113,14 +103,13 @@ namespace wiwa
 		{
 			return false;
 		}
-		m_World = scene;
-		m_HasWorld = true;
+		m_Follow.bind(scene);
 		return true;
 	}
 
 	PlayingId AudioModule::audition(std::string_view event)
 	{
-		if (!m_Backend || m_HasWorld || event.empty())
+		if (!m_Backend || m_Follow.has_world() || event.empty())
 		{
 			return {};
 		}
@@ -148,11 +137,11 @@ namespace wiwa
 		{
 			return {};
 		}
-		if (!m_HasWorld && m_AutoStart)
+		if (!m_Follow.has_world() && m_Follow.auto_start())
 		{
 			start_world(scene);
 		}
-		if (!m_HasWorld || m_World.lock() != scene)
+		if (!m_Follow.has_world() || m_Follow.scene() != scene)
 		{
 			return {};
 		}
@@ -161,7 +150,7 @@ namespace wiwa
 
 	void AudioModule::stop_world()
 	{
-		if (!m_HasWorld)
+		if (!m_Follow.has_world())
 		{
 			return;
 		}
@@ -174,8 +163,7 @@ namespace wiwa
 			}
 		}
 		m_BackendPaused = false;
-		m_HasWorld = false;
-		m_World.reset();
+		m_Follow.release();
 	}
 
 	bool AudioModule::select_backend(AudioBackendKind kind, const AudioInitInfo& info)

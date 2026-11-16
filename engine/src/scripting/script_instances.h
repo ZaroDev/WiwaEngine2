@@ -70,6 +70,8 @@ namespace wiwa
 
 		ScriptClass* class_of(AssetGuid script);
 		bool alive(const Instance& instance) const;
+		// Forgets a finished instance: the UI and animation listeners it registered, and its (entity, script) entry.
+		void drop_owner(const Instance& instance);
 		void reap();
 		void dispatch_ui_events();
 		void dispatch_animation_events();

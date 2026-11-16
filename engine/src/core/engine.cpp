@@ -122,17 +122,10 @@ namespace wiwa
 
 			float realDeltaTime = m_Time.get_engine_delta_time();
 
-			// Update
 			m_ModuleManager.pre_update(realDeltaTime);
 			m_ModuleManager.update(realDeltaTime);
 			m_ModuleManager.post_update(realDeltaTime);
 
-			// Physics update
-			m_ModuleManager.pre_physics_update(realDeltaTime);
-			m_ModuleManager.physics_update(realDeltaTime);
-			m_ModuleManager.post_physics_update(realDeltaTime);
-
-			// Renderer update
 			m_ModuleManager.pre_render_update(realDeltaTime);
 			m_ModuleManager.render_update(realDeltaTime);
 			m_ModuleManager.post_render_update(realDeltaTime);

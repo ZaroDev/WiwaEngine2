@@ -81,21 +81,6 @@ namespace wiwa
 		run_phase(UpdateFlags::UPDATE, [deltaTime](IModule* module) { module->post_update(deltaTime); });
 	}
 
-	void ModuleManager::pre_physics_update(float deltaTime)
-	{
-		run_phase(UpdateFlags::UPDATE_PHYSICS, [deltaTime](IModule* module) { module->pre_physics_update(deltaTime); });
-	}
-
-	void ModuleManager::physics_update(float deltaTime)
-	{
-		run_phase(UpdateFlags::UPDATE_PHYSICS, [deltaTime](IModule* module) { module->physics_update(deltaTime); });
-	}
-
-	void ModuleManager::post_physics_update(float deltaTime)
-	{
-		run_phase(UpdateFlags::UPDATE_PHYSICS, [deltaTime](IModule* module) { module->post_physics_update(deltaTime); });
-	}
-
 	void ModuleManager::pre_render_update(float deltaTime)
 	{
 		run_phase(UpdateFlags::UPDATE_RENDERER, [deltaTime](IModule* module) { module->pre_render_update(deltaTime); });
