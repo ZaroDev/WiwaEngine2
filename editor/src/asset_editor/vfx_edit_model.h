@@ -32,7 +32,6 @@ namespace wiwa
 		bool remove_emitter(size_t index);
 		bool duplicate_emitter(size_t index);
 		bool move_emitter(size_t index, int direction); // -1 up, +1 down
-		bool rename_emitter(size_t index, const std::string& name);
 
 		// A name no other emitter has, from a base ("Emitter" -> "Emitter 2").
 		std::string unique_name(const std::string& base, std::optional<size_t> except = std::nullopt) const;

@@ -8,6 +8,8 @@
 #include <audio/audio_module.h>
 #include <core/engine.h>
 
+#include "catalog_picker.h"
+
 namespace
 {
 	std::string lower(std::string text)
@@ -511,14 +513,12 @@ void SettingsPanel::input_rows()
 				}
 				if (assets != nullptr)
 				{
-					for (const wiwa::AssetCatalog::Entry& entry : assets->catalog_entries())
+					const std::vector<wiwa::AssetCatalog::Entry> entries = assets->catalog_entries();
+					if (const wiwa::AssetCatalog::Entry* picked = catalog_selectables(entries, ".winput", [&](const wiwa::AssetCatalog::Entry& entry) { return entry.Guid == current.Guid; }))
 					{
-						if (std::filesystem::path(entry.Path).extension() == ".winput" && ImGui::Selectable(entry.Path.c_str(), entry.Guid == current.Guid))
+						if (const std::optional<wiwa::AssetRef> ref = assets->find_asset(picked->Path))
 						{
-							if (const std::optional<wiwa::AssetRef> ref = assets->find_asset(entry.Path))
-							{
-								m_Input->set_default_map(*ref);
-							}
+							m_Input->set_default_map(*ref);
 						}
 					}
 				}
@@ -593,14 +593,12 @@ void SettingsPanel::audio_rows()
 			{
 				if (assets != nullptr)
 				{
-					for (const wiwa::AssetCatalog::Entry& entry : assets->catalog_entries())
+					const std::vector<wiwa::AssetCatalog::Entry> entries = assets->catalog_entries();
+					if (const wiwa::AssetCatalog::Entry* picked = catalog_selectables(entries, ".bnk", [](const wiwa::AssetCatalog::Entry&) { return false; }))
 					{
-						if (std::filesystem::path(entry.Path).extension() == ".bnk" && ImGui::Selectable(entry.Path.c_str()))
+						if (const std::optional<wiwa::AssetRef> ref = assets->find_asset(picked->Path))
 						{
-							if (const std::optional<wiwa::AssetRef> ref = assets->find_asset(entry.Path))
-							{
-								m_Audio->add_bank(*ref);
-							}
+							m_Audio->add_bank(*ref);
 						}
 					}
 				}

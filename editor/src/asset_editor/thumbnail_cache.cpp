@@ -20,6 +20,7 @@
 #include <scene/preview_scene.h>
 
 #include <asset_pipeline/asset_database.h>
+#include "asset_kinds.h"
 #include <asset_pipeline/file_utils.h>
 #include <asset_pipeline/material_file.h>
 #include <panels/png_writer.h>
@@ -141,24 +142,32 @@ namespace wiwa
 		}
 	}
 
-	// A model file imports as a prefab (its meshes, materials and skeleton under one root).
-	bool ThumbnailCache::is_model(const std::filesystem::path& source)
+	// A model file imports as a prefab (its meshes, materials and skeleton under one root), so it is a Prefab like .wprefab.
+	std::optional<ThumbnailCache::Kind> ThumbnailCache::thumbnail_kind(const std::filesystem::path& source)
 	{
-		const std::filesystem::path extension = source.extension();
-		return extension == ".glb" || extension == ".gltf" || extension == ".fbx";
-	}
-
-	bool ThumbnailCache::is_animation_asset(const std::filesystem::path& source)
-	{
-		const std::filesystem::path extension = source.extension();
-		return extension == ".wskel" || extension == ".wanim" || extension == ".wmesh";
+		const AssetKindInfo* info = find_asset_kind(source);
+		if (info == nullptr)
+		{
+			return std::nullopt;
+		}
+		switch (info->Type)
+		{
+		case AssetType::Skeleton: return Kind::Skeleton;
+		case AssetType::AnimationClip: return Kind::Clip;
+		case AssetType::Mesh: return Kind::Mesh;
+		case AssetType::Material: return Kind::Material;
+		case AssetType::Prefab: return Kind::Prefab;
+		case AssetType::ParticleEffect: return Kind::Effect;
+		case AssetType::Environment: return Kind::Environment;
+		case AssetType::Lut: return Kind::Lut;
+		case AssetType::Font: return Kind::Font;
+		default: return std::nullopt;
+		}
 	}
 
 	bool ThumbnailCache::handles(const std::filesystem::path& source)
 	{
-		const std::filesystem::path extension = source.extension();
-		return is_animation_asset(source) || is_model(source) || extension == ".wmat" || extension == ".wprefab" || extension == ".wfx" || extension == ".hdr"
-			|| extension == ".cube" || extension == ".ttf" || extension == ".otf";
+		return thumbnail_kind(source).has_value();
 	}
 
 	// The oldest PNGs go when the folder is over its limit.
@@ -200,7 +209,7 @@ namespace wiwa
 		}
 	}
 
-	ThumbnailCache::Entry& ThumbnailCache::entry_for(const std::filesystem::path& source)
+	ThumbnailCache::Entry& ThumbnailCache::entry_for(const std::filesystem::path& source, Kind kind)
 	{
 		const std::string key = source.string();
 		const auto found = m_Entries.find(key);
@@ -210,16 +219,7 @@ namespace wiwa
 		}
 		Entry entry;
 		entry.Source = source;
-		const std::filesystem::path extension = source.extension();
-		if (extension == ".wskel") entry.Type = Kind::Skeleton;
-		else if (extension == ".wanim") entry.Type = Kind::Clip;
-		else if (extension == ".wmesh") entry.Type = Kind::Mesh;
-		else if (extension == ".wmat") entry.Type = Kind::Material;
-		else if (extension == ".wprefab" || is_model(source)) entry.Type = Kind::Prefab;
-		else if (extension == ".wfx") entry.Type = Kind::Effect;
-		else if (extension == ".hdr") entry.Type = Kind::Environment;
-		else if (extension == ".cube") entry.Type = Kind::Lut;
-		else entry.Type = Kind::Font;
+		entry.Type = kind;
 		return m_Entries.emplace(key, std::move(entry)).first->second;
 	}
 
@@ -256,7 +256,7 @@ namespace wiwa
 			hash = fnv(hash, versions, sizeof(versions));
 			const u32 kind = static_cast<u32>(entry.Type);
 			hash = fnv(hash, &kind, sizeof(kind));
-			if (entry.Type == Kind::Material || entry.Type == Kind::Effect || (entry.Type == Kind::Prefab && !is_model(entry.Source)))
+			if (entry.Type == Kind::Material || entry.Type == Kind::Effect || (entry.Type == Kind::Prefab && !is_model_file(entry.Source)))
 			{
 				hash = fnv_file(hash, entry.Source);
 			}
@@ -401,11 +401,12 @@ namespace wiwa
 
 	u32 ThumbnailCache::request(const std::filesystem::path& source)
 	{
-		if (!handles(source))
+		const std::optional<Kind> kind = thumbnail_kind(source);
+		if (!kind)
 		{
 			return 0;
 		}
-		Entry& entry = entry_for(source);
+		Entry& entry = entry_for(source, *kind);
 		entry.LastRequested = m_Frame;
 
 		// the file may have changed since: looked at now and then, not every frame of every cell

@@ -5,6 +5,10 @@
 
 #include <asset_pipeline/asset_database.h>
 
+#include <asset_editor/asset_kinds.h>
+
+#include <IconFontCppHeaders/FontIcons/IconsForkAwesome.h>
+
 #include "asset_icons.h"
 
 namespace
@@ -145,8 +149,7 @@ AssetFieldEvent draw_asset_slot(const char* id, const char* label, const wiwa::A
 		{
 			context.FindReferences(ref);
 		}
-		if (context.OpenInAssetEditor != nullptr && (context.Expected == wiwa::AssetType::Skeleton || context.Expected == wiwa::AssetType::Mesh || context.Expected == wiwa::AssetType::AnimationClip
-			|| context.Expected == wiwa::AssetType::ParticleEffect)
+		if (context.OpenInAssetEditor != nullptr && wiwa::opens_in_asset_editor(context.Expected)
 			&& ImGui::MenuItem("Open in Asset Editor", nullptr, false, ref.valid() && !missing))
 		{
 			context.OpenInAssetEditor(ref);

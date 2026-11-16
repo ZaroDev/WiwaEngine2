@@ -66,10 +66,6 @@ namespace wiwa
 		rebuild();
 	}
 
-	void AssetPreview::set_clip(const AssetRef& clip)
-	{
-		show(m_Skeleton, m_Mesh, clip, m_Graph);
-	}
 
 	// The scene gets one entity that is the Animator and the mesh at once (the extractor takes the Animator of the entity itself): a new one when
 	// the skeleton, mesh or clip changes, so its instance starts from the new clip.

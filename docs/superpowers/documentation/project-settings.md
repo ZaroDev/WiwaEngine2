@@ -28,7 +28,7 @@ Vsync and the copy queue are not here: they stay in `RenderQuality` (`render_qua
 
 `SettingsPanel` (`editor/src/panels/settings_panel.*`, closed until opened from the Window menu): pages on the left (Project, Launch, Performance, Renderer, Physics, Input, Audio, Editor; the Renderer page has groups for shadows, post, anti-aliasing and Particles, vfx.md), rows on the right, a search box that filters rows across all pages. Each row has a reset-to-default button once it differs. Launch values are tagged "(restart needed)".
 
-The panel only draws. Each page is backed by an ImGui-free `ISettingsSection` (`editor/src/settings/`): it owns the value and its file, saves at once on a change and applies it to the module that uses it.
+The panel only draws. Each page is backed by an ImGui-free section class (`load`, `save`, `apply`, `last_error`; no shared base: nothing used them through one) (`editor/src/settings/`): it owns the value and its file, saves at once on a change and applies it to the module that uses it.
 
 | Section | Value and file | Applied to |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ The panel only draws. Each page is backed by an ImGui-free `ISettingsSection` (`
 
 Traps:
 
-- The Physics and Input panels and the Viewport do not own these values any more; they share the section with the Settings page, so only one object writes each file. Keep `PhysicsPanel`/`InputPanel`'s forwarding methods: the smokes call them.
+- The Physics and Input panels and the Viewport do not own these values any more; they share the section with the Settings page, so only one object writes each file. `PhysicsPanel` keeps only `section()` (the smoke edits layers through it); `InputPanel` still forwards a few methods the smokes call.
 - `EditorSection` saves when the mouse is let go (`flush`), so a slider drag writes once. Call it every frame from every widget that edits it.
 - The World panel keeps a one-line hint to Settings where the Quality section used to be.
 

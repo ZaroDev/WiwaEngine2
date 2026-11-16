@@ -12,7 +12,7 @@
 #include <core/engine.h>
 
 #include <asset_pipeline/asset_database.h>
-#include <asset_pipeline/atomic_write.h>
+#include <core/file_io.h>
 #include <asset_pipeline/file_utils.h>
 
 #include "asset_preview.h"

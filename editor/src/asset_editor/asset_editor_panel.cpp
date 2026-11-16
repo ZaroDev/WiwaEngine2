@@ -8,6 +8,7 @@
 
 #include <asset_pipeline/asset_database.h>
 
+#include "asset_kinds.h"
 #include "clip_editor.h"
 #include "../ai/bt_editor.h"
 #include "graph_editor.h"
@@ -37,8 +38,7 @@ AssetEditorPanel::~AssetEditorPanel()
 
 bool AssetEditorPanel::can_open(const std::filesystem::path& file)
 {
-	const std::filesystem::path extension = file.extension();
-	return extension == ".wskel" || extension == ".wmesh" || extension == ".wanim" || extension == ".wgraph" || extension == ".wfx" || extension == ".wbt";
+	return wiwa::opens_in_asset_editor(file);
 }
 
 bool AssetEditorPanel::open_asset(const wiwa::AssetRef& ref)
@@ -73,29 +73,20 @@ bool AssetEditorPanel::load_now(const std::filesystem::path& file)
 {
 	std::unique_ptr<wiwa::IAssetEditor> editor;
 	const wiwa::AssetEditorHost host{ m_Database, m_State, m_Index, m_Preview };
-	if (file.extension() == ".wskel")
+	const wiwa::AssetKindInfo* kind = wiwa::find_asset_kind(file);
+	switch (kind != nullptr ? kind->Editor : wiwa::AssetEditorKind::None)
 	{
-		editor = std::make_unique<wiwa::SkeletonEditor>(host);
-	}
-	else if (file.extension() == ".wanim")
-	{
-		editor = std::make_unique<wiwa::ClipEditor>(host);
-	}
-	else if (file.extension() == ".wgraph")
-	{
-		editor = std::make_unique<wiwa::GraphEditor>(host);
-	}
-	else if (file.extension() == ".wfx")
-	{
-		editor = std::make_unique<wiwa::VfxEditor>(host);
-	}
-	else if (file.extension() == ".wbt")
-	{
-		editor = std::make_unique<wiwa::BehaviorTreeEditor>(host);
-	}
-	else
-	{
-		editor = std::make_unique<wiwa::MeshEditor>(host);
+	case wiwa::AssetEditorKind::Skeleton: editor = std::make_unique<wiwa::SkeletonEditor>(host); break;
+	case wiwa::AssetEditorKind::Clip: editor = std::make_unique<wiwa::ClipEditor>(host); break;
+	case wiwa::AssetEditorKind::Graph: editor = std::make_unique<wiwa::GraphEditor>(host); break;
+	case wiwa::AssetEditorKind::Effect: editor = std::make_unique<wiwa::VfxEditor>(host); break;
+	case wiwa::AssetEditorKind::BehaviorTree: editor = std::make_unique<wiwa::BehaviorTreeEditor>(host); break;
+	case wiwa::AssetEditorKind::Mesh: editor = std::make_unique<wiwa::MeshEditor>(host); break;
+	case wiwa::AssetEditorKind::None:
+		m_Error = file.filename().string() + ": no Asset Editor tool opens this kind of file";
+		m_Editor.reset();
+		m_HaveFileTime = false;
+		return false;
 	}
 	std::string error;
 	if (!editor->load(file, error))

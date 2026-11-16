@@ -8,6 +8,8 @@
 #include <scene/entity_templates.h>
 #include <scene/reflection/component_registry.h>
 
+#include <asset_editor/asset_kinds.h>
+
 #include "asset_icons.h"
 
 namespace
@@ -245,7 +247,7 @@ void HierarchyPanel::drop_asset(const std::string& path, entt::entity target)
 		m_Editor.set_field(target, "MeshRenderer", "Materials", wiwa::FieldValue(std::vector<wiwa::AssetRef>{ *ref }));
 		m_Status.clear();
 	}
-	else if (extension == ".wprefab" || extension == ".gltf" || extension == ".glb" || extension == ".fbx")
+	else if (wiwa::is_prefab_source(path))
 	{
 		const bool authored = target == entt::null || m_Editor.kind_of(target) == wiwa::SceneEditor::Kind::Authored;
 		const entt::entity instance = m_Editor.add_prefab(*ref, authored ? target : entt::null);
@@ -320,8 +322,7 @@ void HierarchyPanel::refresh_prefabs()
 		std::error_code error;
 		for (std::filesystem::recursive_directory_iterator it(root.Source, error), end; !error && it != end; it.increment(error))
 		{
-			const std::filesystem::path extension = it->path().extension();
-			if (it->is_regular_file(error) && (extension == ".wprefab" || extension == ".gltf" || extension == ".glb" || extension == ".fbx"))
+			if (it->is_regular_file(error) && wiwa::is_prefab_source(it->path()))
 			{
 				m_Prefabs.push_back({ it->path().lexically_relative(root.Source).generic_string(), it->path().string() });
 			}

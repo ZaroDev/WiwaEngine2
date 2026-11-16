@@ -20,14 +20,8 @@ public:
 	void stop_audition();
 	bool auditioning() const { return m_Auditioning; }
 
-	wiwa::u32 frames_drawn() const { return m_Frames; }
-	// Brings the window to the front of its dock on the next frame (the smoke check wants the contents drawn).
-	void request_focus() { m_Focus = true; }
-
 private:
 	char m_Filter[128] = "";
 	std::string m_Playing{}; // the event being auditioned
 	bool m_Auditioning = false;
-	wiwa::u32 m_Frames = 0;
-	bool m_Focus = false;
 };

@@ -43,7 +43,6 @@ namespace wiwa
 		// What is shown: the skeleton, the mesh that skins to it (an invalid reference: bones only) and the clip that plays (invalid: the bind pose).
 		// graph: an animation graph that plays instead of the clip.
 		void show(const AssetRef& skeleton, const AssetRef& mesh, const AssetRef& clip = {}, const AssetRef& graph = {});
-		void set_clip(const AssetRef& clip);
 		// The data the overlays name: the skeleton being edited (its sockets and joint names), whose joints keep the order of the saved one.
 		void set_edit_skeleton(const SkeletonData* skeleton) { m_Edit = skeleton; }
 		void set_selection(int joint, int socket) { m_SelectedJoint = joint; m_SelectedSocket = socket; }

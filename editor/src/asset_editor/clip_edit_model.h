@@ -65,7 +65,6 @@ namespace wiwa
 		// value: Components numbers; for a rotation channel three Euler angles in degrees.
 		bool set_key_value(KeyRef key, std::span<const float> value);
 		// Interpolation is a property of a channel: every channel that holds a selected key changes.
-		bool set_interpolation(const KeySelection& selection, AnimationInterpolation interpolation);
 		std::optional<KeyRef> insert_key(size_t channel, float time);
 		// Refused when a channel would be left without keys.
 		bool delete_keys(const KeySelection& selection);

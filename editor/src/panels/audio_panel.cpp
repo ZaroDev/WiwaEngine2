@@ -49,15 +49,7 @@ void AudioPanel::stop_audition()
 
 void AudioPanel::on_draw()
 {
-	m_Frames++; // counted even while the window is a hidden tab: the smoke check wants to know the panel was run
-	if (m_Focus)
-	{
-		ImGui::SetNextWindowFocus();
-		m_Focus = false;
-	}
-	ImGui::SetNextWindowPos(ImVec2(984.0f, 60.0f), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(440.0f, 520.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin(get_name(), &m_Open))
+	if (begin_window(ImVec2(984.0f, 60.0f), ImVec2(440.0f, 520.0f)))
 	{
 		wiwa::AudioModule* module = wiwa::Engine::get().get_module<wiwa::AudioModule>();
 		if (module == nullptr)

@@ -6,8 +6,10 @@
 #include <assets/native_anim_files.h>
 
 #include <asset_pipeline/asset_database.h>
-#include <asset_pipeline/atomic_write.h>
+#include <core/file_io.h>
 #include <asset_pipeline/file_utils.h>
+
+#include "asset_kinds.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -149,8 +151,10 @@ namespace wiwa
 					continue;
 				}
 				const std::filesystem::path& file = it->path();
-				const bool isMesh = file.extension() == ".wmesh";
-				if (!isMesh && file.extension() != ".wanim")
+				const AssetKindInfo* kind = find_asset_kind(file);
+				const AssetType type = kind != nullptr ? kind->Type : AssetType::None;
+				const bool isMesh = type == AssetType::Mesh;
+				if (!isMesh && type != AssetType::AnimationClip)
 				{
 					continue;
 				}
@@ -190,8 +194,10 @@ namespace wiwa
 					continue;
 				}
 				const std::filesystem::path& file = it->path();
-				const bool isMesh = file.extension() == ".wmesh";
-				if (!isMesh && file.extension() != ".wanim")
+				const AssetKindInfo* kind = find_asset_kind(file);
+				const AssetType type = kind != nullptr ? kind->Type : AssetType::None;
+				const bool isMesh = type == AssetType::Mesh;
+				if (!isMesh && type != AssetType::AnimationClip)
 				{
 					continue;
 				}

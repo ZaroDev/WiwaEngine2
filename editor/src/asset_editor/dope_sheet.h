@@ -27,12 +27,8 @@ namespace wiwa
 		bool draw(ClipEditModel& model, float& playhead, KeySelection& selection, const DopeSheetOptions& options, ImVec2 size);
 
 		const std::string& selected_joint() const { return m_SelectedJoint; }
-		void set_selected_joint(const std::string& joint) { m_SelectedJoint = joint; }
 		// The time axis shows the whole clip again on the next draw (a new clip was opened).
 		void fit() { m_Fit = true; m_Collapsed.clear(); m_Opened.clear(); }
-		// The event lane's selection (an index into the clip's events, -1 for none).
-		int selected_event() const { return m_SelectedEvent; }
-		void set_selected_event(int event) { m_SelectedEvent = event; }
 		const KeyClipboard& clipboard() const { return m_Clipboard; }
 
 	private:

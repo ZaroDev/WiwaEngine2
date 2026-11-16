@@ -40,7 +40,6 @@ namespace wiwa
 		VfxEditModel* model() { return m_Model.get(); }
 		VfxPreview& preview() { return m_Preview; }
 		const std::string& message() const { return m_Message; }
-		void select_curve(int slot) { m_CurveSlot = slot; m_CurveView.fit(); }
 
 	private:
 		void sync_preview();

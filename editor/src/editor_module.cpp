@@ -144,7 +144,7 @@ void EditorModule::init()
 		else if (inputSettings.DefaultMap.valid())
 		{
 			// Not yet: on a cold Library the first scan has not cooked it, and the load would fail (see update()).
-			m_PendingDefaultMap = inputSettings.DefaultMap;
+			when_scan_finished([map = inputSettings.DefaultMap]() { wiwa::Engine::get().get_module<wiwa::InputModule>()->set_default_map(map); });
 		}
 	}
 
@@ -157,16 +157,7 @@ void EditorModule::init()
 	m_PlayMode = CreateScope<wiwa::PlayMode>(*m_PlayHost);
 	// quit() in a script ends play mode, not the editor; the stop waits for post_update because the call comes from inside a script hook
 	wiwa::Engine::get().get_module<wiwa::ScriptingModule>()->set_quit_handler([this]() { m_StopPlayRequested = true; });
-	{
-		const std::vector<std::string>& arguments = wiwa::Engine::get().get_arguments();
-		for (size_t i = 0; i + 1 < arguments.size(); i++)
-		{
-			if (arguments[i] == "--nav-bake")
-			{
-				m_NavBakeOut = arguments[i + 1];
-			}
-		}
-	}
+	m_NavBake = CreateScope<wiwa::NavBakeCommand>(wiwa::Engine::get().get_arguments());
 
 	Ref<HierarchyPanel> hierarchy = CreateRef<HierarchyPanel>(*m_SceneEditor, wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database());
 	m_Hierarchy = hierarchy.get(); // owned by m_Panels
@@ -209,7 +200,8 @@ void EditorModule::init()
 	}
 	Ref<EditorSection> editorSection = CreateRef<EditorSection>();
 	m_AudioSection = CreateRef<AudioSection>(std::filesystem::path(wiwa::AUDIO_SETTINGS_FILE));
-	m_PendingAudio = true; // applied once the first import scan has cooked the banks (see update())
+	m_PendingAudio = true; // until the first import scan has cooked the banks
+	when_scan_finished([this]() { m_AudioSection->apply(); m_PendingAudio = false; });
 	// every project-wide setting in one place (closed until opened from the Window menu); it shares the sections the Physics and Input panels made
 	m_Panels.push_back(CreateRef<SettingsPanel>(CreateRef<ProjectSection>(), CreateRef<RendererSection>(), physicsPanel->section(), inputPanel->section(), m_AudioSection, editorSection));
 	// the Scene and Game panels share the renderer's one view: the Game panel, added first, wins when both are visible
@@ -768,22 +760,15 @@ void EditorModule::update(float deltaTime)
 		m_RememberedScene = m_SceneEditor->path();
 		remember_recent_scene(m_RememberedScene.string());
 	}
-	if (m_PendingAudio)
+	const Ref<wiwa::JobProgress> scan = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().scan_progress();
+	const bool scanFinished = scan && scan->finished();
+	if (scanFinished && !m_AfterScan.empty())
 	{
-		const Ref<wiwa::JobProgress> scan = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().scan_progress();
-		if (scan && scan->finished())
+		std::vector<std::function<void()>> actions = std::move(m_AfterScan);
+		m_AfterScan.clear();
+		for (const std::function<void()>& action : actions)
 		{
-			m_AudioSection->apply();
-			m_PendingAudio = false;
-		}
-	}
-	if (m_PendingDefaultMap.valid())
-	{
-		const Ref<wiwa::JobProgress> scan = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().scan_progress();
-		if (scan && scan->finished())
-		{
-			wiwa::Engine::get().get_module<wiwa::InputModule>()->set_default_map(m_PendingDefaultMap);
-			m_PendingDefaultMap = {};
+			action();
 		}
 	}
 	if (!m_SceneEditor->playing() && !wiwa::Engine::get().get_module<wiwa::InputModule>()->backend_injected())
@@ -797,51 +782,9 @@ void EditorModule::update(float deltaTime)
 	}
 
 	// --nav-bake: once the scene of the command line has loaded and the assets are cooked, bake its first volume to the file asked for, and exit with the result.
-	if (!m_NavBakeOut.empty() && m_NavPanel != nullptr)
+	if (m_NavBake->active() && m_NavPanel != nullptr)
 	{
-		wiwa::NavEditModel& model = m_NavPanel->model();
-		const Ref<wiwa::JobProgress> scan = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>()->get_database().scan_progress();
-		if (!m_NavBakeStarted && m_Frame > 10 && scan && scan->finished() && m_SceneEditor->get_scene() != nullptr && !m_SceneEditor->is_opening() && !m_SceneEditor->has_pending())
-		{
-			entt::entity volume = entt::null;
-			for (const entt::entity entity : m_SceneEditor->scene().registry().view<wiwa::NavMeshVolume>())
-			{
-				if (m_SceneEditor->scene().registry().get<wiwa::NavMeshVolume>(entity).Enabled && (volume == entt::null || entt::to_integral(entity) < entt::to_integral(volume)))
-				{
-					volume = entity;
-				}
-			}
-			if (volume == entt::null && m_Frame < 1800)
-			{
-				volume = entt::null; // the scene of the command line may not have replaced the empty startup scene yet: look again next frame
-			}
-			else
-			{
-				m_NavBakeStarted = true;
-			}
-			if (m_NavBakeStarted && (volume == entt::null || !model.start_bake(m_SceneEditor->scene(), volume, m_NavBakeOut)))
-			{
-				WI_ERROR("Editor", "Nav bake: {0}", volume == entt::null ? std::string("the scene has no enabled NavMeshVolume") : model.error());
-				wiwa::Engine::get().set_exit_code(1);
-				wiwa::Engine::get().request_quit();
-			}
-		}
-		if (m_NavBakeStarted && model.state() != wiwa::NavEditModel::BakeState::Running && model.state() != wiwa::NavEditModel::BakeState::Idle)
-		{
-			model.poll();
-			const bool done = model.state() == wiwa::NavEditModel::BakeState::Done;
-			if (done)
-			{
-				WI_INFO("Editor", "Nav bake done: {0} ({1} polygons)", m_NavBakeOut.string(), model.last().PolyCount);
-			}
-			else
-			{
-				WI_ERROR("Editor", "Nav bake FAILED: {0}", model.error());
-			}
-			wiwa::Engine::get().set_exit_code(done ? 0 : 1);
-			wiwa::Engine::get().request_quit();
-			m_NavBakeOut.clear();
-		}
+		m_NavBake->update(*m_SceneEditor, m_NavPanel->model(), m_Frame, scanFinished);
 	}
 
 	m_Shortcuts.poll();
@@ -927,18 +870,6 @@ void EditorModule::post_update(float deltaTime)
 		m_StopPlayRequested = false;
 		m_PlayMode->stop();
 	}
-}
-
-void EditorModule::pre_physics_update(float deltaTime)
-{
-}
-
-void EditorModule::physics_update(float deltaTime)
-{
-}
-
-void EditorModule::post_physics_update(float deltaTime)
-{
 }
 
 void EditorModule::pre_render_update(float deltaTime)

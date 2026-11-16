@@ -12,6 +12,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <asset_editor/asset_kinds.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <gizmo/viewport_selection.h>
@@ -38,8 +39,7 @@ namespace
 
 	bool is_prefab_file(const std::filesystem::path& path)
 	{
-		const std::filesystem::path e = path.extension();
-		return e == ".glb" || e == ".gltf" || e == ".fbx" || e == ".FBX";
+		return wiwa::is_model_file(path);
 	}
 }
 

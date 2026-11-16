@@ -328,30 +328,6 @@ namespace wiwa
 		return true;
 	}
 
-	bool ClipEditModel::set_interpolation(const KeySelection& selection, AnimationInterpolation interpolation)
-	{
-		m_Error.clear();
-		if (!valid_selection(selection))
-		{
-			return refuse("the selection names a key that does not exist");
-		}
-		AnimationClipData edited = m_Clip;
-		bool changed = false;
-		for (const KeyRef& key : selection)
-		{
-			AnimationChannel& channel = edited.Channels[key.Channel];
-			if (channel.Interpolation != interpolation)
-			{
-				set_channel_interpolation(channel, interpolation);
-				changed = true;
-			}
-		}
-		if (changed)
-		{
-			commit(std::move(edited));
-		}
-		return true;
-	}
 
 	std::optional<KeyRef> ClipEditModel::insert_key(size_t channelIndex, float time)
 	{

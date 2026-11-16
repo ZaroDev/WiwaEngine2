@@ -1,6 +1,7 @@
 #include <editor_common.h>
 #include "asset_browser_panel.h"
 
+#include <asset_editor/asset_kinds.h>
 #include <asset_editor/asset_summary.h>
 #include "asset_icons.h"
 
@@ -500,7 +501,7 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 		{
 			m_OpenUiPanel(file);
 		}
-		else if ((file.extension() == ".wskel" || file.extension() == ".wmesh" || file.extension() == ".wanim" || file.extension() == ".wgraph" || file.extension() == ".wbt") && m_OpenAssetEditor)
+		else if (wiwa::opens_in_asset_editor(file) && m_OpenAssetEditor)
 		{
 			m_OpenAssetEditor(file);
 		}
@@ -513,7 +514,7 @@ void AssetBrowserPanel::draw_file(const std::filesystem::path& file, float thumb
 			open_externally(file);
 		}
 	}
-	if ((wiwa::ThumbnailCache::is_animation_asset(file) || file.extension() == ".wgraph") && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+	if (wiwa::has_animation_summary(file) && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
 	{
 		const std::string summary = wiwa::summarize_animation_file(file);
 		const std::string from = wiwa::extracted_from(file);
@@ -640,7 +641,7 @@ void AssetBrowserPanel::draw_context_menu()
 		ImGui::TextDisabled("%s", m_Selected.filename().string().c_str());
 
 		// pack it although no packed scene uses it (the Build Settings panel lists these)
-		if (wiwa::ThumbnailCache::is_animation_asset(m_Selected))
+		if (wiwa::is_animation_file(m_Selected))
 		{
 			if (m_OpenAssetEditor && ImGui::MenuItem("Open in Asset Editor"))
 			{

@@ -39,20 +39,12 @@ public:
 	// Starts the bake of the current volume (what the button does). False, and why in the model's error, if it could not start.
 	bool bake();
 	wiwa::NavEditModel& model() { return m_Model; }
-	const wiwa::NavOverlayOptions& overlay_options() const { return m_Overlay; }
-	bool overlay_visible() const { return m_ShowOverlay; }
 
 	// What the viewport shows (the editor wires these into the scene view): the baked mesh of the current volume, the boxes of the volumes and the
 	// path test; and the clicks of the scene view as rays while the path test is on (click: start, Shift+click: end). True when the click was used.
 	void draw_overlay(wiwa::DebugDraw& draw);
 	bool handle_ray_click(glm::vec3 origin, glm::vec3 direction, bool shift);
-	const wiwa::NavMeshView& overlay_view() const { return m_OverlayView; }
 	wiwa::NavPathTool& path_tool() { return m_PathTool; }
-	bool path_test_active() const { return m_PathTest; }
-	void set_path_test(bool active) { m_PathTest = active; }
-
-	wiwa::u32 frames_drawn() const { return m_Frames; }
-	void request_focus() { m_Focus = true; }
 
 private:
 	void finish_bake();
@@ -86,6 +78,4 @@ private:
 	std::string m_Message{};      // the last thing worth telling: an import failure, the result of a check
 	wiwa::Handle<wiwa::NavMeshData> m_CheckHandle{}; // the stored mesh being loaded for the stale check
 	entt::entity m_CheckVolume{ entt::null };
-	wiwa::u32 m_Frames = 0;
-	bool m_Focus = false;
 };

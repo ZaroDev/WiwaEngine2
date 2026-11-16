@@ -178,16 +178,6 @@ namespace wiwa
 		return true;
 	}
 
-	bool VfxEditModel::rename_emitter(size_t index, const std::string& name)
-	{
-		if (index >= m_Data.Emitters.size() || name.empty())
-		{
-			return false;
-		}
-		ParticleEffectData next = m_Data;
-		next.Emitters[index].Name = unique_name(name, index);
-		return edit(std::move(next));
-	}
 
 	void VfxEditModel::select(size_t index)
 	{

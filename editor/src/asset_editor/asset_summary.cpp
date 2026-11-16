@@ -7,6 +7,8 @@
 #include <asset_pipeline/file_utils.h>
 #include <asset_pipeline/meta_file.h>
 
+#include "asset_kinds.h"
+
 namespace wiwa
 {
 	namespace
@@ -30,8 +32,7 @@ namespace wiwa
 			for (std::filesystem::directory_iterator it(folder.parent_path(), error), end; !error && it != end; it.increment(error))
 			{
 				const std::filesystem::path& candidate = it->path();
-				const std::string extension = candidate.extension().string();
-				if (candidate.stem().string() == stem && (extension == ".fbx" || extension == ".glb" || extension == ".gltf"))
+				if (candidate.stem().string() == stem && is_model_file(candidate))
 				{
 					return candidate;
 				}
@@ -42,7 +43,8 @@ namespace wiwa
 
 	std::string summarize_animation_file(const std::filesystem::path& file)
 	{
-		const std::filesystem::path extension = file.extension();
+		const AssetKindInfo* kind = find_asset_kind(file);
+		const AssetType type = kind != nullptr ? kind->Type : AssetType::None;
 		const std::optional<std::vector<std::byte>> bytes = read_binary_file(file);
 		if (!bytes)
 		{
@@ -50,7 +52,7 @@ namespace wiwa
 		}
 		std::string reason;
 		char text[160];
-		if (extension == ".wskel")
+		if (type == AssetType::Skeleton)
 		{
 			const std::optional<SkeletonData> skeleton = read_skeleton_file(std::string_view(reinterpret_cast<const char*>(bytes->data()), bytes->size()), reason);
 			if (!skeleton)
@@ -60,7 +62,7 @@ namespace wiwa
 			std::snprintf(text, sizeof(text), "%zu joints, %zu sockets", skeleton->JointNames.size(), skeleton->Sockets.size());
 			return text;
 		}
-		if (extension == ".wgraph")
+		if (type == AssetType::AnimationGraph)
 		{
 			std::optional<AnimationGraphData> graph;
 			try
@@ -83,7 +85,7 @@ namespace wiwa
 			std::snprintf(text, sizeof(text), "%zu layers, %zu states, %zu parameters", graph->Layers.size(), states, graph->Parameters.size());
 			return text;
 		}
-		if (extension == ".wanim")
+		if (type == AssetType::AnimationClip)
 		{
 			const std::optional<AnimationClipData> clip = read_clip_file(*bytes, reason);
 			if (!clip)
@@ -93,7 +95,7 @@ namespace wiwa
 			std::snprintf(text, sizeof(text), "%.2f s, %zu channels, %zu events", clip->Duration, clip->Channels.size(), clip->Events.size());
 			return text;
 		}
-		if (extension == ".wmesh")
+		if (type == AssetType::Mesh)
 		{
 			const std::optional<MeshData> mesh = read_mesh_file(*bytes, reason);
 			if (!mesh)

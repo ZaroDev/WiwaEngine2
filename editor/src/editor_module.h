@@ -18,6 +18,8 @@
 #include <asset_editor/skeleton_index.h>
 #include <asset_editor/thumbnail_cache.h>
 
+#include "nav/nav_bake_command.h"
+
 #include "editor_ui/command_palette.h"
 #include "editor_ui/layout_manager.h"
 #include "editor_ui/shortcuts.h"
@@ -51,10 +53,6 @@ public:
 	virtual void update(float deltaTime) override;
 	virtual void post_update(float deltaTime) override;
 
-	virtual void pre_physics_update(float deltaTime) override;
-	virtual void physics_update(float deltaTime) override;
-	virtual void post_physics_update(float deltaTime) override;
-
 	virtual void pre_render_update(float deltaTime) override;
 	virtual void render_update(float deltaTime) override;
 	virtual void post_render_update(float deltaTime) override;
@@ -62,7 +60,11 @@ public:
 	virtual wiwa::UpdateFlags get_update_flags() const { return wiwa::UpdateFlags::ALL; };
 	virtual std::string get_name() const { return "Editor"; };
 
-	virtual int get_priority() const { return 0; }
+	virtual int get_priority() const { return wiwa::ModulePriority::Editor; }
+
+	// Runs `action` on the main thread, from update(), once the first asset scan has finished (on a cold Library the scan is still cooking what the
+	// action needs). Actions run in the order they were added; one added after the scan has finished runs at the next update().
+	void when_scan_finished(std::function<void()> action) { m_AfterScan.push_back(std::move(action)); }
 
 private:
 	friend class EditorSmokeDriver; // wiwa_tests: the panel, play and demo smokes
@@ -136,7 +138,7 @@ private:
 	bool m_StopPlayRequested = false; // a script called quit()
 	Ref<class AudioSection> m_AudioSection{};       // the Audio page of the Settings panel; its settings are applied once the first scan has cooked the banks
 	bool m_PendingAudio = false;
-	wiwa::AssetRef m_PendingDefaultMap{}; // input.wsettings' map, applied once the first import scan has cooked it
+	std::vector<std::function<void()>> m_AfterScan{}; // see when_scan_finished()
 	class HierarchyPanel* m_Hierarchy = nullptr; // owned by m_Panels
 	class UiEditorPanel* m_UiEditor = nullptr; // owned by m_Panels
 	class PhysicsPanel* m_PhysicsPanel = nullptr; // owned by m_Panels
@@ -145,8 +147,7 @@ private:
 	class AnimationPanel* m_AnimationPanel = nullptr; // owned by m_Panels
 	class AudioPanel* m_AudioPanel = nullptr;         // owned by m_Panels
 	class NavigationPanel* m_NavPanel = nullptr;      // owned by m_Panels
-	std::filesystem::path m_NavBakeOut{};              // --nav-bake <file>: bake the first volume of the scene that is loaded at start to this .wnav and exit
-	bool m_NavBakeStarted = false;
+	Scope<wiwa::NavBakeCommand> m_NavBake{};           // --nav-bake <file>: bake the first volume of the scene that is loaded at start to this .wnav and exit
 	Scope<wiwa::SkeletonIndex> m_SkeletonIndex{};   // which meshes and clips name each skeleton, kept up to date in the background
 	Scope<wiwa::EditorState> m_EditorState{};       // Library/editor_state.json
 	Scope<wiwa::ThumbnailCache> m_Thumbnails{};     // the thumbnails of the Asset Browser

@@ -6,7 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include <asset_pipeline/atomic_write.h>
+#include <core/file_io.h>
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 

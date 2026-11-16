@@ -11,7 +11,7 @@
 #include <core/engine.h>
 
 #include <asset_pipeline/asset_database.h>
-#include <asset_pipeline/atomic_write.h>
+#include <core/file_io.h>
 #include <asset_pipeline/file_utils.h>
 #include <panels/asset_field.h>
 
@@ -30,7 +30,7 @@ namespace wiwa
 			return assets != nullptr ? assets->find_asset(path) : std::nullopt;
 		}
 
-		// A value of an emitter the editor offers a curve for (the order is the numbering of VfxEditor::select_curve).
+		// A value of an emitter the editor offers a curve for.
 		struct ValueSlot
 		{
 			const char* Label;

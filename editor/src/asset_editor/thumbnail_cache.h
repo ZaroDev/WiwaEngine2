@@ -38,12 +38,9 @@ namespace wiwa
 		ThumbnailCache(const ThumbnailCache&) = delete;
 		ThumbnailCache& operator=(const ThumbnailCache&) = delete;
 
-		// Whether the file gets a thumbnail: the animation assets, materials, prefabs, environments (.hdr), color grading tables (.cube), fonts.
+		// Whether the file gets a thumbnail: the animation assets, materials, prefabs and model files, effects, environments (.hdr), color grading
+		// tables (.cube), fonts. Which kind a file is comes from asset_kinds.h.
 		static bool handles(const std::filesystem::path& source);
-		// A model file (.glb, .gltf, .fbx): shown as the prefab it imports to.
-		static bool is_model(const std::filesystem::path& source);
-		// The animation assets (.wskel, .wanim, .wmesh) alone: the ones the Asset Editor opens.
-		static bool is_animation_asset(const std::filesystem::path& source);
 
 		// The texture to draw for the asset's source file, or 0 while there is none (a placeholder shows). Call it every frame the cell is visible: a
 		// cell that is not asked for any more leaves the queue.
@@ -57,6 +54,8 @@ namespace wiwa
 		// CPU from the cooked data, no view.
 		enum class Kind { Skeleton, Clip, Mesh, Material, Prefab, Environment, Lut, Font, Effect };
 		enum class State { New, Queued, Working, Ready, Failed };
+		// The kind of a file, nothing for a kind without a thumbnail (asset_kinds.h tells what the file is).
+		static std::optional<Kind> thumbnail_kind(const std::filesystem::path& source);
 
 		struct Entry
 		{
@@ -106,7 +105,7 @@ namespace wiwa
 			bool EffectStopped = false;       // emission is over: only what is in the air is drawn
 		};
 
-		Entry& entry_for(const std::filesystem::path& source);
+		Entry& entry_for(const std::filesystem::path& source, Kind kind);
 		bool make_key(Entry& entry);
 		void begin(Entry& entry);
 		void step_job();
