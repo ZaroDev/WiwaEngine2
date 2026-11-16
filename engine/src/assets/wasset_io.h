@@ -54,6 +54,13 @@ namespace wiwa
 		// Bytes not read yet (reading only): a count that claims more elements than could fit is corrupt.
 		size_t remaining() const { return m_Bytes.size() - m_Cursor; }
 
+		// Archives the asset format version (writes expected, or reads it). False when the archive has failed, which
+		// includes a version other than expected: the caller returns at once.
+		bool version(u32 expected);
+
+		// Reading only: fails the archive when bytes are left over after the last field.
+		void expect_end();
+
 		void raw(void* data, size_t size);
 
 		template<typename T>

@@ -8,15 +8,17 @@
 #include <assets/build_info.h>
 #include <audio/audio_project_settings.h>
 #include <assets/pak_format.h>
+#include <assets/project_blob.h>
 #include <input/input_project_settings.h>
 #include <physics/physics_project_settings.h>
 #include <assets/wasset_io.h>
 
+#include <functional>
 #include <unordered_set>
 
 #include "file_utils.h"
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {
@@ -86,6 +88,32 @@ namespace wiwa
 
 	namespace
 	{
+		// One settings file that goes into the pack: its blob guid, what the log calls it, and how to turn the file into the
+		// blob bytes (false and a reason if it is damaged).
+		struct SettingsBlob
+		{
+			AssetGuid Guid;
+			const char* Label;
+			const std::filesystem::path* File;
+			std::function<bool(const std::filesystem::path&, std::vector<std::byte>&, std::string&)> Load;
+		};
+
+		// A loader for load(path, T&, error): the file's T serialised the way a game reads it back.
+		template<typename T, typename Load>
+		auto settings_loader(Load load)
+		{
+			return [load](const std::filesystem::path& file, std::vector<std::byte>& bytes, std::string& why)
+			{
+				T settings;
+				if (!load(file, settings, why))
+				{
+					return false;
+				}
+				bytes = serialize(settings);
+				return true;
+			};
+		}
+
 		// A source path as the log shows it: relative to the working directory (the editor's project folder) when it is inside.
 		std::string shown_path(const std::string& path)
 		{
@@ -379,102 +407,44 @@ namespace wiwa
 			log_extra(BUILD_INFO_GUID, "build info (default scene)");
 		}
 
-		// The project's physics layers, if the editor has saved any.
-		{
-			std::error_code exists;
-			if (std::filesystem::exists(physicsSettingsFile, exists))
-			{
-				PhysicsLayers layers;
-				std::string layersError;
-				if (load_physics_layers(physicsSettingsFile, layers, layersError))
+		// The project's settings files, each packed under its own blob guid if the editor has saved it (an empty path packs
+		// none, so a check does not pick up the project's files). A file that exists but cannot be loaded fails the pack.
+		const SettingsBlob settingsBlobs[] = {
+			{ project_blob_guid(ProjectBlob::PhysicsSettings), "physics settings", &physicsSettingsFile, settings_loader<PhysicsLayers>(load_physics_layers) },
+			{ project_blob_guid(ProjectBlob::InputSettings), "input settings", &inputSettingsFile, settings_loader<InputProjectSettings>(load_input_settings) },
+			{ project_blob_guid(ProjectBlob::NavSettings), "navigation settings", &navSettingsFile, settings_loader<NavSettings>(load_nav_settings) },
+			{ project_blob_guid(ProjectBlob::AudioSettings), "audio settings", &audioSettingsFile, settings_loader<AudioProjectSettings>(load_audio_settings) },
+			{ project_blob_guid(ProjectBlob::ProjectSettings), "project settings", &projectSettingsFile,
+				settings_loader<ProjectSettings>([](const std::filesystem::path& file, ProjectSettings& out, std::string& why)
 				{
-					ok = add_blob(PHYSICS_SETTINGS_GUID, 0, serialize(layers), "physics settings") && ok;
-					log_extra(PHYSICS_SETTINGS_GUID, shown_path(physicsSettingsFile.generic_string()));
-				}
-				else
-				{
-					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", physicsSettingsFile.string(), layersError);
-					ok = false;
-				}
-			}
-		}
+					std::optional<ProjectSettings> loaded = load_project_settings(file, why);
+					if (loaded)
+					{
+						out = std::move(*loaded);
+					}
+					return loaded.has_value();
+				}) },
+		};
 
-		// The project's input settings (the default map), if the editor has saved any.
+		for (const SettingsBlob& blob : settingsBlobs)
 		{
 			std::error_code exists;
-			if (std::filesystem::exists(inputSettingsFile, exists))
+			if (blob.File->empty() || !std::filesystem::exists(*blob.File, exists))
 			{
-				InputProjectSettings inputSettings;
-				std::string inputError;
-				if (load_input_settings(inputSettingsFile, inputSettings, inputError))
-				{
-					ok = add_blob(INPUT_SETTINGS_GUID, 0, serialize(inputSettings), "input settings") && ok;
-					log_extra(INPUT_SETTINGS_GUID, shown_path(inputSettingsFile.generic_string()));
-				}
-				else
-				{
-					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", inputSettingsFile.string(), inputError);
-					ok = false;
-				}
+				continue;
 			}
-		}
 
-		// The project's navigation settings (area costs), if the editor has saved any.
-		{
-			std::error_code exists;
-			if (!navSettingsFile.empty() && std::filesystem::exists(navSettingsFile, exists))
+			std::vector<std::byte> bytes;
+			std::string why;
+			if (blob.Load(*blob.File, bytes, why))
 			{
-				NavSettings navSettings;
-				std::string navError;
-				if (load_nav_settings(navSettingsFile, navSettings, navError))
-				{
-					ok = add_blob(NAV_SETTINGS_GUID, 0, serialize(navSettings), "navigation settings") && ok;
-					log_extra(NAV_SETTINGS_GUID, shown_path(navSettingsFile.generic_string()));
-				}
-				else
-				{
-					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", navSettingsFile.string(), navError);
-					ok = false;
-				}
+				ok = add_blob(blob.Guid, 0, bytes, blob.Label) && ok;
+				log_extra(blob.Guid, shown_path(blob.File->generic_string()));
 			}
-		}
-
-		// The project's audio settings (backend, soundbanks), if the editor has saved any.
-		{
-			std::error_code exists;
-			if (std::filesystem::exists(audioSettingsFile, exists))
+			else
 			{
-				AudioProjectSettings audioSettings;
-				std::string audioError;
-				if (load_audio_settings(audioSettingsFile, audioSettings, audioError))
-				{
-					ok = add_blob(AUDIO_SETTINGS_GUID, 0, serialize(audioSettings), "audio settings") && ok;
-					log_extra(AUDIO_SETTINGS_GUID, shown_path(audioSettingsFile.generic_string()));
-				}
-				else
-				{
-					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", audioSettingsFile.string(), audioError);
-					ok = false;
-				}
-			}
-		}
-
-		// The project's name, version and launch settings, if the editor has saved any.
-		{
-			std::error_code exists;
-			if (std::filesystem::exists(projectSettingsFile, exists))
-			{
-				std::string projectError;
-				if (const std::optional<ProjectSettings> project = load_project_settings(projectSettingsFile, projectError))
-				{
-					ok = add_blob(PROJECT_SETTINGS_GUID, 0, serialize(*project), "project settings") && ok;
-					log_extra(PROJECT_SETTINGS_GUID, shown_path(projectSettingsFile.generic_string()));
-				}
-				else
-				{
-					WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", projectSettingsFile.string(), projectError);
-					ok = false;
-				}
+				WI_ASSET_LOG(Error, "Packing failed: {0}: {1}", blob.File->string(), why);
+				ok = false;
 			}
 		}
 

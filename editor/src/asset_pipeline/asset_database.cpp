@@ -3,12 +3,13 @@
 
 #include <fstream>
 
+#include <core/file_io.h>
 #include "assets/asset_catalog.h"
 #include "assets/library_source.h"
 #include "assets/pak_format.h"
 #include "lua_stubs.h"
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {
@@ -35,16 +36,13 @@ namespace wiwa
 
 		bool read_file(const std::filesystem::path& path, std::vector<std::byte>& bytes)
 		{
-			std::ifstream file(path, std::ios::binary | std::ios::ate);
-			if (!file)
+			std::optional<std::vector<std::byte>> read = read_file_bytes(path);
+			if (!read)
 			{
 				return false;
 			}
-
-			const std::streamsize size = file.tellg();
-			bytes.resize(static_cast<size_t>(size));
-			file.seekg(0);
-			return size == 0 || static_cast<bool>(file.read(reinterpret_cast<char*>(bytes.data()), size));
+			bytes = std::move(*read);
+			return true;
 		}
 	}
 
@@ -100,11 +98,6 @@ namespace wiwa
 			return nullptr; // a LuaLS declaration file next to the scripts is editor support, not an asset
 		}
 		return found->second;
-	}
-
-	bool AssetDatabase::has_importer_for(const std::filesystem::path& source) const
-	{
-		return find_importer(source) != nullptr;
 	}
 
 	const IImporter* AssetDatabase::importer_for(const std::filesystem::path& source) const
@@ -478,17 +471,13 @@ namespace wiwa
 
 	void AssetDatabase::save_cache_locked()
 	{
-		std::error_code error;
-		std::filesystem::create_directories(m_LibraryRoot, error);
-
 		const std::filesystem::path path = m_LibraryRoot / "import_cache.json";
-		std::filesystem::path temp = path;
-		temp += ".tmp";
+		const std::string text = m_ImportCache.dump(1);
+		std::string error;
+		if (!write_file_atomic(path, text.data(), text.size(), error))
 		{
-			std::ofstream file(temp, std::ios::trunc);
-			file << m_ImportCache.dump(1);
+			WI_ASSET_LOG(Error, "{0}", error);
 		}
-		std::filesystem::rename(temp, path, error);
 	}
 
 	Ref<JobProgress> AssetDatabase::scan_async()
@@ -712,15 +701,11 @@ namespace wiwa
 			return;
 		}
 
-		std::error_code error;
-		std::filesystem::create_directories(m_LibraryRoot, error);
-		std::filesystem::path temp = path;
-		temp += ".tmp";
+		std::string error;
+		if (!write_file_atomic(path, bytes.data(), bytes.size(), error))
 		{
-			std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-			file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+			WI_ASSET_LOG(Error, "{0}", error);
 		}
-		std::filesystem::rename(temp, path, error);
 
 		std::vector<std::function<void()>> listeners;
 		{

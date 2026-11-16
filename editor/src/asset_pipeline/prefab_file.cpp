@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "prefab_file.h"
+#include <core/file_io.h>
 
 #include <fstream>
 #include <unordered_map>
@@ -9,7 +10,7 @@
 #include "../scene/scene_json.h"
 #include "file_utils.h"
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {
@@ -116,28 +117,10 @@ namespace wiwa
 		data.Entities = entities;
 		const std::string text = scene_to_json(data).dump(2);
 
-		std::error_code error;
-		if (file.has_parent_path())
+		std::string error;
+		if (!write_file_atomic(file, text.data(), text.size(), error))
 		{
-			std::filesystem::create_directories(file.parent_path(), error);
-		}
-
-		std::filesystem::path temp = file;
-		temp += ".tmp";
-		{
-			std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-			out << text;
-			if (!out)
-			{
-				WI_ASSET_LOG(Error, "Could not write {0}", temp.string());
-				return false;
-			}
-		}
-
-		std::filesystem::rename(temp, file, error);
-		if (error)
-		{
-			WI_ASSET_LOG(Error, "Could not replace {0}: {1}", file.string(), error.message());
+			WI_ASSET_LOG(Error, "Could not write {0}: {1}", file.string(), error);
 			return false;
 		}
 		return true;

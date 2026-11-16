@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "meta_file.h"
+#include <core/file_io.h>
 
 #include <fstream>
 
@@ -69,23 +70,8 @@ namespace wiwa
 			json["subAssets"][name] = id;
 		}
 
-		std::filesystem::path temp = metaPath;
-		temp += ".tmp";
-		{
-			std::ofstream file(temp, std::ios::trunc);
-			if (!file)
-			{
-				return false;
-			}
-			file << json.dump(2);
-			if (!file)
-			{
-				return false;
-			}
-		}
-
-		std::error_code error;
-		std::filesystem::rename(temp, metaPath, error);
-		return !error;
+		const std::string text = json.dump(2);
+		std::string error;
+		return write_file_atomic(metaPath, text.data(), text.size(), error);
 	}
 }

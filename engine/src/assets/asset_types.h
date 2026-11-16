@@ -4,33 +4,41 @@
 
 namespace wiwa
 {
+	// Every asset type with the CPU-side data it loads as, in the order of the enum below. The enum is written to files:
+	// a new type goes at the END of this list (X(Name, DataType)), never in the middle. asset_type_name() and the
+	// AssetManager's deserializer are generated from it.
+#define WI_ASSET_TYPES(X) \
+	X(Texture, TextureData) \
+	X(Mesh, MeshData) \
+	X(Material, MaterialData) \
+	X(Skeleton, SkeletonData) \
+	X(AnimationClip, AnimationClipData) \
+	X(Prefab, PrefabData) \
+	X(Environment, EnvironmentData) \
+	X(Lut, LutData) \
+	X(Shader, ShaderData) \
+	X(Scene, SceneData) \
+	X(Script, ScriptData) \
+	X(SurfaceShader, SurfaceShaderData) \
+	X(Font, FontData) \
+	X(UiPanel, UiPanelData) \
+	X(PhysicsMaterial, PhysicsMaterialData) \
+	X(PhysicsShape, CookedShapeData) \
+	X(InputMap, InputMapData) \
+	X(AnimationGraph, AnimationGraphData) \
+	X(ParticleEffect, ParticleEffectData) \
+	X(SoundBank, SoundBankData) \
+	X(AudioClip, AudioClipData) \
+	X(NavMesh, NavMeshData) \
+	X(BehaviorTree, BehaviorTreeData) \
+	X(Video, VideoData)
+
 	enum class AssetType : u32
 	{
 		None = 0,
-		Texture,
-		Mesh,
-		Material,
-		Skeleton,
-		AnimationClip,
-		Prefab,
-		Environment,
-		Lut,
-		Shader,
-		Scene,
-		Script,
-		SurfaceShader,
-		Font,
-		UiPanel,
-		PhysicsMaterial,
-		PhysicsShape,
-		InputMap,
-		AnimationGraph,
-		ParticleEffect,
-		SoundBank,
-		AudioClip,
-		NavMesh,
-		BehaviorTree,
-		Video,
+#define WI_ASSET_TYPE_ENUM(name, data) name,
+		WI_ASSET_TYPES(WI_ASSET_TYPE_ENUM)
+#undef WI_ASSET_TYPE_ENUM
 
 		Last
 	};
@@ -39,30 +47,9 @@ namespace wiwa
 	{
 		switch (type)
 		{
-		case AssetType::Texture: return "Texture";
-		case AssetType::Mesh: return "Mesh";
-		case AssetType::Material: return "Material";
-		case AssetType::Skeleton: return "Skeleton";
-		case AssetType::AnimationClip: return "AnimationClip";
-		case AssetType::Prefab: return "Prefab";
-		case AssetType::Environment: return "Environment";
-		case AssetType::Lut: return "Lut";
-		case AssetType::Shader: return "Shader";
-		case AssetType::Scene: return "Scene";
-		case AssetType::Script: return "Script";
-		case AssetType::SurfaceShader: return "SurfaceShader";
-		case AssetType::Font: return "Font";
-		case AssetType::UiPanel: return "UiPanel";
-		case AssetType::PhysicsMaterial: return "PhysicsMaterial";
-		case AssetType::PhysicsShape: return "PhysicsShape";
-		case AssetType::InputMap: return "InputMap";
-		case AssetType::AnimationGraph: return "AnimationGraph";
-		case AssetType::ParticleEffect: return "ParticleEffect";
-		case AssetType::SoundBank: return "SoundBank";
-		case AssetType::AudioClip: return "AudioClip";
-		case AssetType::NavMesh: return "NavMesh";
-		case AssetType::BehaviorTree: return "BehaviorTree";
-		case AssetType::Video: return "Video";
+#define WI_ASSET_TYPE_NAME(name, data) case AssetType::name: return #name;
+		WI_ASSET_TYPES(WI_ASSET_TYPE_NAME)
+#undef WI_ASSET_TYPE_NAME
 		default: return "None";
 		}
 	}

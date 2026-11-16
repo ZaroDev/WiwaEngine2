@@ -6,6 +6,7 @@
 
 #include <assets/asset_guid.h>
 #include <assets/asset_source.h>
+#include <assets/project_blob.h>
 #include <assets/wasset_io.h>
 
 namespace wiwa
@@ -14,7 +15,7 @@ namespace wiwa
 	constexpr const char* PROJECT_SETTINGS_FILE = "project.wproject";
 
 	// The key a pack stores the project settings under (it is not an asset, so no real guid is this one).
-	constexpr AssetGuid PROJECT_SETTINGS_GUID{ ~0ull, ~0ull - 4 };
+	constexpr AssetGuid PROJECT_SETTINGS_GUID = project_blob_guid(ProjectBlob::ProjectSettings);
 
 	constexpr u32 PROJECT_SETTINGS_VERSION = 1;
 

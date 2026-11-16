@@ -1,5 +1,6 @@
 #include <pch.h>
 #include "wasset_io.h"
+#include <core/file_io.h>
 
 #include <ai/bt_file.h>
 #include "native_anim_files.h"
@@ -41,6 +42,25 @@ namespace wiwa
 
 		std::memcpy(data, m_Bytes.data() + m_Cursor, size);
 		m_Cursor += size;
+	}
+
+	bool BinaryArchive::version(u32 expected)
+	{
+		u32 found = expected;
+		value(found);
+		if (reading() && m_Ok && found != expected)
+		{
+			fail();
+		}
+		return m_Ok;
+	}
+
+	void BinaryArchive::expect_end()
+	{
+		if (reading() && m_Ok && remaining() != 0)
+		{
+			fail();
+		}
 	}
 
 	void BinaryArchive::string(std::string& s)
@@ -92,33 +112,8 @@ namespace wiwa
 	{
 		const std::vector<std::byte> blob = make_wasset_blob(header, payload);
 
-		std::error_code error;
-		std::filesystem::create_directories(path.parent_path(), error);
-
-		std::filesystem::path temp = path;
-		temp += ".tmp";
-
-		{
-			std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-			if (!file)
-			{
-				return false;
-			}
-			file.write(reinterpret_cast<const char*>(blob.data()), static_cast<std::streamsize>(blob.size()));
-			if (!file)
-			{
-				return false;
-			}
-		}
-
-		std::filesystem::rename(temp, path, error);
-		if (error)
-		{
-			std::filesystem::remove(temp, error);
-			return false;
-		}
-
-		return true;
+		std::string error;
+		return write_file_atomic(path, blob.data(), blob.size(), error);
 	}
 
 	std::optional<WAssetHeader> parse_wasset_header(std::span<const std::byte> blob, std::span<const std::byte>& payload)
@@ -624,11 +619,8 @@ namespace wiwa
 
 	void archive(BinaryArchive& ar, InputMapData& v)
 	{
-		u32 version = INPUT_MAP_VERSION;
-		ar.value(version);
-		if (ar.reading() && ar.ok() && version != INPUT_MAP_VERSION)
+		if (!ar.version(INPUT_MAP_VERSION))
 		{
-			ar.fail();
 			return;
 		}
 
@@ -654,11 +646,8 @@ namespace wiwa
 
 	void archive(BinaryArchive& ar, AnimationGraphData& v)
 	{
-		u32 version = 1;
-		ar.value(version);
-		if (ar.reading() && ar.ok() && version != 1)
+		if (!ar.version(1))
 		{
-			ar.fail();
 			return;
 		}
 
@@ -684,11 +673,8 @@ namespace wiwa
 
 	void archive(BinaryArchive& ar, BehaviorTreeData& v)
 	{
-		u32 version = 1;
-		ar.value(version);
-		if (ar.reading() && ar.ok() && version != 1)
+		if (!ar.version(1))
 		{
-			ar.fail();
 			return;
 		}
 
@@ -705,11 +691,8 @@ namespace wiwa
 
 	void archive(BinaryArchive& ar, ParticleEffectData& v)
 	{
-		u32 version = static_cast<u32>(WFX_VERSION);
-		ar.value(version);
-		if (ar.reading() && ar.ok() && version != static_cast<u32>(WFX_VERSION))
+		if (!ar.version(static_cast<u32>(WFX_VERSION)))
 		{
-			ar.fail();
 			return;
 		}
 
@@ -762,13 +745,24 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// A blob asset (soundbank, video, audio clip) must name itself, hold bytes and have nothing after them.
+		template<typename T>
+		void validate_blob_asset(BinaryArchive& ar, const T& v)
+		{
+			if (ar.reading() && ar.ok() && (v.Name.empty() || v.Bytes.empty()))
+			{
+				ar.fail();
+			}
+			ar.expect_end();
+		}
+	}
+
 	void archive(BinaryArchive& ar, SoundBankData& v)
 	{
-		u32 version = 1;
-		ar.value(version);
-		if (ar.reading() && ar.ok() && version != 1)
+		if (!ar.version(1))
 		{
-			ar.fail();
 			return;
 		}
 
@@ -782,19 +776,13 @@ namespace wiwa
 			archive_bank_info(ar, v.Info);
 		}
 
-		if (ar.reading() && ar.ok() && (v.Name.empty() || v.Bytes.empty() || ar.remaining() != 0))
-		{
-			ar.fail();
-		}
+		validate_blob_asset(ar, v);
 	}
 
 	void archive(BinaryArchive& ar, VideoData& v)
 	{
-		u32 version = 1;
-		ar.value(version);
-		if (ar.reading() && ar.ok() && version != 1)
+		if (!ar.version(1))
 		{
-			ar.fail();
 			return;
 		}
 
@@ -816,27 +804,18 @@ namespace wiwa
 			ar.value(v.Info.Channels);
 		}
 
-		if (ar.reading() && ar.ok() && (v.Name.empty() || v.Bytes.empty() || ar.remaining() != 0))
-		{
-			ar.fail();
-		}
+		validate_blob_asset(ar, v);
 	}
 
 	void archive(BinaryArchive& ar, AudioClipData& v)
 	{
-		u32 version = 1;
-		ar.value(version);
-		if (ar.reading() && ar.ok() && version != 1)
+		if (!ar.version(1))
 		{
-			ar.fail();
 			return;
 		}
 
 		ar.string(v.Name);
 		ar.pod_vector(v.Bytes);
-		if (ar.reading() && ar.ok() && (v.Name.empty() || v.Bytes.empty() || ar.remaining() != 0))
-		{
-			ar.fail();
-		}
+		validate_blob_asset(ar, v);
 	}
 }

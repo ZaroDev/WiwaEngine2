@@ -8,12 +8,12 @@
 #include <assets/native_anim_files.h>
 
 #include "../asset_database.h"
-#include "../atomic_write.h"
+#include <core/file_io.h>
 #include "../meta_file.h"
 #include "file_names.h"
 #include "model_skeleton.h"
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {

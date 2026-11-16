@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "reference_updater.h"
+#include <core/file_io.h>
 
 #include <fstream>
 #include <sstream>
@@ -8,7 +9,7 @@
 
 #include "asset_database.h"
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {
@@ -137,23 +138,11 @@ namespace wiwa
 				continue;
 			}
 
-			std::filesystem::path temporary = item.File;
-			temporary += ".tmp";
+			const std::string text = content->dump(2) + "\n";
+			std::string error;
+			if (!write_file_atomic(item.File, text.data(), text.size(), error))
 			{
-				std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
-				out << content->dump(2) << "\n";
-				if (!out)
-				{
-					WI_ASSET_LOG(Warning, "Cannot write {0}; its references were not updated", item.File.string());
-					continue;
-				}
-			}
-			std::error_code error;
-			std::filesystem::rename(temporary, item.File, error);
-			if (error)
-			{
-				std::filesystem::remove(temporary, error);
-				WI_ASSET_LOG(Warning, "Cannot write {0}; its references were not updated", item.File.string());
+				WI_ASSET_LOG(Warning, "Cannot write {0}: {1}; its references were not updated", item.File.string(), error);
 				continue;
 			}
 			rewritten += count;

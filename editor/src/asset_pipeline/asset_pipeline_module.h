@@ -25,7 +25,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::NONE; }
 		virtual std::string get_name() const override { return "AssetPipeline"; }
-		virtual int get_priority() const override { return -90; }
+		virtual int get_priority() const override { return ModulePriority::AssetPipeline; }
 
 		AssetDatabase& get_database() { return *m_Database; }
 

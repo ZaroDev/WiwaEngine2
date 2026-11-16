@@ -62,6 +62,14 @@ namespace wiwa
 		// recorded in the .meta like the others; sub_asset never hands out an id in the range of these.
 		AssetRef sub_asset_with_id(const std::string& name, u64 id);
 
+		// The bytes of the source file. Logs "Cannot read" and returns nullopt when it cannot be read (or, with allowEmpty false, is
+		// empty); the importer then just returns false.
+		std::optional<std::vector<std::byte>> read_source(bool allowEmpty = true);
+
+		// Makes an asset this one refers to a dependency: imports its source file first if needed (this import may run before its
+		// own). Warns, naming what (as in "a script"), and returns false when the database does not know the asset.
+		bool depend_on(AssetGuid guid, const char* what = "an asset");
+
 		// Imports another source file (a texture a model uses) if needed and returns its asset. The path may be
 		// relative to this source's folder. nullopt if there is no importer for it.
 		// defaultSettings only apply if that file has no .meta yet (e.g. a model asks for a normal map to be imported as one).

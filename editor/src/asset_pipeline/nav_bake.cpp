@@ -13,7 +13,7 @@
 #include <DetourNavMeshBuilder.h>
 #include <Recast.h>
 
-#include "atomic_write.h"
+#include <core/file_io.h>
 
 namespace wiwa
 {

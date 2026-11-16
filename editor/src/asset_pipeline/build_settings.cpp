@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "build_settings.h"
+#include <core/file_io.h>
 
 #include <fstream>
 
@@ -97,24 +98,9 @@ namespace wiwa
 		json["scenes"] = guids_to_json(Scenes);
 		json["alwaysInclude"] = guids_to_json(AlwaysInclude);
 
-		std::filesystem::path temp = path;
-		temp += ".tmp";
-		{
-			std::ofstream file(temp, std::ios::trunc);
-			if (!file)
-			{
-				return false;
-			}
-			file << json.dump(2);
-			if (!file)
-			{
-				return false;
-			}
-		}
-
-		std::error_code error;
-		std::filesystem::rename(temp, path, error);
-		return !error;
+		const std::string text = json.dump(2);
+		std::string error;
+		return write_file_atomic(path, text.data(), text.size(), error);
 	}
 
 	bool BuildSettings::validate(std::string& error) const

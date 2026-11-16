@@ -6,7 +6,7 @@
 #include "../file_utils.h"
 #include "../shader_compiler.h"
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {
@@ -70,10 +70,9 @@ namespace wiwa
 
 			virtual bool import(ImportContext& ctx) override
 			{
-				std::optional<std::vector<std::byte>> bytes = read_binary_file(ctx.source());
+				std::optional<std::vector<std::byte>> bytes = ctx.read_source();
 				if (!bytes)
 				{
-					WI_ASSET_LOG(Error, "Cannot read {0}", ctx.source().string());
 					return false;
 				}
 
