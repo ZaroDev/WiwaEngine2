@@ -87,6 +87,6 @@ Renderer in one line: the render thread owns all GPU state and a GUID-keyed `Gpu
 - Log with `WI_LOG` and its area variants (`WI_RENDER_LOG`, `WI_PHYSICS_LOG`, `WI_ASSET_LOG`...), never `std::cout`/`printf`.
 - `near` and `far` are Windows macros: don't use them as identifiers.
 - Compile definitions that change how shared headers compile must be identical in every project that includes them: `JoltDefines()` (Jolt) and `SolDefines()` (`SOL_ALL_SAFETIES_ON`, so Lua argument checks behave the same in Release and Debug) in the root `premake5.lua`. A new project that includes Jolt or sol headers calls them.
-- Premake only (no CMake). Third-party code is vendored under `engine/vendor/`; don't edit it except the patched NVRHI (rendering.md). The workspace `premake5.lua` still lists some stale `Wiwa/vendor/...` paths from an older project.
+- Premake only (no CMake). Third-party code is vendored under `engine/vendor/`; don't edit it except the patched NVRHI (rendering.md).
 - Every new feature must be showcased in `editor/assets/scenes/demo.wscene` and covered by `--demo-smoke` (`tests/src/play/demo_smoke.cpp`).
 - `docs/superpowers/documentation/` is committed; `docs/superpowers/plans/` and `PROMPT.md` are git-ignored and never committed. Plans are scratch and may be stale.

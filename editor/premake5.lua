@@ -7,8 +7,6 @@ project "wiwa_editor"
 
 	files
 	{
-		-- "resource.h",
-		-- "WiwaEditor.rc",
 		"src/**.h",
 		"src/**.cpp",
 		"vendor/ImGuizmo/ImGuizmo.h",
@@ -33,21 +31,12 @@ project "wiwa_editor"
 		"%{IncludeDirs.ENTT}",
 		"%{IncludeDirs.filewatch}",
 		"%{IncludeDirs.SPDLOG}",
-		--"%{IncludeDirs.ImGui}",
 		"%{IncludeDirs.GLM}",
 		"%{IncludeDirs.Wiwa}",
 		"%{IncludeDirs.sol2}",
 		"%{IncludeDirs.lua}",
 		"%{IncludeDirs.Recast}",
-		"%{IncludeDirs.Detour}",
-		-- "%{IncludeDirs.Optick}",
-		-- "%{IncludeDirs.ImGuizmo}",
-		-- "%{IncludeDirs.filewatch}",
-		-- "%{IncludeDirs.IconFontCppHeaders}",
-		-- "%{IncludeDirs.bullet}",
-		-- "%{IncludeDirs.ozz}",
-		-- "%{IncludeDirs.recastnavigation}",
-		-- "%{IncludeDirs.OpenCV}"
+		"%{IncludeDirs.Detour}"
 	}
 
 	links
@@ -57,10 +46,7 @@ project "wiwa_editor"
 		"LZ4",
 		"ufbx",
 		"Recast",
-		"d3dcompiler",
-		--"ImGui",
-		-- "Optick",
-		-- "ImGuizmo"
+		"d3dcompiler"
 	}
 
 	WwiseDefines()

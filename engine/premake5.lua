@@ -2,22 +2,19 @@ project "wiwa"
 	kind "StaticLib"
 	language "C++"
 	cppdialect "C++20"
-	
+
 	targetdir ("%{wks.location}/bin/".. outputdir .. "/%{prj.name}")
 	objdir ("%{wks.location}/bin-int/".. outputdir .. "/%{prj.name}")
 
 	pchheader "pch.h"
 	pchsource "src/pch.cpp"
 
-	ignoredefaultlibraries 
-	{
-		"libcmtd"
-	}
-	
+	ignoredefaultlibraries { "libcmtd" }
+
 	files
 	{
-		"src/**.hpp",        
-		"src/**.h",        
+		"src/**.hpp",
+		"src/**.h",
 		"src/**.cpp",
 	}
 
@@ -60,8 +57,6 @@ project "wiwa"
 		"Jolt",
 		"Detour",
 		"DetourCrowd"
-		-- "Optick",
-		-- "ImGuizmo",
 	}
 
 	defines
@@ -73,9 +68,6 @@ project "wiwa"
 	JoltDefines()
 	SolDefines()
 	WwiseDefines()
-
-	filter "files:vendor/imguizmo/**.cpp"
-		enablepch "Off"
 
 	-- the miniaudio implementation is one big vendor file: no precompiled header, and not our warnings
 	filter "files:src/audio/mini/miniaudio_impl.cpp"
@@ -114,37 +106,23 @@ project "wiwa"
 			"_CRT_SECURE_NO_WARNINGS"
 		}
 
-
-		postbuildcommands
-		{
-			--"{COPY} \"%{cfg.buildtarget.relpath}\" \"%{wks.location}Editor\"",
-			-- "copy \"..\\bin\\%{outputdir}\\Wiwa\\Wiwa.lib\" \"%{wks.location}Editor\\game\\Wiwa.lib\"",
-			-- "copy \"..\\bin\\%{outputdir}\\Wiwa\\Wiwa.lib\" \"%{wks.location}Editor\\game_assembly\\Wiwa.lib\""
-		}
-
-	debugdir "%{wks.location}/Editor"
-	
 	filter "configurations:Debug"
 		defines
-		{ 
+		{
 			"WI_DEBUG",
 			"WI_ENABLE_ASSERTS"
 		}
 		runtime "Debug"
 		symbols "On"
-		
-
 
 	filter "configurations:Release"
 		defines "WI_RELEASE"
 		runtime "Release"
 		optimize "On"
 		symbols "On"
-		
 
 	filter "configurations:Shipping"
 		defines "WI_SHIPPING"
 		runtime "Release"
 		optimize "On"
 		symbols "Off"
-		
