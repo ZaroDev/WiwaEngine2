@@ -19,7 +19,7 @@ namespace wiwa
 }
 
 // The "Asset Editor" panel: one window for the animation assets. A preview of the asset (the skeleton posed, with the skinned mesh that goes with
-// it) on the left, the tools of the open asset's type on the right (IAssetEditor: SkeletonEditor, MeshEditor; the clip editor comes later). Opened
+// it) on the left, the tools of the open asset's type on the right (IAssetEditor: the skeleton, mesh, clip, graph, effect and behavior tree editors). Opened
 // from the Asset Browser, the Inspector or the thumbnails. Main thread, between the ImGui frame's begin and end.
 class AssetEditorPanel final : public Panel
 {
@@ -31,7 +31,7 @@ public:
 	void on_draw() override;
 	const char* window_name() const override { return "###AssetEditor"; }
 
-	// Shows the panel with this file open (.wskel or .wmesh). If the open asset has unsaved changes the user is asked first. Other kinds of file
+	// Shows the panel with this file open (see can_open). If the open asset has unsaved changes the user is asked first. Other kinds of file
 	// are ignored (false).
 	bool open_file(const std::filesystem::path& file);
 	// Opens the source file of the asset, if it is one this panel edits.
@@ -47,6 +47,9 @@ public:
 	unsigned frames_with_editor() const { return m_FramesWithEditor; }
 	std::string open_kind() const { return m_Editor != nullptr ? m_Editor->kind() : std::string{}; }
 	const std::string& last_error() const { return m_Error; }
+	wiwa::IAssetEditor* editor() const { return m_Editor.get(); }
+	// Writes the open asset (the toolbar's Save and Ctrl+S): the panel then knows the change on disk is its own.
+	void save();
 	// The state the base layer of a graph plays in the preview (empty when no graph plays there).
 	std::string preview_state() const { const wiwa::AnimatorInstance* instance = m_Preview.animator(); return instance != nullptr && instance->graph_mode() ? instance->state_name(0) : std::string{}; }
 	bool focused() const { return m_Open && m_Focused; } // a closed panel is not drawn, so its last value would be stale
@@ -60,7 +63,6 @@ private:
 	void draw_preview_controls();
 	void draw_prompt();
 	void handle_keys();
-	void save();
 	void update_preview_choice();
 	void poll_file();
 	std::string title() const;

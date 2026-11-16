@@ -2,6 +2,7 @@
 #include "script_instances.h"
 
 #include <animation/animation_module.h>
+#include <nav/nav_module.h>
 
 #include <algorithm>
 
@@ -23,6 +24,8 @@ namespace wiwa
 		bind_scene(m_Runtime, m_Context);
 		bind_assets(m_Runtime, m_Context);
 		bind_render(m_Runtime, m_Context);
+		bind_decal(m_Runtime, m_Context);
+		bind_vfx(m_Runtime, m_Context);
 		m_Context.UiHandlers = &m_UiHandlers;
 		m_Context.AnimHandlers = &m_AnimHandlers;
 		bind_engine(m_Runtime, m_Context);
@@ -30,6 +33,9 @@ namespace wiwa
 		bind_physics(m_Runtime, m_Context);
 		bind_input(m_Runtime, m_Context);
 		bind_animation(m_Runtime, m_Context);
+		bind_audio(m_Runtime, m_Context);
+		bind_nav(m_Runtime, m_Context);
+		bind_ai(m_Runtime, m_Context);
 		bind_settings(m_Runtime, m_Context);
 	}
 
@@ -45,6 +51,22 @@ namespace wiwa
 		m_Context.ActiveScene = m_Scene.get();
 		m_Context.ActiveSceneRef = m_Scene;
 		m_BrokenScripts.clear();
+		m_NavEvents.clear();
+
+		// The agents tell the module when they arrive or find no path; the scripts hear it at the start of the next update.
+		if (m_Context.Nav != nullptr)
+		{
+			m_NavListener = m_Context.Nav->add_listener([this](entt::entity entity, NavAgentState state)
+			{
+				if (m_Scene != nullptr && m_Scene->registry().valid(entity))
+				{
+					if (const Id* id = m_Scene->registry().try_get<Id>(entity))
+					{
+						m_NavEvents.emplace_back(id->Guid, state);
+					}
+				}
+			});
+		}
 	}
 
 	void ScriptInstances::stop()
@@ -55,6 +77,12 @@ namespace wiwa
 			m_Context.Input->actions().cancel_listen();
 		}
 		m_Context.InputListening = false;
+		if (m_NavListener != 0 && m_Context.Nav != nullptr)
+		{
+			m_Context.Nav->remove_listener(m_NavListener);
+		}
+		m_NavListener = 0;
+		m_NavEvents.clear();
 
 		if (m_Scene == nullptr)
 		{
@@ -200,9 +228,7 @@ namespace wiwa
 				{
 					call_hook(instance, "on_destroy", nullptr);
 				}
-				m_UiHandlers.remove_owner(instance.Self);
-				m_AnimHandlers.remove_owner(instance.Self);
-				m_Known.erase({ instance.Entity, instance.Script });
+				drop_owner(instance);
 				instances->erase(instances->begin() + static_cast<std::ptrdiff_t>(i));
 			}
 		}
@@ -384,6 +410,13 @@ namespace wiwa
 		}
 	}
 
+	void ScriptInstances::drop_owner(const Instance& instance)
+	{
+		m_UiHandlers.remove_owner(instance.Self);
+		m_AnimHandlers.remove_owner(instance.Self);
+		m_Known.erase({ instance.Entity, instance.Script });
+	}
+
 	void ScriptInstances::script_reloaded(std::span<const AssetRef> scripts)
 	{
 		for (const AssetRef& script : scripts)
@@ -399,9 +432,7 @@ namespace wiwa
 					const bool reloaded = std::any_of(scripts.begin(), scripts.end(), [&](const AssetRef& script) { return script.resolved() == instance.Script; });
 					if (reloaded && instance.Failed)
 					{
-						m_UiHandlers.remove_owner(instance.Self);
-				m_AnimHandlers.remove_owner(instance.Self);
-						m_Known.erase({ instance.Entity, instance.Script });
+						drop_owner(instance);
 						return true;
 					}
 					return false;
@@ -440,7 +471,9 @@ namespace wiwa
 				{
 					sol::protected_function_result result = event.Kind == UiEventKind::ValueChanged
 						? m_Runtime.call(handler.Function, handler.Owner, event.Value)
-						: m_Runtime.call(handler.Function, handler.Owner);
+						: event.Kind == UiEventKind::Finished
+							? m_Runtime.call(handler.Function, handler.Owner, m_Runtime.state().create_table_with("skipped", event.Skipped, "failed", event.Failed))
+							: m_Runtime.call(handler.Function, handler.Owner);
 					if (!result.valid())
 					{
 						// the handler that failed is dropped; the others and the script's hooks go on
@@ -482,6 +515,30 @@ namespace wiwa
 					sol::error failure = result;
 					WI_SCRIPT_LOG(Error, "An animation event handler failed and was removed: {0}", failure.what());
 					m_AnimHandlers.remove_function(handler);
+				}
+			}
+		}
+	}
+
+	// The agents' arrivals and failures of the last frame go to the scripts on their entities, as on_nav_arrived(self) and on_nav_failed(self), before
+	// the scripts' on_update (a frame old, like the animation events: the crowd runs after the scripts).
+	void ScriptInstances::dispatch_nav_events()
+	{
+		if (m_NavEvents.empty())
+		{
+			return;
+		}
+		const auto events = std::move(m_NavEvents);
+		m_NavEvents.clear();
+		for (const auto& [guid, state] : events)
+		{
+			const char* hook = state == NavAgentState::Arrived ? "on_nav_arrived" : "on_nav_failed";
+			for (size_t i = 0; i < m_Instances.size(); i++)
+			{
+				Instance& instance = m_Instances[i];
+				if (instance.Entity == guid && !instance.Failed && alive(instance))
+				{
+					call_hook(instance, hook, nullptr);
 				}
 			}
 		}
@@ -626,6 +683,7 @@ namespace wiwa
 
 		reap();
 		dispatch_animation_events();
+		dispatch_nav_events();
 		dispatch_ui_events();
 		discover();
 

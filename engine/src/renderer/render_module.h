@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -9,6 +10,7 @@
 
 #include <assets/asset_guid.h>
 #include <core/module.h>
+#include <video/video_types.h>
 
 #include "debug/debug_draw.h"
 #include "imgui_layer.h"
@@ -27,6 +29,11 @@ namespace wiwa
 	class ImGuiRenderPass;
 	class UiRenderPass;
 	class RenderWorld;
+
+	// `--render-test` runs checks that live in the wiwa_tests project: it installs them here before the engine starts. The runner is called once on the render
+	// thread when every pass can render, and returns true when all the checks passed. With none installed, --render-test fails.
+	using RenderCheckRunner = std::function<bool(RenderWorld&)>;
+	void set_render_check_runner(RenderCheckRunner runner);
 
 	// What the main thread keeps for one offscreen view (views.md): the handle's settings and the extractor that mirrors the view's scene.
 	struct ViewRecord
@@ -64,7 +71,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE | UpdateFlags::UPDATE_RENDERER; }
 		virtual std::string get_name() const override { return "Renderer"; }
-		virtual int get_priority() const override { return -50; }
+		virtual int get_priority() const override { return ModulePriority::Render; }
 
 		// Main thread: queues a command for the next batch; it runs on the render thread against the render-side state.
 		void submit(RenderCommand command) { m_PendingCommands.push_back(std::move(command)); }
@@ -151,6 +158,11 @@ namespace wiwa
 		u32 create_ui_image(const ImageData& image);
 		void release_ui_image(u32 id);
 
+		// The pictures of a playing video (video/video_module.h): the render thread keeps one texture per stream, the UI draws it by
+		// view_video_texture_id(stream). A picture is written a frame or two after the call; the frame stays alive until then.
+		void upload_video_frame(u32 stream, std::shared_ptr<const VideoFrame> frame);
+		void release_video_stream(u32 stream);
+
 		GraphicsApi get_api() const { return m_Description.Api; }
 		// False if the renderer could not start or has failed since.
 		bool is_ready() const { return m_Started && !m_Failed; }
@@ -200,8 +212,7 @@ namespace wiwa
 		std::mutex m_ReloadMutex{};
 		std::vector<AssetGuid> m_ReloadedAssets{};
 		u32 m_ReloadListenerId = 0;
-		u32 m_RequestedViewportWidth = 0; // main thread: what was last sent
-		u32 m_RequestedViewportHeight = 0;
+		glm::uvec2 m_RequestedViewport{ 0, 0 }; // main thread: what was last sent
 		bool m_SentSceneInViewport = false;
 		RenderQuality m_Quality{};
 		std::optional<RenderCamera> m_SentCameraOverride{};

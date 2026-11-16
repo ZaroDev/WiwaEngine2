@@ -63,11 +63,21 @@ namespace wiwa
 			m_LightIndex.clear();
 			m_FreeLights.clear();
 			m_LightCount = 0;
+			m_Decals.clear();
+			m_DecalIndex.clear();
+			m_FreeDecals.clear();
+			m_DecalCount = 0;
+			m_Particles.clear();
+			m_ParticleIndex.clear();
+			m_FreeParticles.clear();
+			m_ParticleCount = 0;
 			m_Camera.reset();
 		}
 
 		const Slots<RenderInstance> instances{ &m_Instances, &m_InstanceIndex, &m_FreeInstances, &m_InstanceCount };
 		const Slots<RenderLight> lights{ &m_Lights, &m_LightIndex, &m_FreeLights, &m_LightCount };
+		const Slots<RenderDecal> decals{ &m_Decals, &m_DecalIndex, &m_FreeDecals, &m_DecalCount };
+		const Slots<RenderParticleSystem> particles{ &m_Particles, &m_ParticleIndex, &m_FreeParticles, &m_ParticleCount };
 
 		for (const EntityGuid& guid : delta.InstanceRemovals)
 		{
@@ -108,6 +118,40 @@ namespace wiwa
 		for (auto& [guid, light] : delta.LightUpserts)
 		{
 			upsert(lights, guid, std::move(light));
+		}
+		for (const EntityGuid& guid : delta.DecalRemovals)
+		{
+			remove(decals, guid);
+		}
+		for (auto& [guid, decal] : delta.DecalUpserts)
+		{
+			upsert(decals, guid, std::move(decal));
+		}
+		for (const EntityGuid& guid : delta.ParticleRemovals)
+		{
+			remove(particles, guid);
+		}
+		for (auto& [guid, system] : delta.ParticleUpserts)
+		{
+			// the spawns still waiting for the simulation and the matrix of the last simulated frame belong to the render scene, not to the delta
+			const auto existing = m_ParticleIndex.find(guid);
+			system.Guid = guid;
+			system.PendingSpawns = existing != m_ParticleIndex.end() ? m_Particles[existing->second].PendingSpawns : std::array<u32, PARTICLE_MAX_EMITTERS>{};
+			system.PrevWorld = existing != m_ParticleIndex.end() ? m_Particles[existing->second].PrevWorld : system.World;
+			upsert(particles, guid, std::move(system));
+		}
+		for (const auto& [guid, spawns] : delta.ParticleSpawns)
+		{
+			const auto found = m_ParticleIndex.find(guid);
+			if (found == m_ParticleIndex.end())
+			{
+				continue;
+			}
+			for (size_t i = 0; i < PARTICLE_MAX_EMITTERS; i++)
+			{
+				u32& pending = m_Particles[found->second].PendingSpawns[i];
+				pending = std::min<u64>(static_cast<u64>(pending) + spawns[i], PARTICLE_LIMIT_MAX_PARTICLES);
+			}
 		}
 
 		if (delta.Settings)
@@ -152,9 +196,28 @@ namespace wiwa
 		return found == m_InstanceIndex.end() ? std::nullopt : std::optional<size_t>(found->second);
 	}
 
-	std::optional<size_t> RenderScene::find_light(EntityGuid guid) const
+	std::optional<size_t> RenderScene::find_particle_system(EntityGuid guid) const
 	{
-		const auto found = m_LightIndex.find(guid);
-		return found == m_LightIndex.end() ? std::nullopt : std::optional<size_t>(found->second);
+		const auto found = m_ParticleIndex.find(guid);
+		return found == m_ParticleIndex.end() ? std::nullopt : std::optional<size_t>(found->second);
+	}
+
+	std::array<u32, PARTICLE_MAX_EMITTERS> RenderScene::take_pending_spawns(size_t slot)
+	{
+		std::array<u32, PARTICLE_MAX_EMITTERS> spawns{};
+		if (slot < m_Particles.size() && m_Particles[slot].Alive)
+		{
+			RenderParticleSystem& system = m_Particles[slot];
+			spawns = system.PendingSpawns;
+			system.PendingSpawns.fill(0);
+			system.PrevWorld = system.World;
+		}
+		return spawns;
+	}
+
+	std::optional<size_t> RenderScene::find_decal(EntityGuid guid) const
+	{
+		const auto found = m_DecalIndex.find(guid);
+		return found == m_DecalIndex.end() ? std::nullopt : std::optional<size_t>(found->second);
 	}
 }

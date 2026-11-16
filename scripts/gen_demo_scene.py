@@ -11,7 +11,7 @@ Skeletons, clips and skinned meshes of the models are extracted by the editor in
 the animationEvents setting written to the model .meta below only seeds the clips of that first extraction (the files own the events afterwards), and the
 scene's references to the old sub-asset ids keep working through the catalog's redirects.
 
-The demo smoke test (editor/src/play/demo_smoke.cpp) depends on entity names, positions of the joints and the character lane, the
+The demo smoke test (tests/src/play/demo_smoke.cpp) depends on entity names, positions of the joints and the character lane, the
 HUD widget names and colours and the behaviour of the scripts below. Change them together.
 """
 import hashlib
@@ -28,7 +28,8 @@ import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "editor" / "assets"
-CACHE = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / ".demo_cache"
+ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+CACHE = pathlib.Path(ARGS[0]) if ARGS else ROOT / ".demo_cache"
 
 SCENE_GUID = "2a6ca957fed3526d8d53224e96ff22f1"  # editor/build_settings.json names it
 
@@ -39,6 +40,36 @@ def guid(key):
 
 def ref(g, local=0):
 	return {"guid": g, "localId": local}
+
+
+_FNV = 0xCBF29CE484222325
+_FNV_PRIME = 0x100000001B3
+_U64 = 0xFFFFFFFFFFFFFFFF
+
+
+def node_id(path):
+	"""The stable id of a prefab node (engine/src/scene/prefab_node_id.cpp compute_node_id): FNV-1a 64 of the path of names ("Street lamp/Head"). Only for nodes
+	with unique names among their siblings (the engine adds "#n" to a repeated name and bumps a collision)."""
+	h = _FNV
+	for b in path.encode():
+		h = ((h ^ b) * _FNV_PRIME) & _U64
+	return h or 1
+
+
+def compose_node_id(outer, inner):
+	"""The id of a node of a nested prefab instance (compose_node_id in prefab_node_id.cpp): `outer` is the id of the instance's node, `inner` the id in the inner prefab."""
+	h = _FNV
+	for part in (outer, inner):
+		for shift in range(0, 64, 8):
+			h = ((h ^ ((part >> shift) & 0xFF)) * _FNV_PRIME) & _U64
+		h = ((h ^ 0x9E) * _FNV_PRIME) & _U64
+	if h == 0:
+		return 1
+	return _U64 - 1 if h == _U64 else h
+
+
+def set_field_override(node, component, field, value):
+	return {"kind": "SetField", "node": "%016x" % node, "component": component, "field": field, "value": value}
 
 
 # ---------------------------------------------------------------------------------------------------------------- files
@@ -63,12 +94,12 @@ def write_meta(rel, importer, version, settings=None, sub_assets=None, fixed_gui
 	return g
 
 
-def download(url, name):
+def download(url, name, agent="wiwa2-demo-generator"):
 	CACHE.mkdir(parents=True, exist_ok=True)
 	path = CACHE / name
 	if not path.exists():
 		print("downloading", url)
-		request = urllib.request.Request(url, headers={"User-Agent": "wiwa2-demo-generator"})
+		request = urllib.request.Request(url, headers={"User-Agent": agent})
 		with urllib.request.urlopen(request, timeout=180) as response:
 			path.write_bytes(response.read())
 	return path
@@ -218,6 +249,37 @@ CHARS_URL = "https://opengameart.org/sites/default/files/rpg_characters_-_nov_20
 MONSTERS_URL = "https://opengameart.org/sites/default/files/cute_animated_monsters_-_aug_2020.zip"
 HDRI_URL = "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloppenheim_06_puresky_1k.hdr"
 TEXTURES = {"bricks": "Bricks059", "paving": "PavingStones070", "metal": "Metal032"}
+# Sounds, all CC0: events are the file names (docs/superpowers/documentation/audio.md, MiniAudio backend). Kenney's packs through their Godot mirrors, pinned to a commit.
+KENNEY_UI = "https://raw.githubusercontent.com/Calinou/kenney-interface-sounds/4596a49eaf5a533948d49a47467f606bcdea70ff/addons/kenney_interface_sounds/"
+KENNEY_IMPACT = "https://raw.githubusercontent.com/Boyquotes/kenney-impact-sounds-for-godot/999dd1684873f8b020a3aa5b26e713da21688924/addons/kenney%20impact%20sounds/"
+OGA_WIND = "https://opengameart.org/sites/default/files/Birds%20and%20Wind%20-%20Ambient_0.ogg"
+AUDIO = (  # (event / file name in the project, source url, cache name)
+	("Amb_Hall_loop.ogg", OGA_WIND, "oga_birds_and_wind_ambient.ogg"),  # the "_loop" ending makes the MiniAudio backend loop it
+	("Beacon_Blip.wav", KENNEY_UI + "bong_001.wav", "kenney_bong_001.wav"),
+	("UI_Click.wav", KENNEY_UI + "click_001.wav", "kenney_click_001.wav"),
+	("Footstep_1.ogg", KENNEY_IMPACT + "footstep_concrete_000.ogg", "kenney_footstep_concrete_000.ogg"),
+	("Footstep_2.ogg", KENNEY_IMPACT + "footstep_concrete_001.ogg", "kenney_footstep_concrete_001.ogg"),
+	("Footstep_3.ogg", KENNEY_IMPACT + "footstep_concrete_002.ogg", "kenney_footstep_concrete_002.ogg"),
+	("Impact_Soft.ogg", KENNEY_IMPACT + "impact_soft_medium_000.ogg", "kenney_impact_soft_medium_000.ogg"),
+)
+AUDIO_LICENSE = """The sounds in this folder are all CC0 1.0 (public domain):
+
+- Beacon_Blip.wav (bong_001), UI_Click.wav (click_001): Kenney, "Interface Sounds", https://kenney.nl/assets/interface-sounds
+- Footstep_1..3.ogg (footstep_concrete_000..002), Impact_Soft.ogg (impact_soft_medium_000): Kenney, "Impact Sounds", https://kenney.nl/assets/impact-sounds
+- Amb_Hall_loop.ogg ("Birds and Wind - Ambient.ogg"): Spring Spring, "Birds and Wind - Ambient, Birds, Wind and Synth", https://opengameart.org/content/birds-and-wind-ambient-birds-wind-and-synth
+  (bird sounds in it by isaiah658, syncopika and pauliuw, public domain)
+
+They are copied under the names the demo scripts post as events. scripts/gen_demo_scene.py downloads them.
+"""
+
+
+def import_audio():
+	for name, url, cache in AUDIO:
+		write("audio/clips/" + name, download(url, cache, "Mozilla/5.0").read_bytes(), binary=True)
+		write_meta("audio/clips/" + name, "AudioClipImporter", 1)
+	write("audio/clips/LICENSE.txt", AUDIO_LICENSE)
+
+
 FONT_URL = "https://github.com/google/fonts/raw/main/ofl/lato/Lato-Regular.ttf"
 FONT_LICENSE_URL = "https://github.com/google/fonts/raw/main/ofl/lato/OFL.txt"
 
@@ -569,6 +631,33 @@ end
 return CameraRig
 """
 
+SCRIPTS["audio_demo.lua"] = """-- Audio (see "Audio" in docs/scripting.md): the entity has an AudioEmitter, so it has a voice: it hums the ambience (PlayOnStart, heard across the hall) and
+-- this script blips from the beacon every few seconds. The sounds are assets/audio/*.ogg and .wav (CC0, see its LICENSE.txt); the project plays them
+-- with the MiniAudio backend (Settings, Audio). Another backend, or none (Null), takes the same calls.
+local AudioDemo = Script:extend{
+  properties = {
+    event = { type = "string", default = "Beacon_Blip" },
+    every = { type = "float", default = 4, min = 0.5, max = 60 },
+  },
+}
+
+function AudioDemo:on_init()
+  self.t = 0
+  Audio.set_rtpc("Volume", 0.8)
+  self.last = Audio.post(self.event, self.entity)
+end
+
+function AudioDemo:on_update(dt)
+  self.t = self.t + dt
+  if self.t >= self.every then
+    self.t = 0
+    self.last = Audio.post(self.event, self.entity)
+  end
+end
+
+return AudioDemo
+"""
+
 SCRIPTS["scene_overlay.lua"] = """-- A scene-level script (listed in the scene settings, no entity): logs and draws debug shapes around the stations.
 local SceneOverlay = Script:extend{
   properties = {},
@@ -591,7 +680,7 @@ return SceneOverlay
 """
 
 SCRIPTS["demo_ui.lua"] = """-- The HUD (assets/ui/demo_hud.wuipanel) on the entity that has the UICanvas: change a widget (score, health bar, beacon bar),
--- listen to one (the button switches the light, the slider sets its intensity) and use a widget that follows an entity on the screen.
+-- listen to one (the button switches the light, the slider sets its intensity), use a widget that follows an entity on the screen and play a video.
 local DemoUi = Script:extend{
   properties = {},
 }
@@ -615,12 +704,29 @@ function DemoUi:setup()
   self.level = self.slider.value
 
   panel:find("Controls/ToggleLight"):on("click", function(me)
+    Audio.post("UI_Click")
     me.on = not me.on
     me:apply_light()
   end)
   self.slider:on("value_changed", function(me, value)
     me.level = value
     me:apply_light()
+  end)
+
+  -- Video (see "Video" in docs/scripting.md): the Play intro button shows the full screen Video widget and plays it; the widget hides itself when
+  -- the video ends, is skipped (the Skip button, or Cancel: Escape / pad B) or fails.
+  self.intro = panel:find("Intro")
+  panel:find("PlayIntro"):on("click", function(me)
+    Audio.post("UI_Click")
+    me.intro.visible = true
+    me.intro:video_play()
+  end)
+  panel:find("Intro/Skip"):on("click", function(me) me.intro:video_stop() end)
+  self.intro:on("finished", function(me, info)
+    me.intro.visible = false
+    if info.failed then
+      log("Video", "the intro could not play: " .. me.intro:video_error())
+    end
   end)
 
   self.ready = true
@@ -640,6 +746,10 @@ function DemoUi:on_update(dt)
       return
     end
     self:setup()
+  end
+
+  if self.intro.visible and input.action("UI", "Cancel"):pressed() then
+    self.intro:video_stop()
   end
 
   self.t = self.t + dt
@@ -674,7 +784,7 @@ function InputDemo:setup()
   self.move = panel:find("InputInfo/Move")
   self.jump = panel:find("InputInfo/JumpKey")
   self.rebind_label = panel:find("InputInfo/RebindJump/Label")
-  panel:find("InputInfo/RebindJump"):on("click", function(me) me:start_rebind() end)
+  panel:find("InputInfo/RebindJump"):on("click", function(me) Audio.post("UI_Click") me:start_rebind() end)
   self.ready = true
 end
 
@@ -930,6 +1040,7 @@ end
 function Hopper:on_collision_enter(other, contact)
   if contact.impulse > 30 then
     debug_draw.sphere(contact.point, 0.25, vec4(1, 0.5, 0, 1), 0.4)
+    Audio.post("Impact_Soft", self.entity)
   end
 end
 
@@ -1044,6 +1155,8 @@ function AnimationGraphDemo:on_init()
   end
   self.anim:on("footstep", function(me, event)
     me.steps = me.steps + 1
+    -- the entity has an AudioEmitter (its Event is empty): the step is heard from where the warrior is
+    Audio.post("Footstep_" .. (me.steps % 3 + 1), me.entity)
   end)
 end
 
@@ -1103,6 +1216,121 @@ return ClipPlayer
 """
 
 
+SCRIPTS["decal_footprints.lua"] = """-- Decals from a script: every "footstep" event of the entity's animator leaves a footprint (Decal.spawn) that fades out on its own, and the
+-- mesh of the character does not receive decals itself (MeshRenderer.ReceivesDecals).
+local DecalFootprints = Script:extend{
+  properties = {
+    lifetime = { type = "float", default = 4, min = 0.5, max = 30 },
+  },
+}
+
+local function stop_receiving(entity)
+  for _, child in ipairs(entity.children) do
+    if child:has("MeshRenderer") then
+      child:get("MeshRenderer").receivesdecals = false
+    end
+    stop_receiving(child)
+  end
+end
+
+function DecalFootprints:on_init()
+  self.left = true
+  self.material = load_asset("assets/materials/decal_footprint.wmat")
+  stop_receiving(self.entity)
+  local anim = Animation.animator(self.entity)
+  if anim ~= nil then
+    anim:on("footstep", function(me, event)
+      me:step()
+    end)
+  end
+end
+
+function DecalFootprints:step()
+  local p = self.transform.position
+  local side = self.left and -0.18 or 0.18
+  self.left = not self.left
+  Decal.spawn{ material = self.material, position = vec3(p.x + side, 0.02, p.z), normal = vec3(0, 1, 0), size = vec3(0.3, 0.5, 0.4),
+    lifetime = self.lifetime, fade_in = 0.1, fade_out = 1.5, roll = 180, sort_order = 5, name = "Footprint" }
+end
+
+return DecalFootprints
+"""
+
+
+SCRIPTS["nav_patrol.lua"] = """-- Walks the entity's NavAgent between two points of the navmesh, for ever: Nav.agent(...):set_destination, and on_nav_arrived sends it to the other point.
+-- The agent has to try again until the navmesh of the scene has loaded (set_destination is false before there is a world).
+local NavPatrol = Script:extend{
+  properties = {
+    a = { type = "vec3", default = { 0, 0, 0 } },
+    b = { type = "vec3", default = { 0, 0, 5 } },
+  },
+}
+
+function NavPatrol:on_init()
+  self.agent = Nav.agent(self.entity)
+  self.to_b = true
+  self.started = false
+end
+
+function NavPatrol:target()
+  local p = self.to_b and self.b or self.a
+  return vec3(p.x, p.y, p.z)
+end
+
+function NavPatrol:on_update(dt)
+  if not self.started and self.agent:set_destination(self:target()) then
+    self.started = true
+  end
+end
+
+function NavPatrol:on_nav_arrived()
+  self.to_b = not self.to_b
+  self.agent:set_destination(self:target())
+end
+
+function NavPatrol:on_nav_failed()
+  log_warning("NavPatrol", "no route to the next point")
+end
+
+return NavPatrol
+"""
+
+
+SCRIPTS["heard_check.lua"] = """-- A behaviour tree condition leaf (LuaCondition): succeeds while the guard's blackboard holds a noise it has not gone to look at yet (heard_kind is set
+-- by the Perceiver when it hears AI.emit_noise; the tree clears it after the visit).
+return BtCondition:extend{
+  on_tick = function(self, bb, dt)
+    if bb:get("heard_kind") ~= "" then return "success" end
+    return "failure"
+  end,
+}
+"""
+
+
+SCRIPTS["noise_maker.lua"] = """-- Makes a noise at its own position every few seconds (AI.emit_noise): the guards of the behaviour tree demo that hear it go and look.
+local NoiseMaker = Script:extend{
+  properties = {
+    interval = { type = "float", default = 3.0, min = 0.5, max = 30 },
+    loudness = { type = "float", default = 1.0, min = 0.1, max = 10 },
+  },
+}
+
+function NoiseMaker:on_init()
+  self.t = 1.0
+end
+
+function NoiseMaker:on_update(dt)
+  self.t = self.t - dt
+  if self.t <= 0 then
+    self.t = self.interval
+    AI.emit_noise(self.transform.position, self.loudness, "crash")
+  end
+end
+
+return NoiseMaker
+"""
+
+
 def build_scripts():
 	ids = {}
 	for rel, text in SCRIPTS.items():
@@ -1110,6 +1338,508 @@ def build_scripts():
 		write(path, text)
 		ids[rel.split("/")[-1][:-4]] = write_meta(path, "ScriptImporter", 1)
 	return ids
+
+
+# ---------------------------------------------------------------------------------------------------------------- decals
+
+def decal_textures():
+	"""Procedural textures of the decals (no downloads, no third-party art): a rune circle (color and glow), a bullet hole with a normal map, a
+	scorch mark and a footprint. RGBA PNGs: the alpha is where the decal is."""
+	import numpy as np
+	from PIL import Image, ImageDraw, ImageFilter
+
+	def png(rel, array, kind):
+		buf = io.BytesIO()
+		Image.fromarray(array).save(buf, "PNG")
+		write(rel, buf.getvalue(), binary=True)
+		write_texture_meta(rel, kind)
+
+	def smoothstep(a, b, x):
+		t = np.clip((x - a) / (b - a), 0.0, 1.0)
+		return t * t * (3 - 2 * t)
+
+	def disc(n):
+		y, x = np.mgrid[0:n, 0:n].astype(np.float64)
+		c = (n - 1) / 2
+		return (x - c) / c, (y - c) / c
+
+	rng = np.random.default_rng(7)
+
+	# the rune circle: three rings, twelve spokes between the inner two, and six ticks outside
+	n = 256
+	dx, dy = disc(n)
+	r, a = np.hypot(dx, dy), np.arctan2(dy, dx)
+	ring = lambda r0, w: np.exp(-((r - r0) / w) ** 2)
+	spokes = ((np.abs(((a * 12 / (2 * math.pi)) % 1) - 0.5) > 0.46) & (r > 0.35) & (r < 0.72)).astype(np.float64)
+	ticks = ((np.abs(((a * 6 / (2 * math.pi)) % 1) - 0.5) > 0.44) & (r > 0.76) & (r < 0.9)).astype(np.float64)
+	strokes = np.clip(ring(0.95, 0.018) + ring(0.72, 0.014) + ring(0.35, 0.014) + spokes * 0.9 + ticks * 0.9, 0, 1) * (r < 0.99)
+	color = np.zeros((n, n, 4), np.uint8)
+	color[..., 0], color[..., 1], color[..., 2], color[..., 3] = 255, 150, 40, (strokes * 255).astype(np.uint8)
+	png("textures/decals/rune_color.png", color, "color")
+	glow = np.zeros((n, n, 3), np.uint8)
+	glow[..., 0], glow[..., 1], glow[..., 2] = (strokes * 255).astype(np.uint8), (strokes * 170).astype(np.uint8), (strokes * 60).astype(np.uint8)
+	png("textures/decals/rune_emissive.png", glow, "color")
+
+	# the bullet hole: a dark dent with a raised rim, and its normal map (OpenGL convention, +Y up)
+	n = 128
+	dx, dy = disc(n)
+	r = np.hypot(dx, dy)
+	height = -1.0 * (1 - smoothstep(0.0, 0.5, r)) + 0.35 * np.exp(-((r - 0.55) / 0.12) ** 2)
+	height *= (r < 0.95)
+	gy, gx = np.gradient(height)
+	normal = np.dstack((-gx * 14, gy * 14, np.ones_like(height)))
+	normal /= np.linalg.norm(normal, axis=2, keepdims=True)
+	normal_png = np.zeros((n, n, 4), np.uint8)
+	normal_png[..., :3] = ((normal * 0.5 + 0.5) * 255).astype(np.uint8)
+	normal_png[..., 3] = 255
+	png("textures/decals/bullet_normal.png", normal_png, "normal")
+	alpha = smoothstep(0.95, 0.55, r) * (0.55 + 0.45 * smoothstep(0.6, 0.0, r))
+	hole = np.zeros((n, n, 4), np.uint8)
+	hole[..., 0], hole[..., 1], hole[..., 2] = 22, 20, 18
+	hole[..., 3] = (np.clip(alpha, 0, 1) * 255).astype(np.uint8)
+	png("textures/decals/bullet_color.png", hole, "color")
+
+	# the scorch mark: a soft blot with an uneven edge
+	n = 256
+	dx, dy = disc(n)
+	r = np.hypot(dx, dy)
+	noise = Image.fromarray((rng.random((n // 8, n // 8)) * 255).astype(np.uint8)).resize((n, n), Image.BICUBIC).filter(ImageFilter.GaussianBlur(4))
+	r = r + (np.asarray(noise, np.float64) / 255 - 0.5) * 0.5
+	scorch = np.zeros((n, n, 4), np.uint8)
+	scorch[..., 0], scorch[..., 1], scorch[..., 2] = 12, 10, 9
+	scorch[..., 3] = (np.clip(smoothstep(0.95, 0.2, r) * 0.92, 0, 1) * 255).astype(np.uint8)
+	png("textures/decals/scorch_color.png", scorch, "color")
+
+	# a footprint, pointing up: a sole and a heel
+	img = Image.new("L", (128, 256), 0)
+	draw = ImageDraw.Draw(img)
+	draw.ellipse((26, 20, 102, 150), fill=255)
+	draw.ellipse((38, 160, 90, 236), fill=255)
+	mask = np.asarray(img.filter(ImageFilter.GaussianBlur(2.5)), np.uint8)
+	foot = np.zeros((256, 128, 4), np.uint8)
+	foot[..., 0], foot[..., 1], foot[..., 2] = 30, 26, 22
+	foot[..., 3] = (mask * 0.85).astype(np.uint8)
+	png("textures/decals/footprint_color.png", foot, "color")
+	write("textures/decals/LICENSE.txt", "Generated by scripts/gen_demo_scene.py (no third-party art); CC0 1.0.\n")
+
+
+def decal_materials():
+	"""The materials of the decals: only the textures, the factors and the base color alpha matter (a decal ignores the alpha mode)."""
+	decal_textures()
+	m = {}
+	m["decal_rune"] = wmat("decal_rune", roughness=0.4, emissive=(3.0, 1.6, 0.5), textures={"baseColor": "../textures/decals/rune_color.png", "emissive": "../textures/decals/rune_emissive.png"})
+	m["decal_bullet"] = wmat("decal_bullet", roughness=0.6, textures={"baseColor": "../textures/decals/bullet_color.png", "normal": "../textures/decals/bullet_normal.png"})
+	m["decal_scorch"] = wmat("decal_scorch", roughness=1.0, textures={"baseColor": "../textures/decals/scorch_color.png"})
+	m["decal_footprint"] = wmat("decal_footprint", roughness=0.9, textures={"baseColor": "../textures/decals/footprint_color.png"})
+	return m
+
+
+def add_decals(s, g):
+	"""The decals of the demo (see docs/superpowers/documentation/decals.md): a rune circle that glows on the ground, bullet holes with a normal map on a
+	column, a scorch mark across the ground and a crate, and (scripts/decal_footprints.lua on the warrior) footprints at its footsteps."""
+	def decal(material, size, sort_order=0, **extra):
+		return {"Decal": dict({"Material": ref(g["decals"][material]), "Size": list(size), "SortOrder": sort_order}, **extra)}
+
+	up = qaxis((1, 0, 0), -90)  # turns the box's +Z to +Y: the decal projects straight down
+	s.add("Decals station", "World")
+	s.add("Decal rune circle", "Decals station", pos=(-3, 0.3, 6.5), rot=qmul(up, qaxis((0, 0, 1), 20)), **decal("decal_rune", (4.2, 4.2, 1.0), 1))
+	for i, (x, y) in enumerate(((-6.2, 1.4), (-5.85, 2.1), (-6.1, 3.0), (-5.7, 3.7))):
+		s.add("Decal bullet hole %d" % (i + 1), "Decals station", pos=(x, y, -3.5), rot=qaxis((0, 0, 1), 37 * i), **decal("decal_bullet", (0.4, 0.4, 0.5), 2 + i))
+	s.add("Decal scorch mark", "Decals station", pos=(3.5, 0.2, -3.2), rot=up, **decal("decal_scorch", (3.4, 3.4, 2.0), 0))
+
+
+def patch_scene_with_decals(g):
+	"""--decals-only: adds the decals to the scene that is already written (no downloads): the decals station, and the footprint script on the warrior."""
+	path = ASSETS / "scenes/demo.wscene"
+	scene = json.loads(path.read_text(encoding="utf-8"))
+	fresh = Scene()
+	fresh.ids["World"] = guid("entity:World")
+	add_decals(fresh, g)
+	ours = set(e["id"] for e in fresh.entities)
+	entities = [e for e in scene["entities"] if e["id"] not in ours]
+	entities.extend(fresh.entities)
+	warrior = next(e for e in entities if e["id"] == guid("entity:Warrior (animated)"))
+	warrior["components"]["script:" + g["scripts"]["decal_footprints"]] = {}
+	scene["entities"] = entities
+	write_json("scenes/demo.wscene", scene)
+
+
+# -------------------------------------------------------------------------------------------------------------------- vfx
+
+SCRIPTS["vfx_demo.lua"] = """-- Particles from a script: plays a one-shot effect (Vfx.spawn) at its own position every few seconds; the entity that spawned it is removed by itself
+-- when the effect is over. A placed ParticleSystem (the campfire, the fountain) needs no script.
+local VfxDemo = Script:extend{
+  properties = {
+    interval = { type = "float", default = 2.5, min = 0.2, max = 30 },
+  },
+}
+
+function VfxDemo:on_init()
+  self.effect = load_asset("assets/vfx/impact_sparks.wfx")
+  self.t = self.interval
+end
+
+function VfxDemo:on_update(dt)
+  self.t = self.t - dt
+  if self.t <= 0 then
+    self.t = self.interval
+    Vfx.spawn{ effect = self.effect, position = self.transform.position, name = "Impact sparks" }
+  end
+end
+
+return VfxDemo
+"""
+
+SCRIPTS["vfx_footsteps.lua"] = """-- Particles from animation events: every "footstep" event of the entity's animator kicks up a puff of dust at its feet (Vfx.spawn).
+local VfxFootsteps = Script:extend{
+  properties = {
+    spread = { type = "float", default = 0.18, min = 0, max = 1 },
+  },
+}
+
+function VfxFootsteps:on_init()
+  self.left = true
+  self.effect = load_asset("assets/vfx/footstep_dust.wfx")
+  local anim = Animation.animator(self.entity)
+  if anim ~= nil then
+    anim:on("footstep", function(me, event)
+      me:puff()
+    end)
+  end
+end
+
+function VfxFootsteps:puff()
+  local p = self.transform.position
+  local side = self.left and -self.spread or self.spread
+  self.left = not self.left
+  Vfx.spawn{ effect = self.effect, position = vec3(p.x + side, 0.05, p.z), name = "Footstep dust" }
+end
+
+return VfxFootsteps
+"""
+
+
+def vfx_textures():
+	"""Procedural sprites of the effects (no downloads, no third-party art): a soft glow, a flame, a smoke puff and a spark. RGBA PNGs (white, alpha is the shape);
+	the smoke is a sheet of 2 x 2 puffs."""
+	import numpy as np
+	from PIL import Image, ImageFilter
+
+	def png(rel, array):
+		buf = io.BytesIO()
+		Image.fromarray(array).save(buf, "PNG")
+		write(rel, buf.getvalue(), binary=True)
+		write_texture_meta(rel, "color")
+
+	def smoothstep(a, b, x):
+		t = np.clip((x - a) / (b - a), 0.0, 1.0)
+		return t * t * (3 - 2 * t)
+
+	def disc(n):
+		y, x = np.mgrid[0:n, 0:n].astype(np.float64)
+		c = (n - 1) / 2
+		return (x - c) / c, (y - c) / c
+
+	def white(alpha):
+		out = np.full(alpha.shape + (4,), 255, np.uint8)
+		out[..., 3] = (np.clip(alpha, 0, 1) * 255).astype(np.uint8)
+		return out
+
+	def blurred_noise(cells, n, blur):
+		small = Image.fromarray((rng.random((cells, cells)) * 255).astype(np.uint8))
+		return np.asarray(small.resize((n, n), Image.BICUBIC).filter(ImageFilter.GaussianBlur(blur)), np.float64) / 255
+
+	rng = np.random.default_rng(11)
+
+	n = 128
+	dx, dy = disc(n)
+	r = np.hypot(dx, dy)
+	png("textures/vfx/glow.png", white((1 - smoothstep(0.0, 1.0, r)) ** 2))
+
+	# a spark: a bright core with a soft halo
+	png("textures/vfx/spark.png", white(np.exp(-(r / 0.22) ** 2) + 0.35 * (1 - smoothstep(0.0, 1.0, r)) ** 3))
+
+	# a flame: a teardrop, narrow at the top (v = 0 is the top of the image), wobbled by a little noise
+	y, x = np.mgrid[0:n, 0:n].astype(np.float64)
+	u, v = (x / (n - 1)) * 2 - 1, y / (n - 1)
+	width = np.sin(np.clip(v, 0, 1) * math.pi * 0.85 + 0.25) * 0.7 * (0.35 + 0.65 * v)
+	d = np.abs(u + (blurred_noise(8, n, 3) - 0.5) * 0.3) / np.maximum(width, 1e-3)
+	flame = (1 - smoothstep(0.35, 1.0, d)) * smoothstep(0.0, 0.12, v) * (1 - smoothstep(0.93, 1.0, v))
+	png("textures/vfx/flame.png", white(flame))
+
+	# smoke: four puffs of a blurred noise blob, in a 2 x 2 sheet
+	cell = 128
+	sheet = np.zeros((cell * 2, cell * 2), np.float64)
+	for i in range(4):
+		puff = smoothstep(1.0, 0.25, r + (blurred_noise(6, cell, 5) - 0.5) * 0.7) * 0.8
+		sheet[(i // 2) * cell:(i // 2 + 1) * cell, (i % 2) * cell:(i % 2 + 1) * cell] = puff
+	png("textures/vfx/smoke_sheet.png", white(sheet))
+	write("textures/vfx/LICENSE.txt", "Generated by scripts/gen_demo_scene.py (no third-party art); CC0 1.0.\n")
+
+
+def vfx_effects():
+	"""The materials and the .wfx effects of the demo. Sprites only (ribbons and mesh particles are not drawn yet, see vfx.md)."""
+	vfx_textures()
+	m = {}
+	for name, tex in (("glow", "glow"), ("spark", "spark"), ("flame", "flame"), ("smoke", "smoke_sheet")):
+		m[name] = wmat("vfx_" + name, roughness=1.0, alpha="blend", textures={"baseColor": "../textures/vfx/%s.png" % tex})
+
+	def curve(*keys):
+		return {"curve": [list(k) for k in keys]}
+
+	def emitter(name, material, **fields):
+		e = {"name": name, "renderer": "sprite", "material": ref(m[material]), "blend": "additive", "align": "camera", "softDistance": 0.4, "intensity": 1.0,
+			"maxParticles": 1024}
+		e.update(fields)
+		return e
+
+	fx = {}
+	fx["campfire"] = {"version": 1, "name": "Campfire", "emitters": [
+		emitter("Flames", "flame", intensity=2.5, maxParticles=256,
+			spawn={"looping": True, "rate": 45, "shape": "cone", "shapeSize": [0.18, 0, 0], "coneAngle": 8, "worldSpace": True},
+			start={"lifetime": [0.55, 0.95], "speed": [1.0, 1.6], "size": [0.45, 0.7], "rotation": [-12, 12], "color": [1, 0.75, 0.3, 1]},
+			forces={"noiseStrength": 1.2, "noiseFrequency": 1.5},
+			overLife={"size": curve((0, 0.6), (0.2, 1.0), (1, 0.15)), "alpha": curve((0, 0), (0.1, 1), (0.7, 0.8), (1, 0)),
+				"color": [{"time": 0, "color": [1, 0.95, 0.6, 1]}, {"time": 0.5, "color": [1, 0.5, 0.12, 1]}, {"time": 1, "color": [0.7, 0.1, 0.02, 1]}]}),
+		emitter("Smoke", "smoke", blend="alpha", intensity=1.0, sorted=True, softDistance=0.8, maxParticles=128, sheet=[2, 2],
+			spawn={"looping": True, "rate": 7, "shape": "cone", "shapeSize": [0.2, 0, 0], "coneAngle": 14},
+			start={"lifetime": [2.6, 3.6], "speed": [0.6, 1.0], "size": [0.5, 0.8], "rotation": [0, 360], "color": [0.16, 0.15, 0.15, 0.55]},
+			forces={"gravity": [0.15, 0.15, 0], "drag": 0.3, "noiseStrength": 0.8, "noiseFrequency": 0.7},
+			overLife={"size": curve((0, 0.5), (1, 2.6)), "rotationSpeed": [-25, 25], "alpha": curve((0, 0), (0.2, 1), (1, 0)), "frame": curve((0, 0), (1, 0))}),
+		emitter("Embers", "spark", intensity=4.0, maxParticles=128,
+			spawn={"looping": True, "rate": 9, "shape": "sphere", "shapeSize": [0.2, 0, 0]},
+			start={"lifetime": [1.2, 2.4], "speed": [0.6, 1.4], "size": [0.025, 0.05], "color": [1, 0.55, 0.15, 1]},
+			forces={"gravity": [0, 0.8, 0], "noiseStrength": 2.0, "noiseFrequency": 1.2},
+			overLife={"alpha": curve((0, 1), (0.75, 1), (1, 0))}),
+	]}
+
+	fx["spark_fountain"] = {"version": 1, "name": "Spark fountain", "emitters": [
+		emitter("Sparks", "spark", intensity=5.0, maxParticles=2048,
+			collision={"mode": "depth", "response": "bounce", "restitution": 0.45},
+			spawn={"looping": True, "rate": 140, "shape": "cone", "shapeSize": [0.05, 0, 0], "coneAngle": 16},
+			start={"lifetime": [1.8, 2.8], "speed": [4.5, 6.5], "size": [0.035, 0.06], "color": [1, 0.8, 0.35, 1]},
+			forces={"gravity": [0, -9.8, 0], "drag": 0.05},
+			overLife={"alpha": curve((0, 1), (0.8, 1), (1, 0)),
+				"color": [{"time": 0, "color": [1, 1, 0.8, 1]}, {"time": 0.6, "color": [1, 0.6, 0.2, 1]}, {"time": 1, "color": [0.8, 0.2, 0.05, 1]}]}),
+		emitter("Glow", "glow", intensity=1.2, maxParticles=64, softDistance=0.2,
+			spawn={"looping": True, "rate": 12, "shape": "point"},
+			start={"lifetime": [0.4, 0.6], "speed": 0.0, "size": [0.5, 0.7], "color": [1, 0.6, 0.2, 0.5]},
+			overLife={"alpha": curve((0, 0), (0.3, 1), (1, 0))}),
+	]}
+
+	fx["rune_motes"] = {"version": 1, "name": "Rune motes", "emitters": [
+		emitter("Motes", "glow", intensity=3.0, maxParticles=512, softDistance=0.15,
+			spawn={"looping": True, "rate": 30, "shape": "box", "shapeSize": [3.2, 0.05, 3.2], "worldSpace": True},
+			start={"lifetime": [2.0, 3.5], "speed": [0.25, 0.7], "size": [0.05, 0.12], "color": [1, 0.65, 0.2, 1]},
+			forces={"noiseStrength": 0.6, "noiseFrequency": 0.9},
+			overLife={"alpha": curve((0, 0), (0.2, 1), (0.7, 1), (1, 0)), "size": curve((0, 0.6), (0.5, 1), (1, 0.3)),
+				"color": [{"time": 0, "color": [1, 0.8, 0.4, 1]}, {"time": 1, "color": [1, 0.35, 0.1, 1]}]}),
+	]}
+
+	fx["impact_sparks"] = {"version": 1, "name": "Impact sparks", "emitters": [
+		emitter("Burst", "spark", intensity=6.0, maxParticles=128,
+			collision={"mode": "depth", "response": "bounce", "restitution": 0.35},
+			spawn={"looping": False, "duration": 0.2, "rate": 0, "bursts": [{"time": 0, "count": 48}], "shape": "sphere", "shapeSize": [0.05, 0, 0]},
+			start={"lifetime": [0.6, 1.2], "speed": [2.0, 5.0], "size": [0.03, 0.055], "color": [1, 0.85, 0.5, 1]},
+			forces={"gravity": [0, -9.8, 0], "drag": 0.2},
+			overLife={"alpha": curve((0, 1), (0.6, 1), (1, 0))}),
+		emitter("Flash", "glow", intensity=3.0, maxParticles=8, softDistance=0.1,
+			spawn={"looping": False, "duration": 0.2, "rate": 0, "bursts": [{"time": 0, "count": 1}], "shape": "point"},
+			start={"lifetime": 0.18, "speed": 0.0, "size": 0.9, "color": [1, 0.8, 0.5, 1]},
+			overLife={"alpha": curve((0, 1), (1, 0)), "size": curve((0, 0.4), (1, 1.2))}),
+	]}
+
+	fx["footstep_dust"] = {"version": 1, "name": "Footstep dust", "emitters": [
+		emitter("Dust", "smoke", blend="alpha", intensity=1.0, sorted=True, softDistance=0.3, maxParticles=64, sheet=[2, 2],
+			spawn={"looping": False, "duration": 0.2, "rate": 0, "bursts": [{"time": 0, "count": 5}], "shape": "sphere", "shapeSize": [0.06, 0, 0]},
+			start={"lifetime": [0.5, 0.9], "speed": [0.25, 0.6], "size": [0.12, 0.2], "rotation": [0, 360], "color": [0.55, 0.5, 0.42, 0.45]},
+			forces={"gravity": [0, 0.2, 0], "drag": 1.5},
+			overLife={"size": curve((0, 0.6), (1, 2.0)), "alpha": curve((0, 1), (1, 0)), "frame": curve((0, 0), (1, 0))}),
+	]}
+
+	ids = {}
+	for name, data in fx.items():
+		rel = "vfx/%s.wfx" % name
+		write_json(rel, data)
+		ids[name] = write_meta(rel, "ParticleFileImporter", 1)
+	return {"effects": ids, "materials": m}
+
+
+def add_vfx(s, g):
+	"""The particle effects of the demo (see docs/superpowers/documentation/vfx.md): a campfire (flames, smoke, embers), a spark fountain that bounces off the ground
+	through the depth buffer, motes rising from the rune circle of the decals station, impact sparks spawned from a script, and (scripts/vfx_footsteps.lua on
+	the warrior) dust at its footsteps."""
+	def system(effect):
+		return {"ParticleSystem": {"Effect": ref(g["vfx"]["effects"][effect])}}
+
+	def script(name, **props):
+		return {"script:" + g["scripts"][name]: props}
+
+	def log(name, yaw):
+		return dict(MeshRenderer={"Mesh": ref(g["shapes"], MESH["cube"]), "Materials": [ref(g["mat"]["crate"])]})
+
+	light = {"Light": {"Kind": "Point", "Color": [1, 0.55, 0.2, 1], "Intensity": 14, "Range": 8, "InnerAngle": 20, "OuterAngle": 30, "CastsShadows": False}}
+	s.add("VFX station", "World")
+	s.add("Campfire log 1", "VFX station", pos=(16, 0.1, -9), rot=qaxis((0, 1, 0), 30), scale=(0.9, 0.2, 0.2), **log("1", 30))
+	s.add("Campfire log 2", "VFX station", pos=(16, 0.1, -9), rot=qaxis((0, 1, 0), -40), scale=(0.9, 0.2, 0.2), **log("2", -40))
+	s.add("Campfire", "VFX station", pos=(16, 0.25, -9), **system("campfire"))
+	s.add("Campfire light", "Campfire", pos=(0, 0.6, 0), **dict(light, **script("light_pulse", amplitude=4, speed=9)))
+	s.add("Spark fountain", "VFX station", pos=(20, 0.3, -9), **system("spark_fountain"))
+	s.add("Impact sparks emitter", "VFX station", pos=(24, 0.6, -9), **script("vfx_demo", interval=2.5))
+	s.add("Rune motes", "Decals station", pos=(-3, 0.35, 6.5), **system("rune_motes"))
+
+
+# ------------------------------------------------------------------------------------------------------------ navigation
+
+NAV_CENTER = -30  # x of the navigation station: west of the hall, where nothing else stands
+NAV_FILE = "navmeshes/Navmesh_volume_%s.wnav" % guid("entity:Navmesh volume")[:8]  # where the editor's bake puts it (NavigationPanel::bake)
+NAV_GOALS = [(NAV_CENTER - 4 + 4 * i, -8) for i in range(3)]  # (x, z) of where the agents go; tests/src/play/demo_smoke.cpp checks them
+
+
+def add_navigation(s, g):
+	"""The navigation station (docs/superpowers/documentation/navigation.md): a wall across an arena with an open way round each end, mud over the west way (the cost
+	is in editor/nav.wsettings), and three agents that walk from the north side to the south side and back, round the wall, with nav_patrol.lua. The navmesh
+	is baked by the editor from this scene (wiwa_editor --scene assets/scenes/demo.wscene --nav-bake <file>) into NAV_FILE; the volume refers to it."""
+	cx = NAV_CENTER
+	s.add("Navigation station", "World")
+	s.add("Navmesh volume", "Navigation station", pos=(cx, 2.5, 0), NavMeshVolume={"NavMesh": ref(guid("asset:" + NAV_FILE)), "Size": [24, 7, 24]})
+	crate = {"MeshRenderer": {"Mesh": ref(g["shapes"], MESH["cube"]), "Materials": [ref(g["mat"]["crate"])]}}
+	s.add("Nav wall", "Navigation station", pos=(cx, 1, 0), scale=(16, 2, 1), **crate)
+	s.add("Nav mud", "Navigation station", pos=(cx - 10, 0.05, 0), scale=(4, 0.1, 6), NavAreaTag={"Area": "Mud"},
+		MeshRenderer={"Mesh": ref(g["shapes"], MESH["cube"]), "Materials": [ref(g["mat"]["marker"])]})
+	# a project area of our own (nav.wsettings names it Swamp, slot 4, which a scene stores as "Custom0"): half of the east way, so the walk goes round it
+	s.add("Nav swamp", "Navigation station", pos=(cx + 9, 0.05, 0), scale=(2.4, 0.1, 6), NavAreaTag={"Area": "Custom0"},
+		MeshRenderer={"Mesh": ref(g["shapes"], MESH["cube"]), "Materials": [ref(g["mat"]["marker"])]})
+	for i, (gx, gz) in enumerate(NAV_GOALS):
+		colour = ("neon_cyan", "neon_magenta", "neon_orange")[i]
+		name = "Nav agent %d" % (i + 1)
+		props = {"a": [gx, 0, 8], "b": [gx, 0, gz]}
+		s.add(name, "Navigation station", pos=(gx, 0, 8), NavAgent={"Speed": 7, "Acceleration": 30}, **{"script:" + g["scripts"]["nav_patrol"]: props})
+		s.add(name + " body", name, pos=(0, 0.9, 0), scale=(0.7, 1.8, 0.7),
+			MeshRenderer={"Mesh": ref(g["shapes"], MESH["cylinder"]), "Materials": [ref(g["mat"][colour])]})
+
+
+def write_nav_settings():
+	"""The project's navigation settings: walking through mud costs 8 times as much, which sends the agents of the navigation station round it; Swamp is
+	an area the project made up (slot 4, cost 5) and is on the east way. tests/src/play/demo_smoke.cpp checks that the project has it."""
+	areas = {"areas": [{"id": 1, "cost": 1.0}, {"id": 2, "name": "Mud", "cost": 8.0}, {"id": 3, "name": "Water", "cost": 1.0}, {"id": 4, "name": "Swamp", "cost": 5.0}]}
+	(ROOT / "editor" / "nav.wsettings").write_text(json.dumps(areas, indent=2) + "\n", encoding="utf-8", newline="\n")
+	# the record of the navmesh asset, so that the guid the volume refers to is the one the baked file gets (the file itself comes from --nav-bake)
+	(ASSETS / NAV_FILE).parent.mkdir(parents=True, exist_ok=True)
+	write_meta(NAV_FILE, "NavMeshImporter", 1)
+	print("bake the navmesh with: wiwa_editor --scene assets/scenes/demo.wscene --nav-bake assets/" + NAV_FILE)
+
+
+def patch_scene_with_nav(g):
+	"""--nav-only: adds the navigation station to the scene that is already written (no downloads, no other .meta files touched)."""
+	path = ASSETS / "scenes/demo.wscene"
+	scene = json.loads(path.read_text(encoding="utf-8"))
+	fresh = Scene()
+	fresh.ids["World"] = guid("entity:World")
+	add_navigation(fresh, g)
+	ours = set(e["id"] for e in fresh.entities)
+	scene["entities"] = [e for e in scene["entities"] if e["id"] not in ours] + fresh.entities
+	write_json("scenes/demo.wscene", scene)
+
+
+# -------------------------------------------------------------------------------------------------------------- behaviour trees
+
+AI_TREE_FILE = "ai/guard.wbt"
+
+
+def guard_tree():
+	"""The guard of the navigation station (docs/superpowers/documentation/behavior-trees.md): a reactive Selector that chases what it sees, goes to look at a noise
+	it heard (a Lua condition leaf says whether there is one), and otherwise patrols between two points. Perception fills target (seen_target),
+	can_see_target, last_seen_position, heard_position and heard_kind of its blackboard."""
+	cx = NAV_CENTER
+	def node(nid, kind, children=(), **params):
+		return {"id": nid, "type": kind, "name": "", "params": params, "children": list(children)}
+	nodes = [
+		node("root", "Selector", ["chase", "investigate", "patrol"], reactive=True),
+		node("chase", "Guard", ["follow"], key="can_see_target", op="true"),
+		node("follow", "MoveTo", target="key:seen_target", stoppingDistance=1.5),
+		node("investigate", "Sequence", ["heard", "go_noise", "look", "forget"]),
+		node("heard", "LuaCondition", script=guid("asset:scripts/heard_check.lua")),
+		node("go_noise", "MoveTo", target="key:heard_position", stoppingDistance=1.0),
+		node("look", "Wait", seconds=2.0),
+		node("forget", "SetBlackboard", key="heard_kind", value=""),
+		node("patrol", "Sequence", ["to_a", "wait_a", "to_b", "wait_b"]),
+		node("to_a", "MoveTo", target=[cx + 10, 0, -6]),
+		node("wait_a", "Wait", seconds=1.0),
+		node("to_b", "MoveTo", target=[cx + 10, 0, 6]),
+		node("wait_b", "Wait", seconds=1.0),
+	]
+	blackboard = [
+		{"key": "seen_target", "type": "entity", "default": None},
+		{"key": "can_see_target", "type": "bool", "default": False},
+		{"key": "last_seen_position", "type": "vec3", "default": [0, 0, 0]},
+		{"key": "heard_position", "type": "vec3", "default": [0, 0, 0]},
+		{"key": "heard_kind", "type": "string", "default": ""},
+	]
+	return {"version": 1, "root": "root", "blackboard": blackboard, "nodes": nodes}
+
+
+def write_ai_assets():
+	"""The guard's tree and its asset record (fixed guid, so the scene can refer to it before the editor has imported it)."""
+	write_json(AI_TREE_FILE, guard_tree())
+	return write_meta(AI_TREE_FILE, "BehaviorTreeImporter", 1)
+
+
+def add_ai(s, g):
+	"""The behaviour tree demo, in the navigation station: a guard (NavAgent, Perceiver, AIController) that patrols, chases the thief it sees across the
+	arena and looks at the noise a noise maker makes. tests/src/play/demo_smoke.cpp checks it (the thief's place and the names here)."""
+	cx = NAV_CENTER
+	cylinder = lambda colour: {"MeshRenderer": {"Mesh": ref(g["shapes"], MESH["cylinder"]), "Materials": [ref(g["mat"][colour])]}}
+	s.add("Guard", "Navigation station", pos=(cx + 10, 0, 8), NavAgent={"Speed": 4.5, "Acceleration": 20},
+		Perceiver={"SightRange": 12, "SightAngle": 120, "HearingRadius": 15, "Team": "guards", "Interval": 0.2},
+		AIController={"Tree": ref(guid("asset:" + AI_TREE_FILE))})
+	s.add("Guard body", "Guard", pos=(0, 0.9, 0), scale=(0.8, 1.8, 0.8), **cylinder("toon_red"))
+	s.add("Thief", "Navigation station", pos=(cx + 10, 0, -10), Perceivable={"Team": "thieves", "Kind": "thief", "AimOffset": [0, 1, 0]})
+	s.add("Thief body", "Thief", pos=(0, 0.9, 0), scale=(0.7, 1.8, 0.7), **cylinder("toon_yellow"))
+	s.add("Noise maker", "Navigation station", pos=(cx + 13, 0.5, 0), **{"script:" + g["scripts"]["noise_maker"]: {"interval": 3.0}},
+		MeshRenderer={"Mesh": ref(g["shapes"], MESH["sphere"]), "Materials": [ref(g["mat"]["marker"])]}, **{})
+
+
+def patch_scene_with_ai(g):
+	"""--ai-only: adds the behaviour tree demo to the scene that is already written (no downloads, no other .meta files touched)."""
+	path = ASSETS / "scenes/demo.wscene"
+	scene = json.loads(path.read_text(encoding="utf-8"))
+	fresh = Scene()
+	fresh.ids["Navigation station"] = guid("entity:Navigation station")
+	add_ai(fresh, g)
+	ours = set(e["id"] for e in fresh.entities)
+	scene["entities"] = [e for e in scene["entities"] if e["id"] not in ours] + fresh.entities
+	write_json("scenes/demo.wscene", scene)
+
+
+def patch_scene_with_nested(g):
+	"""--nested-only: adds the lamp pair (a prefab that holds prefabs) to the scene that is already written, without downloading anything."""
+	path = ASSETS / "scenes/demo.wscene"
+	scene = json.loads(path.read_text(encoding="utf-8"))
+	fresh = Scene()
+	fresh.ids["Lighting station"] = guid("entity:Lighting station")
+	add_nested_lamps(fresh, g)
+	ours = set(e["id"] for e in fresh.entities)
+	scene["entities"] = [e for e in scene["entities"] if e["id"] not in ours] + fresh.entities
+	write_json("scenes/demo.wscene", scene)
+
+
+def patch_scene_with_vfx(g):
+	"""--vfx-only: adds the effects to the scene that is already written (no downloads): the VFX station, the motes over the rune circle, and the footstep
+	script on the warrior."""
+	path = ASSETS / "scenes/demo.wscene"
+	scene = json.loads(path.read_text(encoding="utf-8"))
+	fresh = Scene()
+	fresh.ids["World"] = guid("entity:World")
+	fresh.ids["Decals station"] = guid("entity:Decals station")
+	add_vfx(fresh, g)
+	ours = set(e["id"] for e in fresh.entities)
+	entities = [e for e in scene["entities"] if e["id"] not in ours]
+	entities.extend(fresh.entities)
+	warrior = next(e for e in entities if e["id"] == guid("entity:Warrior (animated)"))
+	warrior["components"]["script:" + g["scripts"]["vfx_footsteps"]] = {}
+	scene["entities"] = entities
+	write_json("scenes/demo.wscene", scene)
 
 
 # ------------------------------------------------------------------------------------------------------- UI and input
@@ -1157,6 +1887,17 @@ def build_ui(font, beacon_id, labels):
 	# a ViewImage: the wizard portrait that the "Wizard portrait" ViewHost of the scene draws (views.md), at the top right
 	w(next_id, "ViewImage", "WizardPortrait", AnchorMin=[1, 1], AnchorMax=[1, 1], OffsetMin=[-264, -264], OffsetMax=[-24, -24], ViewName="wizard_portrait")
 	next_id += 1
+	# a Video (video.md): the intro clip (assets/video/Intro.mp4, written by `wiwa_tests --write-demo-video`), full screen and hidden until the "Play intro" button
+	# shows and plays it (demo_ui.lua); it is the last widget, so it covers the rest. The Skip button inside it stops the video.
+	w(next_id, "Button", "PlayIntro", AnchorMin=[0.5, 1], AnchorMax=[0.5, 1], OffsetMin=[-110, -108], OffsetMax=[110, -64], Color=[0.15, 0.45, 0.35, 1],
+		HoverColor=[0.25, 0.65, 0.5, 1], PressedColor=[0.1, 0.3, 0.25, 1])
+	w(next_id + 1, "Text", "Label", next_id, AnchorMax=[1, 1], OffsetMin=[0, 9], OffsetMax=[0, 0], Text="Play intro", Font=font_ref, FontSize=22, Align="Center")
+	w(next_id + 2, "Video", "Intro", AnchorMin=[0, 0], AnchorMax=[1, 1], OffsetMin=[0, 0], OffsetMax=[0, 0], Visible=False, AutoPlay=False, Fit="Letterbox",
+		Video=ref(guid("asset:video/Intro.mp4")))
+	w(next_id + 3, "Button", "Skip", next_id + 2, AnchorMin=[1, 1], AnchorMax=[1, 1], OffsetMin=[-184, -72], OffsetMax=[-24, -24], Color=[0.5, 0.25, 0.15, 1],
+		HoverColor=[0.7, 0.4, 0.25, 1], PressedColor=[0.35, 0.18, 0.1, 1])
+	w(next_id + 4, "Text", "Label", next_id + 3, AnchorMax=[1, 1], OffsetMin=[0, 9], OffsetMax=[0, 0], Text="Skip", Font=font_ref, FontSize=22, Align="Center")
+	next_id += 5
 	rel = "ui/demo_hud.wuipanel"
 	write_json(rel, {"version": 1, "referenceResolution": [1920, 1080], "match": 0.5, "nextId": next_id, "widgets": widgets})
 	return write_meta(rel, "UiPanelImporter", 1)
@@ -1248,6 +1989,8 @@ def build_scene(g):
 	# --- the camera, the sun, the HUD -----------------------------------------------------------------------
 	s.add("Camera", pos=(0, 4.5, 17), rot=qaxis((1, 0, 0), -8),
 		Camera={"Projection": "Perspective", "FovY": 55, "Near": 0.1, "Far": 400, "OrthoSize": 10, "Primary": True}, **script("camera_rig"))
+	s.add("Audio listener", "Camera", AudioListener={"Active": True})
+	s.add("Audio demo", pos=(-3, 1.5, 3), AudioEmitter={"Event": "Amb_Hall_loop", "PlayOnStart": True, "AttenuationScale": 4.0}, **script("audio_demo", event="Beacon_Blip", every=4))
 	s.add("Sun", pos=(0, 20, 0), rot=euler(-45, 35, 0), **light("Directional", (1, 0.96, 0.9, 1), 3.5, shadows=True))
 	s.add("Hud", UICanvas={"Panel": ref(g["ui"]), "SortOrder": 0, "Visible": True}, **script("demo_ui"))
 	s.add("Demo light", pos=(-5, 3, 6), **light("Point", (0.6, 0.8, 1, 1), 2, rng=14))
@@ -1281,6 +2024,7 @@ def build_scene(g):
 	for i, x in enumerate((-9, 9, 0)):
 		z = -2 if x else -11
 		s.add("Street lamp %d" % (i + 1), "Lighting station", pos=(x, 0, z), PrefabInstance={"Prefab": ref(g["lamp"])})
+	add_nested_lamps(s, g)
 
 	# --- station 2: materials and shaders --------------------------------------------------------------------
 	s.add("Materials station", "World")
@@ -1309,7 +2053,8 @@ def build_scene(g):
 	# with the same skeleton reference the prefab's skinned node holds (the legacy local id 1 of the model, which the catalog redirects)
 	s.add("Warrior (animated)", "Animation station", pos=(0, 0, 9), PrefabInstance={"Prefab": ref(g["models"]["Warrior"][0])},
 		Animator={"Skeleton": ref(g["models"]["Warrior"][0], 1), "Graph": ref(guid("asset:models/characters/Warrior_animation/warrior.wgraph")), "PlayOnStart": False},
-		**script("animation_graph_demo", period=0.4, attack_every=0.15))
+		AudioEmitter={"Event": "", "PlayOnStart": False, "AttenuationScale": 1.0},
+		**merge(script("animation_graph_demo", period=0.4, attack_every=0.15), script("decal_footprints"), script("vfx_footsteps")))
 	s.add("Warrior head socket", "Warrior (animated)", AnimationSocket={"Joint": "Head", "OffsetPosition": [0, 0.3, 0], "OffsetRotation": IDENTITY})
 	s.add("Warrior head ornament", "Warrior head socket", scale=(0.18, 0.18, 0.18), **mesh("sphere", "gold"))
 	lineup = (("Wizard", -2.5, 11), ("Ranger", 2.5, 11), ("Cleric", -5, 12), ("Yeti", 5, 12), ("Panda", -7.5, 12.5), ("YellowDragon", 7.5, 12.5))
@@ -1325,7 +2070,7 @@ def build_scene(g):
 	s.add("Side wall 3", "Physics demo", pos=(11.2, 0.6, 3), scale=(7, 1.2, 0.2), **merge(mesh("cube", "plain"), {"Collider": BOX}))
 	for i, (x, y, z) in enumerate(((13.6, 0.4, 1.0), (13.6, 0.4, 2.0), (13.6, 1.25, 1.5), (12.7, 0.4, 1.5))):
 		s.add("Crate %d" % (i + 1), "Physics demo", pos=(x, y, z), scale=(0.8, 0.8, 0.8), **merge(mesh("cube", "crate"), {"Collider": BOX}, body(ReportContacts=(i == 0))))
-	s.add("Hopper", "Physics demo", pos=(8.9, 3.2, 1.5), scale=(0.8, 0.8, 0.8), **merge(mesh("sphere", "plastic_red"), {"Collider": BALL}, body(), script("physics_hopper", interval=3, speed=6)))
+	s.add("Hopper", "Physics demo", pos=(8.9, 3.2, 1.5), scale=(0.8, 0.8, 0.8), **merge(mesh("sphere", "plastic_red"), {"Collider": BALL}, body(), {"AudioEmitter": {"Event": "", "PlayOnStart": False, "AttenuationScale": 1.0}}, script("physics_hopper", interval=3, speed=6)))
 	for i, (x, y, z) in enumerate(((8.6, 5, 1), (9.2, 7, 2), (9.6, 9, 1.5))):
 		s.add("Bouncy ball %d" % (i + 1), "Physics demo", pos=(x, y, z), scale=(0.6, 0.6, 0.6),
 			**merge(mesh("sphere", "gold"), {"Collider": dict(BALL, Material=ref(g["bouncy"]))}, body()))
@@ -1372,6 +2117,14 @@ def build_scene(g):
 	s.add("Steep ramp", "Character demo", pos=(25.0866, 1.682, -1.2), rot=qaxis((0, 0, 1), 60), scale=(4, 0.2, 2), **merge(mesh("cube", "plastic_red"), {"Collider": BOX}))
 	s.add("Sliding platform", "Character demo", pos=(28, 0.15, -4.5), scale=(2.4, 0.3, 2.4), **merge(mesh("cube", "gold"), {"Collider": BOX}, body("Kinematic"), script("slide_platform", amplitude=2.5, speed=0.6)))
 
+	# --- station 7: decals -----------------------------------------------------------------------------------
+	add_decals(s, g)
+
+	# --- station 8: particle effects -------------------------------------------------------------------------
+	add_vfx(s, g)
+	add_navigation(s, g)
+	add_ai(s, g)
+
 	# --- station labels (world-anchored text in the HUD) -----------------------------------------------------
 	labels = []
 	for text, position in (("1  Lighting and post", (0, 6.5, 0)), ("2  Materials and shaders", (0, 4.5, -16)), ("3  Models and animation", (0, 3.6, 9)),
@@ -1392,6 +2145,35 @@ def scene_settings(g):
 		"motionBlur": {"enabled": True}}
 
 
+HEAD_NODE = node_id("Street lamp/Head")  # the lamp head, in the street lamp prefab
+LEFT_LAMP_NODE = node_id("Lamp pair/Left lamp")  # the node of the lamp pair prefab that holds the left lamp
+
+
+def add_nested_lamps(s, g):
+	"""A lamp pair: a prefab that holds two instances of the street lamp (the right one has a blue head, an override stored in the pair prefab). The
+	instance in the scene brightens the head of the left lamp, an override of a node two prefabs deep (its id is composed from the node of the left lamp)."""
+	eid = s.add("Lamp pair", "Lighting station", pos=(6, 0, -8), PrefabInstance={"Prefab": ref(g["lamp_pair"])})
+	s.entities[-1]["overrides"] = [set_field_override(compose_node_id(LEFT_LAMP_NODE, HEAD_NODE), "Light", "Intensity", 40.0)]
+	return eid
+
+
+def build_lamp_pair(g):
+	"""lamp_pair.wprefab: a prefab that holds two street lamps (a nested prefab instance each)."""
+	root = guid("lamp_pair:root")
+	identity = {"Rotation": IDENTITY, "Scale": [1, 1, 1]}
+	blue = set_field_override(HEAD_NODE, "Light", "Color", [0.3, 0.5, 1, 1])
+	ents = [
+		{"id": root, "components": {"Name": {"Value": "Lamp pair"}, "Transform": dict(identity, Position=[0, 0, 0])}},
+		{"id": guid("lamp_pair:left"), "parent": root, "components": {"Name": {"Value": "Left lamp"}, "Transform": dict(identity, Position=[-1.6, 0, 0]),
+			"PrefabInstance": {"Prefab": ref(g["lamp"])}}},
+		{"id": guid("lamp_pair:right"), "parent": root, "components": {"Name": {"Value": "Right lamp"}, "Transform": dict(identity, Position=[1.6, 0, 0]),
+			"PrefabInstance": {"Prefab": ref(g["lamp"])}}, "overrides": [blue]},
+	]
+	rel = "prefabs/lamp_pair.wprefab"
+	write_json(rel, {"name": "Lamp pair", "entities": ents})
+	return write_meta(rel, "PrefabImporter", 2)
+
+
 def build_lamp(g):
 	"""street_lamp.wprefab: a pole, an emissive head and a point light, instanced three times in the lighting station."""
 	root = guid("lamp:root")
@@ -1409,6 +2191,55 @@ def build_lamp(g):
 
 
 def main():
+	if "--ai-only" in sys.argv:
+		# adds only the behaviour tree demo (the guard's tree and the two scripts it uses, the guard, the thief and the noise maker) to the scene that is
+		# already written, without downloading anything and without touching the .meta files of anything else
+		for name in ("heard_check.lua", "noise_maker.lua"):
+			write("scripts/" + name, SCRIPTS[name])
+		scripts = {name[:-4]: write_meta("scripts/" + name, "ScriptImporter", 1) for name in ("heard_check.lua", "noise_maker.lua")}
+		write_ai_assets()
+		g = {"shapes": guid("asset:models/shapes/shapes.glb"), "scripts": scripts,
+			"mat": {name: guid("asset:materials/%s.wmat" % name) for name in ("toon_red", "toon_yellow", "marker")}}
+		patch_scene_with_ai(g)
+		print("added the behaviour tree demo to the demo scene")
+		return
+
+	if "--nav-only" in sys.argv:
+		# adds only the navigation station to the scene that is already written (its script, its navmesh asset record and nav.wsettings too), without
+		# downloading anything and without touching the .meta files of anything else: the navmesh itself is baked by the editor afterwards (--nav-bake)
+		write("scripts/nav_patrol.lua", SCRIPTS["nav_patrol.lua"])
+		g = {"shapes": guid("asset:models/shapes/shapes.glb"), "mat": {"crate": guid("asset:materials/crate.wmat"), "marker": guid("asset:materials/marker.wmat"),
+			"neon_cyan": guid("asset:materials/neon_cyan.wmat"), "neon_magenta": guid("asset:materials/neon_magenta.wmat"), "neon_orange": guid("asset:materials/neon_orange.wmat")},
+			"scripts": {"nav_patrol": write_meta("scripts/nav_patrol.lua", "ScriptImporter", 1)}}
+		write_nav_settings()
+		patch_scene_with_nav(g)
+		print("added the navigation station to the demo scene")
+		return
+
+	if "--nested-only" in sys.argv:
+		# adds only the lamp pair to the scene that is already written (and its prefab), without downloading anything or touching other .meta files
+		g = {"lamp": guid("asset:prefabs/street_lamp.wprefab")}
+		g["lamp_pair"] = build_lamp_pair(g)
+		patch_scene_with_nested(g)
+		print("added the lamp pair to the demo scene")
+		return
+
+	if "--vfx-only" in sys.argv:
+		# adds only the particle effects to the scene that is already written, without downloading anything
+		g = {"vfx": vfx_effects(), "shapes": guid("asset:models/shapes/shapes.glb"), "mat": {"crate": guid("asset:materials/crate.wmat")}}
+		g["scripts"] = build_scripts()
+		patch_scene_with_vfx(g)
+		print("added the particle effects to the demo scene")
+		return
+
+	if "--decals-only" in sys.argv:
+		# adds only the decals to the scene that is already written, without downloading anything
+		g = {"decals": decal_materials()}
+		g["scripts"] = build_scripts()
+		patch_scene_with_decals(g)
+		print("added the decals to the demo scene")
+		return
+
 	g = {}
 	write("models/shapes/shapes.glb", build_glb(), binary=True)
 	g["shapes"] = write_meta("models/shapes/shapes.glb", "ModelImporter", 7, {"generatePhysicsShapes": False},
@@ -1417,6 +2248,8 @@ def main():
 	g["models"] = import_models()
 	import_textures()
 	g["mat"] = build_materials()
+	g["decals"] = decal_materials()
+	g["vfx"] = vfx_effects()
 	g["scripts"] = build_scripts()
 
 	write("environments/sky.hdr", download(HDRI_URL, "sky.hdr").read_bytes(), binary=True)
@@ -1427,11 +2260,14 @@ def main():
 	write("fonts/OFL-Lato.txt", download(FONT_LICENSE_URL, "OFL-Lato.txt").read_bytes(), binary=True)
 	font = write_meta("fonts/Lato-Regular.ttf", "FontImporter", 1, {"pixelSize": 48, "sdfRange": 8, "charset": "latin1"})
 
+	import_audio()
+
 	write_json("physics/bouncy.wphysmat", {"friction": 0.4, "restitution": 0.75, "restitutionCombine": "Max"})
 	g["bouncy"] = write_meta("physics/bouncy.wphysmat", "PhysicsMaterialImporter", 1)
 
 	input_map = build_input()
 	g["lamp"] = build_lamp(g)
+	g["lamp_pair"] = build_lamp_pair(g)
 
 	scene, labels = build_scene(g | {"ui": "0" * 32})  # the HUD guid does not depend on its content
 	g["ui"] = build_ui(font, scene.ids["Beacon"], labels)
@@ -1440,6 +2276,8 @@ def main():
 	write_json("scenes/demo.wscene", {"name": "Demo hall", "settings": scene_settings(g), "entities": scene.entities})
 	write_meta("scenes/demo.wscene", "SceneImporter", 5, fixed_guid=SCENE_GUID)
 
+	write_nav_settings()
+	write_ai_assets()
 	# the project's default input map is the demo's
 	(ROOT / "editor" / "input.wsettings").write_text(json.dumps({"defaultMap": input_map}, indent=2) + "\n", encoding="utf-8", newline="\n")
 	print("wrote %d entities, %d materials, %d scripts" % (len(scene.entities), len(g["mat"]), len(g["scripts"])))

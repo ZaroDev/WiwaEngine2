@@ -11,9 +11,11 @@
 #include <physics/cooked_shape.h>
 #include <input/action_types.h>
 #include <physics/physics_material_asset.h>
+#include <nav/nav_mesh_asset.h>
 #include <ui/ui_widget.h>
 #include "asset_data.h"
 #include "asset_types.h"
+#include "particle_effect.h"
 
 // The .wasset file: a header (magic, format version, type, guid, dependencies, payload size) followed by a typed
 // binary payload. Every read is bounds-checked: a truncated or corrupt blob gives std::nullopt, never a crash.
@@ -51,6 +53,13 @@ namespace wiwa
 		void fail() { m_Ok = false; }
 		// Bytes not read yet (reading only): a count that claims more elements than could fit is corrupt.
 		size_t remaining() const { return m_Bytes.size() - m_Cursor; }
+
+		// Archives the asset format version (writes expected, or reads it). False when the archive has failed, which
+		// includes a version other than expected: the caller returns at once.
+		bool version(u32 expected);
+
+		// Reading only: fails the archive when bytes are left over after the last field.
+		void expect_end();
 
 		void raw(void* data, size_t size);
 
@@ -129,6 +138,8 @@ namespace wiwa
 	void archive(BinaryArchive& ar, SceneData& v);
 	// The components of one entity or prefab node, at most SCENE_MAX_COMPONENTS_PER_ENTITY of them.
 	void archive_component_list(BinaryArchive& ar, std::vector<ComponentRecord>& list);
+	// The overrides of a prefab instance, at most SCENE_MAX_OVERRIDES of them.
+	void archive_override_list(BinaryArchive& ar, std::vector<PrefabOverride>& list);
 	void archive(BinaryArchive& ar, ScriptData& v);
 	void archive(BinaryArchive& ar, SurfaceShaderData& v);
 	void archive(BinaryArchive& ar, FontData& v);
@@ -142,6 +153,19 @@ namespace wiwa
 	void archive(BinaryArchive& ar, InputMapData& v);
 	// A version, then the .wgraph JSON text (native_anim_files.h is the one description of it).
 	void archive(BinaryArchive& ar, AnimationGraphData& v);
+	// A version, then the .wfx JSON text (particle_effect.h is the one description of it); reading bakes the curves again.
+	void archive(BinaryArchive& ar, ParticleEffectData& v);
+	// A version, the bank name, its bytes, then the metadata (when HasInfo). Refuses another version, an empty name or empty bytes and trailing bytes.
+	void archive(BinaryArchive& ar, SoundBankData& v);
+	// A version, the clip name, then the encoded bytes. Refuses another version, an empty name or empty bytes and trailing bytes.
+	void archive(BinaryArchive& ar, AudioClipData& v);
+	// A version, the file name, the encoded bytes, then whether Info follows and the info (size, frame rate, duration, sound format). Refuses another
+	// version, an empty name or empty bytes and trailing bytes.
+	void archive(BinaryArchive& ar, VideoData& v);
+	// Magic, a version, then the Detour tiles (nav/nav_mesh_asset.h is the one description of the format).
+	void archive(BinaryArchive& ar, NavMeshData& v);
+	// A version, then the .wbt JSON text (ai/bt_file.h is the one description of it); refuses another version, an empty text, trailing bytes and text read_bt_file refuses.
+	void archive(BinaryArchive& ar, BehaviorTreeData& v);
 
 	template<typename T>
 	constexpr AssetType asset_type_of();
@@ -163,6 +187,12 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<CookedShapeData>() { return AssetType::PhysicsShape; }
 	template<> constexpr AssetType asset_type_of<InputMapData>() { return AssetType::InputMap; }
 	template<> constexpr AssetType asset_type_of<AnimationGraphData>() { return AssetType::AnimationGraph; }
+	template<> constexpr AssetType asset_type_of<ParticleEffectData>() { return AssetType::ParticleEffect; }
+	template<> constexpr AssetType asset_type_of<SoundBankData>() { return AssetType::SoundBank; }
+	template<> constexpr AssetType asset_type_of<AudioClipData>() { return AssetType::AudioClip; }
+	template<> constexpr AssetType asset_type_of<NavMeshData>() { return AssetType::NavMesh; }
+	template<> constexpr AssetType asset_type_of<BehaviorTreeData>() { return AssetType::BehaviorTree; }
+	template<> constexpr AssetType asset_type_of<VideoData>() { return AssetType::Video; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)

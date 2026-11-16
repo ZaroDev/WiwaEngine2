@@ -5,7 +5,7 @@
 
 #include "../prefab_file.h"
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {
@@ -17,7 +17,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "PrefabImporter"; }
-			virtual u32 version() const override { return 1; }
+			virtual u32 version() const override { return 2; }
 			virtual std::vector<std::string> extensions() const override { return { ".wprefab" }; }
 
 			virtual bool import(ImportContext& ctx) override
@@ -42,6 +42,15 @@ namespace wiwa
 				{
 					WI_ASSET_LOG(Error, "{0}: {1}", file, error);
 					return false;
+				}
+
+				for (const PrefabNode& node : prefab->Nodes)
+				{
+					if (node.Instance && node.Instance->Prefab.Guid == ctx.main_asset().Guid)
+					{
+						WI_ASSET_LOG(Error, "{0}: a prefab cannot hold an instance of itself", file);
+						return false;
+					}
 				}
 
 				std::vector<AssetRef> dependencies;

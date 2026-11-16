@@ -62,10 +62,6 @@ glm::vec3 sample_cube(const CubeMap& cube, const glm::vec3& direction);
 
 // ---- Sources -----------------------------------------------------------------------------------
 
-// The default sky: the old three-colour gradient plus a soft glow around the sun's direction. There is
-// no hard sun disc on purpose: the analytic sun light already makes the sun's highlight.
-CubeMap make_procedural_environment(u32 size);
-
 // An equirectangular image (RGB float, top row first) as a cube of `size` x `size` faces:
 // u = atan2(z, x) / (2 pi) + 0.5, v = acos(y) / pi. NaN and negative texels become 0 and everything is
 // clamped to 65000 (what a half float can hold), so nothing downstream can turn into Inf or NaN.

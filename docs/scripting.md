@@ -79,8 +79,34 @@ or `debug`.
   (`"replace"` or `"additive"`) returns a handle with `progress()`, `done()`, `failed()`, `stage()`.
 - **Rendering:** `debug_draw.line / box / sphere / arrow(..., color?, duration?)`; `camera.primary()` and
   `camera.set_primary(entity)`.
+- **Decals:** `Decal.spawn{ material, position, normal, size, opacity, lifetime, fade_in, fade_out, sort_order, roll, parent, name }` makes an entity
+  with a `Decal` that projects the material (an asset from `load_asset`) onto the surface at `position` whose normal is `normal` (default +Z;
+  the box projects along the opposite). `size` is width, height and the depth the decal reaches through the surface. The fades and `lifetime` are
+  game seconds: it fades in, stays `lifetime` seconds, fades out and removes itself; without `lifetime` it is permanent. A missing material, a zero
+  normal or a size of zero is an error. The `Decal` component is also reachable as `e:get("Decal")`; `MeshRenderer.receivesdecals` lets a mesh opt out.
+- **Particles:** `Vfx.spawn{ effect, position, rotation, scale, parent, name, looping, time_scale, params, animator, joint }` plays a particle effect (a `.wfx` from `load_asset`) in a new entity that removes itself when the effect is over (`looping = true` plays until stopped or destroyed). `params` sets `color` (a vec4), `size`, `rate` and `time_scale`. With `animator` (an entity with an Animator) and `joint` the effect is placed at that joint, `position` and `rotation` then being offsets in the joint's space: `anim:on("footstep", function(me, event) Vfx.spawn{ effect = me.step_fx, animator = me.entity, joint = "Foot_R" } end)`. A placed `ParticleSystem` is controlled with `Vfx.play(e)`, `Vfx.stop(e, clear?)` (the particles in the air live out their lives, or are discarded with `clear`), `Vfx.restart(e)`, `Vfx.is_playing(e)` and `Vfx.set_param(e, name, value)`; the component is also reachable as `e:get("ParticleSystem")`. Effects play only while the game clock plays. A missing effect, a non-finite number or a name that is not a parameter is an error.
 - **Engine:** `time.delta()`, `time.total()`; `project.name`, `project.company`, `project.description`, `project.version` (`"1.2.3"` or `"1.2.3-label"`), `project.version_major/minor/patch` (read-only, from the Settings panel's Project page); `log(title, message)`, `log_warning`, `log_error`; `quit()` asks the host to end the program (a game closes, the editor's Play stops).
 - **Settings and prefs:** `settings.graphics.get()` / `.set{ vsync, shadow_distance, shadow_cascades, bloom_mips, ao_slices, ao_steps, fxaa, taa }` read and change the renderer's quality settings of the project (applied at once, sanitized, saved to `render_quality.json`; an unknown key or a wrong type is an error that names it). `settings.scene.get()` / `.set{ bloom, ao, motion_blur, exposure_compensation }` change how the active scene is shown (at once, not saved). `prefs.get(key, default)`, `prefs.set(key, value)` (boolean, number or string) and `prefs.save()` keep the player's own options in `user_prefs.json` next to the program.
+- **Audio:** `Audio.post(event [, entity])` starts an event of the project's audio backend (Wwise, or a silent Null backend) and returns a handle, or `nil` when
+  it did not start (an unknown name is logged once). An entity needs an `AudioEmitter` component (its `Event` may be empty) to have a position; posting
+  without an entity plays globally. `Audio.stop(handle)`, `Audio.stop_entity(e)`, `Audio.stop_all()`, `Audio.set_rtpc(name, value [, entity])`,
+  `Audio.set_switch(group, state [, entity])`, `Audio.set_state(group, state)`, `Audio.load_bank(load_asset("assets/audio/Music.bnk"))`,
+  `Audio.backend()` (`"Null"`, `"Wwise"` or `"MiniAudio"`). Banks the project lists in Settings, Audio are loaded at start. Sound only plays while the game clock plays.
+- **AI (behaviour trees):** `AI.controller(entity)` is the handle of the entity's `AIController` (an error without one): `:get(key)` / `:set(key, value)` read and
+  write the blackboard of its tree (numbers, booleans, strings, `vec3`, `Entity` or `nil`; a value of another type than the key's, a fraction for an int key and an
+  unknown key are errors that name the key), `:restart()`, `:running()`. `AI.emit_noise(position, loudness, kind)` makes a sound the AIs with a `Perceiver` within
+  `HearingRadius * loudness` hear this frame. Methods are called with a colon (a dot is a Lua error). A tree leaf is a script that returns
+  `BtAction:extend{ properties = { ... }, on_start = function(self, bb) end, on_tick = function(self, bb, dt) return "running" end, on_abort = function(self, bb) end }`
+  (`BtCondition` for a condition): `on_tick` returns `"success"`, `"failure"` or `"running"` (anything else, or an error, fails the node and is logged once);
+  `self.entity` is the AI, the declared `properties` take the node's parameters over their defaults, `bb:get(key)` / `bb:set(key, value)` / `bb:has(key)` are the blackboard.
+  A leaf script is for trees: put it in a `LuaAction` / `LuaCondition` node, not on an entity.
+- **Navigation:** queries against the baked navmesh of the scene that plays (a `NavMeshVolume` with a `.wnav`, see the Navigation panel); without one they answer
+  failed / `nil` / `false`. `Nav.area_mask({"Walkable", "Mud"})` gives the bit set of named areas of the project, for `area_mask`. `Nav.find_path(from, to [, area_mask])` is `{ status = "complete" | "partial" | "failed", length, points = { vec3... } }` (partial: the walk
+  ends where it comes closest), `Nav.nearest_point(p [, extents])`, `Nav.raycast(a, b)` (`hit, point`: the line leaves the mesh), `Nav.random_point(centre, radius)`,
+  `Nav.has_navmesh()`. A vector that is not made of finite numbers is a Lua error. `Nav.agent(entity)` is the handle of the entity's `NavAgent` (an error without one):
+  `:set_destination(v)` (false when there is no route), `:stop()`, `:warp(v)`, `:state()` (`"idle"`, `"moving"`, `"arrived"`, `"no_path"`), `:remaining_distance()`,
+  `:velocity()`. A script on the entity gets `on_nav_arrived(self)` and `on_nav_failed(self)` at the start of the update after the agent arrived or lost its way. Agents only
+  walk while the game clock plays.
 - **UI:** `UI.panel(entity)`, widgets by path, `widget:on(event, fn)`, `UI.input` (see "UI" below).
 
 ## UI
@@ -104,8 +130,9 @@ panel:find("Menu/Volume"):on("value_changed", function(self, value) self.volume 
   `world_anchor`, `world_offset`, ... all the fields the editor's inspector shows). A name that is not a property is an error; `name` is
   read only. Assign vectors whole (`w.color = vec4(1, 0, 0, 1)`). A handle to a widget whose canvas is gone reads `nil` and ignores
   writes. `panel.visible = false` hides the whole panel; `panel.ready` tells whether the asset has loaded.
-- **Events.** `widget:on(event, fn)` with `click`, `value_changed`, `hover_enter`, `hover_exit` and `focus`; `fn(self, value)` gets the
-  script instance first (and the new value for `value_changed`). Register from a hook (`on_init`, ...): handlers belong to the instance
+- **Events.** `widget:on(event, fn)` with `click`, `value_changed`, `hover_enter`, `hover_exit`, `focus` and `finished` (a Video widget's video
+  ended, see [Video](#video)); `fn(self, value)` gets the script instance first (and the new value for `value_changed`, a table
+  `{ skipped, failed }` for `finished`). Register from a hook (`on_init`, ...): handlers belong to the instance
   and go away with it (destroy, stop, reload that restarts it). `widget:off(event)` removes this script's handlers for the event, or
   `widget:off(event, fn)` one of them. A handler that raises an error is logged and removed; the others and your hooks carry on.
 - **Order in a frame.** The UI looks at the input and raises its events *before* the scripts update, so a click in a frame runs its
@@ -119,6 +146,34 @@ panel:find("Menu/Volume"):on("value_changed", function(self, value) self.volume 
   has the focus or the pointer (`Escape` or `Shift+F1` hands them back, a click on the image takes them again). `UI.input` (`move_to`,
   `press`, `release`, `nav`, `scroll`, `clear_pointer`) writes to a scripted input source, which only reaches the UI while it is the one in
   use (tests and tools).
+
+## Video
+
+A `Video` widget (in the UI editor) plays an mp4 (H.264 and AAC), picture in the widget and sound through the audio device. Its fields are the
+widget's `video` (the asset), `fit` (`Stretch`, `Letterbox`, `Cover`), `loop`, `auto_play`, `volume` and `letterbox_color`. Scripts control it
+with methods on the widget (any other kind of widget is an error; a handle to a widget whose canvas is gone reads `nil`):
+
+```lua
+local intro = UI.panel(find_entity("Hud")):find("Intro")
+intro:on("finished", function(self, info)               -- the video ended, was stopped, or failed
+    if info.failed then log("Video", intro:video_error()) end
+    intro.visible = false
+end)
+intro.visible = true
+intro:video_play()                                      -- false if the widget is gone
+```
+
+- `video_play()` starts, goes on from a pause, or starts again from the end. `video_pause()`, `video_stop()` (back to the first picture, `finished`
+  with `skipped = true`), `video_seek(seconds)` (clamped to the length), `video_state()` (`"idle"`, `"loading"`, `"playing"`, `"paused"`,
+  `"ended"`, `"failed"`), `video_time()`, `video_duration()` and `video_error()` (why it failed, else an empty string).
+- **One video at a time.** Playing another stops the first. A video follows its widget: hiding the widget or its canvas, or a game clock that
+  does not play, pauses it; a scene change or a destroyed canvas stops it. Nothing starts while the game clock does not play (the editor's edit
+  mode). A widget with `auto_play` starts when it becomes visible.
+- **`finished`** is raised for a video that played to its end (`skipped` and `failed` false; never for a looping one), for `video_stop()`
+  (`skipped`), and for a video that could not play or broke (`failed`, with the reason in `video_error()`). Like the other widget events it
+  reaches the handlers at the start of the frame after the video module saw it, before that frame's `on_update`.
+- **Files.** Import `.mp4`, `.m4v` or `.mov` into the project; Windows decodes them with Media Foundation (H.264 and AAC ship with Windows, other
+  codecs may need an extension). Details and limits: `docs/superpowers/documentation/video.md`.
 
 ## Views (3D widgets)
 
@@ -136,7 +191,7 @@ portrait.model = load_asset("models/characters/Cleric.fbx")
 
 `name` is what the widget's `ViewName` says (unique in the scene); `width` / `height` are the texture's pixels; `profile` is `Full`, `Preview` or
 `Thumbnail`; `transparent` leaves nothing behind the model; `continuous = false` draws only when a field changed. The model shows its bind pose
-for now (views do not play animations yet). See `docs/superpowers/specs/views.md`.
+for now (views do not play animations yet). See `docs/superpowers/documentation/views.md`.
 
 ## Animation
 
@@ -210,7 +265,7 @@ snapshot of step N+1: `entity:body()` is a `Body` with `add_force` (during one s
 `set_angular_velocity`, `get_velocity`, `get_angular_velocity` (the newest step; `nil` without a body), `set_kinematic_target(position, rotation)` and `wake()`.
 `physics.set_gravity(vec3)` changes the world's gravity. A command for a body that no longer exists is ignored.
 
-**Characters** are the `CharacterController` component (see the physics spec): a capsule that walks, climbs steps and stands on
+**Characters** are the `CharacterController` component (see the physics documentation): a capsule that walks, climbs steps and stands on
 slopes without being a rigid body. `character.move(entity, velocity)` sets the horizontal velocity (m/s, world space; `y` is ignored) the
 character keeps until the next call, `character.jump(entity, speed)` jumps with an upward speed if it stands on something,
 `character.is_grounded(entity)` and `character.state(entity)` (`grounded`, `sliding`, `ground` (an entity or `nil`), `normal`, `velocity`)
@@ -218,7 +273,7 @@ read the newest step (`nil` while the world has no such character). Like the bod
 call on an entity without a `CharacterController` is a Lua error. Triggers see characters: `on_trigger_enter/exit` arrive with the character
 as `other` (and the trigger for the character). Physics queries hit characters too.
 
-**Joints** are the `Joint` component (see the physics spec). `joint.set_motor(entity, mode, target, max_force)` (`mode` is `"off"`,
+**Joints** are the `Joint` component (see the physics documentation). `joint.set_motor(entity, mode, target, max_force)` (`mode` is `"off"`,
 `"velocity"` or `"position"`) and `joint.set_limits(entity, min, max)` write the component, and the physics world gets the change at the
 start of the next step like the body control above, keeping the joint's rest pose. A positive target turns (hinge, rad/s or degrees) or
 moves (slider, m/s or metres) the entity that owns the joint, relative to the one it is connected to, the right-handed way around the

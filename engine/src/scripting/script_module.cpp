@@ -2,7 +2,12 @@
 #include "script_module.h"
 
 #include <animation/animation_module.h>
+#include <audio/audio_module.h>
+#include <ai/ai_module.h>
+#include <ai/bt_lua_host.h>
+#include <nav/nav_module.h>
 #include <ui/ui_module.h>
+#include <video/video_module.h>
 
 #include <algorithm>
 
@@ -33,13 +38,22 @@ namespace wiwa
 		context.Physics = Engine::get().get_module<PhysicsModule>();
 		context.Input = Engine::get().get_module<InputModule>();
 		context.Animation = Engine::get().get_module<AnimationModule>();
+		context.Audio = Engine::get().get_module<AudioModule>();
+		context.Video = Engine::get().get_module<VideoModule>();
+		context.Nav = Engine::get().get_module<NavModule>();
+		context.AI = Engine::get().get_module<AIModule>();
 		context.RequestQuit = []() { Engine::get().request_quit(); };
 		if (RenderModule* renderer = Engine::get().get_module<RenderModule>())
 		{
 			context.Debug = &renderer->get_debug_draw();
 		}
 
+		define_bt_lua_bases(*m_Runtime); // the catalog's scripts may extend BtAction / BtCondition
 		register_catalog_scripts();
+		if (AIModule* ai = Engine::get().get_module<AIModule>())
+		{
+			ai->attach_lua(*m_Runtime, m_Instances->context());
+		}
 
 		// the listener runs on whatever thread cooked the asset: it only notes the guid
 		m_ReloadListener = assets->add_reload_listener([this](AssetGuid guid)
@@ -54,6 +68,10 @@ namespace wiwa
 		if (AssetManager* assets = Engine::get().get_module<AssetManager>())
 		{
 			assets->remove_reload_listener(m_ReloadListener);
+		}
+		if (AIModule* ai = Engine::get().get_module<AIModule>())
+		{
+			ai->detach_lua(); // aborts what runs while the Lua state is there
 		}
 		stop();
 		m_Instances.reset();
@@ -77,6 +95,10 @@ namespace wiwa
 			std::string error;
 			if (ScriptClass* scriptClass = m_Runtime->load(AssetRef{ entry.Guid, 0 }, error))
 			{
+				if (!bt_leaf_kind(scriptClass->Class).empty())
+				{
+					continue; // a behaviour tree leaf, not a script to put on an entity
+				}
 				register_script_component(*scriptClass);
 				registered++;
 			}

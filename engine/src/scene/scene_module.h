@@ -43,7 +43,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE; }
 		virtual std::string get_name() const override { return "SceneModule"; }
-		virtual int get_priority() const override { return -80; }
+		virtual int get_priority() const override { return ModulePriority::Scene; }
 
 		// Makes this scene the active one at once (a new empty scene in the editor). Main thread only; the old one is taken down over
 		// the next updates.

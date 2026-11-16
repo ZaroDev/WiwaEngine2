@@ -13,6 +13,7 @@ namespace wiwa
 	class ShaderLibrary;
 	class TextureRegistry;
 	class GpuResourceCache;
+	class ParticlePool;
 	class SceneRenderData;
 	struct ViewState;
 	struct ViewFlags;
@@ -26,7 +27,7 @@ namespace wiwa
 		u32 Width = 0;
 		u32 Height = 0;
 		float Time = 0.0f;
-		float DeltaTime = 0.0f; // seconds since the last rendered frame
+		float DeltaSeconds = 0.0f; // since the last rendered frame
 		u64 FrameIndex = 0; // counts rendered frames
 		const OwnedDrawData* ImGui = nullptr; // the UI of this frame, built on the main thread
 		bool SceneInViewport = false; // the UI shows the scene in a panel; otherwise it fills the window (the blit pass draws it)
@@ -45,6 +46,7 @@ namespace wiwa
 		ShaderLibrary* Shaders = nullptr;          // cooked shaders, loaded through the asset system
 		TextureRegistry* Textures = nullptr;       // the textures the UI can draw by id
 		GpuResourceCache* Cache = nullptr;           // the meshes, textures and fonts on the GPU
+		ParticlePool* Particles = nullptr;           // the particles of every system (vfx.md)
 	};
 
 	// A render pass records its commands into the command list that the renderer
@@ -72,8 +74,6 @@ namespace wiwa
 		// An offscreen view is being destroyed: forget what was cached for its target (ViewportTarget::uid), so that its images are not kept alive.
 		virtual void on_view_removed(u32 targetUid) {}
 		virtual bool has_failed() const { return false; }
-
-		virtual void on_resize(nvrhi::IDevice* device, u32 width, u32 height) {}
 
 		virtual void render(nvrhi::ICommandList* commandList, const FrameDescription& frame) = 0;
 

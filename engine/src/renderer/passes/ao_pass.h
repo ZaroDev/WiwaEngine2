@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../render_constants.h"
 #include "../render_pass.h"
 #include "../shader_library.h"
 #include "../view/per_view.h"
@@ -25,8 +26,8 @@ namespace wiwa
 		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return flags.Ao; }
 
 	private:
-		static constexpr u32 GROUP_SIZE = 8;        // [numthreads] of gtao.hlsl and gtao_blur.hlsl
-		static constexpr u32 DEPTH_GROUP_SIZE = 16; // and of gtao_depth.hlsl, which reduces 16x16 pixels to 5 levels
+		static constexpr u32 GROUP_SIZE = GTAO_GROUP_SIZE;             // gtao.hlsl and gtao_blur.hlsl
+		static constexpr u32 DEPTH_GROUP_SIZE = GTAO_DEPTH_GROUP_SIZE; // gtao_depth.hlsl, which reduces 16x16 pixels to 5 levels
 
 		// Mirrors the AoData cbuffer of the three shaders.
 		struct AoData

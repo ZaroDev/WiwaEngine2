@@ -61,9 +61,6 @@ namespace wiwa
 		// Replaces the data of an inline shader; invalidate() the reference's guid for the change to show.
 		void set_inline_shader(const AssetRef& shader, SurfaceShaderData data);
 
-		// Whether any shader is still waiting for its first version.
-		bool any_loading() const;
-
 	private:
 		struct Entry
 		{

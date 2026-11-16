@@ -5,7 +5,10 @@
 #include <cctype>
 
 #include <assets/asset_manager.h>
+#include <audio/audio_module.h>
 #include <core/engine.h>
+
+#include "catalog_picker.h"
 
 namespace
 {
@@ -40,8 +43,8 @@ namespace
 	}
 }
 
-SettingsPanel::SettingsPanel(Ref<ProjectSection> project, Ref<RendererSection> renderer, Ref<PhysicsSection> physics, Ref<InputSection> input, Ref<EditorSection> editor)
-	: Panel("Settings", PanelCategory::Window), m_Project(std::move(project)), m_Renderer(std::move(renderer)), m_Physics(std::move(physics)), m_Input(std::move(input)), m_Editor(std::move(editor))
+SettingsPanel::SettingsPanel(Ref<ProjectSection> project, Ref<RendererSection> renderer, Ref<PhysicsSection> physics, Ref<InputSection> input, Ref<AudioSection> audio, Ref<EditorSection> editor)
+	: Panel("Settings", PanelCategory::Window), m_Project(std::move(project)), m_Renderer(std::move(renderer)), m_Physics(std::move(physics)), m_Input(std::move(input)), m_Audio(std::move(audio)), m_Editor(std::move(editor))
 {
 	m_Open = false; // opened from the Window menu
 }
@@ -56,6 +59,7 @@ const char* SettingsPanel::page_name(Page page)
 	case Page::Renderer: return "Renderer";
 	case Page::Physics: return "Physics";
 	case Page::Input: return "Input";
+	case Page::Audio: return "Audio";
 	case Page::Editor: return "Editor";
 	default: return "";
 	}
@@ -139,6 +143,7 @@ void SettingsPanel::draw_page(Page page)
 	case Page::Renderer: renderer_rows(); break;
 	case Page::Physics: physics_rows(); break;
 	case Page::Input: input_rows(); break;
+	case Page::Audio: audio_rows(); break;
 	case Page::Editor: editor_rows(); break;
 	default: break;
 	}
@@ -364,6 +369,30 @@ void SettingsPanel::renderer_rows()
 			}
 		});
 
+	group("Particles");
+	field("Particle pool size", [&]()
+		{
+			int pool = static_cast<int>(q.ParticlePoolSize);
+			ImGui::SetNextItemWidth(180.0f);
+			if (ImGui::DragInt("Particle pool size", &pool, 256.0f, 4096, 4194304))
+			{
+				q.ParticlePoolSize = static_cast<wiwa::u32>(std::clamp(pool, 4096, 4194304));
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("%.1f MB", static_cast<double>(q.ParticlePoolSize) * 64.0 / (1024.0 * 1024.0));
+		});
+	field("Most particles per emitter", [&]()
+		{
+			int cap = static_cast<int>(q.ParticleMaxPerEmitter);
+			ImGui::SetNextItemWidth(180.0f);
+			if (ImGui::DragInt("Most particles per emitter", &cap, 16.0f, 64, 65536))
+			{
+				q.ParticleMaxPerEmitter = static_cast<wiwa::u32>(std::clamp(cap, 64, 65536));
+			}
+		});
+	field("Spawn rate scale", [&]() { ImGui::SetNextItemWidth(180.0f); ImGui::SliderFloat("Spawn rate scale", &q.ParticleRateScale, 0.0f, 4.0f, "%.2fx"); });
+	field("Particles collide with the depth", [&]() { ImGui::Checkbox("Particles collide with the depth", &q.ParticleCollision); });
+
 	group("Display");
 	field("Vertical sync", [&]() { ImGui::Checkbox("Vertical sync", &q.Vsync); });
 	field("Upload on the copy queue", [&]() { ImGui::Checkbox("Upload on the copy queue", &q.CopyQueue); });
@@ -484,14 +513,12 @@ void SettingsPanel::input_rows()
 				}
 				if (assets != nullptr)
 				{
-					for (const wiwa::AssetCatalog::Entry& entry : assets->catalog_entries())
+					const std::vector<wiwa::AssetCatalog::Entry> entries = assets->catalog_entries();
+					if (const wiwa::AssetCatalog::Entry* picked = catalog_selectables(entries, ".winput", [&](const wiwa::AssetCatalog::Entry& entry) { return entry.Guid == current.Guid; }))
 					{
-						if (std::filesystem::path(entry.Path).extension() == ".winput" && ImGui::Selectable(entry.Path.c_str(), entry.Guid == current.Guid))
+						if (const std::optional<wiwa::AssetRef> ref = assets->find_asset(picked->Path))
 						{
-							if (const std::optional<wiwa::AssetRef> ref = assets->find_asset(entry.Path))
-							{
-								m_Input->set_default_map(*ref);
-							}
+							m_Input->set_default_map(*ref);
 						}
 					}
 				}
@@ -500,6 +527,107 @@ void SettingsPanel::input_rows()
 			ImGui::TextDisabled("The maps themselves (actions and bindings) are edited in the Input panel.");
 		});
 	show_error(m_Input->last_error());
+}
+
+void SettingsPanel::audio_rows()
+{
+	const wiwa::AudioProjectSettings& current = m_Audio->settings();
+	wiwa::AudioModule* module = wiwa::Engine::get().get_module<wiwa::AudioModule>();
+	wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>();
+
+	field("Backend", [&]()
+		{
+			if (ImGui::BeginCombo("Backend", wiwa::audio_backend_name(current.Backend)))
+			{
+				for (const wiwa::AudioBackendKind kind : { wiwa::AudioBackendKind::Null, wiwa::AudioBackendKind::Wwise, wiwa::AudioBackendKind::MiniAudio })
+				{
+					if (ImGui::Selectable(wiwa::audio_backend_name(kind), kind == current.Backend))
+					{
+						m_Audio->set_backend(kind);
+					}
+				}
+				ImGui::EndCombo();
+			}
+			if (module != nullptr)
+			{
+				ImGui::TextDisabled("Running: %s", wiwa::audio_backend_name(module->active_kind()));
+				if (!module->last_error().empty())
+				{
+					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", module->last_error().c_str());
+				}
+			}
+		});
+
+	field("Soundbanks", [&]()
+		{
+			ImGui::TextUnformatted("Soundbanks");
+			int remove = -1;
+			for (size_t i = 0; i < current.Banks.size(); i++)
+			{
+				std::string shown = current.Banks[i].Guid.to_string();
+				if (assets != nullptr)
+				{
+					for (const wiwa::AssetCatalog::Entry& entry : assets->catalog_entries())
+					{
+						if (entry.Guid == current.Banks[i].Guid)
+						{
+							shown = entry.Path;
+						}
+					}
+				}
+				ImGui::PushID(static_cast<int>(i));
+				if (ImGui::SmallButton("x"))
+				{
+					remove = static_cast<int>(i);
+				}
+				ImGui::SameLine();
+				ImGui::TextUnformatted(shown.c_str());
+				ImGui::PopID();
+			}
+			if (remove >= 0)
+			{
+				m_Audio->remove_bank(static_cast<size_t>(remove));
+			}
+
+			if (ImGui::BeginCombo("##add_bank", "Add a soundbank"))
+			{
+				if (assets != nullptr)
+				{
+					const std::vector<wiwa::AssetCatalog::Entry> entries = assets->catalog_entries();
+					if (const wiwa::AssetCatalog::Entry* picked = catalog_selectables(entries, ".bnk", [](const wiwa::AssetCatalog::Entry&) { return false; }))
+					{
+						if (const std::optional<wiwa::AssetRef> ref = assets->find_asset(picked->Path))
+						{
+							m_Audio->add_bank(*ref);
+						}
+					}
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::TextDisabled("Wwise: Init.bnk is always loaded first; generate the banks into the project with the SoundbanksInfo.json file. MiniAudio: no banks, events are the names of .wav/.mp3/.flac files in the assets.");
+		});
+
+	field("Memory pool (KB)", [&]()
+		{
+			wiwa::u32 kilobytes = current.MemoryPoolKb;
+			if (count_input("Memory pool (KB)", kilobytes, wiwa::AUDIO_POOL_MIN_KB, wiwa::AUDIO_POOL_MAX_KB, 256.0f))
+			{
+				m_Audio->set_memory_pool(kilobytes);
+			}
+			restart_note();
+		});
+
+	field("Language", [&]()
+		{
+			std::string language = current.Language;
+			if (text_input("Language", language, 64) && !language.empty())
+			{
+				m_Audio->set_language(language);
+			}
+			ImGui::TextDisabled("The Wwise language the voice banks are loaded for, such as English(US).");
+		});
+
+	show_error(m_Audio->last_error());
 }
 
 void SettingsPanel::editor_rows()
@@ -525,6 +653,8 @@ void SettingsPanel::editor_rows()
 	toggle("World axes", g.Axes, defaults.Axes);
 	toggle("Lights", g.Lights, defaults.Lights);
 	toggle("Cameras", g.Cameras, defaults.Cameras);
+	toggle("Decals", g.Decals, defaults.Decals);
+	toggle("Particle systems", g.Particles, defaults.Particles);
 	toggle("Bounds of the selection", g.Bounds, defaults.Bounds);
 	toggle("Outline the selection", g.Outline.Enabled, defaults.Outline.Enabled);
 	field("Outline color", [&]()

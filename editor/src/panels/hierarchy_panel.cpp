@@ -8,12 +8,15 @@
 #include <scene/entity_templates.h>
 #include <scene/reflection/component_registry.h>
 
+#include <asset_editor/asset_kinds.h>
+
 #include "asset_icons.h"
 
 namespace
 {
 	constexpr const char* ENTITY_PAYLOAD = "WI_ENTITY";
 	const ImVec4 PREFAB_NODE_COLOR(0.60f, 0.76f, 1.00f, 1.0f);
+	const ImVec4 NESTED_PREFAB_COLOR(0.55f, 0.90f, 0.85f, 1.0f); // the root of a prefab that a prefab holds
 	const ImVec4 ADDED_CHILD_COLOR(0.60f, 1.00f, 0.65f, 1.0f);
 	const ImVec4 INSTANCE_COLOR(1.00f, 0.80f, 0.45f, 1.0f);
 	const ImVec4 ERROR_COLOR(1.0f, 0.4f, 0.4f, 1.0f);
@@ -244,7 +247,7 @@ void HierarchyPanel::drop_asset(const std::string& path, entt::entity target)
 		m_Editor.set_field(target, "MeshRenderer", "Materials", wiwa::FieldValue(std::vector<wiwa::AssetRef>{ *ref }));
 		m_Status.clear();
 	}
-	else if (extension == ".wprefab" || extension == ".gltf" || extension == ".glb" || extension == ".fbx")
+	else if (wiwa::is_prefab_source(path))
 	{
 		const bool authored = target == entt::null || m_Editor.kind_of(target) == wiwa::SceneEditor::Kind::Authored;
 		const entt::entity instance = m_Editor.add_prefab(*ref, authored ? target : entt::null);
@@ -319,8 +322,7 @@ void HierarchyPanel::refresh_prefabs()
 		std::error_code error;
 		for (std::filesystem::recursive_directory_iterator it(root.Source, error), end; !error && it != end; it.increment(error))
 		{
-			const std::filesystem::path extension = it->path().extension();
-			if (it->is_regular_file(error) && (extension == ".wprefab" || extension == ".gltf" || extension == ".glb" || extension == ".fbx"))
+			if (it->is_regular_file(error) && wiwa::is_prefab_source(it->path()))
 			{
 				m_Prefabs.push_back({ it->path().lexically_relative(root.Source).generic_string(), it->path().string() });
 			}
@@ -452,7 +454,8 @@ void HierarchyPanel::draw_node(entt::entity entity)
 	ImVec4 textColor;
 	if (kind == wiwa::SceneEditor::Kind::PrefabNode)
 	{
-		textColor = PREFAB_NODE_COLOR;
+		const wiwa::PrefabChild* child = m_Editor.scene().registry().try_get<wiwa::PrefabChild>(entity);
+		textColor = child != nullptr && child->NestedRoot ? NESTED_PREFAB_COLOR : PREFAB_NODE_COLOR;
 		color = "";
 	}
 	else if (kind == wiwa::SceneEditor::Kind::AddedChild)
@@ -574,6 +577,7 @@ void HierarchyPanel::draw_node(entt::entity entity)
 			{ ICON_FK_CUBE, registry.all_of<wiwa::MeshRenderer>(entity), "MeshRenderer" },
 			{ ICON_FK_LIGHTBULB_O, registry.all_of<wiwa::Light>(entity), "Light" },
 			{ ICON_FK_VIDEO_CAMERA, registry.all_of<wiwa::Camera>(entity), "Camera" },
+			{ ICON_FK_PAINT_BRUSH, registry.all_of<wiwa::Decal>(entity), "Decal" },
 			{ ICON_FK_CIRCLE_O, registry.all_of<wiwa::Collider>(entity), "Collider" },
 			{ ICON_FK_HUBZILLA, registry.all_of<wiwa::RigidBody>(entity), "RigidBody" },
 			{ ICON_FK_MALE, registry.all_of<wiwa::Animator>(entity), "Animator" },

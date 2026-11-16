@@ -182,6 +182,9 @@ namespace wiwa
 		Handle<PrefabData> prefab_handle(const AssetRef& prefab);
 		const PrefabData* prefab_of(entt::entity root);
 		void expand_instance(entt::entity root, const PrefabData& prefab);
+		// Whether the prefabs that this one instantiates have loaded (a failed one counts: its instances are left out).
+		LoadState nested_state(const PrefabData& prefab);
+		PrefabResolver resolver();
 		void queue_expansion(entt::entity root);
 		// Every edit ends here, so the WorldTransforms the renderer and the gizmos read never go stale.
 		void mark_dirty(const std::string& label = "Edit")

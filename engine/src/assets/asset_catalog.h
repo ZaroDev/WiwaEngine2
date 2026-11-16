@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "asset_guid.h"
+#include "project_blob.h"
 #include "wasset_io.h"
 
 namespace wiwa
@@ -14,7 +15,7 @@ namespace wiwa
 	constexpr const char* CATALOG_FILE_NAME = "catalog.wcat";
 
 	// The key a pack stores its catalog under (it is not an asset, so no real guid is this one).
-	constexpr AssetGuid CATALOG_GUID{ ~0ull, ~0ull };
+	constexpr AssetGuid CATALOG_GUID = project_blob_guid(ProjectBlob::Catalog);
 
 	// Which asset a source path names: "Assets/models/torus_knot.glb", "engine/shaders/imgui.hlsl". Written by the editor's
 	// asset database next to the cooked files and packed with them, so code (and a game) can refer to an asset by the path

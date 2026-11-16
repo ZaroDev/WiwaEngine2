@@ -7,6 +7,7 @@
 #include <nvrhi/nvrhi.h>
 
 #include <assets/asset_manager.h>
+#include <assets/particle_effect.h>
 
 #include "../upload_queue.h"
 #include "gpu_material.h"
@@ -86,6 +87,11 @@ namespace wiwa
 		nvrhi::IBuffer* material_buffer() const { return m_MaterialBuffer; }
 		u32 material_generation() const { return m_MaterialGeneration; }
 
+		// The data of a particle effect (.wfx): CPU-side, the particle pass builds its own GPU records from it. Null while it loads or when it cannot be
+		// loaded. effect_revision counts up each time the effect is cooked again (a system that holds ranges for it must start over).
+		const ParticleEffectData* get_particle_effect(const AssetRef& effect);
+		u32 effect_revision(const AssetRef& effect) const;
+
 		// Once per frame, after UploadQueue::begin_frame and before its submit: polls what is loading and uploads what is ready.
 		void update();
 
@@ -97,6 +103,10 @@ namespace wiwa
 		AssetRef add_inline_material(MaterialData material);
 		AssetRef add_inline_texture(TextureData texture);
 		AssetRef add_inline_font(FontData font);
+		AssetRef add_inline_particle_effect(ParticleEffectData effect);
+		void set_inline_particle_effect(const AssetRef& effect, ParticleEffectData data);
+		// Takes the inline data of an effect away again (a preview of unsaved edits): the effect is the asset on disk once more.
+		void clear_inline_particle_effect(const AssetRef& effect);
 		// Replaces the data of an inline asset; invalidate() the reference's guid for the change to show.
 		void set_inline_texture(const AssetRef& texture, TextureData data);
 		void set_inline_mesh(const AssetRef& mesh, MeshData data);
@@ -259,6 +269,13 @@ namespace wiwa
 		std::unordered_map<AssetGuid, std::unique_ptr<MeshEntry>> m_Meshes{};
 		std::unordered_map<AssetGuid, std::unique_ptr<TextureEntry>> m_Textures{};
 		std::unordered_map<AssetGuid, Ref<const FontData>> m_InlineFonts{};
+		std::unordered_map<AssetGuid, Ref<const ParticleEffectData>> m_InlineEffects{};
+		struct EffectEntry
+		{
+			Source<ParticleEffectData> Data{};
+			u32 Revision = 0;
+		};
+		std::unordered_map<AssetGuid, EffectEntry> m_Effects{};
 		std::unordered_map<AssetGuid, std::unique_ptr<FontEntry>> m_Fonts{};
 		std::vector<FontEntry*> m_PendingFonts{};
 		std::unordered_map<AssetGuid, std::unique_ptr<MaterialEntry>> m_MaterialEntries{};

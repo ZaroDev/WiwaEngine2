@@ -12,6 +12,12 @@
 
 namespace wiwa
 {
+	// The cooked binary a backend loads: SPIR-V for Vulkan, DXBC for D3D11 and D3D12.
+	inline ShaderTarget shader_target_for(GraphicsApi api)
+	{
+		return api == GraphicsApi::Vulkan ? ShaderTarget::Spirv : ShaderTarget::Dxbc;
+	}
+
 	// Turns the cooked Shader assets into NVRHI shaders for the backend in use. Render thread only. Nothing is compiled
 	// here: the binary of the right target (DXBC for D3D11 and D3D12, SPIR-V for Vulkan) is taken from the asset.
 	//

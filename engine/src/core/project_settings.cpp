@@ -1,5 +1,6 @@
 #include <pch.h>
 #include "project_settings.h"
+#include <core/file_io.h>
 
 #include <algorithm>
 #include <fstream>
@@ -153,13 +154,9 @@ namespace wiwa
 		json["launch"] = { { "api", APIS[static_cast<u8>(settings.Api)] }, { "debugDraw", settings.DebugDrawOnStart }, { "gpuValidation", settings.GpuValidation } };
 		json["performance"] = { { "fpsCap", settings.FpsCap }, { "fixedRate", settings.FixedRate } };
 
-		std::ofstream file(path, std::ios::binary | std::ios::trunc);
-		if (!file)
-		{
-			return false;
-		}
-		file << json.dump(2) << '\n';
-		return file.good();
+		const std::string text = json.dump(2) + '\n';
+		std::string error;
+		return write_file_atomic(path, text.data(), text.size(), error);
 	}
 
 	void archive(BinaryArchive& ar, ProjectSettings& v)
@@ -203,16 +200,6 @@ namespace wiwa
 
 	std::optional<ProjectSettings> read_project_settings(IAssetSource& source)
 	{
-		if (!source.contains(PROJECT_SETTINGS_GUID))
-		{
-			return std::nullopt;
-		}
-
-		std::optional<std::vector<std::byte>> bytes = source.read(PROJECT_SETTINGS_GUID);
-		if (!bytes)
-		{
-			return std::nullopt;
-		}
-		return deserialize<ProjectSettings>(*bytes);
+		return read_project_blob<ProjectSettings>(source, PROJECT_SETTINGS_GUID);
 	}
 }

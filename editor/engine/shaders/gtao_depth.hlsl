@@ -6,7 +6,7 @@
 // One dispatch builds all levels: a 16x16 group converts its pixels (level 0) and reduces them through groupshared
 // memory to levels 1 to 4 (8x8, 4x4, 2x2 and 1 texel per group).
 
-#define GROUP_SIZE 16
+#define GROUP_SIZE WI_GTAO_DEPTH_GROUP_SIZE
 
 // Mirrors AoData in ao_pass.h.
 cbuffer AoData : register(b0)

@@ -9,6 +9,7 @@
 #include "entity_guid.h"
 #include "scene_data.h"
 #include <physics/physics_types.h>
+#include <nav/nav_types.h>
 
 // The components of a scene. They are plain data; the reflection layer (reflection/) describes their fields for the
 // serializer and the editor. Assets are referenced by AssetRef, never by a loaded handle.
@@ -53,6 +54,7 @@ namespace wiwa
 	{
 		EntityGuid Instance{};
 		u64 NodeId = 0;
+		bool NestedRoot = false; // the node is the root of a nested prefab instance (its children come from that prefab)
 	};
 
 	// Components and fields that were in the scene file but that this engine does not know. They are kept so that saving the
@@ -100,6 +102,41 @@ namespace wiwa
 	{
 		AssetRef Mesh{};
 		std::vector<AssetRef> Materials{}; // overrides, per primitive; empty means the mesh's own materials
+		bool ReceivesDecals = true;        // false: decals never draw on this mesh
+	};
+
+	// Projects a Material (base color, normal, ORM, emissive, alpha) onto the opaque geometry inside its box. The box is Size in local
+	// space, projecting along local -Z; the transform's rotation and scale apply. Fades run only while the game clock plays.
+	struct Decal
+	{
+		AssetRef Material{};
+		glm::vec3 Size{ 1.0f };
+		float Opacity = 1.0f;
+		bool AffectColor = true;
+		bool AffectNormal = true;
+		bool AffectOrm = true;
+		bool AffectEmissive = true;
+		float NormalAngleFadeStart = 60.0f; // degrees between the surface normal and the projection axis
+		float NormalAngleFadeEnd = 80.0f;
+		float EdgeFade = 0.1f; // fraction of the box faded at its sides
+		i32 SortOrder = 0;     // higher draws later and wins overlaps
+		float FadeInTime = 0.0f;
+		float Lifetime = 0.0f; // seconds; 0 is permanent
+		float FadeOutTime = 0.0f;
+	};
+
+	// Plays a particle effect (.wfx, vfx.md). The particles are simulated on the GPU; this component says which effect, whether it plays, and a few
+	// parameters scripts and prefabs can change. It plays only while the game clock plays (the editor previews the selected one).
+	struct ParticleSystem
+	{
+		AssetRef Effect{};
+		bool PlayOnStart = true;
+		bool Looping = true;        // false: every emitter plays once, whatever its own Looping says
+		float TimeScale = 1.0f;     // 0 pauses, 2 is twice as fast
+		i32 SortBias = 0;           // orders the effect among the others that blend: the higher draws later
+		glm::vec4 ColorTint{ 1.0f };// multiplies every particle's color
+		float SizeScale = 1.0f;     // multiplies every particle's size
+		float RateScale = 1.0f;     // multiplies the emission rate (bursts are not scaled)
 	};
 
 	// The root of a linked prefab instance: the entities below it are generated from the Prefab, and the overrides change them.
@@ -224,6 +261,146 @@ namespace wiwa
 		glm::vec3 OffsetPosition{ 0.0f };
 		glm::quat OffsetRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
 		glm::vec3 OffsetScale{ 1.0f };
+	};
+
+	// Hears the scene: the first active listener (else the primary camera) is where sound is heard from.
+	struct AudioListener
+	{
+		bool Active = true;
+	};
+
+	// Plays audio events from its entity's position while the game plays.
+	struct AudioEmitter
+	{
+		std::string Event{};              // the vendor's event name (Wwise: Play_Footstep); empty plays nothing
+		bool PlayOnStart = false;         // posts Event once when the emitter starts to exist in a playing scene
+		float AttenuationScale = 1.0f;    // scales the event's attenuation distances
+	};
+
+	// The region of the scene a navmesh is baked for (navigation.md). NavMesh is the baked .wnav; the rest are what Recast bakes with, the fields of
+	// NavBuildSettings one by one (build() puts them together). The box is Size around the entity's position. Masks are bit sets held in an i32
+	// (-1: all): LayerMask picks the render layers that contribute geometry.
+	struct NavMeshVolume
+	{
+		AssetRef NavMesh{};
+		glm::vec3 Size{ 20.0f, 6.0f, 20.0f };
+		float AgentRadius = 0.4f;
+		float AgentHeight = 1.8f;
+		float AgentMaxClimb = 0.4f;
+		float AgentMaxSlope = 45.0f;
+		float CellSize = 0.2f;
+		float CellHeight = 0.1f;
+		i32 RegionMinSize = 8;
+		i32 RegionMergeSize = 20;
+		float EdgeMaxLength = 12.0f;
+		float EdgeMaxError = 1.3f;
+		i32 VertsPerPoly = 6;
+		float DetailSampleDist = 6.0f;
+		float DetailSampleMaxError = 1.0f;
+		i32 TileSize = 64;
+		i32 LayerMask = -1;
+		bool Enabled = true;
+
+		NavBuildSettings build() const
+		{
+			NavBuildSettings settings;
+			settings.AgentRadius = AgentRadius;
+			settings.AgentHeight = AgentHeight;
+			settings.AgentMaxClimb = AgentMaxClimb;
+			settings.AgentMaxSlope = AgentMaxSlope;
+			settings.CellSize = CellSize;
+			settings.CellHeight = CellHeight;
+			settings.RegionMinSize = RegionMinSize;
+			settings.RegionMergeSize = RegionMergeSize;
+			settings.EdgeMaxLength = EdgeMaxLength;
+			settings.EdgeMaxError = EdgeMaxError;
+			settings.VertsPerPoly = VertsPerPoly;
+			settings.DetailSampleDist = DetailSampleDist;
+			settings.DetailSampleMaxError = DetailSampleMaxError;
+			settings.TileSize = TileSize;
+			return settings;
+		}
+
+		void set_build(const NavBuildSettings& settings)
+		{
+			AgentRadius = settings.AgentRadius;
+			AgentHeight = settings.AgentHeight;
+			AgentMaxClimb = settings.AgentMaxClimb;
+			AgentMaxSlope = settings.AgentMaxSlope;
+			CellSize = settings.CellSize;
+			CellHeight = settings.CellHeight;
+			RegionMinSize = settings.RegionMinSize;
+			RegionMergeSize = settings.RegionMergeSize;
+			EdgeMaxLength = settings.EdgeMaxLength;
+			EdgeMaxError = settings.EdgeMaxError;
+			VertsPerPoly = settings.VertsPerPoly;
+			DetailSampleDist = settings.DetailSampleDist;
+			DetailSampleMaxError = settings.DetailSampleMaxError;
+			TileSize = settings.TileSize;
+		}
+	};
+
+	// Marks the geometry of the entity's mesh as one kind of ground when a navmesh is baked. NotWalkable makes it an obstacle.
+	struct NavAreaTag
+	{
+		NavArea Area = NavArea::Walkable;
+	};
+
+	// Walks the navmesh to a destination while the game plays (NavModule moves the transform). The state of the walk lives in the module.
+	// AreaMask is a bit set of the areas it may walk on (-1: all); with DriveTransform off the module only reports the velocity (for a character body).
+	struct NavAgent
+	{
+		float Speed = 3.5f;
+		float Acceleration = 8.0f;
+		float Radius = 0.4f;
+		float Height = 1.8f;
+		float StoppingDistance = 0.2f;
+		i32 AvoidanceQuality = 2;     // 0 none .. 3 best
+		float SeparationWeight = 2.0f;
+		i32 AreaMask = -1;
+		bool AutoRepath = true;
+		bool DriveTransform = true;
+	};
+
+	// Runs a behaviour tree (.wbt) for the entity while the game plays (ai/ai_module.h). TickRate is in Hz (0: every frame). Overrides is a JSON object of
+	// blackboard key to value that replaces the tree's defaults for this entity. The state of the run lives in the AIModule, not here.
+	struct AIController
+	{
+		AssetRef Tree{};
+		bool Enabled = true;
+		float TickRate = 0.0f;
+		i32 Seed = 0;
+		std::string Overrides{};
+	};
+
+	// Senses for the AI of the entity (ai/perception.h): sight (a cone of SightAngle degrees and SightRange metres from the eye, blocked by the physics
+	// layers in SightLayerMask) and hearing (HearingRadius times the loudness of AI.emit_noise). Every Interval seconds the results go to the blackboard of
+	// the entity's AIController under the key names below (an empty name switches that output off). Team and TargetTeams (comma separated; empty: everyone
+	// but its own team) pick what it looks for.
+	struct Perceiver
+	{
+		float SightRange = 15.0f;
+		float SightAngle = 110.0f;
+		glm::vec3 EyeOffset{ 0.0f, 1.6f, 0.0f };
+		i32 SightLayerMask = -1;
+		float HearingRadius = 10.0f;
+		std::string Team{};
+		std::string TargetTeams{};
+		float Interval = 0.2f;
+		std::string SeenKey = "seen_target";
+		std::string CanSeeKey = "can_see_target";
+		std::string LastSeenKey = "last_seen_position";
+		std::string HeardKey = "heard_position";
+		std::string HeardKindKey = "heard_kind";
+	};
+
+	// Something a Perceiver can see: Kind and Team tag it, AimOffset (local) is where sight rays aim, Visible false hides it.
+	struct Perceivable
+	{
+		std::string Kind{};
+		std::string Team{};
+		glm::vec3 AimOffset{ 0.0f, 1.0f, 0.0f };
+		bool Visible = true;
 	};
 
 	// What a ViewHost's preview is drawn with (the profiles of renderer/view/view_types.h; the values match).

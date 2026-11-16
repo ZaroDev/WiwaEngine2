@@ -7,6 +7,8 @@
 
 #include <assets/asset_manager.h>
 #include <core/engine.h>
+#include <scene/decal_lifetime.h>
+#include <scene/particle_runtime.h>
 
 namespace wiwa
 {
@@ -49,6 +51,50 @@ namespace wiwa
 		{
 			return a.Kind == b.Kind && a.Position == b.Position && a.Direction == b.Direction && a.Color == b.Color && a.Intensity == b.Intensity
 				&& a.Range == b.Range && a.InnerAngle == b.InnerAngle && a.OuterAngle == b.OuterAngle && a.CastsShadows == b.CastsShadows;
+		}
+
+		// age: the DecalAge of a decal that is fading or expiring while the game plays; none shows it at its full opacity (edit mode).
+		RenderDecal make_decal(const Decal& decal, const glm::mat4& world, const DecalAge* age)
+		{
+			RenderDecal result;
+			result.World = world;
+			result.Material = decal.Material;
+			result.Size = glm::max(decal.Size, glm::vec3(0.0f));
+			result.Opacity = std::clamp(decal.Opacity, 0.0f, 1.0f) * (age != nullptr ? decal_fade(decal, age->Seconds) : 1.0f);
+			result.Channels = (decal.AffectColor ? DECAL_CHANNEL_COLOR : 0u) | (decal.AffectNormal ? DECAL_CHANNEL_NORMAL : 0u)
+				| (decal.AffectOrm ? DECAL_CHANNEL_ORM : 0u) | (decal.AffectEmissive ? DECAL_CHANNEL_EMISSIVE : 0u);
+			result.AngleFadeStart = decal.NormalAngleFadeStart;
+			result.AngleFadeEnd = decal.NormalAngleFadeEnd;
+			result.EdgeFade = std::clamp(decal.EdgeFade, 0.0f, 0.5f);
+			result.SortOrder = decal.SortOrder;
+			return result;
+		}
+
+		// (The SpawnCount of the runtime is not part of it: those are sent as ParticleSpawns.)
+		RenderParticleSystem make_particle_system(const ParticleSystem& system, const glm::mat4& world, const ParticleRuntime* runtime)
+		{
+			RenderParticleSystem result;
+			result.World = world;
+			result.Effect = system.Effect;
+			result.SortBias = system.SortBias;
+			result.ColorTint = system.ColorTint;
+			result.SizeScale = std::max(system.SizeScale, 0.0f);
+			result.RateScale = std::max(system.RateScale, 0.0f);
+			result.Seed = runtime != nullptr ? runtime->Seed : 0u;
+			result.ClearCount = runtime != nullptr ? runtime->ClearCount : 0u;
+			return result;
+		}
+
+		bool same_particle_system(const RenderParticleSystem& a, const RenderParticleSystem& b)
+		{
+			return same_matrix(a.World, b.World) && a.Effect == b.Effect && a.SortBias == b.SortBias && a.ColorTint == b.ColorTint && a.SizeScale == b.SizeScale
+				&& a.RateScale == b.RateScale && a.Seed == b.Seed && a.ClearCount == b.ClearCount;
+		}
+
+		bool same_decal(const RenderDecal& a, const RenderDecal& b)
+		{
+			return same_matrix(a.World, b.World) && a.Material == b.Material && a.Size == b.Size && a.Opacity == b.Opacity && a.Channels == b.Channels
+				&& a.AngleFadeStart == b.AngleFadeStart && a.AngleFadeEnd == b.AngleFadeEnd && a.EdgeFade == b.EdgeFade && a.SortOrder == b.SortOrder;
 		}
 	}
 
@@ -173,6 +219,8 @@ namespace wiwa
 			m_Scene = scene;
 			m_Instances.clear();
 			m_Lights.clear();
+			m_Decals.clear();
+			m_Particles.clear();
 			m_HasCamera = false;
 			m_SettingsRevision = 0;
 		}
@@ -221,14 +269,17 @@ namespace wiwa
 			const bool known = found != m_Instances.end();
 			SentInstance& sent = known ? found->second : m_Instances[id.Guid];
 			sent.Seen = pass;
-			if (!known || !same_matrix(sent.World, matrix) || sent.Mesh != renderer.Mesh || sent.Materials != renderer.Materials || sent.Padding != padding)
+			if (!known || !same_matrix(sent.World, matrix) || sent.Mesh != renderer.Mesh || sent.Materials != renderer.Materials || sent.Padding != padding
+				|| sent.ReceivesDecals != renderer.ReceivesDecals)
 			{
 				sent.World = matrix;
 				sent.Mesh = renderer.Mesh;
 				sent.Materials = renderer.Materials;
 				sent.Padding = padding;
+				sent.ReceivesDecals = renderer.ReceivesDecals;
 
 				RenderInstance instance;
+				instance.ReceivesDecals = renderer.ReceivesDecals;
 				instance.World = matrix;
 				instance.Mesh = renderer.Mesh;
 				instance.Materials = renderer.Materials;
@@ -286,6 +337,91 @@ namespace wiwa
 				{
 					delta.LightRemovals.push_back(it->first);
 					it = m_Lights.erase(it);
+				}
+				else
+				{
+					++it;
+				}
+			}
+		}
+
+		size_t decalsSeen = 0;
+		for (const auto [entity, id, decal, world] : registry.view<Id, Decal, WorldTransform>().each())
+		{
+			decalsSeen++;
+			RenderDecal current = make_decal(decal, world.Matrix, registry.try_get<DecalAge>(entity));
+			auto found = m_Decals.find(id.Guid);
+			if (found != m_Decals.end() && same_decal(found->second.Decal, current))
+			{
+				found->second.Seen = pass;
+				continue;
+			}
+
+			SentDecal& sent = m_Decals[id.Guid];
+			sent.Decal = current;
+			sent.Seen = pass;
+			delta.DecalUpserts.emplace_back(id.Guid, std::move(current));
+		}
+
+		if (m_Decals.size() != decalsSeen)
+		{
+			for (auto it = m_Decals.begin(); it != m_Decals.end();)
+			{
+				if (it->second.Seen != pass)
+				{
+					delta.DecalRemovals.push_back(it->first);
+					it = m_Decals.erase(it);
+				}
+				else
+				{
+					++it;
+				}
+			}
+		}
+
+		size_t particlesSeen = 0;
+		for (const auto [entity, system, id, world] : registry.view<ParticleSystem, Id, WorldTransform>().each())
+		{
+			if (!system.Effect.valid())
+			{
+				continue; // nothing to play (yet); a system sent before is removed below
+			}
+
+			particlesSeen++;
+			ParticleRuntime* runtime = registry.try_get<ParticleRuntime>(entity);
+			RenderParticleSystem current = make_particle_system(system, world.Matrix, runtime);
+			auto found = m_Particles.find(id.Guid);
+			if (found != m_Particles.end() && same_particle_system(found->second.System, current))
+			{
+				found->second.Seen = pass;
+			}
+			else
+			{
+				SentParticles& sent = m_Particles[id.Guid];
+				sent.System = current;
+				sent.Seen = pass;
+				delta.ParticleUpserts.emplace_back(id.Guid, std::move(current));
+			}
+
+			if (runtime != nullptr)
+			{
+				const bool any = std::any_of(runtime->SpawnCount.begin(), runtime->SpawnCount.end(), [](u32 count) { return count != 0; });
+				if (any)
+				{
+					delta.ParticleSpawns.emplace_back(id.Guid, runtime->SpawnCount);
+					runtime->SpawnCount.fill(0); // taken: a paused game does not tick, and must not send the same spawns again
+				}
+			}
+		}
+
+		if (m_Particles.size() != particlesSeen)
+		{
+			for (auto it = m_Particles.begin(); it != m_Particles.end();)
+			{
+				if (it->second.Seen != pass)
+				{
+					delta.ParticleRemovals.push_back(it->first);
+					it = m_Particles.erase(it);
 				}
 				else
 				{

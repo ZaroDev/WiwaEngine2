@@ -1,5 +1,8 @@
 #include <pch.h>
 #include "wasset_io.h"
+#include <core/file_io.h>
+
+#include <ai/bt_file.h>
 #include "native_anim_files.h"
 
 #include <fstream>
@@ -39,6 +42,25 @@ namespace wiwa
 
 		std::memcpy(data, m_Bytes.data() + m_Cursor, size);
 		m_Cursor += size;
+	}
+
+	bool BinaryArchive::version(u32 expected)
+	{
+		u32 found = expected;
+		value(found);
+		if (reading() && m_Ok && found != expected)
+		{
+			fail();
+		}
+		return m_Ok;
+	}
+
+	void BinaryArchive::expect_end()
+	{
+		if (reading() && m_Ok && remaining() != 0)
+		{
+			fail();
+		}
 	}
 
 	void BinaryArchive::string(std::string& s)
@@ -90,33 +112,8 @@ namespace wiwa
 	{
 		const std::vector<std::byte> blob = make_wasset_blob(header, payload);
 
-		std::error_code error;
-		std::filesystem::create_directories(path.parent_path(), error);
-
-		std::filesystem::path temp = path;
-		temp += ".tmp";
-
-		{
-			std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-			if (!file)
-			{
-				return false;
-			}
-			file.write(reinterpret_cast<const char*>(blob.data()), static_cast<std::streamsize>(blob.size()));
-			if (!file)
-			{
-				return false;
-			}
-		}
-
-		std::filesystem::rename(temp, path, error);
-		if (error)
-		{
-			std::filesystem::remove(temp, error);
-			return false;
-		}
-
-		return true;
+		std::string error;
+		return write_file_atomic(path, blob.data(), blob.size(), error);
 	}
 
 	std::optional<WAssetHeader> parse_wasset_header(std::span<const std::byte> blob, std::span<const std::byte>& payload)
@@ -543,6 +540,48 @@ namespace wiwa
 			}
 		}
 
+		// Nested instances came after the components: older payloads end before this section. Always written.
+		if (!(ar.reading() && ar.ok() && ar.remaining() == 0))
+		{
+			u32 instances = 0;
+			if (!ar.reading())
+			{
+				for (const PrefabNode& n : v.Nodes)
+				{
+					instances += n.Instance ? 1u : 0u;
+				}
+			}
+			ar.value(instances);
+			if (ar.reading() && (!ar.ok() || instances > v.Nodes.size()))
+			{
+				ar.fail();
+				return;
+			}
+
+			u32 next = 0;
+			for (u32 i = 0; i < instances; i++)
+			{
+				u32 index = 0;
+				if (!ar.reading())
+				{
+					while (!v.Nodes[next].Instance)
+					{
+						next++;
+					}
+					index = next++;
+				}
+				ar.value(index);
+				if (ar.reading() && index >= v.Nodes.size())
+				{
+					ar.fail();
+					return;
+				}
+				PrefabNodeInstance& instance = ar.reading() ? v.Nodes[index].Instance.emplace() : *v.Nodes[index].Instance;
+				ar.value(instance.Prefab);
+				archive_override_list(ar, instance.Overrides);
+			}
+		}
+
 		if (ar.reading() && ar.ok())
 		{
 			for (const PrefabNode& n : v.Nodes)
@@ -580,11 +619,8 @@ namespace wiwa
 
 	void archive(BinaryArchive& ar, InputMapData& v)
 	{
-		u32 version = INPUT_MAP_VERSION;
-		ar.value(version);
-		if (ar.reading() && ar.ok() && version != INPUT_MAP_VERSION)
+		if (!ar.version(INPUT_MAP_VERSION))
 		{
-			ar.fail();
 			return;
 		}
 
@@ -610,11 +646,8 @@ namespace wiwa
 
 	void archive(BinaryArchive& ar, AnimationGraphData& v)
 	{
-		u32 version = 1;
-		ar.value(version);
-		if (ar.reading() && ar.ok() && version != 1)
+		if (!ar.version(1))
 		{
-			ar.fail();
 			return;
 		}
 
@@ -636,5 +669,153 @@ namespace wiwa
 			}
 			v = std::move(*parsed);
 		}
+	}
+
+	void archive(BinaryArchive& ar, BehaviorTreeData& v)
+	{
+		if (!ar.version(1))
+		{
+			return;
+		}
+
+		ar.string(v.Text);
+		if (ar.reading() && ar.ok())
+		{
+			std::string error;
+			if (v.Text.empty() || ar.remaining() != 0 || !read_bt_file(v.Text, error))
+			{
+				ar.fail();
+			}
+		}
+	}
+
+	void archive(BinaryArchive& ar, ParticleEffectData& v)
+	{
+		if (!ar.version(static_cast<u32>(WFX_VERSION)))
+		{
+			return;
+		}
+
+		std::string text;
+		if (!ar.reading())
+		{
+			text = write_particle_file(v);
+		}
+		ar.string(text);
+
+		if (ar.reading() && ar.ok())
+		{
+			std::string error;
+			std::optional<ParticleEffectData> parsed = read_particle_file(text, error);
+			if (ar.remaining() != 0 || !parsed)
+			{
+				ar.fail();
+				return;
+			}
+			v = std::move(*parsed);
+		}
+	}
+
+	namespace
+	{
+		void archive_name_groups(BinaryArchive& ar, std::vector<AudioNameGroup>& groups)
+		{
+			ar.list(groups, [&](AudioNameGroup& group)
+			{
+				ar.string(group.Name);
+				ar.list(group.Values, [&](std::string& value) { ar.string(value); });
+			});
+		}
+
+		void archive_bank_info(BinaryArchive& ar, AudioBankInfo& info)
+		{
+			ar.list(info.Events, [&](AudioEventInfo& event)
+			{
+				ar.string(event.Name);
+				ar.value(event.MaxAttenuation);
+				ar.value(event.DurationMs);
+				u8 looping = event.Looping ? 1 : 0;
+				ar.value(looping);
+				event.Looping = looping != 0;
+			});
+			ar.list(info.Rtpcs, [&](std::string& name) { ar.string(name); });
+			archive_name_groups(ar, info.Switches);
+			archive_name_groups(ar, info.States);
+			ar.list(info.Buses, [&](std::string& name) { ar.string(name); });
+		}
+	}
+
+	namespace
+	{
+		// A blob asset (soundbank, video, audio clip) must name itself, hold bytes and have nothing after them.
+		template<typename T>
+		void validate_blob_asset(BinaryArchive& ar, const T& v)
+		{
+			if (ar.reading() && ar.ok() && (v.Name.empty() || v.Bytes.empty()))
+			{
+				ar.fail();
+			}
+			ar.expect_end();
+		}
+	}
+
+	void archive(BinaryArchive& ar, SoundBankData& v)
+	{
+		if (!ar.version(1))
+		{
+			return;
+		}
+
+		ar.string(v.Name);
+		ar.pod_vector(v.Bytes);
+		u8 hasInfo = v.HasInfo ? 1 : 0;
+		ar.value(hasInfo);
+		v.HasInfo = hasInfo != 0;
+		if (v.HasInfo)
+		{
+			archive_bank_info(ar, v.Info);
+		}
+
+		validate_blob_asset(ar, v);
+	}
+
+	void archive(BinaryArchive& ar, VideoData& v)
+	{
+		if (!ar.version(1))
+		{
+			return;
+		}
+
+		ar.string(v.Name);
+		ar.pod_vector(v.Bytes);
+		u8 hasInfo = v.HasInfo ? 1 : 0;
+		ar.value(hasInfo);
+		v.HasInfo = hasInfo != 0;
+		if (v.HasInfo)
+		{
+			ar.value(v.Info.Width);
+			ar.value(v.Info.Height);
+			ar.value(v.Info.Fps);
+			ar.value(v.Info.DurationSeconds);
+			u8 hasAudio = v.Info.HasAudio ? 1 : 0;
+			ar.value(hasAudio);
+			v.Info.HasAudio = hasAudio != 0;
+			ar.value(v.Info.SampleRate);
+			ar.value(v.Info.Channels);
+		}
+
+		validate_blob_asset(ar, v);
+	}
+
+	void archive(BinaryArchive& ar, AudioClipData& v)
+	{
+		if (!ar.version(1))
+		{
+			return;
+		}
+
+		ar.string(v.Name);
+		ar.pod_vector(v.Bytes);
+		validate_blob_asset(ar, v);
 	}
 }

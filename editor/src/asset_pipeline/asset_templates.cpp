@@ -1,6 +1,8 @@
 #include <editor_common.h>
 #include "asset_templates.h"
 
+#include <ai/bt_file.h>
+
 #include <fstream>
 
 #include <scene/scene_data.h>
@@ -10,9 +12,10 @@
 #include "material_file.h"
 #include "physics_material_file.h"
 #include <assets/native_anim_files.h>
+#include <assets/particle_effect.h>
 #include <input/input_map_io.h>
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {
@@ -33,6 +36,47 @@ namespace wiwa
 			layer.States.push_back(std::move(state));
 			graph.Layers.push_back(std::move(layer));
 			return graph;
+		}
+
+		// A Sequence with a Wait: valid, does nothing, and shows the editor what a tree is.
+		BehaviorTreeDoc default_behavior_tree()
+		{
+			BehaviorTreeDoc doc;
+			doc.Root = "n1";
+			BtNodeDesc sequence;
+			sequence.Id = "n1";
+			sequence.Type = "Sequence";
+			sequence.Name = "Root";
+			sequence.Children = { "n2" };
+			BtNodeDesc wait;
+			wait.Id = "n2";
+			wait.Type = "Wait";
+			wait.Params = nlohmann::json{ { "seconds", 1.0 } };
+			doc.Nodes = { sequence, wait };
+			return doc;
+		}
+
+		// One emitter of sparks: an additive sprite, thirty a second, thrown up and pulled down, fading out.
+		ParticleEffectData default_particle_effect(const std::string& name)
+		{
+			ParticleEffectData effect;
+			effect.Name = name;
+			ParticleEmitterData sparks;
+			sparks.Name = "Sparks";
+			sparks.Blend = ParticleBlend::Additive;
+			sparks.Rate = ParticleValue::constant(30.0f);
+			sparks.Shape = ParticleShape::Cone;
+			sparks.ShapeSize = glm::vec3(0.1f);
+			sparks.Lifetime = ParticleValue::range(0.6f, 1.2f);
+			sparks.StartSpeed = ParticleValue::range(2.0f, 4.0f);
+			sparks.StartSize = ParticleValue::range(0.04f, 0.08f);
+			sparks.StartColor = glm::vec4(1.0f, 0.7f, 0.3f, 1.0f);
+			sparks.Intensity = 3.0f;
+			sparks.Gravity = glm::vec3(0.0f, -6.0f, 0.0f);
+			sparks.AlphaOverLife = ParticleValue::curve({ { 0.0f, 1.0f }, { 0.7f, 1.0f }, { 1.0f, 0.0f } });
+			sparks.bake();
+			effect.Emitters.push_back(std::move(sparks));
+			return effect;
 		}
 
 		InputMapData default_input_map()
@@ -193,6 +237,8 @@ namespace wiwa
 		case CreateKind::PhysicsMaterial: return "Physics Material";
 		case CreateKind::InputMap: return "Input Map";
 		case CreateKind::AnimationGraph: return "Animation graph";
+		case CreateKind::ParticleEffect: return "Particle effect";
+		case CreateKind::BehaviorTree: return "Behaviour tree";
 		}
 		return "";
 	}
@@ -212,6 +258,8 @@ namespace wiwa
 		case CreateKind::PhysicsMaterial: return "New physics material";
 		case CreateKind::InputMap: return "New input map";
 		case CreateKind::AnimationGraph: return "New animation graph";
+		case CreateKind::ParticleEffect: return "New particle effect";
+		case CreateKind::BehaviorTree: return "New behaviour tree";
 		}
 		return "";
 	}
@@ -231,6 +279,8 @@ namespace wiwa
 		case CreateKind::PhysicsMaterial: return ".wphysmat";
 		case CreateKind::InputMap: return ".winput";
 		case CreateKind::AnimationGraph: return ".wgraph";
+		case CreateKind::ParticleEffect: return ".wfx";
+		case CreateKind::BehaviorTree: return ".wbt";
 		}
 		return "";
 	}
@@ -339,6 +389,12 @@ namespace wiwa
 			break;
 		case CreateKind::AnimationGraph:
 			written = write_text(path, write_graph_file(default_animation_graph(name)));
+			break;
+		case CreateKind::ParticleEffect:
+			written = write_text(path, write_particle_file(default_particle_effect(name)));
+			break;
+		case CreateKind::BehaviorTree:
+			written = write_text(path, write_bt_file(default_behavior_tree()));
 			break;
 		}
 

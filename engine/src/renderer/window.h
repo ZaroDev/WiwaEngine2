@@ -23,7 +23,7 @@ namespace wiwa
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE_RENDERER; }
 		virtual std::string get_name() const { return "Window"; }
 
-		virtual int get_priority() const { return INT_MAX; }
+		virtual int get_priority() const { return ModulePriority::Window; }
 
 		void set_title(const std::string& newTitle);
 

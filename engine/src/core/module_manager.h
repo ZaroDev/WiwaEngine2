@@ -44,10 +44,6 @@ namespace wiwa
 		void update(float deltaTime);
 		void post_update(float deltaTime);
 
-		void pre_physics_update(float deltaTime);
-		void physics_update(float deltaTime);
-		void post_physics_update(float deltaTime);
-
 		void pre_render_update(float deltaTime);
 		void render_update(float deltaTime);
 		void post_render_update(float deltaTime);

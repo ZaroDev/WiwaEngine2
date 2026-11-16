@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "material_file.h"
+#include <core/file_io.h>
 
 #include <charconv>
 #include <cstdlib>
@@ -263,37 +264,9 @@ namespace wiwa
 		}
 
 		// Keys come out in alphabetical order (nlohmann::json keeps its objects sorted), so the file is the same for the same data.
-		// The text goes to a temporary file that then replaces the real one, so a reader (the importer, a crash) never sees half a file.
-		const std::filesystem::path temp = std::filesystem::path(file) += ".tmp";
-		{
-			std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-			if (!out)
-			{
-				error = "cannot write " + file.string();
-				return false;
-			}
-			out << root.dump(2) << "\n";
-			out.flush();
-			if (!out)
-			{
-				out.close();
-				std::error_code ignored;
-				std::filesystem::remove(temp, ignored);
-				error = "cannot write " + file.string();
-				return false;
-			}
-		}
-
-		std::error_code renameError;
-		std::filesystem::rename(temp, file, renameError);
-		if (renameError)
-		{
-			std::error_code ignored;
-			std::filesystem::remove(temp, ignored);
-			error = "cannot replace " + file.string() + ": " + renameError.message();
-			return false;
-		}
-		return true;
+		// The text is written atomically, so a reader (the importer, a crash) never sees half a file.
+		const std::string text = root.dump(2) + "\n";
+		return write_file_atomic(file, text.data(), text.size(), error);
 	}
 
 	std::filesystem::path create_material_file(const std::filesystem::path& directory, const std::string& baseName)

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <assets/asset_data.h>
+#include "prefab_expander.h"
 #include "scene.h"
 #include "scene_records.h"
 
@@ -15,6 +16,7 @@ namespace wiwa
 	{
 		EntityGuid Instance{}; // the instance that generated it; invalid for an entity written in the scene
 		u64 NodeId = 0;        // its prefab node, or ADDED_CHILD_NODE (see prefab_expander.h)
+		bool NestedRoot = false; // the root of a nested prefab instance
 	};
 
 	// A scene ready to be created: the file's entities with every prefab instance expanded, parents before children.
@@ -29,8 +31,11 @@ namespace wiwa
 		std::vector<std::string> Warnings{};
 	};
 
+	// The Prefab an entity record holds a PrefabInstance for, if it has one (and names a valid asset).
+	std::optional<AssetRef> prefab_of(const EntityRecord& entity);
+
 	// Returns the prefab a PrefabInstance names, or null if it is not available (it did not load).
-	using PrefabLookup = std::function<const PrefabData*(const AssetRef&)>;
+	using PrefabLookup = PrefabResolver;
 
 	SceneBlueprint build_blueprint(const SceneData& data, const PrefabLookup& prefabs);
 

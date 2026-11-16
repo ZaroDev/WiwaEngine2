@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "input_panel.h"
+#include <core/file_io.h>
 
 #include <sstream>
 
@@ -9,6 +10,8 @@
 #include <core/engine.h>
 #include <input/input_map_io.h>
 #include <input/input_module.h>
+
+#include "catalog_picker.h"
 
 namespace
 {
@@ -160,22 +163,10 @@ bool InputPanel::save()
 		return false;
 	}
 
-	std::filesystem::path temp = m_File;
-	temp += ".tmp";
+	const std::string text = wiwa::input_map_to_text(m_Model->data());
+	if (!wiwa::write_file_atomic(m_File, text.data(), text.size(), error))
 	{
-		std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-		out << wiwa::input_map_to_text(m_Model->data());
-		if (!out)
-		{
-			m_Error = "cannot write " + temp.string();
-			return false;
-		}
-	}
-	std::error_code rename;
-	std::filesystem::rename(temp, m_File, rename);
-	if (rename)
-	{
-		m_Error = "cannot replace " + m_File.string();
+		m_Error = error;
 		return false;
 	}
 
@@ -235,17 +226,9 @@ void InputPanel::apply_heard_control()
 
 void InputPanel::on_draw()
 {
-	m_Frames++; // counted even while the window is a hidden tab: the smoke check wants to know the panel was run
 	apply_heard_control();
 
-	if (m_Focus)
-	{
-		ImGui::SetNextWindowFocus();
-		m_Focus = false;
-	}
-	ImGui::SetNextWindowPos(ImVec2(984.0f, 60.0f), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(520.0f, 560.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin(get_name(), &m_Open))
+	if (begin_window(ImVec2(984.0f, 60.0f), ImVec2(520.0f, 560.0f)))
 	{
 		toolbar();
 		ImGui::TextDisabled("The default input map is a project setting: see the Settings panel.");
@@ -284,12 +267,11 @@ void InputPanel::toolbar()
 	{
 		if (wiwa::AssetManager* assets = wiwa::Engine::get().get_module<wiwa::AssetManager>())
 		{
-			for (const wiwa::AssetCatalog::Entry& entry : assets->catalog_entries())
+			const std::vector<wiwa::AssetCatalog::Entry> entries = assets->catalog_entries();
+			const std::string current = m_File.generic_string();
+			if (const wiwa::AssetCatalog::Entry* picked = catalog_selectables(entries, ".winput", [&](const wiwa::AssetCatalog::Entry& entry) { return entry.Path == current; }))
 			{
-				if (std::filesystem::path(entry.Path).extension() == ".winput" && ImGui::Selectable(entry.Path.c_str(), entry.Path == m_File.generic_string()))
-				{
-					open_path(entry.Path);
-				}
+				open_path(picked->Path);
 			}
 		}
 		ImGui::EndCombo();

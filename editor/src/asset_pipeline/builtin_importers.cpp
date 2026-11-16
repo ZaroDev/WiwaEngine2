@@ -29,5 +29,11 @@ namespace wiwa
 		database.register_importer(create_clip_file_importer());
 		database.register_importer(create_mesh_file_importer());
 		database.register_importer(create_graph_file_importer());
+		database.register_importer(create_particle_file_importer());
+		database.register_importer(create_sound_bank_importer());
+		database.register_importer(create_nav_mesh_importer());
+		database.register_importer(create_behavior_tree_importer());
+		database.register_importer(create_audio_clip_importer());
+		database.register_importer(create_video_importer());
 	}
 }

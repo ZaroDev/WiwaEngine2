@@ -88,11 +88,6 @@ namespace wiwa
 		return true;
 	}
 
-	void ImGuiLayer::rebuild_fonts()
-	{
-		m_FontDirty = true;
-	}
-
 	void ImGuiLayer::upload_font_atlas()
 	{
 		ImGuiIO& io = ImGui::GetIO();

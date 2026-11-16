@@ -57,7 +57,6 @@ namespace wiwa
 		// The payload of the cooked file of a whole-file asset, nullopt if it is not cooked (never imported, or its first import failed)
 		// or is not of the given type.
 		std::optional<std::vector<std::byte>> read_cooked_payload(AssetGuid guid, AssetType type) const;
-		bool has_importer_for(const std::filesystem::path& source) const;
 		// The importer that cooks this file (extension), or null.
 		const IImporter* importer_for(const std::filesystem::path& source) const;
 
@@ -131,7 +130,7 @@ namespace wiwa
 		// Cooks again every file that is in that case; returns how many.
 		u32 refresh_unresolved();
 		u32 remove_orphans();
-		void write_catalog(); // returns how many sources/files were cleaned up
+		void write_catalog();
 		IImporter* find_importer(const std::filesystem::path& source) const;
 		std::optional<AssetRef> import_source(const std::filesystem::path& source, bool recheck, bool force, const nlohmann::json* defaultSettings);
 		std::optional<AssetRef> do_import(const std::filesystem::path& source, const std::string& key, bool force, const nlohmann::json* defaultSettings, bool& failed);

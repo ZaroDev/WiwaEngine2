@@ -2,14 +2,17 @@
 
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <audio/audio_bank_info.h>
 #include <math/math.h>
 #include <scene/scene_data.h>
+#include <video/video_types.h>
 #include "asset_guid.h"
 
 // CPU-side data of every asset type. Nothing here knows about the GPU: the renderer builds its own resources
@@ -404,6 +407,47 @@ namespace wiwa
 		std::vector<GraphLayer> Layers{};
 	};
 
+	// A behaviour tree (.wbt): the JSON text, which ai/bt_file.h reads and validates and ai/bt_compile.h compiles.
+	struct BehaviorTreeData
+	{
+		std::string Text{};
+	};
+
+	// A soundbank the audio backend loads from memory (Wwise: a .bnk), with the metadata of its contents when SoundbanksInfo.json was next to it.
+	struct SoundBankData
+	{
+		std::string Name{};          // the bank's short name, as the backend knows it ("Init", "Test")
+		std::vector<std::byte> Bytes{};
+		AudioBankInfo Info{};
+		bool HasInfo = false;
+	};
+
+	// A sound file (wav, mp3 or flac) as it was imported: the encoded bytes, which the MiniAudio backend decodes while it plays (streaming from memory,
+	// so a long clip is never decoded whole).
+	struct AudioClipData
+	{
+		std::string Name{};          // the file name without extension: what an event is called
+		std::vector<std::byte> Bytes{};
+	};
+
+	// A video file (.mp4) as it was imported: the encoded bytes, which the platform decoder reads from memory while it plays (video/video_decoder.h).
+	// Info is what the importer's probe found (HasInfo false when the platform decoder could not read the file); the player asks the decoder again.
+	struct VideoData
+	{
+		std::string Name{};          // the file name without extension
+		std::vector<std::byte> Bytes{};
+		VideoInfo Info{};
+		bool HasInfo = false;
+	};
+
+	// A node that is the root of an instance of another prefab: the inner prefab's nodes are its children (see scene/prefab_expander.h).
+	// The overrides address the inner prefab's nodes by their own ids (0 is this node).
+	struct PrefabNodeInstance
+	{
+		AssetRef Prefab{};
+		std::vector<PrefabOverride> Overrides{};
+	};
+
 	struct PrefabNode
 	{
 		std::string Name{};
@@ -418,6 +462,7 @@ namespace wiwa
 		// Every other reflected component of the node, for prefabs made from scene entities (a model's nodes have none). A component
 		// named here replaces the one the fields above would give the node.
 		std::vector<ComponentRecord> Components{};
+		std::optional<PrefabNodeInstance> Instance{}; // set when this node is the root of an instance of another prefab
 	};
 
 	// The hierarchy of an imported model; it points to the meshes, skeletons and clips by reference.

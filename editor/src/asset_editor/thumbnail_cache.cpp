@@ -15,9 +15,12 @@
 #include <renderer/render_module.h>
 #include <renderer/view/view_camera.h>
 #include <scene/components.h>
+#include <scene/particle_module.h>
+#include <scene/particle_runtime.h>
 #include <scene/preview_scene.h>
 
 #include <asset_pipeline/asset_database.h>
+#include "asset_kinds.h"
 #include <asset_pipeline/file_utils.h>
 #include <asset_pipeline/material_file.h>
 #include <panels/png_writer.h>
@@ -34,6 +37,7 @@ namespace wiwa
 	{
 		constexpr float FOV = 35.0f;
 		constexpr int MAX_JOB_FRAMES = 900;
+		constexpr std::chrono::seconds MAX_JOB_TIME{ 15 }; // frames alone are no measure: at 1000 fps they are under a second
 		constexpr int KEYS_PER_FRAME = 6;
 
 		u64 fnv(u64 hash, const void* data, size_t size)
@@ -138,24 +142,32 @@ namespace wiwa
 		}
 	}
 
-	// A model file imports as a prefab (its meshes, materials and skeleton under one root).
-	bool ThumbnailCache::is_model(const std::filesystem::path& source)
+	// A model file imports as a prefab (its meshes, materials and skeleton under one root), so it is a Prefab like .wprefab.
+	std::optional<ThumbnailCache::Kind> ThumbnailCache::thumbnail_kind(const std::filesystem::path& source)
 	{
-		const std::filesystem::path extension = source.extension();
-		return extension == ".glb" || extension == ".gltf" || extension == ".fbx";
-	}
-
-	bool ThumbnailCache::is_animation_asset(const std::filesystem::path& source)
-	{
-		const std::filesystem::path extension = source.extension();
-		return extension == ".wskel" || extension == ".wanim" || extension == ".wmesh";
+		const AssetKindInfo* info = find_asset_kind(source);
+		if (info == nullptr)
+		{
+			return std::nullopt;
+		}
+		switch (info->Type)
+		{
+		case AssetType::Skeleton: return Kind::Skeleton;
+		case AssetType::AnimationClip: return Kind::Clip;
+		case AssetType::Mesh: return Kind::Mesh;
+		case AssetType::Material: return Kind::Material;
+		case AssetType::Prefab: return Kind::Prefab;
+		case AssetType::ParticleEffect: return Kind::Effect;
+		case AssetType::Environment: return Kind::Environment;
+		case AssetType::Lut: return Kind::Lut;
+		case AssetType::Font: return Kind::Font;
+		default: return std::nullopt;
+		}
 	}
 
 	bool ThumbnailCache::handles(const std::filesystem::path& source)
 	{
-		const std::filesystem::path extension = source.extension();
-		return is_animation_asset(source) || is_model(source) || extension == ".wmat" || extension == ".wprefab" || extension == ".hdr"
-			|| extension == ".cube" || extension == ".ttf" || extension == ".otf";
+		return thumbnail_kind(source).has_value();
 	}
 
 	// The oldest PNGs go when the folder is over its limit.
@@ -197,7 +209,7 @@ namespace wiwa
 		}
 	}
 
-	ThumbnailCache::Entry& ThumbnailCache::entry_for(const std::filesystem::path& source)
+	ThumbnailCache::Entry& ThumbnailCache::entry_for(const std::filesystem::path& source, Kind kind)
 	{
 		const std::string key = source.string();
 		const auto found = m_Entries.find(key);
@@ -207,15 +219,7 @@ namespace wiwa
 		}
 		Entry entry;
 		entry.Source = source;
-		const std::filesystem::path extension = source.extension();
-		if (extension == ".wskel") entry.Type = Kind::Skeleton;
-		else if (extension == ".wanim") entry.Type = Kind::Clip;
-		else if (extension == ".wmesh") entry.Type = Kind::Mesh;
-		else if (extension == ".wmat") entry.Type = Kind::Material;
-		else if (extension == ".wprefab" || is_model(source)) entry.Type = Kind::Prefab;
-		else if (extension == ".hdr") entry.Type = Kind::Environment;
-		else if (extension == ".cube") entry.Type = Kind::Lut;
-		else entry.Type = Kind::Font;
+		entry.Type = kind;
 		return m_Entries.emplace(key, std::move(entry)).first->second;
 	}
 
@@ -242,7 +246,7 @@ namespace wiwa
 		std::error_code time;
 		entry.FileTime = std::filesystem::last_write_time(entry.Source, time);
 
-		if (entry.Type == Kind::Material || entry.Type == Kind::Prefab || entry.Type == Kind::Environment || entry.Type == Kind::Lut || entry.Type == Kind::Font)
+		if (entry.Type == Kind::Material || entry.Type == Kind::Prefab || entry.Type == Kind::Effect || entry.Type == Kind::Environment || entry.Type == Kind::Lut || entry.Type == Kind::Font)
 		{
 			entry.Skeleton = {};
 			entry.Mesh = {};
@@ -252,7 +256,7 @@ namespace wiwa
 			hash = fnv(hash, versions, sizeof(versions));
 			const u32 kind = static_cast<u32>(entry.Type);
 			hash = fnv(hash, &kind, sizeof(kind));
-			if (entry.Type == Kind::Material || (entry.Type == Kind::Prefab && !is_model(entry.Source)))
+			if (entry.Type == Kind::Material || entry.Type == Kind::Effect || (entry.Type == Kind::Prefab && !is_model_file(entry.Source)))
 			{
 				hash = fnv_file(hash, entry.Source);
 			}
@@ -397,11 +401,12 @@ namespace wiwa
 
 	u32 ThumbnailCache::request(const std::filesystem::path& source)
 	{
-		if (!handles(source))
+		const std::optional<Kind> kind = thumbnail_kind(source);
+		if (!kind)
 		{
 			return 0;
 		}
-		Entry& entry = entry_for(source);
+		Entry& entry = entry_for(source, *kind);
 		entry.LastRequested = m_Frame;
 
 		// the file may have changed since: looked at now and then, not every frame of every cell
@@ -497,6 +502,15 @@ namespace wiwa
 			lighting.AmbientIntensity = 1.0f;
 			m_Scene = make_preview_scene(lighting);
 			module->register_preview_scene(m_Scene);
+			if (ParticleModule* particles = Engine::get().get_module<ParticleModule>())
+			{
+				particles->register_preview_scene(m_Scene);
+			}
+		}
+		const ViewMode wantedMode = entry.Type == Kind::Effect ? ViewMode::Continuous : ViewMode::OneShot;
+		if (m_View.valid() && m_ViewMode != wantedMode)
+		{
+			m_View = RenderView{};
 		}
 		if (!m_View.valid())
 		{
@@ -505,7 +519,8 @@ namespace wiwa
 			description.Height = SIZE;
 			description.Profile = ViewProfile::Thumbnail;
 			description.TransparentBackground = true;
-			description.Mode = ViewMode::OneShot;
+			description.Mode = wantedMode;
+			m_ViewMode = wantedMode;
 			m_View = render->create_view(description);
 			if (!m_View.valid())
 			{
@@ -522,7 +537,17 @@ namespace wiwa
 			job.Key = entry.Key;
 			job.Type = entry.Type;
 			job.Asset = entry.Ref;
-			if (entry.Type == Kind::Material)
+			if (entry.Type == Kind::Effect)
+			{
+				// plays on the origin; the job waits for the effect to load, then lets it run
+				job.Entity = m_Scene->create("Preview");
+				ParticleSystem system;
+				system.Effect = entry.Ref;
+				m_Scene->registry().emplace<ParticleSystem>(job.Entity, system);
+				m_Scene->update_world_transforms();
+				particle_runtime_of(m_Scene->registry(), job.Entity).Preview = true;
+			}
+			else if (entry.Type == Kind::Material)
 			{
 				// the engine's own sphere (builtin_assets.h), held by the render thread: no asset of the project is needed
 				job.Entity = m_Scene->create("Preview");
@@ -679,7 +704,7 @@ namespace wiwa
 			end_job();
 			return;
 		}
-		if (++job.Frames > MAX_JOB_FRAMES)
+		if (++job.Frames > MAX_JOB_FRAMES && std::chrono::steady_clock::now() - job.Started > MAX_JOB_TIME)
 		{
 			fail(job.Source, "its assets did not load in time");
 			end_job();
@@ -692,6 +717,11 @@ namespace wiwa
 		if (job.Type == Kind::Material || job.Type == Kind::Prefab)
 		{
 			step_static_job();
+			return;
+		}
+		if (job.Type == Kind::Effect)
+		{
+			step_effect_job();
 			return;
 		}
 		if (job.Type == Kind::Environment || job.Type == Kind::Lut || job.Type == Kind::Font)
@@ -817,6 +847,56 @@ namespace wiwa
 					fail(source, "the view drew nothing");
 				}
 			});
+	}
+
+	// An effect, played in the view: one render is requested every frame until its time (so that the simulation on the render thread ages the particles),
+	// then emission stops and the picture is taken of what is in the air, framed by how far the particles get.
+	void ThumbnailCache::step_effect_job()
+	{
+		Job& job = *m_Job;
+		ParticleModule* particles = Engine::get().get_module<ParticleModule>();
+		ParticleRuntime* runtime = particles != nullptr && m_Scene->registry().valid(job.Entity) ? m_Scene->registry().try_get<ParticleRuntime>(job.Entity) : nullptr;
+		if (particles == nullptr || runtime == nullptr)
+		{
+			fail(job.Source, "the particle module is not there");
+			end_job();
+			return;
+		}
+		const ParticleEffectData* effect = particles->effect(job.Asset);
+		if (effect == nullptr)
+		{
+			return; // loading (a broken effect never loads: the job times out)
+		}
+		if (job.EffectTime <= 0.0f)
+		{
+			// the moment the effect looks fullest: after most of the first particles' life, but not past the first second or so
+			float time = 0.4f;
+			float radius = 0.5f;
+			for (const ParticleEmitterData& emitter : effect->Emitters)
+			{
+				const float life = particle_value_max(emitter.Lifetime);
+				time = std::max(time, emitter.StartDelay + std::min(life * 0.7f, 1.2f));
+				const float travel = std::max(particle_value_max(emitter.StartSpeed), 0.0f) * std::min(life, 1.5f) + 0.25f * glm::length(emitter.Gravity) * life * life;
+				radius = std::max(radius, travel + std::max(emitter.ShapeSize.x, 0.0f));
+			}
+			job.EffectTime = std::min(time, 2.0f);
+			job.EffectRadius = std::clamp(radius, 0.5f, 8.0f);
+		}
+
+		const float distance = job.EffectRadius / std::sin(glm::radians(FOV * 0.5f)) * 0.9f * job.Zoom;
+		const RenderCamera camera = make_orbit_camera(glm::vec3(0.0f, job.EffectRadius * 0.45f, 0.0f), distance, 25.0f, 15.0f, FOV, 1.0f);
+		if (runtime->Time < job.EffectTime)
+		{
+			m_View.set_camera(camera); // the continuous view renders every frame: the simulation goes on
+			return;
+		}
+		if (!job.EffectStopped)
+		{
+			runtime->Playing = false; // no new particles: the next renders only age the ones in the air
+			job.EffectStopped = true;
+			job.Settled = 0;
+		}
+		render_job(camera, 3);
 	}
 
 	// A material on the sphere of the shapes model, a prefab as it stands: framed by the bounds the asset knows.

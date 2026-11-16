@@ -38,7 +38,7 @@ namespace
 	};
 
 	constexpr WidgetKind KINDS[] = { WidgetKind::Panel, WidgetKind::HStack, WidgetKind::VStack, WidgetKind::Text, WidgetKind::Image,
-		WidgetKind::Button, WidgetKind::Slider, WidgetKind::Toggle, WidgetKind::Bar, WidgetKind::ViewImage };
+		WidgetKind::Button, WidgetKind::Slider, WidgetKind::Toggle, WidgetKind::Bar, WidgetKind::ViewImage, WidgetKind::Video };
 
 	constexpr const char* DRAG_PAYLOAD = "UI_WIDGET";
 	constexpr float HANDLE_SIZE = 7.0f;

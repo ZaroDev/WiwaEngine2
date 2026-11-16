@@ -14,6 +14,7 @@
 #include "render_pick.h"
 #include "render_queue.h"
 #include "environment/environment_cache.h"
+#include "particles/particle_pool.h"
 #include "resources/gpu_resource_cache.h"
 #include "scene/render_scene.h"
 #include "scene/scene_render_data.h"
@@ -52,6 +53,7 @@ namespace wiwa
 		UploadQueue& get_upload_queue() { return m_Uploads; }
 		RenderScene& get_scene() { return m_MainView.Scene; }
 		GpuResourceCache& get_cache() { return *m_Cache; }
+		ParticlePool& get_particle_pool() { return m_ParticlePool; }
 		EnvironmentCache& get_environments() { return *m_Environments; }
 		SceneRenderData& get_scene_data() { return m_MainView.Data; }
 		AssetManager* get_assets() const { return m_Description.Assets; }
@@ -79,7 +81,6 @@ namespace wiwa
 
 		// Views: the main one (the Viewport panel, or the window) is always there; the others are made for RenderViews and drawn into targets of
 		// their own with the same passes. add_view returns INVALID_VIEW at MAX_VIEWS live views or when the view cannot be set up.
-		ViewState& get_main_view() { return m_MainView; }
 		ViewState* find_view(ViewId id);
 		ViewId add_view(ViewId id, const ViewDesc& desc);
 		void remove_view(ViewId id);
@@ -99,13 +100,12 @@ namespace wiwa
 		// The size the scene is rendered at (the Viewport panel's size). The target is made, or made again, at the start of the next
 		// frame. 0 in either dimension changes nothing (a hidden panel keeps its target).
 		void set_viewport_size(u32 width, u32 height);
-		// True: the scene is drawn into the viewport target at the size requested above and the UI shows it (the editor). False, the
-		// default: the viewport target follows the window and the blit pass draws it fullscreen (a game).
 		// Applies the quality settings (render thread; commands run between frames). Vsync and the copy queue take effect at once.
 		void set_quality(const RenderQuality& quality);
 		const RenderQuality& get_quality() const { return m_Quality; }
+		// True: the scene is drawn into the viewport target at the size requested above and the UI shows it (the editor). False, the
+		// default: the viewport target follows the window and the blit pass draws it fullscreen (a game).
 		void set_scene_in_viewport(bool inViewport) { m_SceneInViewport = inViewport; }
-		bool is_scene_in_viewport() const { return m_SceneInViewport; }
 		GraphicsApi get_api() const { return m_Description.Api; }
 		std::string get_adapter_name() const { return m_Backend ? m_Backend->get_adapter_name() : std::string{}; }
 		u32 get_width() const { return m_Backend ? m_Backend->get_width() : 0; }
@@ -161,6 +161,7 @@ namespace wiwa
 		UploadQueue m_Uploads{};
 		Scope<JobSystem> m_Jobs{};                 // background work of the renderer (the BRDF table, atmosphere builds)
 		Scope<GpuResourceCache> m_Cache{};
+		ParticlePool m_ParticlePool{};
 		Scope<EnvironmentCache> m_Environments{};
 		ViewState m_MainView{};                      // view 0: its scene, frame data and target (what get_scene() and friends return)
 		std::vector<Scope<ViewState>> m_ExtraViews{}; // the views made for RenderViews, by creation order

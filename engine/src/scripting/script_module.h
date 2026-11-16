@@ -24,7 +24,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE; }
 		virtual std::string get_name() const override { return "ScriptingModule"; }
-		virtual int get_priority() const override { return 0; }
+		virtual int get_priority() const override { return ModulePriority::Scripting; }
 
 		virtual void update(float deltaTime) override;
 		virtual void post_update(float deltaTime) override;

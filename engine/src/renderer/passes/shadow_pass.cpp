@@ -160,8 +160,8 @@ namespace wiwa
 					commandList->clearDepthStencilTexture(data.spot_atlas(), nvrhi::AllSubresources, true, 1.0f, false, 0);
 					atlasCleared = true;
 				}
-				const float x = static_cast<float>((view.Slice % 4) * SPOT_TILE_SIZE);
-				const float y = static_cast<float>((view.Slice / 4) * SPOT_TILE_SIZE);
+				const float x = static_cast<float>((view.Slice % SPOT_GRID) * SPOT_TILE_SIZE);
+				const float y = static_cast<float>((view.Slice / SPOT_GRID) * SPOT_TILE_SIZE);
 				viewport = nvrhi::Viewport(x, x + SPOT_TILE_SIZE, y, y + SPOT_TILE_SIZE, 0.0f, 1.0f);
 				framebuffer = cache.AtlasFramebuffer;
 				pipeline = m_AtlasPipeline;

@@ -27,7 +27,7 @@ namespace wiwa
 	struct RenderBatch
 	{
 		u64 FrameIndex = 0;
-		float DeltaTime = 0.0f;
+		float DeltaSeconds = 0.0f; // since the previous batch
 		u32 Width = 0;
 		u32 Height = 0;
 		bool Minimized = false; // nothing to show: the render thread does not draw this frame

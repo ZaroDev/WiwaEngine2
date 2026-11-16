@@ -31,6 +31,9 @@ project "wiwa_game"
 		"LZ4"
 	}
 
+	WwiseDefines()
+	WwiseLinks()
+
 	debugdir "%{wks.location}/game"
 
 	filter "system:windows"

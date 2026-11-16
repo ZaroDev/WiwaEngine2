@@ -1,5 +1,6 @@
 #include <pch.h>
 #include "user_prefs.h"
+#include <core/file_io.h>
 
 #include <fstream>
 #include <map>
@@ -96,12 +97,8 @@ namespace wiwa
 				json[key] = std::get<std::string>(value);
 			}
 		}
-		std::ofstream file(m_File, std::ios::binary | std::ios::trunc);
-		if (!file)
-		{
-			return false;
-		}
-		file << json.dump(2) << "\n";
-		return static_cast<bool>(file);
+		const std::string text = json.dump(2) + "\n";
+		std::string error;
+		return write_file_atomic(m_File, text.data(), text.size(), error);
 	}
 }

@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "shader_compiler.h"
+#include <core/file_io.h>
 
 #include <set>
 
@@ -9,7 +10,7 @@
 #include <d3dcompiler.h>
 #include <wrl/client.h>
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {
@@ -37,16 +38,12 @@ namespace wiwa
 
 		std::string read_text_file(const fs::path& path)
 		{
-			std::ifstream file(path, std::ios::binary | std::ios::ate);
-			if (!file)
+			const std::optional<std::vector<std::byte>> bytes = read_file_bytes(path);
+			if (!bytes)
 			{
 				return {};
 			}
-
-			std::string data(static_cast<size_t>(file.tellg()), '\0');
-			file.seekg(0);
-			file.read(data.data(), static_cast<std::streamsize>(data.size()));
-			return data;
+			return std::string(reinterpret_cast<const char*>(bytes->data()), bytes->size());
 		}
 
 		std::vector<u8> read_binary_file(const fs::path& path)

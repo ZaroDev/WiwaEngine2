@@ -41,7 +41,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE | UpdateFlags::UPDATE_RENDERER; }
 		virtual std::string get_name() const override { return "UiModule"; }
-		virtual int get_priority() const override { return -10; } // after the scene and the renderer, before the scripts (0)
+		virtual int get_priority() const override { return ModulePriority::Ui; }
 
 		// Where the pointer and navigation come from. Null (the default) is no input at all. Not owned.
 		void set_input_source(IUiInputSource* source) { m_Input = source; }
@@ -56,15 +56,32 @@ namespace wiwa
 		// depend on the size of the editor's window). Nothing goes back to the real size.
 		void set_canvas_override(const std::optional<glm::vec2>& size) { m_CanvasOverride = size; }
 
-		// How panels, fonts and texture sizes are found. The defaults ask the AssetManager; tests and tools put their own.
+		// How panels and fonts are found. The defaults ask the AssetManager; tests and tools put their own.
 		void set_panel_loader(PanelLoader loader) { m_Loader = std::move(loader); }
 		void set_font_provider(FontProvider provider) { m_Fonts = std::move(provider); }
-		void set_texture_size_provider(TextureSizeProvider provider) { m_TextureSizes = std::move(provider); }
 
 		// The font and the size of a texture as the UI draws them, for tools that lay a panel out themselves (the UI editor). Null / nothing
 		// while the asset is loading.
 		const FontData* font_for(const AssetRef& font) const { return m_Fonts ? m_Fonts(font) : nullptr; }
 		std::optional<glm::vec2> texture_size_for(const AssetRef& texture) const { return m_TextureSizes ? m_TextureSizes(texture) : std::nullopt; }
+
+		// Where the pictures of Video widgets come from (video/video_module.h sets it): for a widget of a canvas, the texture and size of the picture
+		// that is playing in it, or nothing. Without one a Video widget is its bar colour.
+		using VideoProvider = std::function<std::optional<UiVideoView>(const EntityGuid& canvas, UiId widget)>;
+		void set_video_provider(VideoProvider provider) { m_VideoProvider = std::move(provider); }
+
+		// A video that finished (video/video_module.h): its widget and how it ended.
+		struct UiVideoEvent
+		{
+			EntityGuid Canvas{};
+			UiId Widget = 0;
+			bool Skipped = false;
+			bool Failed = false;
+		};
+		// The videos that finished since the last frame (the video module hands them over and forgets them). They are raised as Finished events at the
+		// start of update_interaction, after the events of the last frame were cleared, so scripts see them in the frame after the video module ran.
+		using VideoEventSource = std::function<std::vector<UiVideoEvent>()>;
+		void set_video_event_source(VideoEventSource source) { m_VideoEvents = std::move(source); }
 
 		// The panel asset was cooked again: its canvases ask for it again.
 		void reload_panel(const AssetRef& panel);
@@ -85,6 +102,7 @@ namespace wiwa
 		{
 			UiPanelInstance* Instance = nullptr;
 			bool CanvasVisible = true;
+			EntityGuid Canvas{};
 		};
 
 		std::vector<Active> sync(Scene& scene);
@@ -100,6 +118,8 @@ namespace wiwa
 		std::optional<RenderCamera> m_CameraOverride{};
 		std::optional<glm::vec2> m_CanvasOverride{};
 		PanelLoader m_Loader{};
+		VideoProvider m_VideoProvider{};
+		VideoEventSource m_VideoEvents{};
 		FontProvider m_Fonts{};
 		std::unordered_set<std::string> m_WarnedViews{}; // names of views a ViewImage asked for that did not exist
 		TextureSizeProvider m_TextureSizes{};

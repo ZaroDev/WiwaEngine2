@@ -46,7 +46,6 @@ namespace wiwa
 			TimeScale = 0.f;
 		}
 
-		float get_time_since_startup() const { return static_cast<float>(Timer.time_since_epoch().count()); }
 		std::chrono::time_point<std::chrono::steady_clock> get_last_time() const { return LastTime; }
 	};
 
@@ -66,19 +65,13 @@ namespace wiwa
 		void pause_game();
 		void unpause_game();
 		void set_game_pause(bool pause = true);
-		void set_game_time_scale(float value = 1.0f);
 
 		// Milliseconds functions
-
-		// Delta time
 		float get_delta_time() const { return m_GameClock.DeltaTime.count() * 1000.0f; }
-		float get_real_delta_time() const { return m_RealTimeClock.DeltaTime.count() * 1000.0f; }
 		float get_engine_delta_time() const { return m_EngineTimeClock.DeltaTime.count() * 1000.0f; }
 
-		// Seconds functions
 		float get_delta_time_seconds() const { return m_GameClock.DeltaTime.count(); }
 		float get_real_delta_time_seconds() const { return m_RealTimeClock.DeltaTime.count(); }
-		float get_engine_delta_time_seconds() const { return m_EngineTimeClock.DeltaTime.count(); }
 
 
 		const int c_UnlockedFPS = -1;

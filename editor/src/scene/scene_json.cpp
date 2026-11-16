@@ -508,7 +508,7 @@ namespace wiwa
 
 					for (auto it = json["components"].begin(); it != json["components"].end(); ++it)
 					{
-						if (it.key() == "Id")
+						if (it.key() == ID_COMPONENT)
 						{
 							Warnings.push_back(path + ": a component called Id is ignored, the id is the entity's id");
 							continue;
@@ -642,78 +642,86 @@ namespace wiwa
 			return SceneJson::array({ static_cast<double>(v.x), static_cast<double>(v.y), static_cast<double>(v.z) });
 		}
 
-		void put_float_if_different(SceneJson& json, const char* key, float value, float defaultValue)
+		// Writes the fields the list in scene_settings.h visits that differ from the default, into objects it opens for its groups.
+		struct SettingsJsonWriter
 		{
-			if (value != defaultValue)
-			{
-				json[key] = static_cast<double>(value);
-			}
-		}
+			SceneJson* Out = nullptr;
 
-		void put_vec3_if_different(SceneJson& json, const char* key, const glm::vec3& value, const glm::vec3& defaultValue)
-		{
-			if (value != defaultValue)
+			template<typename E, size_t N>
+			void choice(const char* key, E value, const E& fallback, const std::array<const char*, N>& names)
 			{
-				json[key] = vec3_json(value);
+				if (value != fallback)
+				{
+					(*Out)[key] = names[std::min<size_t>(static_cast<size_t>(value), N - 1)];
+				}
 			}
-		}
+
+			void asset(const char* key, const AssetRef& value)
+			{
+				if (value.valid())
+				{
+					(*Out)[key] = ref_to_json(value);
+				}
+			}
+
+			void angle(const char* key, float value, const float& fallback) { number(key, value, fallback, 0.0f, 0.0f); }
+
+			void number(const char* key, float value, const float& fallback, float, float)
+			{
+				if (value != fallback)
+				{
+					(*Out)[key] = static_cast<double>(value);
+				}
+			}
+
+			void vec3(const char* key, const glm::vec3& value, const glm::vec3& fallback, float, float)
+			{
+				if (value != fallback)
+				{
+					(*Out)[key] = vec3_json(value);
+				}
+			}
+
+			void flag(const char* key, bool value, const bool& fallback)
+			{
+				if (value != fallback)
+				{
+					(*Out)[key] = value;
+				}
+			}
+
+			void count(const char* key, u32 value, const u32& fallback, u32, u32)
+			{
+				if (value != fallback)
+				{
+					(*Out)[key] = value;
+				}
+			}
+
+			// the file has the scripts before the groups: settings_to_json puts them there
+			void scripts(const char*, const std::vector<AssetRef>&) {}
+
+			template<typename F>
+			void group(const char* key, F fn)
+			{
+				SceneJson* parent = Out;
+				SceneJson object = SceneJson::object();
+				Out = &object;
+				fn();
+				Out = parent;
+				if (!object.empty())
+				{
+					(*parent)[key] = std::move(object);
+				}
+			}
+		};
 
 		SceneJson settings_to_json(const SceneSettings& s)
 		{
-			const SceneSettings d;
 			SceneJson json = SceneJson::object();
-			if (s.Source != d.Source)
-			{
-				json["source"] = s.Source == EnvironmentSource::File ? "file" : (s.Source == EnvironmentSource::Atmosphere ? "atmosphere" : "none");
-			}
-			if (s.EnvironmentAsset.valid())
-			{
-				json["environment"] = ref_to_json(s.EnvironmentAsset);
-			}
-			put_float_if_different(json, "rotation", s.RotationDegrees, d.RotationDegrees);
-			put_float_if_different(json, "brightness", s.Brightness, d.Brightness);
-			put_float_if_different(json, "ambient", s.AmbientIntensity, d.AmbientIntensity);
-			put_vec3_if_different(json, "hemisphereSky", s.HemisphereSky, d.HemisphereSky);
-			put_vec3_if_different(json, "hemisphereGround", s.HemisphereGround, d.HemisphereGround);
-
-			SceneJson atmosphere = SceneJson::object();
-			const AtmosphereParameters& a = s.Atmosphere;
-			const AtmosphereParameters& da = d.Atmosphere;
-			put_float_if_different(atmosphere, "rayleigh", a.RayleighScale, da.RayleighScale);
-			put_float_if_different(atmosphere, "mie", a.MieScale, da.MieScale);
-			put_float_if_different(atmosphere, "ozone", a.OzoneScale, da.OzoneScale);
-			put_float_if_different(atmosphere, "mieAnisotropy", a.MieAnisotropy, da.MieAnisotropy);
-			put_float_if_different(atmosphere, "multipleScattering", a.MultipleScattering, da.MultipleScattering);
-			put_float_if_different(atmosphere, "sunIlluminance", a.SunIlluminance, da.SunIlluminance);
-			put_float_if_different(atmosphere, "skyBrightness", a.SkyBrightness, da.SkyBrightness);
-			put_float_if_different(atmosphere, "sunDiscBoost", a.SunDiscBoost, da.SunDiscBoost);
-			put_vec3_if_different(atmosphere, "groundAlbedo", a.GroundAlbedo, da.GroundAlbedo);
-			if (!atmosphere.empty())
-			{
-				json["atmosphere"] = std::move(atmosphere);
-			}
-
-			if (s.Background != d.Background)
-			{
-				json["background"] = s.Background == BackgroundMode::SolidColor ? "color" : "sky";
-			}
-			put_vec3_if_different(json, "backgroundColor", s.BackgroundColor, d.BackgroundColor);
-			put_float_if_different(json, "exposureEv", s.ExposureEv, d.ExposureEv);
-
-			auto put_bool = [](SceneJson& object, const char* key, bool value, bool defaultValue)
-			{
-				if (value != defaultValue)
-				{
-					object[key] = value;
-				}
-			};
-			auto put_group = [&](const char* key, SceneJson& group)
-			{
-				if (!group.empty())
-				{
-					json[key] = std::move(group);
-				}
-			};
+			SettingsJsonWriter writer;
+			writer.Out = &json;
+			visit_scene_settings(s, SceneSettings{}, writer);
 
 			if (!s.Scripts.empty())
 			{
@@ -722,287 +730,200 @@ namespace wiwa
 				{
 					scripts.push_back(ref_to_json(script));
 				}
-				json["scripts"] = std::move(scripts);
+
+				// before the first group that follows exposureEv in the list, else last
+				static constexpr const char* GROUPS_AFTER[] = { "exposure", "bloom", "tonemap", "ao", "taa", "motionBlur", "physics" };
+				SceneJson ordered = SceneJson::object();
+				bool placed = false;
+				for (auto& item : json.items())
+				{
+					if (!placed && std::find(std::begin(GROUPS_AFTER), std::end(GROUPS_AFTER), item.key()) != std::end(GROUPS_AFTER))
+					{
+						ordered["scripts"] = std::move(scripts);
+						placed = true;
+					}
+					ordered[item.key()] = std::move(item.value());
+				}
+				if (!placed)
+				{
+					ordered["scripts"] = std::move(scripts);
+				}
+				json = std::move(ordered);
 			}
-
-			SceneJson exposure = SceneJson::object();
-			put_bool(exposure, "auto", s.Exposure.Auto, d.Exposure.Auto);
-			put_float_if_different(exposure, "compensation", s.Exposure.CompensationEv, d.Exposure.CompensationEv);
-			put_float_if_different(exposure, "key", s.Exposure.Key, d.Exposure.Key);
-			put_float_if_different(exposure, "minEv", s.Exposure.MinEv, d.Exposure.MinEv);
-			put_float_if_different(exposure, "maxEv", s.Exposure.MaxEv, d.Exposure.MaxEv);
-			put_float_if_different(exposure, "adaptSpeed", s.Exposure.AdaptSpeed, d.Exposure.AdaptSpeed);
-			put_float_if_different(exposure, "lowPercent", s.Exposure.LowPercent, d.Exposure.LowPercent);
-			put_float_if_different(exposure, "highPercent", s.Exposure.HighPercent, d.Exposure.HighPercent);
-			put_group("exposure", exposure);
-
-			SceneJson bloom = SceneJson::object();
-			put_bool(bloom, "enabled", s.Bloom.Enabled, d.Bloom.Enabled);
-			put_float_if_different(bloom, "threshold", s.Bloom.Threshold, d.Bloom.Threshold);
-			put_float_if_different(bloom, "knee", s.Bloom.Knee, d.Bloom.Knee);
-			put_float_if_different(bloom, "intensity", s.Bloom.Intensity, d.Bloom.Intensity);
-			put_group("bloom", bloom);
-
-			SceneJson tonemap = SceneJson::object();
-			if (s.Tonemap.Operator != d.Tonemap.Operator)
-			{
-				static const char* const names[] = { "aces", "reinhard", "neutral", "none" };
-				tonemap["operator"] = names[std::min<u32>(static_cast<u32>(s.Tonemap.Operator), 3)];
-			}
-			put_float_if_different(tonemap, "contrast", s.Tonemap.Contrast, d.Tonemap.Contrast);
-			put_float_if_different(tonemap, "saturation", s.Tonemap.Saturation, d.Tonemap.Saturation);
-			put_float_if_different(tonemap, "temperature", s.Tonemap.Temperature, d.Tonemap.Temperature);
-			put_float_if_different(tonemap, "tint", s.Tonemap.Tint, d.Tonemap.Tint);
-			put_float_if_different(tonemap, "vignette", s.Tonemap.Vignette, d.Tonemap.Vignette);
-			put_group("tonemap", tonemap);
-
-			SceneJson ao = SceneJson::object();
-			put_bool(ao, "enabled", s.Ao.Enabled, d.Ao.Enabled);
-			put_float_if_different(ao, "radius", s.Ao.Radius, d.Ao.Radius);
-			put_float_if_different(ao, "power", s.Ao.Power, d.Ao.Power);
-			put_group("ao", ao);
-
-			SceneJson taa = SceneJson::object();
-			put_float_if_different(taa, "feedback", s.Taa.Feedback, d.Taa.Feedback);
-			put_group("taa", taa);
-
-			SceneJson motionBlur = SceneJson::object();
-			put_bool(motionBlur, "enabled", s.MotionBlur.Enabled, d.MotionBlur.Enabled);
-			put_float_if_different(motionBlur, "exposureTime", s.MotionBlur.ExposureTime, d.MotionBlur.ExposureTime);
-			put_float_if_different(motionBlur, "strength", s.MotionBlur.Strength, d.MotionBlur.Strength);
-			put_float_if_different(motionBlur, "maxBlurPixels", s.MotionBlur.MaxBlurPixels, d.MotionBlur.MaxBlurPixels);
-			put_group("motionBlur", motionBlur);
-
-			SceneJson physics = SceneJson::object();
-			put_vec3_if_different(physics, "gravity", s.Physics.Gravity, d.Physics.Gravity);
-			if (s.Physics.FixedRateHz != d.Physics.FixedRateHz) { physics["fixedRateHz"] = s.Physics.FixedRateHz; }
-			if (s.Physics.MaxStepsPerWake != d.Physics.MaxStepsPerWake) { physics["maxStepsPerWake"] = s.Physics.MaxStepsPerWake; }
-			if (s.Physics.VelocityIterations != d.Physics.VelocityIterations) { physics["velocityIterations"] = s.Physics.VelocityIterations; }
-			if (s.Physics.PositionIterations != d.Physics.PositionIterations) { physics["positionIterations"] = s.Physics.PositionIterations; }
-			put_float_if_different(physics, "sleepThreshold", s.Physics.SleepThreshold, d.Physics.SleepThreshold);
-			put_group("physics", physics);
 			return json;
 		}
 
-		bool read_float(const SceneJson& json, const char* key, const std::string& path, float& out, std::string& error)
+		// Reads the fields the list in scene_settings.h visits from the JSON object it is on, into the group objects it opens. The
+		// first error stops the reading: the rest of the fields are left alone.
+		struct SettingsJsonReader
 		{
-			if (!json.contains(key))
-			{
-				return true;
-			}
-			if (!json[key].is_number())
-			{
-				error = path + "." + key + ": not a number";
-				return false;
-			}
-			out = json[key].get<float>();
-			return true;
-		}
+			const SceneJson* Json = nullptr;
+			std::string Path;
+			std::string* Error = nullptr;
+			bool Ok = true;
 
-		bool read_bool(const SceneJson& json, const char* key, const std::string& path, bool& out, std::string& error)
-		{
-			if (!json.contains(key))
-			{
-				return true;
-			}
-			if (!json[key].is_boolean())
-			{
-				error = path + "." + key + ": not a boolean";
-				return false;
-			}
-			out = json[key].get<bool>();
-			return true;
-		}
+			bool has(const char* key) const { return Ok && Json->contains(key); }
 
-		bool read_u32(const SceneJson& json, const char* key, const std::string& path, u32& out, std::string& error)
-		{
-			if (!json.contains(key))
+			void fail(const char* key, const std::string& what)
 			{
-				return true;
+				*Error = Path + "." + key + ": " + what;
+				Ok = false;
 			}
-			if (!json[key].is_number_unsigned())
-			{
-				error = path + "." + key + ": not a non-negative integer";
-				return false;
-			}
-			out = json[key].get<u32>();
-			return true;
-		}
 
-		// A group (an object) that may be missing; calls read with the object when it is there.
-		template<typename F>
-		bool read_group(const SceneJson& json, const char* key, const std::string& path, std::string& error, F read)
-		{
-			if (!json.contains(key))
+			template<typename E, size_t N>
+			void choice(const char* key, E& value, const E&, const std::array<const char*, N>& names)
 			{
-				return true;
-			}
-			if (!json[key].is_object())
-			{
-				error = path + "." + key + ": not an object";
-				return false;
-			}
-			return read(json[key], path + "." + key);
-		}
-
-		bool read_vec3(const SceneJson& json, const char* key, const std::string& path, glm::vec3& out, std::string& error)
-		{
-			if (!json.contains(key))
-			{
-				return true;
-			}
-			const SceneJson& value = json[key];
-			if (!value.is_array() || value.size() != 3 || !value[0].is_number() || !value[1].is_number() || !value[2].is_number())
-			{
-				error = path + "." + key + ": not an array of 3 numbers";
-				return false;
-			}
-			out = glm::vec3(value[0].get<float>(), value[1].get<float>(), value[2].get<float>());
-			return true;
-		}
-
-		bool read_choice(const SceneJson& json, const char* key, const std::string& path, std::initializer_list<const char*> names, u32& out, std::string& error)
-		{
-			if (!json.contains(key))
-			{
-				return true;
-			}
-			if (!json[key].is_string())
-			{
-				error = path + "." + key + ": not a string";
-				return false;
-			}
-			const std::string& text = json[key].get_ref<const std::string&>();
-			u32 index = 0;
-			for (const char* name : names)
-			{
-				if (text == name)
+				if (!has(key))
 				{
-					out = index;
-					return true;
+					return;
 				}
-				index++;
+				const SceneJson& json = (*Json)[key];
+				if (!json.is_string())
+				{
+					fail(key, "not a string");
+					return;
+				}
+				const std::string& text = json.get_ref<const std::string&>();
+				for (size_t i = 0; i < N; i++)
+				{
+					if (text == names[i])
+					{
+						value = static_cast<E>(i);
+						return;
+					}
+				}
+				fail(key, "unknown value \"" + text + "\"");
 			}
-			error = path + "." + key + ": unknown value \"" + text + "\"";
-			return false;
-		}
+
+			void asset(const char* key, AssetRef& value)
+			{
+				if (has(key) && !ref_from_json((*Json)[key], value))
+				{
+					fail(key, "not an AssetRef");
+				}
+			}
+
+			void angle(const char* key, float& value, const float&) { number(key, value, 0.0f, 0.0f, 0.0f); }
+
+			void number(const char* key, float& value, const float&, float, float)
+			{
+				if (!has(key))
+				{
+					return;
+				}
+				if (!(*Json)[key].is_number())
+				{
+					fail(key, "not a number");
+					return;
+				}
+				value = (*Json)[key].get<float>();
+			}
+
+			void vec3(const char* key, glm::vec3& value, const glm::vec3&, float, float)
+			{
+				if (!has(key))
+				{
+					return;
+				}
+				const SceneJson& json = (*Json)[key];
+				if (!json.is_array() || json.size() != 3 || !json[0].is_number() || !json[1].is_number() || !json[2].is_number())
+				{
+					fail(key, "not an array of 3 numbers");
+					return;
+				}
+				value = glm::vec3(json[0].get<float>(), json[1].get<float>(), json[2].get<float>());
+			}
+
+			void flag(const char* key, bool& value, const bool&)
+			{
+				if (!has(key))
+				{
+					return;
+				}
+				if (!(*Json)[key].is_boolean())
+				{
+					fail(key, "not a boolean");
+					return;
+				}
+				value = (*Json)[key].get<bool>();
+			}
+
+			void count(const char* key, u32& value, const u32&, u32, u32)
+			{
+				if (!has(key))
+				{
+					return;
+				}
+				if (!(*Json)[key].is_number_unsigned())
+				{
+					fail(key, "not a non-negative integer");
+					return;
+				}
+				value = (*Json)[key].get<u32>();
+			}
+
+			void scripts(const char* key, std::vector<AssetRef>& list)
+			{
+				if (!has(key))
+				{
+					return;
+				}
+				const SceneJson& json = (*Json)[key];
+				if (!json.is_array())
+				{
+					fail(key, "not an array");
+					return;
+				}
+				for (size_t i = 0; i < json.size(); i++)
+				{
+					AssetRef script;
+					if (!ref_from_json(json[i], script))
+					{
+						*Error = Path + "." + key + "[" + std::to_string(i) + "]: not an AssetRef";
+						Ok = false;
+						return;
+					}
+					list.push_back(script);
+				}
+			}
+
+			template<typename F>
+			void group(const char* key, F fn)
+			{
+				if (!has(key))
+				{
+					return;
+				}
+				const SceneJson& json = (*Json)[key];
+				if (!json.is_object())
+				{
+					fail(key, "not an object");
+					return;
+				}
+				const SceneJson* parent = Json;
+				const std::string parentPath = Path;
+				Json = &json;
+				Path = Path + "." + key;
+				fn();
+				Json = parent;
+				Path = parentPath;
+			}
+		};
 
 		bool settings_from_json(const SceneJson& json, SceneSettings& s, std::string& error)
 		{
-			const std::string path = "settings";
 			if (!json.is_object())
 			{
 				error = "settings: not an object";
 				return false;
 			}
 
-			u32 source = static_cast<u32>(s.Source);
-			u32 background = static_cast<u32>(s.Background);
-			if (!read_choice(json, "source", path, { "none", "file", "atmosphere" }, source, error)
-				|| !read_choice(json, "background", path, { "sky", "color" }, background, error)
-				|| !read_float(json, "rotation", path, s.RotationDegrees, error) || !read_float(json, "brightness", path, s.Brightness, error)
-				|| !read_float(json, "ambient", path, s.AmbientIntensity, error) || !read_float(json, "exposureEv", path, s.ExposureEv, error)
-				|| !read_vec3(json, "hemisphereSky", path, s.HemisphereSky, error) || !read_vec3(json, "hemisphereGround", path, s.HemisphereGround, error)
-				|| !read_vec3(json, "backgroundColor", path, s.BackgroundColor, error))
-			{
-				return false;
-			}
-			s.Source = static_cast<EnvironmentSource>(source);
-			s.Background = static_cast<BackgroundMode>(background);
-
-			if (json.contains("environment") && !ref_from_json(json["environment"], s.EnvironmentAsset))
-			{
-				error = path + ".environment: not an AssetRef";
-				return false;
-			}
-
-			if (json.contains("scripts"))
-			{
-				const SceneJson& scripts = json["scripts"];
-				if (!scripts.is_array())
-				{
-					error = path + ".scripts: not an array";
-					return false;
-				}
-				for (size_t i = 0; i < scripts.size(); i++)
-				{
-					AssetRef script;
-					if (!ref_from_json(scripts[i], script))
-					{
-						error = path + ".scripts[" + std::to_string(i) + "]: not an AssetRef";
-						return false;
-					}
-					s.Scripts.push_back(script);
-				}
-			}
-
-			if (json.contains("atmosphere"))
-			{
-				const SceneJson& atmosphere = json["atmosphere"];
-				const std::string atmospherePath = path + ".atmosphere";
-				if (!atmosphere.is_object())
-				{
-					error = atmospherePath + ": not an object";
-					return false;
-				}
-				AtmosphereParameters& a = s.Atmosphere;
-				if (!read_float(atmosphere, "rayleigh", atmospherePath, a.RayleighScale, error) || !read_float(atmosphere, "mie", atmospherePath, a.MieScale, error)
-					|| !read_float(atmosphere, "ozone", atmospherePath, a.OzoneScale, error) || !read_float(atmosphere, "mieAnisotropy", atmospherePath, a.MieAnisotropy, error)
-					|| !read_float(atmosphere, "multipleScattering", atmospherePath, a.MultipleScattering, error)
-					|| !read_float(atmosphere, "sunIlluminance", atmospherePath, a.SunIlluminance, error)
-					|| !read_float(atmosphere, "skyBrightness", atmospherePath, a.SkyBrightness, error) || !read_float(atmosphere, "sunDiscBoost", atmospherePath, a.SunDiscBoost, error)
-					|| !read_vec3(atmosphere, "groundAlbedo", atmospherePath, a.GroundAlbedo, error))
-				{
-					return false;
-				}
-			}
-
-			ExposureSettings& e = s.Exposure;
-			BloomSettings& b = s.Bloom;
-			TonemapSettings& t = s.Tonemap;
-			AoSettings& ao = s.Ao;
-			u32 tonemapOperator = static_cast<u32>(t.Operator);
-			if (!read_group(json, "exposure", path, error, [&](const SceneJson& g, const std::string& p)
-					{
-						return read_bool(g, "auto", p, e.Auto, error) && read_float(g, "compensation", p, e.CompensationEv, error) && read_float(g, "key", p, e.Key, error)
-							&& read_float(g, "minEv", p, e.MinEv, error) && read_float(g, "maxEv", p, e.MaxEv, error) && read_float(g, "adaptSpeed", p, e.AdaptSpeed, error)
-							&& read_float(g, "lowPercent", p, e.LowPercent, error) && read_float(g, "highPercent", p, e.HighPercent, error);
-					})
-				|| !read_group(json, "bloom", path, error, [&](const SceneJson& g, const std::string& p)
-					{
-						return read_bool(g, "enabled", p, b.Enabled, error) && read_float(g, "threshold", p, b.Threshold, error) && read_float(g, "knee", p, b.Knee, error)
-							&& read_float(g, "intensity", p, b.Intensity, error);
-					})
-				|| !read_group(json, "tonemap", path, error, [&](const SceneJson& g, const std::string& p)
-					{
-						return read_choice(g, "operator", p, { "aces", "reinhard", "neutral", "none" }, tonemapOperator, error) && read_float(g, "contrast", p, t.Contrast, error)
-							&& read_float(g, "saturation", p, t.Saturation, error) && read_float(g, "temperature", p, t.Temperature, error) && read_float(g, "tint", p, t.Tint, error)
-							&& read_float(g, "vignette", p, t.Vignette, error);
-					})
-				|| !read_group(json, "ao", path, error, [&](const SceneJson& g, const std::string& p)
-					{
-						return read_bool(g, "enabled", p, ao.Enabled, error) && read_float(g, "radius", p, ao.Radius, error) && read_float(g, "power", p, ao.Power, error);
-					})
-				|| !read_group(json, "taa", path, error, [&](const SceneJson& g, const std::string& p)
-					{
-						return read_float(g, "feedback", p, s.Taa.Feedback, error);
-					})
-				|| !read_group(json, "motionBlur", path, error, [&](const SceneJson& g, const std::string& p)
-					{
-						return read_bool(g, "enabled", p, s.MotionBlur.Enabled, error) && read_float(g, "exposureTime", p, s.MotionBlur.ExposureTime, error)
-							&& read_float(g, "strength", p, s.MotionBlur.Strength, error) && read_float(g, "maxBlurPixels", p, s.MotionBlur.MaxBlurPixels, error);
-					})
-				|| !read_group(json, "physics", path, error, [&](const SceneJson& g, const std::string& p)
-					{
-						return read_vec3(g, "gravity", p, s.Physics.Gravity, error) && read_u32(g, "fixedRateHz", p, s.Physics.FixedRateHz, error)
-							&& read_u32(g, "maxStepsPerWake", p, s.Physics.MaxStepsPerWake, error) && read_u32(g, "velocityIterations", p, s.Physics.VelocityIterations, error)
-							&& read_u32(g, "positionIterations", p, s.Physics.PositionIterations, error) && read_float(g, "sleepThreshold", p, s.Physics.SleepThreshold, error);
-					}))
-			{
-				return false;
-			}
-			t.Operator = static_cast<TonemapOperator>(tonemapOperator);
-			return true;
+			SettingsJsonReader reader;
+			reader.Json = &json;
+			reader.Path = "settings";
+			reader.Error = &error;
+			visit_scene_settings(s, SceneSettings{}, reader);
+			return reader.Ok;
 		}
 	}
 

@@ -103,6 +103,9 @@ namespace wiwa
 			case WidgetKind::ViewImage:
 				widget.OffsetMax = { 192.0f, 192.0f };
 				break;
+			case WidgetKind::Video:
+				widget.OffsetMax = { 320.0f, 180.0f };
+				break;
 			case WidgetKind::Button:
 				widget.OffsetMax = { 160.0f, 40.0f };
 				widget.Color = { 0.25f, 0.25f, 0.3f, 1.0f };

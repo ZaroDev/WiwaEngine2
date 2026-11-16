@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../render_pass.h"
-#include "../shader_library.h"
+#include "pass_shaders.h"
 #include "../view/per_view.h"
 
 namespace wiwa
@@ -24,7 +24,7 @@ namespace wiwa
 
 	private:
 		nvrhi::IDevice* m_Device = nullptr;
-		ShaderLibrary* m_Shaders = nullptr;
+		PassShaders m_Shaders{};
 		bool m_Failed = false;
 
 		nvrhi::BindingLayoutHandle m_Layout{};
@@ -35,6 +35,5 @@ namespace wiwa
 		};
 		PerView<ViewCache> m_PerView{};
 		nvrhi::ComputePipelineHandle m_Pipeline{};
-		u32 m_BuiltShaderGeneration = ~0u;
 	};
 }

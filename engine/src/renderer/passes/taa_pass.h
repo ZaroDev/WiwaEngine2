@@ -1,7 +1,8 @@
 #pragma once
 
+#include "../render_constants.h"
 #include "../render_pass.h"
-#include "../shader_library.h"
+#include "pass_shaders.h"
 #include "../view/per_view.h"
 #include "../viewport_target.h"
 
@@ -24,7 +25,7 @@ namespace wiwa
 		virtual bool runs_in_view(const ViewFlags& flags, bool isMain) const override { return flags.Taa; }
 
 	private:
-		static constexpr u32 GROUP_SIZE = 8;
+		static constexpr u32 GROUP_SIZE = TAA_GROUP_SIZE;
 
 		// Mirrors TaaData in taa.hlsl.
 		struct TaaData
@@ -36,7 +37,7 @@ namespace wiwa
 		};
 
 		nvrhi::IDevice* m_Device = nullptr;
-		ShaderLibrary* m_Shaders = nullptr;
+		PassShaders m_Shaders{};
 		bool m_Failed = false;
 
 		nvrhi::BufferHandle m_ConstantBuffer{};
@@ -54,7 +55,6 @@ namespace wiwa
 		PerView<ViewCache> m_PerView{};
 		bool create_binding_sets(ViewportTarget& viewport, ViewCache& c);
 		nvrhi::ComputePipelineHandle m_Pipeline{};
-		u32 m_BuiltShaderGeneration = ~0u;
 
 	};
 }

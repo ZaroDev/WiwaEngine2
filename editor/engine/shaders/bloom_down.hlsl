@@ -5,7 +5,7 @@
 // groups of the 13-tap filter with a weight of 1 / (1 + luma): a single very bright pixel (a firefly) can't
 // flicker through the whole chain.
 
-#define GROUP_SIZE 8
+#define GROUP_SIZE WI_BLOOM_GROUP_SIZE
 
 // Mirrors DownConstants in bloom_pass.h.
 struct BloomDownData

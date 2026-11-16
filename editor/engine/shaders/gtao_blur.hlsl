@@ -4,7 +4,7 @@
 // offsets, so a window of that size holds all of them; each tap counts less the farther its distance is from the
 // centre's, so the occlusion does not bleed across the edge of an object.
 
-#define GROUP_SIZE 8
+#define GROUP_SIZE WI_GTAO_GROUP_SIZE
 
 // Mirrors AoData in ao_pass.h (only the depth range is used here).
 cbuffer AoData : register(b0)

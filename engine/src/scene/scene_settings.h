@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <vector>
 
 #include <assets/asset_guid.h>
@@ -19,12 +20,20 @@ namespace wiwa
 		Atmosphere, // the procedural atmosphere, with the scene's first directional light as the sun
 	};
 
+	// The names the scene file gives the values of an enum; their number is the number of values, so a value appended to
+	// the enum must be named here (the static_assert says so) and is then accepted by every reader and writer.
+	inline constexpr std::array<const char*, 3> ENVIRONMENT_SOURCE_NAMES{ "none", "file", "atmosphere" };
+	static_assert(ENVIRONMENT_SOURCE_NAMES.size() == static_cast<size_t>(EnvironmentSource::Atmosphere) + 1, "name the new EnvironmentSource");
+
 	// Only append: the values are saved.
 	enum class BackgroundMode : u32
 	{
 		Sky,        // the environment or atmosphere is drawn behind the scene
 		SolidColor, // BackgroundColor
 	};
+
+	inline constexpr std::array<const char*, 2> BACKGROUND_MODE_NAMES{ "sky", "color" };
+	static_assert(BACKGROUND_MODE_NAMES.size() == static_cast<size_t>(BackgroundMode::SolidColor) + 1, "name the new BackgroundMode");
 
 	struct AtmosphereParameters
 	{
@@ -49,6 +58,9 @@ namespace wiwa
 		Neutral,
 		None,
 	};
+
+	inline constexpr std::array<const char*, 4> TONEMAP_OPERATOR_NAMES{ "aces", "reinhard", "neutral", "none" };
+	static_assert(TONEMAP_OPERATOR_NAMES.size() == static_cast<size_t>(TonemapOperator::None) + 1, "name the new TonemapOperator");
 
 	// Automatic exposure (eye adaptation). Off: SceneSettings::ExposureEv applies.
 	struct ExposureSettings
@@ -151,6 +163,117 @@ namespace wiwa
 
 		bool operator==(const SceneSettings&) const = default;
 	};
+
+	// Every field of SceneSettings, once: in the order of the binary file, with the key of the JSON file, the default and the
+	// range a value may have. The binary archive (scene_data_io.cpp), the JSON reader and writer (scene_json.cpp), the sanitizer
+	// (scene_settings.cpp) and the ranges the panels offer (settings_range) are visitors of this one list: a field is added here
+	// (and to the struct), nowhere else. (The JSON file has `scripts` just before `exposure` instead of at its place here.)
+	//
+	// A visitor has: choice(key, enum, default, names), asset(key, ref), angle(key, float, default), number(key, float, default,
+	// min, max), vec3(key, vec3, default, min, max) (min and max apply to each component), flag(key, bool, default), count(key, u32,
+	// default, min, max), scripts(key, list) and group(key, fn), which calls fn for the fields of an object of the JSON file.
+	// S is SceneSettings, or const SceneSettings for a visitor that only reads.
+	template<typename S, typename V>
+	void visit_scene_settings(S& s, const SceneSettings& d, V&& v)
+	{
+		v.choice("source", s.Source, d.Source, ENVIRONMENT_SOURCE_NAMES);
+		v.asset("environment", s.EnvironmentAsset);
+		v.angle("rotation", s.RotationDegrees, d.RotationDegrees); // 0..360, wrapped rather than clamped
+		v.number("brightness", s.Brightness, d.Brightness, 0.0f, 64.0f);
+		v.number("ambient", s.AmbientIntensity, d.AmbientIntensity, 0.0f, 16.0f);
+		v.vec3("hemisphereSky", s.HemisphereSky, d.HemisphereSky, 0.0f, 64.0f);
+		v.vec3("hemisphereGround", s.HemisphereGround, d.HemisphereGround, 0.0f, 64.0f);
+		v.group("atmosphere", [&]()
+			{
+				auto& a = s.Atmosphere;
+				const AtmosphereParameters& da = d.Atmosphere;
+				v.number("rayleigh", a.RayleighScale, da.RayleighScale, 0.0f, 10.0f);
+				v.number("mie", a.MieScale, da.MieScale, 0.0f, 10.0f);
+				v.number("ozone", a.OzoneScale, da.OzoneScale, 0.0f, 10.0f);
+				v.number("mieAnisotropy", a.MieAnisotropy, da.MieAnisotropy, 0.0f, 0.99f);
+				v.number("multipleScattering", a.MultipleScattering, da.MultipleScattering, 0.0f, 1.0f);
+				v.number("sunIlluminance", a.SunIlluminance, da.SunIlluminance, 0.0f, 64.0f);
+				v.number("skyBrightness", a.SkyBrightness, da.SkyBrightness, 0.0f, 64.0f);
+				v.number("sunDiscBoost", a.SunDiscBoost, da.SunDiscBoost, 0.0f, 10000.0f);
+				v.vec3("groundAlbedo", a.GroundAlbedo, da.GroundAlbedo, 0.0f, 1.0f);
+			});
+		v.choice("background", s.Background, d.Background, BACKGROUND_MODE_NAMES);
+		v.vec3("backgroundColor", s.BackgroundColor, d.BackgroundColor, 0.0f, 64.0f);
+		v.number("exposureEv", s.ExposureEv, d.ExposureEv, -10.0f, 10.0f);
+		v.group("exposure", [&]()
+			{
+				auto& e = s.Exposure;
+				const ExposureSettings& de = d.Exposure;
+				v.flag("auto", e.Auto, de.Auto);
+				v.number("compensation", e.CompensationEv, de.CompensationEv, -6.0f, 6.0f);
+				v.number("key", e.Key, de.Key, 0.02f, 2.0f);
+				v.number("minEv", e.MinEv, de.MinEv, -10.0f, 10.0f);
+				v.number("maxEv", e.MaxEv, de.MaxEv, -10.0f, 10.0f); // sanitized() also keeps it above MinEv
+				v.number("adaptSpeed", e.AdaptSpeed, de.AdaptSpeed, 0.0f, 20.0f);
+				v.number("lowPercent", e.LowPercent, de.LowPercent, 0.0f, 0.9f);
+				v.number("highPercent", e.HighPercent, de.HighPercent, 0.0f, 1.0f); // sanitized() also keeps it above LowPercent + 0.05
+			});
+		v.group("bloom", [&]()
+			{
+				auto& b = s.Bloom;
+				const BloomSettings& db = d.Bloom;
+				v.flag("enabled", b.Enabled, db.Enabled);
+				v.number("threshold", b.Threshold, db.Threshold, 0.0f, 4.0f);
+				v.number("knee", b.Knee, db.Knee, 0.0f, 1.0f);
+				v.number("intensity", b.Intensity, db.Intensity, 0.0f, 0.3f);
+			});
+		v.group("tonemap", [&]()
+			{
+				auto& t = s.Tonemap;
+				const TonemapSettings& dt = d.Tonemap;
+				v.choice("operator", t.Operator, dt.Operator, TONEMAP_OPERATOR_NAMES);
+				v.number("contrast", t.Contrast, dt.Contrast, 0.2f, 2.5f);
+				v.number("saturation", t.Saturation, dt.Saturation, 0.0f, 2.5f);
+				v.number("temperature", t.Temperature, dt.Temperature, -1.0f, 1.0f);
+				v.number("tint", t.Tint, dt.Tint, -1.0f, 1.0f);
+				v.number("vignette", t.Vignette, dt.Vignette, 0.0f, 1.0f);
+			});
+		v.group("ao", [&]()
+			{
+				auto& ao = s.Ao;
+				const AoSettings& dao = d.Ao;
+				v.flag("enabled", ao.Enabled, dao.Enabled);
+				v.number("radius", ao.Radius, dao.Radius, 0.01f, 10.0f);
+				v.number("power", ao.Power, dao.Power, 0.1f, 8.0f);
+			});
+		v.group("taa", [&]() { v.number("feedback", s.Taa.Feedback, d.Taa.Feedback, 0.8f, 0.98f); });
+		v.group("motionBlur", [&]()
+			{
+				auto& mb = s.MotionBlur;
+				const MotionBlurSettings& dmb = d.MotionBlur;
+				v.flag("enabled", mb.Enabled, dmb.Enabled);
+				v.number("exposureTime", mb.ExposureTime, dmb.ExposureTime, 0.0005f, 0.1f);
+				v.number("strength", mb.Strength, dmb.Strength, 0.0f, 4.0f);
+				v.number("maxBlurPixels", mb.MaxBlurPixels, dmb.MaxBlurPixels, 1.0f, 100.0f);
+			});
+		v.scripts("scripts", s.Scripts);
+		v.group("physics", [&]()
+			{
+				auto& ph = s.Physics;
+				const PhysicsSettings& dph = d.Physics;
+				v.vec3("gravity", ph.Gravity, dph.Gravity, -1000.0f, 1000.0f);
+				v.count("fixedRateHz", ph.FixedRateHz, dph.FixedRateHz, 10, 240);
+				v.count("maxStepsPerWake", ph.MaxStepsPerWake, dph.MaxStepsPerWake, 1, 16);
+				v.count("velocityIterations", ph.VelocityIterations, dph.VelocityIterations, 1, 64);
+				v.count("positionIterations", ph.PositionIterations, dph.PositionIterations, 1, 64);
+				v.number("sleepThreshold", ph.SleepThreshold, dph.SleepThreshold, 0.0f, 10.0f);
+			});
+	}
+
+	// The range the sanitizer allows the numeric field of `settings` that `field` is (a member of `settings` itself): what the
+	// panels offer, so that a slider never reaches a value the sanitizer would change.
+	struct SettingRange
+	{
+		float Min = 0.0f;
+		float Max = 0.0f;
+	};
+	SettingRange settings_range(const SceneSettings& settings, const float& field);
+	SettingRange settings_range(const SceneSettings& settings, const u32& field);
 
 	// The settings with every value made usable: finite numbers inside sane ranges, the rotation wrapped to 0..360, enums that
 	// name something. A value that was changed is logged once per call.

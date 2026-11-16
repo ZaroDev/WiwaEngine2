@@ -1,6 +1,8 @@
 #include <pch.h>
 #include "surface_shader_cache.h"
 
+#include "../shader_library.h"
+
 #define WI_SURFACE_LOG(level, ...) WI_LOG(level, "Shaders", __VA_ARGS__)
 
 namespace wiwa
@@ -106,7 +108,7 @@ namespace wiwa
 		}
 		else
 		{
-			const ShaderTarget target = (m_Api == GraphicsApi::Vulkan) ? ShaderTarget::Spirv : ShaderTarget::Dxbc;
+			const ShaderTarget target = shader_target_for(m_Api);
 			for (u32 kind = 0; kind < SURFACE_VARIANT_COUNT && usable; kind++)
 			{
 				for (u32 stageIndex = 0; stageIndex < 2 && usable; stageIndex++)
@@ -186,17 +188,5 @@ namespace wiwa
 	void SurfaceShaderCache::set_inline_shader(const AssetRef& shader, SurfaceShaderData data)
 	{
 		m_Inline[shader.resolved()] = std::make_shared<const SurfaceShaderData>(std::move(data));
-	}
-
-	bool SurfaceShaderCache::any_loading() const
-	{
-		for (const std::unique_ptr<Entry>& entry : m_Entries)
-		{
-			if (entry->Gpu.Loading)
-			{
-				return true;
-			}
-		}
-		return false;
 	}
 }

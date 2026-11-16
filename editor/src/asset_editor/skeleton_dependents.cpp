@@ -6,8 +6,10 @@
 #include <assets/native_anim_files.h>
 
 #include <asset_pipeline/asset_database.h>
-#include <asset_pipeline/atomic_write.h>
+#include <core/file_io.h>
 #include <asset_pipeline/file_utils.h>
+
+#include "asset_kinds.h"
 
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
 
@@ -127,6 +129,13 @@ namespace wiwa
 	{
 		const RenameMap none;
 		std::unordered_map<AssetGuid, SkeletonUsers> index;
+		// read once: redirected() would walk the whole import cache again for every file
+		const std::unordered_map<AssetGuid, AssetGuid> redirects = database.redirect_map();
+		const auto redirected = [&redirects](AssetRef ref)
+		{
+			const auto found = ref.valid() ? redirects.find(ref.resolved()) : redirects.end();
+			return found == redirects.end() ? ref.Guid : found->second; // as AssetDatabase::redirected: unchanged when nothing redirects it
+		};
 		for (const AssetDatabase::SourceRoot& root : database.get_roots())
 		{
 			std::error_code error;
@@ -142,15 +151,17 @@ namespace wiwa
 					continue;
 				}
 				const std::filesystem::path& file = it->path();
-				const bool isMesh = file.extension() == ".wmesh";
-				if (!isMesh && file.extension() != ".wanim")
+				const AssetKindInfo* kind = find_asset_kind(file);
+				const AssetType type = kind != nullptr ? kind->Type : AssetType::None;
+				const bool isMesh = type == AssetType::Mesh;
+				if (!isMesh && type != AssetType::AnimationClip)
 				{
 					continue;
 				}
 				const Reading reading = isMesh ? read_mesh(file, none) : read_clip(file, none);
 				if (reading.Ok && reading.Skeleton.valid())
 				{
-					SkeletonUsers& users = index[database.redirected(reading.Skeleton).Guid];
+					SkeletonUsers& users = index[redirected(reading.Skeleton)];
 					(isMesh ? users.Meshes : users.Clips).push_back(file);
 				}
 			}
@@ -183,8 +194,10 @@ namespace wiwa
 					continue;
 				}
 				const std::filesystem::path& file = it->path();
-				const bool isMesh = file.extension() == ".wmesh";
-				if (!isMesh && file.extension() != ".wanim")
+				const AssetKindInfo* kind = find_asset_kind(file);
+				const AssetType type = kind != nullptr ? kind->Type : AssetType::None;
+				const bool isMesh = type == AssetType::Mesh;
+				if (!isMesh && type != AssetType::AnimationClip)
 				{
 					continue;
 				}

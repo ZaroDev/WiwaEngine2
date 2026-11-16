@@ -251,29 +251,32 @@ namespace wiwa
 		std::vector<std::pair<AssetRef, Handle<PrefabData>>> prefabs;
 		for (const EntityRecord& entity : data.Entities)
 		{
-			for (const ComponentRecord& component : entity.Components)
+			const std::optional<AssetRef> prefab = prefab_of(entity);
+			if (prefab && std::none_of(prefabs.begin(), prefabs.end(), [&](const auto& known) { return known.first == *prefab; }))
 			{
-				if (component.Name != "PrefabInstance")
-				{
-					continue;
-				}
-				for (const FieldRecord& field : component.Fields)
-				{
-					const AssetRef* prefab = std::get_if<AssetRef>(&field.Value);
-					if (field.Name == "Prefab" && prefab != nullptr && prefab->valid()
-						&& std::none_of(prefabs.begin(), prefabs.end(), [&](const auto& known) { return known.first == *prefab; }))
-					{
-						prefabs.emplace_back(*prefab, m_Assets->load<PrefabData>(*prefab));
-					}
-				}
+				prefabs.emplace_back(*prefab, m_Assets->load<PrefabData>(*prefab));
 			}
 		}
-		for (auto& [prefabRef, handle] : prefabs)
+		for (size_t i = 0; i < prefabs.size(); i++) // grows: what a prefab instantiates is loaded too
 		{
+			Handle<PrefabData> handle = prefabs[i].second;
 			if (wait_loaded(handle, progress) == LoadState::Loading)
 			{
 				fail("cancelled");
 				return;
+			}
+
+			std::vector<AssetRef> nested;
+			if (const PrefabData* loaded = handle.get())
+			{
+				collect_nested_prefabs(*loaded, nested);
+			}
+			for (const AssetRef& ref : nested)
+			{
+				if (std::none_of(prefabs.begin(), prefabs.end(), [&](const auto& known) { return known.first == ref; }))
+				{
+					prefabs.emplace_back(ref, m_Assets->load<PrefabData>(ref));
+				}
 			}
 		}
 

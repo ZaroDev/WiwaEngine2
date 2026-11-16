@@ -18,14 +18,10 @@ namespace wiwa
 	bool MotionBlurPass::initialize(const PassInitializationDescription& description)
 	{
 		m_Device = description.Device;
-		m_Shaders = description.Shaders;
-		if (m_Shaders == nullptr)
+		if (!m_Shaders.initialize(description, "motion blur", { { engine_assets::MOTION_BLUR_SHADER, ShaderStage::Compute } }))
 		{
-			WI_MOTION_BLUR_LOG(Error, "The motion blur pass needs the shader library");
 			return false;
 		}
-
-		m_Shaders->request(engine_assets::MOTION_BLUR_SHADER, ShaderStage::Compute);
 
 		nvrhi::BufferDesc constants;
 		constants.byteSize = sizeof(MotionBlurData);
@@ -59,12 +55,12 @@ namespace wiwa
 
 	bool MotionBlurPass::is_ready() const
 	{
-		return m_Shaders->get(engine_assets::MOTION_BLUR_SHADER, ShaderStage::Compute) != nullptr;
+		return m_Shaders.ready();
 	}
 
 	void MotionBlurPass::update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer)
 	{
-		if (m_Shaders->has_failed(engine_assets::MOTION_BLUR_SHADER, ShaderStage::Compute))
+		if (m_Shaders.failed())
 		{
 			m_Failed = true;
 		}
@@ -99,10 +95,9 @@ namespace wiwa
 		}
 
 		ViewportTarget& viewport = *frame.Scene->viewport();
-		const u32 shaderGeneration = m_Shaders->get_generation();
-		if (m_Pipeline == nullptr || shaderGeneration != m_BuiltShaderGeneration)
+		const bool shadersChanged = m_Shaders.take_generation_change();
+		if (m_Pipeline == nullptr || shadersChanged)
 		{
-			m_BuiltShaderGeneration = shaderGeneration;
 			nvrhi::ComputePipelineDesc pipeline;
 			pipeline.CS = m_Shaders->get(engine_assets::MOTION_BLUR_SHADER, ShaderStage::Compute);
 			pipeline.addBindingLayout(m_BindingLayout);
@@ -129,7 +124,7 @@ namespace wiwa
 		MotionBlurData data;
 		data.InverseViewProjection = glm::inverse(constants.UnjitteredViewProjection);
 		data.PreviousViewProjection = constants.PreviousViewProjection; // the current one without a history: a camera cut does not blur
-		data.Parameters = glm::vec4(settings.ExposureTime / std::max(frame.DeltaTime, 0.001f) * settings.Strength, settings.MaxBlurPixels, static_cast<float>(viewport.width()), static_cast<float>(viewport.height()));
+		data.Parameters = glm::vec4(settings.ExposureTime / std::max(frame.DeltaSeconds, 0.001f) * settings.Strength, settings.MaxBlurPixels, static_cast<float>(viewport.width()), static_cast<float>(viewport.height()));
 		data.Mode = glm::vec4(debug ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
 		commandList->writeBuffer(m_ConstantBuffer, &data, sizeof(data));
 
@@ -137,7 +132,7 @@ namespace wiwa
 		state.pipeline = m_Pipeline;
 		state.addBindingSet(c.BindingSet);
 		commandList->setComputeState(state);
-		commandList->dispatch((viewport.width() + GROUP_SIZE - 1) / GROUP_SIZE, (viewport.height() + GROUP_SIZE - 1) / GROUP_SIZE, 1);
+		commandList->dispatch(ceil_div(viewport.width(), GROUP_SIZE), ceil_div(viewport.height(), GROUP_SIZE), 1);
 
 		commandList->copyTexture(viewport.hdr(), nvrhi::TextureSlice(), viewport.post_scratch(), nvrhi::TextureSlice());
 	}

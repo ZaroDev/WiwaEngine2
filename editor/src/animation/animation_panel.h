@@ -26,10 +26,6 @@ public:
 	virtual void on_draw() override;
 
 	const std::string& last_error() const { return m_Error; }
-	wiwa::u32 frames_drawn() const { return m_Frames; }
-	// Brings the window to the front of its dock on the next frame (the smoke check wants the contents drawn).
-	void request_focus() { m_Focus = true; }
-
 private:
 	struct ClipInfo
 	{
@@ -57,6 +53,4 @@ private:
 	float m_PreviewTime = 0.0f;
 	bool m_ShowSkeleton = false;
 	std::string m_Error{};
-	wiwa::u32 m_Frames = 0;
-	bool m_Focus = false;
 };

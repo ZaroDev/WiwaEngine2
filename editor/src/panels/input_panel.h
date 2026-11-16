@@ -40,10 +40,6 @@ public:
 	const Ref<InputSection>& section() const { return m_Section; }
 
 	const std::string& last_error() const { return m_Error; }
-	wiwa::u32 frames_drawn() const { return m_Frames; }
-	// Brings the window to the front of its dock on the next frame (the smoke check wants the contents drawn).
-	void request_focus() { m_Focus = true; }
-
 private:
 	struct ListenTarget
 	{
@@ -65,8 +61,6 @@ private:
 	std::filesystem::path m_File{};
 	Scope<wiwa::InputEditModel> m_Model{};
 	std::string m_Error{};
-	wiwa::u32 m_Frames = 0;
-	bool m_Focus = false;
 
 	// "Listen": the module calls back from its update with the control that was pressed; it is applied at the next draw.
 	std::optional<ListenTarget> m_Listening{};

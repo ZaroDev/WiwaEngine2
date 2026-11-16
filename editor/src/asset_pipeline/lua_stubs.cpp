@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "lua_stubs.h"
+#include <core/file_io.h>
 
 #include <algorithm>
 #include <cctype>
@@ -224,7 +225,6 @@ namespace wiwa
 
 	bool write_if_changed(const std::filesystem::path& file, const std::string& text)
 	{
-		std::error_code error;
 		if (const std::optional<std::vector<std::byte>> existing = read_binary_file(file))
 		{
 			if (existing->size() == text.size() && std::memcmp(existing->data(), text.data(), text.size()) == 0)
@@ -233,29 +233,10 @@ namespace wiwa
 			}
 		}
 
-		if (file.has_parent_path())
+		std::string writeError;
+		if (!write_file_atomic(file, text.data(), text.size(), writeError))
 		{
-			std::filesystem::create_directories(file.parent_path(), error);
-		}
-
-		const std::filesystem::path temp = file.string() + ".tmp";
-		{
-			std::ofstream stream(temp, std::ios::binary | std::ios::trunc);
-			stream.write(text.data(), static_cast<std::streamsize>(text.size()));
-			if (!stream)
-			{
-				WI_LOG(Warning, "Assets", "Cannot write {0}: Lua IntelliSense for scripts will be out of date", file.generic_string());
-				stream.close();
-				std::filesystem::remove(temp, error);
-				return false;
-			}
-		}
-
-		std::filesystem::rename(temp, file, error);
-		if (error)
-		{
-			WI_LOG(Warning, "Assets", "Cannot write {0}: {1}", file.generic_string(), error.message());
-			std::filesystem::remove(temp, error);
+			WI_LOG(Warning, "Assets", "Cannot write {0}: {1} (Lua IntelliSense for scripts will be out of date)", file.generic_string(), writeError);
 			return false;
 		}
 		return true;

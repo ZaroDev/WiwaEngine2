@@ -38,6 +38,7 @@ namespace wiwa
 			AssetRef Mesh{};
 			std::vector<AssetRef> Materials{};
 			float Padding = 0.0f;
+			bool ReceivesDecals = true;
 			std::vector<glm::vec4> Palette{};
 			u64 Seen = 0;
 		};
@@ -48,9 +49,23 @@ namespace wiwa
 			u64 Seen = 0;
 		};
 
+		struct SentDecal
+		{
+			RenderDecal Decal{};
+			u64 Seen = 0;
+		};
+
+		struct SentParticles
+		{
+			RenderParticleSystem System{}; // as last sent (PendingSpawns and PrevWorld stay empty here)
+			u64 Seen = 0;
+		};
+
 		std::weak_ptr<Scene> m_Scene{};
+		std::unordered_map<EntityGuid, SentParticles> m_Particles{};
 		std::unordered_map<EntityGuid, SentInstance> m_Instances{};
 		std::unordered_map<EntityGuid, SentLight> m_Lights{};
+		std::unordered_map<EntityGuid, SentDecal> m_Decals{};
 
 		bool m_HasCamera = false;
 		EntityGuid m_CameraId{};

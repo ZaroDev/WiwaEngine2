@@ -9,7 +9,7 @@
 #include "builtin_importers.h"
 #include "lua_stubs.h"
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {
@@ -101,7 +101,7 @@ namespace wiwa
 				progress->finish(false);
 				return;
 			}
-			Packager::pack(*database, outDirectory, progress.get(), settings ? &*settings : nullptr);
+			Packager::pack(*database, outDirectory, progress.get(), settings ? &*settings : nullptr, PHYSICS_SETTINGS_FILE, INPUT_SETTINGS_FILE, PROJECT_SETTINGS_FILE, AUDIO_SETTINGS_FILE, NAV_SETTINGS_FILE);
 		});
 		return progress;
 	}

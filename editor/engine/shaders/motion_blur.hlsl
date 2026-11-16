@@ -6,7 +6,7 @@
 // background next to it. A pixel that moved less than a pixel is copied. In the velocity debug mode the
 // output is the velocity itself (absolute value, 50 times) instead.
 
-#define GROUP_SIZE 8
+#define GROUP_SIZE WI_MOTION_BLUR_GROUP_SIZE
 #define TAP_COUNT 16
 
 // Mirrors MotionBlurData in motion_blur_pass.h.

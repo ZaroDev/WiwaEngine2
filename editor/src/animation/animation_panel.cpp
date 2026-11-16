@@ -76,19 +76,10 @@ void AnimationPanel::follow_selection(bool editing)
 
 void AnimationPanel::on_draw()
 {
-	m_Frames++; // counted even while the window is a hidden tab: the smoke check wants to know the panel was run
-	if (m_Focus)
-	{
-		ImGui::SetNextWindowFocus();
-		m_Focus = false;
-	}
-
 	const bool editing = m_Editing ? m_Editing() : true;
 	follow_selection(editing);
 
-	ImGui::SetNextWindowPos(ImVec2(360.0f, 520.0f), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(620.0f, 300.0f), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin(get_name(), &m_Open))
+	if (begin_window(ImVec2(360.0f, 520.0f), ImVec2(620.0f, 300.0f)))
 	{
 		const bool hasAnimator = m_Entity != entt::null && m_Editor.get_scene() != nullptr && m_Editor.scene().registry().valid(m_Entity)
 			&& m_Editor.scene().registry().all_of<wiwa::Animator>(m_Entity);
@@ -99,15 +90,12 @@ void AnimationPanel::on_draw()
 		else
 		{
 			ImGui::Checkbox("Show skeleton", &m_ShowSkeleton);
-			if (hasAnimator)
+			if (m_ShowSkeleton)
 			{
-				if (m_ShowSkeleton)
-				{
-					draw_skeleton(m_Entity);
-				}
-				ImGui::Separator();
-				preview_controls(m_Entity);
+				draw_skeleton(m_Entity);
 			}
+			ImGui::Separator();
+			preview_controls(m_Entity);
 
 			if (!m_Error.empty())
 			{

@@ -38,6 +38,8 @@ project "wiwa_editor"
 		"%{IncludeDirs.Wiwa}",
 		"%{IncludeDirs.sol2}",
 		"%{IncludeDirs.lua}",
+		"%{IncludeDirs.Recast}",
+		"%{IncludeDirs.Detour}",
 		-- "%{IncludeDirs.Optick}",
 		-- "%{IncludeDirs.ImGuizmo}",
 		-- "%{IncludeDirs.filewatch}",
@@ -54,13 +56,19 @@ project "wiwa_editor"
 		"ImGui",
 		"LZ4",
 		"ufbx",
+		"Recast",
 		"d3dcompiler",
 		--"ImGui",
 		-- "Optick",
 		-- "ImGuizmo"
 	}
 
+	WwiseDefines()
+	WwiseLinks()
+
 	debugdir "%{wks.location}/editor"
+
+	SolDefines()
 
 	filter "system:windows"
 		staticruntime "Off"

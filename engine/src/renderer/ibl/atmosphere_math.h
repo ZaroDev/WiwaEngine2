@@ -197,15 +197,4 @@ namespace wiwa::atmosphere
 		}
 		return radiance;
 	}
-
-	// The irradiance of a light on a surface at the observer's altitude that faces it: the light's own irradiance, reddened and dimmed
-	// by the air it crosses, and faded out as it goes down behind the horizon (a disc, not a point).
-	inline glm::vec3 light_at_observer(const glm::vec3& direction, const glm::vec3& irradiance, const SkyParameters& parameters)
-	{
-		// The path through the air at the horizon is already very long: the light below it is the horizon's, faded.
-		const glm::vec3 clamped = glm::normalize(glm::vec3(direction.x, std::max(direction.y, 0.0f), direction.z) + glm::vec3(0.0f, 1e-4f, 0.0f));
-		const glm::vec3 arriving = transmittance_to_top(observer_position(parameters), clamped, parameters, 16);
-		const float visible = smoothstep(-0.03f, 0.02f, direction.y);
-		return irradiance * arriving * visible;
-	}
 }

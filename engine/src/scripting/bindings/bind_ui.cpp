@@ -5,6 +5,7 @@
 #include <cctype>
 
 #include <ui/ui_module.h>
+#include <video/video_module.h>
 #include "../ui_handlers.h"
 
 namespace wiwa
@@ -28,11 +29,7 @@ namespace wiwa
 
 		UiModule& ui_of(ScriptContext& context)
 		{
-			if (context.Ui == nullptr)
-			{
-				throw sol::error("there is no UI module");
-			}
-			return *context.Ui;
+			return require_module(context.Ui, "there is no UI module");
 		}
 
 		// Null when the canvas, its scene or its panel is not there (yet).
@@ -90,6 +87,7 @@ namespace wiwa
 			if (name == "hover_enter") { return UiEventKind::HoverEnter; }
 			if (name == "hover_exit") { return UiEventKind::HoverExit; }
 			if (name == "focus") { return UiEventKind::Focus; }
+			if (name == "finished") { return UiEventKind::Finished; }
 			return std::nullopt;
 		}
 
@@ -98,7 +96,7 @@ namespace wiwa
 			const std::optional<UiEventKind> kind = event_kind(name);
 			if (!kind)
 			{
-				throw sol::error("unknown UI event '" + name + "' (click, value_changed, hover_enter, hover_exit, focus)");
+				throw sol::error("unknown UI event '" + name + "' (click, value_changed, hover_enter, hover_exit, focus, finished)");
 			}
 			return *kind;
 		}
@@ -112,6 +110,36 @@ namespace wiwa
 			if (name == "submit") { return UiNav::Submit; }
 			if (name == "cancel") { return UiNav::Cancel; }
 			throw sol::error("unknown navigation '" + name + "' (up, down, left, right, submit, cancel)");
+		}
+
+		VideoModule& video_of(ScriptContext& context)
+		{
+			return require_module(context.Video, "there is no video module");
+		}
+
+		// The data of a Video widget, null when the widget (or its canvas) is gone; a widget of another kind is a Lua error.
+		const UiWidget* video_widget_for(ScriptContext& context, const LuaUiWidget& widget, const char* method)
+		{
+			const UiWidget* data = widget_for(context, widget);
+			if (data != nullptr && data->Kind != WidgetKind::Video)
+			{
+				throw sol::error(std::string(method) + ": the widget is not a Video widget");
+			}
+			return data;
+		}
+
+		const char* video_state_name(VideoState state)
+		{
+			switch (state)
+			{
+			case VideoState::Idle: return "idle";
+			case VideoState::Loading: return "loading";
+			case VideoState::Playing: return "playing";
+			case VideoState::Paused: return "paused";
+			case VideoState::Ended: return "ended";
+			case VideoState::Failed: return "failed";
+			}
+			return "idle";
 		}
 
 		sol::object nil_object(sol::this_state state)
@@ -242,6 +270,66 @@ namespace wiwa
 						throw sol::error("off: handlers are removed from a script hook (on_init, on_update, ...)");
 					}
 					context.UiHandlers->remove(*context.UiHandlers->current(), widget.Canvas, widget.Id, kind, function.value_or(sol::object{}));
+				});
+
+			// A Video widget plays its video (the video module; one video at a time). All of them do nothing, and read nil, for a widget whose canvas
+			// is gone; on a widget that is not a Video they are Lua errors.
+			methods.set_function("video_play", [&context](const LuaUiWidget& widget) -> bool
+				{
+					return video_widget_for(context, widget, "video_play") != nullptr && video_of(context).play(VideoKey{ widget.Canvas, widget.Id }, context.ActiveSceneRef);
+				});
+			methods.set_function("video_pause", [&context](const LuaUiWidget& widget)
+				{
+					if (video_widget_for(context, widget, "video_pause") != nullptr)
+					{
+						video_of(context).pause(VideoKey{ widget.Canvas, widget.Id });
+					}
+				});
+			methods.set_function("video_stop", [&context](const LuaUiWidget& widget)
+				{
+					if (video_widget_for(context, widget, "video_stop") != nullptr)
+					{
+						video_of(context).stop(VideoKey{ widget.Canvas, widget.Id });
+					}
+				});
+			methods.set_function("video_seek", [&context](const LuaUiWidget& widget, double seconds)
+				{
+					if (video_widget_for(context, widget, "video_seek") != nullptr)
+					{
+						video_of(context).seek(VideoKey{ widget.Canvas, widget.Id }, seconds);
+					}
+				});
+			methods.set_function("video_state", [&context](const LuaUiWidget& widget, sol::this_state state) -> sol::object
+				{
+					if (video_widget_for(context, widget, "video_state") == nullptr)
+					{
+						return nil_object(state);
+					}
+					return sol::make_object(state, std::string(video_state_name(video_of(context).state(VideoKey{ widget.Canvas, widget.Id }))));
+				});
+			methods.set_function("video_time", [&context](const LuaUiWidget& widget, sol::this_state state) -> sol::object
+				{
+					if (video_widget_for(context, widget, "video_time") == nullptr)
+					{
+						return nil_object(state);
+					}
+					return sol::make_object(state, video_of(context).time(VideoKey{ widget.Canvas, widget.Id }));
+				});
+			methods.set_function("video_duration", [&context](const LuaUiWidget& widget, sol::this_state state) -> sol::object
+				{
+					if (video_widget_for(context, widget, "video_duration") == nullptr)
+					{
+						return nil_object(state);
+					}
+					return sol::make_object(state, video_of(context).duration(VideoKey{ widget.Canvas, widget.Id }));
+				});
+			methods.set_function("video_error", [&context](const LuaUiWidget& widget, sol::this_state state) -> sol::object
+				{
+					if (video_widget_for(context, widget, "video_error") == nullptr)
+					{
+						return nil_object(state);
+					}
+					return sol::make_object(state, video_of(context).error(VideoKey{ widget.Canvas, widget.Id }));
 				});
 
 			methods.set_function("clear_world_anchor", [&context](const LuaUiWidget& widget)

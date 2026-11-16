@@ -4,7 +4,7 @@
 // that average at the target brightness, moves the stored exposure towards it, and clears the histogram for the next
 // frame. Mirrors average_bin / bin_to_luminance / target_exposure / adapt_exposure in ExposureMath.h.
 
-#define BINS 256
+#define BINS WI_EXPOSURE_BINS
 
 // Slots match ExposurePass: UAV 0 and 1, push constants 2.
 RWStructuredBuffer<uint> uHistogram : register(u0);

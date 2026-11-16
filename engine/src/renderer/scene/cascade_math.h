@@ -6,13 +6,12 @@
 
 #include <math/math.h>
 
+#include "../render_constants.h"
 #include "render_scene.h"
 
 // The matrices of the sun's cascaded shadow maps and of spot light shadow maps.
 namespace wiwa
 {
-	constexpr u32 MAX_CASCADES = 4;
-	constexpr u32 CASCADE_MAP_SIZE = 2048;
 
 	struct CascadeSet
 	{

@@ -38,6 +38,9 @@ project "wiwa"
 		"%{IncludeDirs.lua}",
 		"%{IncludeDirs.sol2}",
 		"%{IncludeDirs.Jolt}",
+		"%{IncludeDirs.miniaudio}",
+		"%{IncludeDirs.Detour}",
+		"%{IncludeDirs.DetourCrowd}",
 	}
 
 	links
@@ -54,7 +57,9 @@ project "wiwa"
 		"vk-bootstrap",
 		"ImGui",
 		"lua",
-		"Jolt"
+		"Jolt",
+		"Detour",
+		"DetourCrowd"
 		-- "Optick",
 		-- "ImGuizmo",
 	}
@@ -66,17 +71,41 @@ project "wiwa"
 
 	-- must match the Jolt library defines
 	JoltDefines()
+	SolDefines()
+	WwiseDefines()
 
 	filter "files:vendor/imguizmo/**.cpp"
 		enablepch "Off"
+
+	-- the miniaudio implementation is one big vendor file: no precompiled header, and not our warnings
+	filter "files:src/audio/mini/miniaudio_impl.cpp"
+		enablepch "Off"
+		warnings "Off"
+
+	-- every component description of the reflection registry is one big function
+	filter "files:src/scene/scene_components.cpp"
+		buildoptions { "/bigobj" }
 
 	-- the sol2 usertypes of the Lua bindings make big object files
 	filter "files:src/scripting/bindings/**.cpp"
 		buildoptions { "/bigobj" }
 
+	-- the video decoder of Windows (Media Foundation) lives in src/video/mf and is built only there; another platform adds its own folder and its case in
+	-- src/video/video_factory.cpp
+	filter "system:not windows"
+		removefiles { "src/video/mf/**" }
+
 	filter "system:windows"
 		staticruntime "Off"
 		systemversion "latest"
+		links
+		{
+			"mfplat",
+			"mfreadwrite",
+			"mfuuid",
+			"ole32",
+			"shlwapi"
+		}
 		defines
 		{
 			"WI_PLATFORM_WINDOWS",

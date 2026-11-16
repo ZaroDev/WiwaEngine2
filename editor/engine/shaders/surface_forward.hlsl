@@ -30,7 +30,7 @@ float4 PSMain(SurfaceForwardVertexOutput input, bool frontFace : SV_IsFrontFace)
 	MaterialRecord material = uMaterials[DrawConstants.MaterialSlot];
 	SurfaceInput surfaceInput = MakeSurfaceInput(input.WorldPosition, input.WorldNormal, input.Uv, frontFace);
 	SurfaceOutput surfaceOutput = EvaluateSurface(material, DrawConstants.MaterialSlot, surfaceInput);
-	SurfaceData surface = SurfaceShadingData(surfaceInput, surfaceOutput);
+	SurfaceData surface = SurfaceShadingData(surfaceInput, surfaceOutput, input.Position.xy, (material.Flags & MATERIAL_ALPHA_BLEND_BIT) == 0u);
 
 	if ((material.Flags & MATERIAL_ALPHA_MASK_BIT) != 0u && surface.Alpha < material.AlphaCutoff)
 	{

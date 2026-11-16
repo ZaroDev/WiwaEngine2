@@ -6,7 +6,7 @@
 #include <ui/ui_module.h>
 #include <time/time.h>
 
-#define WI_GAME_DEBUG_STATS WI_DEBUG || WI_RELEASE
+#define WI_GAME_DEBUG_STATS (WI_DEBUG || WI_RELEASE)
 
 void GameModule::init()
 {

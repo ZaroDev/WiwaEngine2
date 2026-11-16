@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -37,12 +38,9 @@ namespace wiwa
 		ThumbnailCache(const ThumbnailCache&) = delete;
 		ThumbnailCache& operator=(const ThumbnailCache&) = delete;
 
-		// Whether the file gets a thumbnail: the animation assets, materials, prefabs, environments (.hdr), color grading tables (.cube), fonts.
+		// Whether the file gets a thumbnail: the animation assets, materials, prefabs and model files, effects, environments (.hdr), color grading
+		// tables (.cube), fonts. Which kind a file is comes from asset_kinds.h.
 		static bool handles(const std::filesystem::path& source);
-		// A model file (.glb, .gltf, .fbx): shown as the prefab it imports to.
-		static bool is_model(const std::filesystem::path& source);
-		// The animation assets (.wskel, .wanim, .wmesh) alone: the ones the Asset Editor opens.
-		static bool is_animation_asset(const std::filesystem::path& source);
 
 		// The texture to draw for the asset's source file, or 0 while there is none (a placeholder shows). Call it every frame the cell is visible: a
 		// cell that is not asked for any more leaves the queue.
@@ -52,10 +50,12 @@ namespace wiwa
 		void update();
 
 	private:
-		// Skeleton, Clip, Mesh: posed by the animation module. Material (a sphere) and Prefab: drawn by the view. Environment, Lut, Font: made on the
+		// Skeleton, Clip, Mesh: posed by the animation module. Material (a sphere) and Prefab: drawn by the view. Effect (.wfx): played for a moment in the view,
 		// CPU from the cooked data, no view.
-		enum class Kind { Skeleton, Clip, Mesh, Material, Prefab, Environment, Lut, Font };
+		enum class Kind { Skeleton, Clip, Mesh, Material, Prefab, Environment, Lut, Font, Effect };
 		enum class State { New, Queued, Working, Ready, Failed };
+		// The kind of a file, nothing for a kind without a thumbnail (asset_kinds.h tells what the file is).
+		static std::optional<Kind> thumbnail_kind(const std::filesystem::path& source);
 
 		struct Entry
 		{
@@ -95,18 +95,23 @@ namespace wiwa
 			std::unique_ptr<PreviewModel> Model{}; // Prefab
 			entt::entity Entity = entt::null;
 			int Frames = 0;
+			std::chrono::steady_clock::time_point Started = std::chrono::steady_clock::now(); // a job also ends by the clock: frames can be a millisecond each
 			int Settled = 0;
 			int Attempts = 0;
 			bool Posed = false;
 			bool ReadBack = false;
+			float EffectTime = 0.0f;           // Effect: the second of its play the picture shows
+			float EffectRadius = 1.0f;         // and the size the camera frames
+			bool EffectStopped = false;       // emission is over: only what is in the air is drawn
 		};
 
-		Entry& entry_for(const std::filesystem::path& source);
+		Entry& entry_for(const std::filesystem::path& source, Kind kind);
 		bool make_key(Entry& entry);
 		void begin(Entry& entry);
 		void step_job();
 		void step_static_job();   // Material and Prefab
 		void step_cpu_job();      // Environment, Lut, Font
+		void step_effect_job();   // Effect
 		void render_job(const RenderCamera& camera, int settleFrames);
 		void end_job();
 		bool load_from_disk(Entry& entry);
@@ -126,6 +131,7 @@ namespace wiwa
 		std::optional<Job> m_Job{};
 		Ref<Scene> m_Scene{};
 		RenderView m_View{};
+		ViewMode m_ViewMode = ViewMode::OneShot; // an effect is played in a continuous view (its simulation needs every frame), the rest in a one-shot one
 		int m_Frame = 0;
 		int m_KeysThisFrame = 0;
 	};

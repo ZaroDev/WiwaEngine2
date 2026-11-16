@@ -1,5 +1,9 @@
 #include "viewport_panel.h"
 
+#include <audio/audio_module.h>
+
+#include "../audio/audio_edit_model.h"
+
 #include <algorithm>
 #include <optional>
 
@@ -8,6 +12,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <asset_editor/asset_kinds.h>
 #include <assets/asset_manager.h>
 #include <core/engine.h>
 #include <gizmo/viewport_selection.h>
@@ -34,14 +39,18 @@ namespace
 
 	bool is_prefab_file(const std::filesystem::path& path)
 	{
-		const std::filesystem::path e = path.extension();
-		return e == ".glb" || e == ".gltf" || e == ".fbx" || e == ".FBX";
+		return wiwa::is_model_file(path);
 	}
 }
 
 ViewportPanel::ViewportPanel(wiwa::SceneEditor& editor, Ref<ViewOwner> owner, Ref<EditorSection> section)
 	: Panel("Viewport", PanelCategory::Window), m_Editor(editor), m_Owner(std::move(owner)), m_Section(std::move(section)), m_SceneGizmos(*wiwa::Engine::get().get_module<wiwa::AssetManager>())
 {
+	m_SceneGizmos.set_audio_radius([](const wiwa::AudioEmitter& emitter)
+	{
+		wiwa::AudioModule* audio = wiwa::Engine::get().get_module<wiwa::AudioModule>();
+		return audio != nullptr ? wiwa::audio_attenuation_radius(emitter.Event, emitter.AttenuationScale, audio->bank_infos()) : 0.0f;
+	});
 }
 
 // ImGuizmo hands back the entity's new world matrix; the operation in use decides which field of the local Transform it becomes.
@@ -209,6 +218,10 @@ void ViewportPanel::on_draw()
 				changed |= ImGui::Checkbox("World axes", &settings.Axes);
 				changed |= ImGui::Checkbox("Lights", &settings.Lights);
 				changed |= ImGui::Checkbox("Cameras", &settings.Cameras);
+				changed |= ImGui::Checkbox("Decals", &settings.Decals);
+				changed |= ImGui::Checkbox("Particle systems", &settings.Particles);
+				changed |= ImGui::Checkbox("Audio emitters", &settings.Audio);
+				changed |= ImGui::Checkbox("Perception ranges", &settings.Perception);
 				changed |= ImGui::Checkbox("Bounds of the selection", &settings.Bounds);
 				ImGui::Separator();
 				changed |= ImGui::Checkbox("Outline the selection", &settings.Outline.Enabled);
@@ -288,8 +301,28 @@ void ViewportPanel::on_draw()
 			}
 
 			m_SceneGizmos.draw(render->get_debug_draw(), m_Editor.scene(), m_Editor.selected(), m_Section->gizmos(), sceneView);
+			if (m_OverlayHook)
+			{
+				m_OverlayHook(render->get_debug_draw());
+			}
 
-			if (clicked && !gizmoHasMouse)
+			// A tool may want the click as a ray into the scene (the navigation path test); the camera maps the pixel to clip space with depth 0 at the near plane.
+			bool rayConsumed = false;
+			if (clicked && !gizmoHasMouse && m_RayClickHook && m_UseEditorCamera)
+			{
+				const glm::vec2 ndc(2.0f * (io.MousePos.x - imageMin.x) / std::max(size.x, 1.0f) - 1.0f, 1.0f - 2.0f * (io.MousePos.y - imageMin.y) / std::max(size.y, 1.0f));
+				const glm::mat4 inverse = glm::inverse(sceneView.Projection * sceneView.View);
+				const glm::vec4 nearPoint = inverse * glm::vec4(ndc, 0.0f, 1.0f);
+				const glm::vec4 farPoint = inverse * glm::vec4(ndc, 1.0f, 1.0f);
+				if (nearPoint.w != 0.0f && farPoint.w != 0.0f)
+				{
+					const glm::vec3 origin = glm::vec3(nearPoint) / nearPoint.w;
+					const glm::vec3 target = glm::vec3(farPoint) / farPoint.w;
+					rayConsumed = m_RayClickHook(origin, target - origin, io.KeyShift);
+				}
+			}
+
+			if (clicked && !gizmoHasMouse && !rayConsumed)
 			{
 				WI_LOG(Info, "Viewport", "click at ({0:.0f}, {1:.0f}): asking the renderer what is there", io.MousePos.x - imageMin.x, io.MousePos.y - imageMin.y);
 				const float x = std::max(io.MousePos.x - imageMin.x, 0.0f) * scale;

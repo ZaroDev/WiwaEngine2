@@ -1,6 +1,9 @@
 #ifndef COMMON_HLSLI
 #define COMMON_HLSLI
 
+// The numbers C++ and HLSL share (cluster grid, shadow map sizes, thread group sizes, ...).
+#include "../../../engine/src/renderer/render_constants.h"
+
 // Shared by every shader. The same HLSL is compiled two ways:
 //   D3D11:  D3DCompile at load time (shader model 5.0, DXBC)
 //   Vulkan: DXC with -spirv at build time, with VULKAN defined

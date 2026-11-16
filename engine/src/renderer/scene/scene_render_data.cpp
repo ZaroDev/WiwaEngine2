@@ -89,11 +89,15 @@ namespace wiwa
 		layout.addItem(nvrhi::BindingLayoutItem::PushConstants(1, DRAW_CONSTANTS_BYTES));
 		m_FrameLayout = device->createBindingLayout(layout);
 
-		// Slot t15 of set 2 on Vulkan (see ao_layout()).
+		// Slots t24 (the occlusion) and t25..t28 (the decal targets) of set 2 on Vulkan (see ao_layout()). They sit together past the other sets' registers: on D3D11 the register range of a layout may not enclose that of another.
 		nvrhi::BindingLayoutDesc aoLayout;
 		aoLayout.visibility = nvrhi::ShaderType::Pixel;
 		aoLayout.bindingOffsets = make_zero_binding_offsets();
-		aoLayout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(15));
+		aoLayout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(24));
+		for (u32 slot = 25; slot <= 28; slot++)
+		{
+			aoLayout.addItem(nvrhi::BindingLayoutItem::Texture_SRV(slot)); // the decal targets: albedo, normal, ORM, emissive
+		}
 		m_AoLayout = device->createBindingLayout(aoLayout);
 
 		// t22 and t23 of the skin set (scene_common.hlsli): vertex shaders only
@@ -179,7 +183,24 @@ namespace wiwa
 		dummyAo.debugName = "AO stand-in";
 		m_DummyAo = device->createTexture(dummyAo);
 
-		return m_FrameLayout && m_ConstantBuffer && m_LightBuffer && m_ClusterCounts && m_ClusterIndices && m_ShadowSampler && m_EnvironmentSampler && m_DummyCube && m_DummyBrdf && m_DummyAo && m_AoLayout && m_DummyCascadeMap && m_DummySpotAtlas;
+		const nvrhi::Format decalFormats[4] = { nvrhi::Format::SRGBA8_UNORM, nvrhi::Format::RGBA8_UNORM, nvrhi::Format::RGBA8_UNORM, nvrhi::Format::R11G11B10_FLOAT };
+		const char* decalNames[4] = { "Decal albedo stand-in", "Decal normal stand-in", "Decal ORM stand-in", "Decal emissive stand-in" };
+		bool decalDummies = true;
+		for (u32 i = 0; i < 4; i++)
+		{
+			nvrhi::TextureDesc dummyDecal;
+			dummyDecal.width = 1;
+			dummyDecal.height = 1;
+			dummyDecal.format = decalFormats[i];
+			dummyDecal.isShaderResource = true;
+			dummyDecal.initialState = nvrhi::ResourceStates::ShaderResource;
+			dummyDecal.keepInitialState = true;
+			dummyDecal.debugName = decalNames[i];
+			m_DummyDecal[i] = device->createTexture(dummyDecal);
+			decalDummies = decalDummies && m_DummyDecal[i] != nullptr;
+		}
+
+		return decalDummies && m_FrameLayout && m_ConstantBuffer && m_LightBuffer && m_ClusterCounts && m_ClusterIndices && m_ShadowSampler && m_EnvironmentSampler && m_DummyCube && m_DummyBrdf && m_DummyAo && m_AoLayout && m_DummyCascadeMap && m_DummySpotAtlas;
 	}
 
 	void SceneRenderData::shutdown()
@@ -195,6 +216,11 @@ namespace wiwa
 		m_DummyCube = nullptr;
 		m_DummyBrdf = nullptr;
 		m_DummyAo = nullptr;
+		for (nvrhi::TextureHandle& texture : m_DummyDecal)
+		{
+			texture = nullptr;
+		}
+		m_BoundDecalAlbedo = nullptr;
 		m_AoBindings = nullptr;
 		m_AoLayout = nullptr;
 		m_FrameEnvironment = nullptr;
@@ -218,6 +244,9 @@ namespace wiwa
 		m_Opaque.clear();
 		m_Masked.clear();
 		m_Blended.clear();
+		m_VisibleDecals.clear();
+		m_DroppedDecals = 0;
+		m_DecalsActive = false;
 		m_Lights.clear();
 		m_ShadowViews.clear();
 		m_NeedCascades = false;
@@ -463,6 +492,7 @@ namespace wiwa
 					item.IndexCount = primitive.IndexCount;
 					item.BaseVertex = primitive.BaseVertex;
 					item.DoubleSided = (record.Flags & MATERIAL_DOUBLE_SIDED_BIT) != 0;
+					item.ReceivesDecals = instance.ReceivesDecals;
 
 					if (record.Flags & MATERIAL_ALPHA_BLEND_BIT)
 					{
@@ -524,8 +554,8 @@ namespace wiwa
 				const u32 tile = spotShadows++;
 				const glm::mat4 matrix = compute_spot_shadow_matrix(*sources[i], tanHalf);
 				constants.ShadowMatrices[MAX_CASCADES + tile] = matrix;
-				constants.SpotShadowRects[tile] = glm::vec4(static_cast<float>((tile % 4) * SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE,
-					static_cast<float>((tile / 4) * SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE, static_cast<float>(SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE,
+				constants.SpotShadowRects[tile] = glm::vec4(static_cast<float>((tile % SPOT_GRID) * SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE,
+					static_cast<float>((tile / SPOT_GRID) * SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE, static_cast<float>(SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE,
 					static_cast<float>(SPOT_TILE_SIZE) / SPOT_ATLAS_SIZE);
 				constants.SpotShadowInfo[tile] = glm::vec4(tanHalf, 0.0f, 0.0f, 0.0f);
 				m_Lights[i].ShadowIndex = tile + 1;
@@ -543,6 +573,44 @@ namespace wiwa
 			std::sort(m_Opaque.begin(), m_Opaque.end(), draw_order);
 			std::sort(m_Masked.begin(), m_Masked.end(), draw_order);
 			std::sort(m_Blended.begin(), m_Blended.end(), [](const DrawItem& a, const DrawItem& b) { return a.Depth > b.Depth; });
+
+			// Decals: the ones whose box the camera may see, in the order they are drawn (the higher SortOrder wins an overlap).
+			if (m_Flags.Decals)
+			{
+				const std::vector<RenderDecal>& decals = scene.decals();
+				for (u32 slot = 0; slot < decals.size(); slot++)
+				{
+					const RenderDecal& decal = decals[slot];
+					if (!decal.Alive || !decal.Material.valid() || decal.Opacity <= 0.0f || decal.Channels == 0u)
+					{
+						continue;
+					}
+					if (decal.Size.x <= 0.0f || decal.Size.y <= 0.0f || decal.Size.z <= 0.0f)
+					{
+						continue;
+					}
+					if (!visible(frustum, decal.World, -decal.Size * 0.5f, decal.Size * 0.5f))
+					{
+						continue;
+					}
+					m_VisibleDecals.push_back(VisibleDecal{ slot, cache.get_material_slot(decal.Material) });
+				}
+				std::sort(m_VisibleDecals.begin(), m_VisibleDecals.end(), [&](const VisibleDecal& a, const VisibleDecal& b)
+					{
+						return decals[a.Slot].SortOrder != decals[b.Slot].SortOrder ? decals[a.Slot].SortOrder < decals[b.Slot].SortOrder : a.Slot < b.Slot;
+					});
+				if (m_VisibleDecals.size() > MAX_VISIBLE_DECALS)
+				{
+					m_DroppedDecals = static_cast<u32>(m_VisibleDecals.size()) - MAX_VISIBLE_DECALS;
+					m_VisibleDecals.resize(MAX_VISIBLE_DECALS);
+					const auto now = std::chrono::steady_clock::now();
+					if (now - m_LastDecalWarning > std::chrono::seconds(5))
+					{
+						m_LastDecalWarning = now;
+						WI_LOG(Warning, "Renderer", "more than {0} decals are visible: {1} are not drawn", MAX_VISIBLE_DECALS, m_DroppedDecals);
+					}
+				}
+			}
 		}
 		m_Constants = constants;
 	}
@@ -697,6 +765,15 @@ namespace wiwa
 			commandList->writeTexture(m_DummyAo, 0, 0, &white, 1);
 			m_EnvironmentDummiesWritten = true;
 		}
+		if (!m_DummyDecalWritten)
+		{
+			const u8 zeros[4] = {};
+			for (nvrhi::TextureHandle& texture : m_DummyDecal)
+			{
+				commandList->writeTexture(texture, 0, 0, zeros, 4);
+			}
+			m_DummyDecalWritten = true;
+		}
 
 		commandList->writeBuffer(m_ConstantBuffer, &m_Constants, sizeof(m_Constants));
 		if (!m_Lights.empty())
@@ -712,12 +789,42 @@ namespace wiwa
 		nvrhi::ITexture* brdf = (m_Environments != nullptr && m_Environments->brdf_lut() != nullptr) ? m_Environments->brdf_lut() : m_DummyBrdf.Get();
 		m_AoActive = m_Settings.Ao.Enabled && m_HasCamera && m_Viewport != nullptr && m_Constants.ClusterParams.z < 0.5f; // not for an orthographic camera
 		nvrhi::ITexture* ao = m_AoActive ? m_Viewport->ao() : m_DummyAo.Get();
-		if (m_AoBindings == nullptr || m_BoundAo != ao)
+
+		// The decal targets exist while decals are visible, and for a couple of seconds after (so a camera turning back does not make them again).
+		m_DecalsActive = false;
+		if (m_Viewport != nullptr)
+		{
+			if (!m_VisibleDecals.empty() && m_Viewport->ensure_decal_targets(m_Device))
+			{
+				m_DecalsActive = true;
+				m_FramesWithoutDecals = 0;
+			}
+			else if (++m_FramesWithoutDecals > DECAL_TARGET_LINGER_FRAMES)
+			{
+				m_Viewport->release_decal_targets();
+			}
+		}
+		const bool realDecals = m_DecalsActive; // the stand-ins also while the targets linger: nothing draws into them, they would hold last frame's decals
+		nvrhi::ITexture* decalTextures[4] = { m_DummyDecal[0], m_DummyDecal[1], m_DummyDecal[2], m_DummyDecal[3] };
+		if (realDecals)
+		{
+			decalTextures[0] = m_Viewport->decal_albedo();
+			decalTextures[1] = m_Viewport->decal_normal();
+			decalTextures[2] = m_Viewport->decal_orm();
+			decalTextures[3] = m_Viewport->decal_emissive();
+		}
+		if (m_AoBindings == nullptr || m_BoundAo != ao || m_BoundDecalAlbedo != decalTextures[0] || m_BoundDecalGeneration != (realDecals ? m_Viewport->decal_generation() : 0u))
 		{
 			nvrhi::BindingSetDesc aoSet;
-			aoSet.addItem(nvrhi::BindingSetItem::Texture_SRV(15, ao));
+			aoSet.addItem(nvrhi::BindingSetItem::Texture_SRV(24, ao));
+			for (u32 i = 0; i < 4; i++)
+			{
+				aoSet.addItem(nvrhi::BindingSetItem::Texture_SRV(25 + i, decalTextures[i]));
+			}
 			m_AoBindings = m_Device->createBindingSet(aoSet, m_AoLayout);
 			m_BoundAo = ao;
+			m_BoundDecalAlbedo = decalTextures[0];
+			m_BoundDecalGeneration = realDecals ? m_Viewport->decal_generation() : 0u;
 		}
 		if (m_FrameBindings == nullptr || m_BoundInstanceBuffer != m_InstanceBuffer.Get() || m_BoundMaterialBuffer != materials
 			|| m_BoundCascades != cascades || m_BoundAtlas != atlas || m_BoundCube != cube || m_BoundBrdf != brdf)

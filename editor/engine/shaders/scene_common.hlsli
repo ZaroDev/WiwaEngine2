@@ -41,13 +41,13 @@ cbuffer FrameBuffer : register(b0)
 	float4 ViewportSize;    // width, height, 1 / width, 1 / height
 	float4 ClusterParams;   // x = slice scale, y = slice bias (slice = log2(viewDepth) * x + y), z = 1 for an orthographic camera, w = 1 to skip the clusters (debug)
 	uint4 LightInfo;        // x = number of lights in uLights
-	float4x4 ShadowMatrices[8]; // 0..3 the sun's cascades, 4..7 the shadowed spot lights
+	float4x4 ShadowMatrices[WI_MAX_CASCADES + WI_MAX_SPOT_SHADOWS]; // 0..3 the sun's cascades, 4..7 the shadowed spot lights
 	float4 CascadeSplits;   // view depth at which each cascade ends
 	float4 CascadeTexels;   // world size of a texel of each cascade
 	float4 ShadowParams;    // x = 1 when the sun casts shadows, y = cascade count, z = depth bias, w = normal bias (texels)
 	float4 ShadowParams2;   // x = spot light depth bias
-	float4 SpotShadowRects[4]; // the light's tile in the atlas: offset xy, scale zw
-	float4 SpotShadowInfo[4];  // x = tan(half the cone angle)
+	float4 SpotShadowRects[WI_MAX_SPOT_SHADOWS]; // the light's tile in the atlas: offset xy, scale zw
+	float4 SpotShadowInfo[WI_MAX_SPOT_SHADOWS];  // x = tan(half the cone angle)
 	float4 EnvSH[9];        // the environment's diffuse light as spherical harmonics (rgb in xyz)
 	float4 EnvParams;       // x = 1 when an environment lights the scene, y = highest mip of the cube, z = brightness * ambient intensity, w = 1 when the BRDF table exists
 	float4 EnvRotation;     // x = cos, y = sin of the rotation of the environment about +Y, z = the brightness of the sky seen
@@ -62,14 +62,14 @@ cbuffer FrameBuffer : register(b0)
 	float4 JitterInfo;            // xy = the jitter in pixels, z = 1 when TAA jitters the projection, w = 1 when the previous camera is a history
 };
 
-// The cluster grid the lights are sorted into: screen tiles times exponential depth slices. Mirrors the constants in C++.
-static const uint CLUSTERS_X = 16;
-static const uint CLUSTERS_Y = 9;
-static const uint CLUSTERS_Z = 24;
-static const uint MAX_LIGHTS_PER_CLUSTER = 64;
-static const float CASCADE_MAP_SIZE = 2048.0;
-static const float SPOT_TILE_SIZE = 1024.0;
-static const float SPOT_ATLAS_SIZE = 4096.0;
+// The cluster grid the lights are sorted into (screen tiles times exponential depth slices) and the shadow map sizes: render_constants.h.
+static const uint CLUSTERS_X = WI_CLUSTERS_X;
+static const uint CLUSTERS_Y = WI_CLUSTERS_Y;
+static const uint CLUSTERS_Z = WI_CLUSTERS_Z;
+static const uint MAX_LIGHTS_PER_CLUSTER = WI_MAX_LIGHTS_PER_CLUSTER;
+static const float CASCADE_MAP_SIZE = (float)WI_CASCADE_MAP_SIZE;
+static const float SPOT_TILE_SIZE = (float)WI_SPOT_TILE_SIZE;
+static const float SPOT_ATLAS_SIZE = (float)WI_SPOT_ATLAS_SIZE;
 
 static const uint LIGHT_POINT = 0;
 static const uint LIGHT_SPOT = 1;
@@ -189,7 +189,7 @@ struct SkinVertex
 VK_BINDING(22, SKIN_SET) StructuredBuffer<float4> uPalettes : register(t22);
 VK_BINDING(23, SKIN_SET) StructuredBuffer<SkinVertex> uSkinVertices : register(t23);
 
-static const uint NO_PALETTE = 0xFFFFFFFFu;
+static const uint NO_PALETTE = WI_NO_PALETTE;
 
 // Where the vertex is in the page's buffers, which uSkinVertices is parallel to.
 uint SkinVertexIndex(MeshVertexInput input)

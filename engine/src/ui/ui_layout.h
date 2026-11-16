@@ -31,6 +31,14 @@ namespace wiwa
 		bool Valid = false;
 	};
 
+	// What a Video widget needs to draw the picture that is playing in it: the id of its texture in the TextureRegistry
+	// (renderer/view/view_types.h: view_video_texture_id) and the size of the picture in pixels.
+	struct UiVideoView
+	{
+		u32 Texture = 0;
+		glm::vec2 Size{ 0.0f };
+	};
+
 	struct UiLayoutInput
 	{
 		glm::vec2 CanvasSize{ 0.0f }; // pixels
@@ -43,6 +51,8 @@ namespace wiwa
 		std::function<std::optional<glm::vec2>(const AssetRef&)> TextureSize{};
 		// The texture id (renderer/view/view_types.h: view_texture_id) of the offscreen view with this name, or 0 when there is none (a ViewImage then draws nothing).
 		std::function<u32(std::string_view)> ViewTexture{};
+		// The picture playing in the Video widget with this id, or nothing (the widget then fills its rect with its LetterboxColor).
+		std::function<std::optional<UiVideoView>(UiId)> Video{};
 	};
 
 	// Per widget, by its index in UiPanelData::Widgets.

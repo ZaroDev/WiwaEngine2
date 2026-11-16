@@ -34,7 +34,34 @@ namespace wiwa
 
 		registry.register_component(WI_COMPONENT(MeshRenderer,
 			WI_FIELD_META(Mesh, FieldMeta::asset(AssetType::Mesh)),
-			WI_FIELD_META(Materials, FieldMeta::asset(AssetType::Material))));
+			WI_FIELD_META(Materials, FieldMeta::asset(AssetType::Material)),
+			WI_FIELD(ReceivesDecals)));
+
+		registry.register_component(WI_COMPONENT(Decal,
+			WI_FIELD_META(Material, FieldMeta::asset(AssetType::Material)),
+			WI_FIELD(Size),
+			WI_FIELD_META(Opacity, FieldMeta::range(0.0f, 1.0f)),
+			WI_FIELD(AffectColor),
+			WI_FIELD(AffectNormal),
+			WI_FIELD(AffectOrm),
+			WI_FIELD(AffectEmissive),
+			WI_FIELD_META(NormalAngleFadeStart, FieldMeta::range(0.0f, 90.0f)),
+			WI_FIELD_META(NormalAngleFadeEnd, FieldMeta::range(0.0f, 90.0f)),
+			WI_FIELD_META(EdgeFade, FieldMeta::range(0.0f, 0.5f)),
+			WI_FIELD(SortOrder),
+			WI_FIELD(FadeInTime),
+			WI_FIELD(Lifetime),
+			WI_FIELD(FadeOutTime)));
+
+		registry.register_component(WI_COMPONENT(ParticleSystem,
+			WI_FIELD_META(Effect, FieldMeta::asset(AssetType::ParticleEffect)),
+			WI_FIELD(PlayOnStart),
+			WI_FIELD(Looping),
+			WI_FIELD_META(TimeScale, FieldMeta::range(0.0f, 10.0f)),
+			WI_FIELD(SortBias),
+			WI_FIELD_META(ColorTint, FieldMeta::color()),
+			WI_FIELD_META(SizeScale, FieldMeta::range(0.0f, 100.0f)),
+			WI_FIELD_META(RateScale, FieldMeta::range(0.0f, 100.0f))));
 
 		// The overrides are not a field: the record layer saves and applies them.
 		registry.register_component(WI_COMPONENT(PrefabInstance,
@@ -111,6 +138,77 @@ namespace wiwa
 			WI_FIELD(Enabled),
 			WI_FIELD_META(BoundsPadding, FieldMeta::range(0.0f, 100.0f)),
 			WI_FIELD_META(Graph, FieldMeta::asset(AssetType::AnimationGraph))));
+
+		registry.register_component(WI_COMPONENT(AudioListener,
+			WI_FIELD(Active)));
+
+		registry.register_component(WI_COMPONENT(AudioEmitter,
+			WI_FIELD_META(Event, FieldMeta::audio_event()),
+			WI_FIELD(PlayOnStart),
+			WI_FIELD_META(AttenuationScale, FieldMeta::range(0.01f, 100.0f))));
+
+		registry.register_component(WI_COMPONENT(NavMeshVolume,
+			WI_FIELD_META(NavMesh, FieldMeta::asset(AssetType::NavMesh)),
+			WI_FIELD_META(Size, FieldMeta::range(0.5f, 10000.0f)),
+			WI_FIELD_META(AgentRadius, FieldMeta::range(0.05f, 10.0f)),
+			WI_FIELD_META(AgentHeight, FieldMeta::range(0.2f, 20.0f)),
+			WI_FIELD_META(AgentMaxClimb, FieldMeta::range(0.0f, 5.0f)),
+			WI_FIELD_META(AgentMaxSlope, FieldMeta::range(0.0f, 89.0f)),
+			WI_FIELD_META(CellSize, FieldMeta::range(0.05f, 2.0f)),
+			WI_FIELD_META(CellHeight, FieldMeta::range(0.02f, 2.0f)),
+			WI_FIELD_META(RegionMinSize, FieldMeta::range(0.0f, 150.0f)),
+			WI_FIELD_META(RegionMergeSize, FieldMeta::range(0.0f, 150.0f)),
+			WI_FIELD_META(EdgeMaxLength, FieldMeta::range(0.0f, 50.0f)),
+			WI_FIELD_META(EdgeMaxError, FieldMeta::range(0.1f, 3.0f)),
+			WI_FIELD_META(VertsPerPoly, FieldMeta::range(3.0f, 6.0f)),
+			WI_FIELD_META(DetailSampleDist, FieldMeta::range(0.0f, 16.0f)),
+			WI_FIELD_META(DetailSampleMaxError, FieldMeta::range(0.0f, 16.0f)),
+			WI_FIELD_META(TileSize, FieldMeta::range(16.0f, 512.0f)),
+			WI_FIELD(LayerMask),
+			WI_FIELD(Enabled)));
+
+		registry.register_component(WI_COMPONENT(NavAreaTag,
+			WI_FIELD_META(Area, FieldMeta::nav_area({ "NotWalkable", "Walkable", "Mud", "Water", "Custom0", "Custom1", "Custom2", "Custom3", "Area8", "Area9", "Area10", "Area11", "Area12", "Area13", "Area14", "Area15" }))));
+
+		registry.register_component(WI_COMPONENT(NavAgent,
+			WI_FIELD_META(Speed, FieldMeta::range(0.0f, 100.0f)),
+			WI_FIELD_META(Acceleration, FieldMeta::range(0.1f, 200.0f)),
+			WI_FIELD_META(Radius, FieldMeta::range(0.05f, 10.0f)),
+			WI_FIELD_META(Height, FieldMeta::range(0.2f, 20.0f)),
+			WI_FIELD_META(StoppingDistance, FieldMeta::range(0.0f, 10.0f)),
+			WI_FIELD_META(AvoidanceQuality, FieldMeta::range(0.0f, 3.0f)),
+			WI_FIELD_META(SeparationWeight, FieldMeta::range(0.0f, 20.0f)),
+			WI_FIELD(AreaMask),
+			WI_FIELD(AutoRepath),
+			WI_FIELD(DriveTransform)));
+
+		registry.register_component(WI_COMPONENT(AIController,
+			WI_FIELD_META(Tree, FieldMeta::asset(AssetType::BehaviorTree)),
+			WI_FIELD(Enabled),
+			WI_FIELD_META(TickRate, FieldMeta::range(0.0f, 120.0f)),
+			WI_FIELD(Seed),
+			WI_FIELD(Overrides)));
+
+		registry.register_component(WI_COMPONENT(Perceiver,
+			WI_FIELD_META(SightRange, FieldMeta::range(0.0f, 1000.0f)),
+			WI_FIELD_META(SightAngle, FieldMeta::range(0.0f, 360.0f)),
+			WI_FIELD(EyeOffset),
+			WI_FIELD(SightLayerMask),
+			WI_FIELD_META(HearingRadius, FieldMeta::range(0.0f, 1000.0f)),
+			WI_FIELD(Team),
+			WI_FIELD(TargetTeams),
+			WI_FIELD_META(Interval, FieldMeta::range(0.0f, 10.0f)),
+			WI_FIELD(SeenKey),
+			WI_FIELD(CanSeeKey),
+			WI_FIELD(LastSeenKey),
+			WI_FIELD(HeardKey),
+			WI_FIELD(HeardKindKey)));
+
+		registry.register_component(WI_COMPONENT(Perceivable,
+			WI_FIELD(Kind),
+			WI_FIELD(Team),
+			WI_FIELD(AimOffset),
+			WI_FIELD(Visible)));
 
 		registry.register_component(WI_COMPONENT(AnimationSocket,
 			WI_FIELD(Joint),

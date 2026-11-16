@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 
+#include <imgui.h>
+
 #include <core/common.h>
 #include <math/math.h>
 #include <IconFontCppHeaders/FontIcons/IconsForkAwesome.h>
@@ -40,8 +42,32 @@ public:
 		m_Open = !m_Open;
 	}
 
+	// How many times on_draw ran begin_window (counted even while the window is a hidden tab: a smoke check wants to know the panel was run).
+	wiwa::u32 frames_drawn() const { return m_Frames; }
+	// Brings the window to the front of its dock on the next frame (a smoke check wants the contents drawn).
+	void request_focus() { m_Focus = true; }
+
 protected:
+	// The shared start of a panel's on_draw: counts the frame, honours request_focus, sets the first-use position and size and calls ImGui::Begin.
+	// The caller calls ImGui::End either way.
+	bool begin_window(ImVec2 pos, ImVec2 size)
+	{
+		m_Frames++;
+		if (m_Focus)
+		{
+			ImGui::SetNextWindowFocus();
+			m_Focus = false;
+		}
+		ImGui::SetNextWindowPos(pos, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(size, ImGuiCond_FirstUseEver);
+		return ImGui::Begin(get_name(), &m_Open);
+	}
+
 	std::string m_Name;
 	bool m_Open = true;
 	PanelCategory m_Category;
+
+private:
+	wiwa::u32 m_Frames = 0;
+	bool m_Focus = false;
 };

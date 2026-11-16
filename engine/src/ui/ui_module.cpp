@@ -139,7 +139,7 @@ namespace wiwa
 			}
 			seen.insert(id.Guid);
 			entities[entity] = id.Guid;
-			entries.push_back(Entry{ canvas.SortOrder, static_cast<u32>(entt::to_integral(entity)), Active{ it->second.get(), canvas.Visible } });
+			entries.push_back(Entry{ canvas.SortOrder, static_cast<u32>(entt::to_integral(entity)), Active{ it->second.get(), canvas.Visible, id.Guid } });
 		}
 
 		for (auto it = m_Instances.begin(); it != m_Instances.end();)
@@ -230,6 +230,19 @@ namespace wiwa
 			item.Instance->events().clear();
 			item.Instance->poll(m_Loader);
 		}
+		if (m_VideoEvents)
+		{
+			for (const UiVideoEvent& finished : m_VideoEvents())
+			{
+				for (const Active& item : active)
+				{
+					if (item.Canvas == finished.Canvas)
+					{
+						item.Instance->events().push_back(UiEvent{ UiEventKind::Finished, finished.Widget, 0.0f, finished.Skipped, finished.Failed });
+					}
+				}
+			}
+		}
 
 		const bool hasArea = canvasSize.x > 0.0f && canvasSize.y > 0.0f;
 		UiInputFrame input = m_Input != nullptr ? m_Input->poll() : UiInputFrame{};
@@ -292,8 +305,14 @@ namespace wiwa
 				continue;
 			}
 
-			const UiLayoutResult layout = compute_layout(instance.data(), layoutInput);
-			append_panel(out, instance.data(), instance.states(), layout, layoutInput);
+			// the widgets of this canvas ask for their pictures by canvas
+			UiLayoutInput canvasInput = layoutInput;
+			if (m_VideoProvider)
+			{
+				canvasInput.Video = [this, canvas = item.Canvas](UiId widget) { return m_VideoProvider(canvas, widget); };
+			}
+			const UiLayoutResult layout = compute_layout(instance.data(), canvasInput);
+			append_panel(out, instance.data(), instance.states(), layout, canvasInput);
 		}
 	}
 

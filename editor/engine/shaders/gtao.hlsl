@@ -9,7 +9,7 @@
 // pattern away. The search reads the distances of gtao_depth.hlsl: the farther a sample is from the pixel, the
 // coarser the mip level it is read from (cheaper, and a wide search does not alias).
 
-#define GROUP_SIZE 8
+#define GROUP_SIZE WI_GTAO_GROUP_SIZE
 
 // Mirrors AoData in ao_pass.h.
 cbuffer AoData : register(b0)

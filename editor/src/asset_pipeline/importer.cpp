@@ -1,9 +1,10 @@
 #include <editor_common.h>
 #include "importer.h"
 
-#include "asset_database.h"
+#include <assets/asset_log.h>
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include "asset_database.h"
+#include "file_utils.h"
 
 namespace wiwa
 {
@@ -117,6 +118,28 @@ namespace wiwa
 	std::optional<std::vector<std::byte>> ImportContext::read_cooked_data(AssetGuid guid, AssetType type) const
 	{
 		return m_Database.read_cooked_payload(guid, type);
+	}
+
+	std::optional<std::vector<std::byte>> ImportContext::read_source(bool allowEmpty)
+	{
+		std::optional<std::vector<std::byte>> bytes = read_binary_file(m_Source);
+		if (!bytes || (!allowEmpty && bytes->empty()))
+		{
+			WI_ASSET_LOG(Error, "Cannot read {0}", m_Source.string());
+			return std::nullopt;
+		}
+		return bytes;
+	}
+
+	bool ImportContext::depend_on(AssetGuid guid, const char* what)
+	{
+		if (const std::optional<std::filesystem::path> path = path_of(guid))
+		{
+			import_dependency(*path);
+			return true;
+		}
+		warn(std::string(what) + " it names (" + guid.to_string() + ") was not found");
+		return false;
 	}
 
 	void ImportContext::warn(const std::string& message)

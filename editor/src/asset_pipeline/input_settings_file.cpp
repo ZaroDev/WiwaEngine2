@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "input_settings_file.h"
+#include <core/file_io.h>
 
 #include <fstream>
 #include <sstream>
@@ -78,24 +79,7 @@ namespace wiwa
 
 	bool save_input_settings(const std::filesystem::path& path, const InputProjectSettings& settings, std::string& error)
 	{
-		std::filesystem::path temp = path;
-		temp += ".tmp";
-		{
-			std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-			file << input_settings_to_text(settings);
-			if (!file)
-			{
-				error = "cannot write " + temp.string();
-				return false;
-			}
-		}
-		std::error_code rename;
-		std::filesystem::rename(temp, path, rename);
-		if (rename)
-		{
-			error = "cannot replace " + path.string();
-			return false;
-		}
-		return true;
+		const std::string text = input_settings_to_text(settings);
+		return write_file_atomic(path, text.data(), text.size(), error);
 	}
 }

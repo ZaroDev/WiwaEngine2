@@ -254,6 +254,63 @@ function camera.primary() end
 ---@param entity Entity
 function camera.set_primary(entity) end
 
+---@class DecalOptions
+---@field material Asset the material (.wmat) to project: its base color, normal, ORM and emissive
+---@field position? vec3 where on the surface (default the origin)
+---@field normal? vec3 the surface's normal: the decal projects along its opposite (default +Z)
+---@field size? vec3 the box: width, height and the depth the decal reaches through the surface (default 1, 1, 1)
+---@field opacity? number 0 to 1 (default 1)
+---@field lifetime? number seconds at full opacity between the fades; 0 or none is permanent
+---@field fade_in? number seconds
+---@field fade_out? number seconds
+---@field sort_order? integer the higher draws later and wins overlaps
+---@field roll? number degrees about the normal
+---@field parent? Entity
+---@field name? string
+
+Decal = {}
+--- Makes an entity with a Decal that projects a material onto the surface at `position`; with a lifetime it fades and removes itself.
+---@param options DecalOptions
+---@return Entity
+function Decal.spawn(options) end
+
+---@class VfxOptions
+---@field effect Asset the particle effect (.wfx), from load_asset
+---@field position? vec3 where (default the origin); an offset from the joint when animator and joint are given
+---@field rotation? quat
+---@field scale? number|vec3
+---@field parent? Entity
+---@field name? string
+---@field looping? boolean true: plays until stopped or destroyed (default false: plays once and removes itself)
+---@field time_scale? number
+---@field params? table "color" (vec4), "size", "rate", "time_scale"
+---@field animator? Entity an entity with an Animator: place the effect at one of its joints
+---@field joint? string the joint of the animator
+
+Vfx = {}
+--- Plays a particle effect in a new entity that removes itself when the effect is over (an animation event of a footstep or a sword swing: pass animator and joint).
+---@param options VfxOptions
+---@return Entity
+function Vfx.spawn(options) end
+--- Starts the ParticleSystem of the entity (one that has finished starts over).
+---@param entity Entity
+function Vfx.play(entity) end
+--- Stops it spawning; the particles in the air live out their lives, or are discarded at once with clear.
+---@param entity Entity
+---@param clear? boolean
+function Vfx.stop(entity, clear) end
+--- Plays it from its beginning with none of the last play's particles left.
+---@param entity Entity
+function Vfx.restart(entity) end
+---@param entity Entity
+---@return boolean
+function Vfx.is_playing(entity) end
+--- "color" (vec4 or vec3), "size", "rate" (numbers of zero or more) or "time_scale".
+---@param entity Entity
+---@param name string
+---@param value number|vec3|vec4
+function Vfx.set_param(entity, name, value) end
+
 --------------------------------------------------------------------------------------------------------------------------------
 -- Physics
 --------------------------------------------------------------------------------------------------------------------------------
@@ -499,7 +556,11 @@ function input.save_bindings() end
 -- UI
 --------------------------------------------------------------------------------------------------------------------------------
 
----@alias UiEvent "click"|"value_changed"|"hover_enter"|"hover_exit"|"focus"
+---@alias UiEvent "click"|"value_changed"|"hover_enter"|"hover_exit"|"focus"|"finished"
+---@alias VideoState "idle"|"loading"|"playing"|"paused"|"ended"|"failed"
+---@class VideoFinishedInfo
+---@field skipped boolean a script stopped the video (video_stop)
+---@field failed boolean the video could not play, or broke
 ---@alias UiNav "up"|"down"|"left"|"right"|"submit"|"cancel"
 
 --- A widget of a UI panel as one canvas shows it. Reading a widget whose canvas is gone gives nil, and writing it does nothing. The
@@ -521,10 +582,11 @@ function input.save_bindings() end
 ---@field world_offset vec3 world units from the entity
 ---@field [string] any
 local UiWidget = {}
---- Calls `handler(self, ...)` when the widget raises the event. `self` is the script instance; `value_changed` also passes the new value.
+--- Calls `handler(self, ...)` when the widget raises the event. `self` is the script instance; `value_changed` also passes the new value, and
+--- `finished` (a Video widget's video ended, was stopped or failed) passes a table `{ skipped, failed }`.
 --- Call it from a hook (on_init, on_update, ...): the handler goes away with the script instance.
 ---@param event UiEvent
----@param handler fun(self: ScriptClass, value?: number)
+---@param handler fun(self: ScriptClass, value?: number|VideoFinishedInfo)
 function UiWidget:on(event, handler) end
 --- Removes this script's handlers for the event, or only `handler`.
 ---@param event UiEvent
@@ -532,6 +594,31 @@ function UiWidget:on(event, handler) end
 function UiWidget:off(event, handler) end
 --- Stops the widget following an entity.
 function UiWidget:clear_world_anchor() end
+
+--- Video widgets only (any other widget is an error; a widget whose canvas is gone reads nil and does nothing). One video plays at a time:
+--- playing another stops the first.
+--- Starts the video, or goes on from a pause, or starts again from the end. False when the widget is gone.
+---@return boolean
+function UiWidget:video_play() end
+--- Pauses the video. `video_play` goes on from there.
+function UiWidget:video_pause() end
+--- Stops the video and shows its first picture; `finished` is raised with `skipped = true`.
+function UiWidget:video_stop() end
+--- Moves the video to a time in seconds (clamped to its length); the picture waits for the first frame at that time.
+---@param seconds number
+function UiWidget:video_seek(seconds) end
+--- "idle", "loading" (the asset or the decoder is not ready), "playing", "paused", "ended" or "failed".
+---@return VideoState?
+function UiWidget:video_state() end
+--- The position in seconds.
+---@return number?
+function UiWidget:video_time() end
+--- The length in seconds (0 until the file has opened).
+---@return number?
+function UiWidget:video_duration() end
+--- Why the video failed, or an empty string.
+---@return string?
+function UiWidget:video_error() end
 
 --- The panel shown by a UICanvas.
 ---@class UiPanel
@@ -653,6 +740,155 @@ Animation = {}
 ---@param entity Entity
 ---@return AnimatorHandle?
 function Animation.animator(entity) end
+
+--- An event that was started with Audio.post. It stays valid to pass to Audio.stop after the event ended.
+---@class AudioHandle
+local AudioHandle = {}
+---@return boolean
+function AudioHandle:is_valid() end
+
+--- Audio through the project's backend (Wwise, or Null when none is available). Names are the vendor's own (Wwise event, RTPC, switch and state names).
+Audio = {}
+--- Starts an event from the entity (it needs an AudioEmitter component, whose Event may be empty) or globally without one. Returns a handle, or nil when the event did not start (an unknown name is logged once).
+---@param event string
+---@param entity? Entity
+---@return AudioHandle?
+function Audio.post(event, entity) end
+---@param handle AudioHandle
+function Audio.stop(handle) end
+--- Stops everything the entity's emitter plays.
+---@param entity Entity
+function Audio.stop_entity(entity) end
+function Audio.stop_all() end
+--- A game parameter (RTPC): global, or of one entity.
+---@param name string
+---@param value number
+---@param entity? Entity
+function Audio.set_rtpc(name, value, entity) end
+---@param group string
+---@param state string
+---@param entity? Entity
+function Audio.set_switch(group, state, entity) end
+---@param group string
+---@param state string
+function Audio.set_state(group, state) end
+--- Loads a SoundBank asset (a .bnk) in the background.
+---@param bank Asset
+function Audio.load_bank(bank) end
+--- The backend that plays: "Null" or "Wwise".
+---@return string
+function Audio.backend() end
+
+--- The AIController of an entity (AI.controller): its behaviour tree's blackboard and its run. Methods are called with a colon.
+---@class AIHandle
+local AIHandle = {}
+--- A blackboard value: a number, bool, string, vec3 or Entity (nil for no entity). An unknown key is an error naming it.
+---@param key string
+---@return any
+function AIHandle:get(key) end
+--- Sets a value of the key's own type (no conversions; a number for an int key must be whole); an error names the key and the type.
+---@param key string
+---@param value any
+function AIHandle:set(key, value) end
+--- Aborts what runs and puts the blackboard back to the defaults and the controller's overrides.
+function AIHandle:restart() end
+--- Whether the tree is in the middle of a run.
+---@return boolean
+function AIHandle:running() end
+
+--- Behaviour trees: the AI of entities that have an AIController. An AI error is raised when there is no AI module.
+AI = {}
+--- The controller of an entity; an error when it has no AIController component.
+---@param entity Entity
+---@return AIHandle
+function AI.controller(entity) end
+--- A sound that the AIs with a Perceiver within hearing (hearing radius times loudness) hear this frame. They get it in their blackboard (heard_position, heard_kind).
+---@param position vec3
+---@param loudness number  0 to 1000
+---@param kind? string
+function AI.emit_noise(position, loudness, kind) end
+
+--- The blackboard of a behaviour tree leaf (the `bb` argument of its hooks). Methods are called with a colon.
+---@class BtBlackboard
+local BtBlackboard = {}
+---@param key string
+---@return any
+function BtBlackboard:get(key) end
+---@param key string
+---@param value any
+function BtBlackboard:set(key, value) end
+---@param key string
+---@return boolean
+function BtBlackboard:has(key) end
+
+--- Base class of a behaviour tree action leaf (a LuaAction node). Return BtAction:extend{ properties = {...}, on_start, on_tick, on_abort }.
+---@class BtAction : ScriptClass
+BtAction = {}
+--- Base class of a behaviour tree condition leaf (a LuaCondition node).
+---@class BtCondition : ScriptClass
+BtCondition = {}
+
+--- The NavAgent of an entity (Nav.agent): it walks the navmesh to a destination while the game plays.
+---@class NavAgentHandle
+local NavAgentHandle = {}
+--- Starts a walk to the point of the navmesh nearest to the destination. False when there is no navmesh, none near the destination, or no route even part of the way (a route that stops short is walked to its end and the state then becomes "no_path").
+---@param destination vec3
+---@return boolean
+function NavAgentHandle:set_destination(destination) end
+function NavAgentHandle:stop() end
+--- Puts the agent at the point of the navmesh nearest to the position. False if the navmesh is not near it.
+---@param position vec3
+---@return boolean
+function NavAgentHandle:warp(position) end
+---@return "idle"|"moving"|"arrived"|"no_path"
+function NavAgentHandle:state() end
+--- Straight distance to the destination; 0 when the agent is not moving.
+---@return number
+function NavAgentHandle:remaining_distance() end
+---@return vec3
+function NavAgentHandle:velocity() end
+
+---@class NavPath
+---@field status "complete"|"partial"|"failed"
+---@field length number
+---@field points vec3[]
+
+--- Navigation: queries against the navmesh of the scene that plays (baked in the Navigation panel). Without a navmesh the queries answer "failed" / nil / false. Vectors that are not finite numbers are errors.
+Nav = {}
+--- The agent of an entity; an error when it has no NavAgent component.
+---@param entity Entity
+---@return NavAgentHandle
+function Nav.agent(entity) end
+--- The bit set of the named areas of the project (the names of the Navigation panel's Areas table, "NotWalkable" and "Walkable" included); an error for a
+--- name the project has no area of. For `find_path`'s `area_mask`.
+---@param names string[]
+---@return integer
+function Nav.area_mask(names) end
+--- The straight path between the navmesh points nearest to the two positions. Partial: the walk ends where it comes closest to the target.
+---@param from vec3
+---@param to vec3
+---@param area_mask? integer  bit set of the areas that may be used (default all)
+---@return NavPath
+function Nav.find_path(from, to, area_mask) end
+--- The point of the navmesh nearest to the point within the extents (default 2 x 4 x 2 m), or nil.
+---@param point vec3
+---@param extents? vec3
+---@return vec3?
+function Nav.nearest_point(point, extents) end
+--- Whether the line from a to b leaves the navmesh (a wall or an edge) before b, and where.
+---@param a vec3
+---@param b vec3
+---@return boolean hit
+---@return vec3? point
+function Nav.raycast(a, b) end
+--- A random point of the navmesh within the radius of the centre (which must be on it), or nil.
+---@param centre vec3
+---@param radius number
+---@return vec3?
+function Nav.random_point(centre, radius) end
+--- Whether the scene that plays has its navmesh loaded.
+---@return boolean
+function Nav.has_navmesh() end
 
 time = {}
 --- Seconds of the update that is running.
@@ -782,6 +1018,10 @@ function ScriptClass:on_trigger_exit(other) end
 --- A joint of this entity went over its break force or torque and is gone. `other` is the entity it was connected to, nil for the world.
 ---@param other Entity?
 function ScriptClass:on_joint_break(other) end
+--- This entity's NavAgent reached its destination (heard at the start of the next update).
+function ScriptClass:on_nav_arrived() end
+--- This entity's NavAgent found no path, or its route stopped short of the destination.
+function ScriptClass:on_nav_failed() end
 ---@param definition? ScriptDefinition
 ---@return ScriptClass
 function ScriptClass:extend(definition) end

@@ -9,6 +9,7 @@
 
 #include "../resources/gpu_resource_cache.h"
 #include "../environment/environment_cache.h"
+#include "../render_constants.h"
 #include "../render_quality.h"
 #include "../view/view_types.h"
 #include "../viewport_target.h"
@@ -17,17 +18,8 @@
 namespace wiwa
 {
 	class Frustum;
-	// The cluster grid lights are sorted into (mirrored in scene_common.hlsli).
-	constexpr u32 CLUSTERS_X = 16;
-	constexpr u32 CLUSTERS_Y = 9;
-	constexpr u32 CLUSTERS_Z = 24;
-	constexpr u32 CLUSTER_COUNT = CLUSTERS_X * CLUSTERS_Y * CLUSTERS_Z;
-	constexpr u32 MAX_LIGHTS_PER_CLUSTER = 64;
+	// The cluster grid, the shadow map sizes and NO_PALETTE are in render_constants.h, which the shaders read too.
 	constexpr u32 MAX_LIGHTS = 1024;
-
-	constexpr u32 MAX_SPOT_SHADOWS = 4;
-	constexpr u32 SPOT_TILE_SIZE = 1024;
-	constexpr u32 SPOT_ATLAS_SIZE = 4096;
 
 	// One point or spot light as the shaders read it (GpuLight in scene_common.hlsli).
 	struct GpuLight
@@ -58,10 +50,9 @@ namespace wiwa
 		u32 IndexCount = 0;
 		i32 BaseVertex = 0;
 		bool DoubleSided = false;
+		bool ReceivesDecals = true; // false: the depth prepass marks its pixels in the stencil and the decals leave them alone
 		float Depth = 0.0f; // view-space distance of the primitive's bounds center (for sorting blended draws)
 	};
-
-	constexpr u32 NO_PALETTE = ~0u; // GpuInstance::Skin.x of an instance that is not skinned (mirrored in scene_common.hlsli)
 
 	// One scene instance as the shaders read it (SceneInstance in scene_common.hlsli): the world matrix, the matrix for normals and the
 	// world matrix of the previous frame, each as four columns.
@@ -89,13 +80,13 @@ namespace wiwa
 		glm::vec4 ViewportSize{ 1.0f };   // width, height, 1 / width, 1 / height
 		glm::vec4 ClusterParams{ 0.0f };  // x = slice scale, y = slice bias, z = 1 when the camera is orthographic
 		glm::uvec4 LightInfo{ 0 };        // x = number of lights
-		glm::mat4 ShadowMatrices[8]{};    // 0..3 the sun's cascades, 4..7 the shadowed spot lights
+		glm::mat4 ShadowMatrices[MAX_CASCADES + MAX_SPOT_SHADOWS]{};    // 0..3 the sun's cascades, 4..7 the shadowed spot lights
 		glm::vec4 CascadeSplits{ 0.0f };  // view depth at which each cascade ends
 		glm::vec4 CascadeTexels{ 0.0f };  // world size of a texel of each cascade
 		glm::vec4 ShadowParams{ 0.0f };   // x = 1 when the sun casts shadows, y = cascade count, z = depth bias, w = normal bias (texels)
 		glm::vec4 ShadowParams2{ 0.0f };  // x = spot depth bias
-		glm::vec4 SpotShadowRects[4]{};   // atlas tile of each shadowed spot light: offset xy, scale zw
-		glm::vec4 SpotShadowInfo[4]{};    // x = tan(half the cone angle)
+		glm::vec4 SpotShadowRects[MAX_SPOT_SHADOWS]{};   // atlas tile of each shadowed spot light: offset xy, scale zw
+		glm::vec4 SpotShadowInfo[MAX_SPOT_SHADOWS]{};    // x = tan(half the cone angle)
 		glm::vec4 EnvSH[9]{};             // the environment's diffuse light (rgb in xyz)
 		glm::vec4 EnvParams{ 0.0f };      // x = 1 when an environment lights the scene, y = highest mip, z = brightness * ambient intensity, w = 1 when the BRDF table exists
 		glm::vec4 EnvRotation{ 1.0f, 0.0f, 1.0f, 0.0f }; // cos, sin of the rotation about +Y, the brightness of the sky seen
@@ -170,18 +161,33 @@ namespace wiwa
 		// The scene has ambient occlusion on this frame: the AO pass writes ViewportTarget::ao() and the forward pass reads it (else a
 		// white stand-in).
 		bool ao_active() const { return m_AoActive; }
-		// The forward pass reads the occlusion through a layout of its own (one SRV, t15): the frame layout's registers already span
+		// The forward pass reads the occlusion through a layout of its own (one SRV, t24): the frame layout's registers already span
 		// 1..9, and NVRHI rejects layouts whose register ranges overlap those of the material layout (t10..t13).
+		// The set also carries the four decal targets (t25..t28, stand-ins that change nothing when the view has no decals).
 		nvrhi::IBindingLayout* ao_layout() const { return m_AoLayout; }
 		nvrhi::IBindingSet* ao_bindings() const { return m_AoBindings; }
+
+		// The decals this view draws, culled against the camera and sorted by SortOrder then slot (at most MAX_VISIBLE_DECALS; the rest are
+		// counted in dropped_decals()). Slot indexes RenderScene::decals(); Material is the material slot of the decal's material.
+		struct VisibleDecal
+		{
+			u32 Slot = 0;
+			u32 Material = 0;
+		};
+		static constexpr u32 MAX_VISIBLE_DECALS = 512;
+		const std::vector<VisibleDecal>& visible_decals() const { return m_VisibleDecals; }
+		u32 dropped_decals() const { return m_DroppedDecals; }
+		// The decal targets of the viewport exist and are the ones bound in ao_bindings() (decals are visible this frame).
+		bool decals_active() const { return m_DecalsActive; }
 		// An environment (a file's, ready) lights the scene this frame.
-		bool has_environment() const { return m_FrameEnvironment != nullptr; }
 		// What the sky pass draws behind the scene this frame.
 		enum class SkyKind { None, Environment, Atmosphere };
 		SkyKind sky_kind() const { return m_SkyKind; }
 		ViewportTarget* viewport() const { return m_Viewport; }
 		GpuResourceCache* cache() const { return m_Cache; }
 		const RenderScene* scene() const { return m_Scene; }
+		// The scene of this view, to take what the particle simulation consumes (RenderScene::take_pending_spawns). Render thread, simulation pass only.
+		RenderScene* scene_mutable() const { return m_Scene; }
 		const SceneSettings& settings() const { return m_Settings; }
 		// Where the environments of the settings come from; without one the scene is lit by the hemisphere ambient.
 		void set_environments(EnvironmentCache* environments) { m_Environments = environments; }
@@ -237,7 +243,7 @@ namespace wiwa
 		bool m_AoActive = false;
 		ViewportTarget* m_Viewport = nullptr;
 		GpuResourceCache* m_Cache = nullptr;
-		const RenderScene* m_Scene = nullptr;
+		RenderScene* m_Scene = nullptr;
 		SceneSettings m_Settings{};
 		RenderQuality m_Quality{};
 		ViewFlags m_Flags{};
@@ -281,6 +287,17 @@ namespace wiwa
 		nvrhi::TextureHandle m_DummyCube{};
 		nvrhi::TextureHandle m_DummyBrdf{};
 		nvrhi::TextureHandle m_DummyAo{};    // 1x1, white: no occlusion
+		// 1x1, zero: no decals (albedo, normal, ORM, emissive). Read with the coordinates clamped, so one texel serves every pixel.
+		nvrhi::TextureHandle m_DummyDecal[4]{};
+		bool m_DummyDecalWritten = false;
+		std::vector<VisibleDecal> m_VisibleDecals{};
+		u32 m_DroppedDecals = 0;
+		bool m_DecalsActive = false;
+		u32 m_FramesWithoutDecals = 0;
+		const nvrhi::ITexture* m_BoundDecalAlbedo = nullptr;
+		u32 m_BoundDecalGeneration = 0;
+		static constexpr u32 DECAL_TARGET_LINGER_FRAMES = 120;
+		std::chrono::steady_clock::time_point m_LastDecalWarning{};
 		nvrhi::BindingLayoutHandle m_AoLayout{};
 		nvrhi::BindingSetHandle m_AoBindings{};
 		EnvironmentCache* m_Environments = nullptr;

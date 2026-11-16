@@ -30,7 +30,7 @@ namespace wiwa
 
 		virtual UpdateFlags get_update_flags() const override { return UpdateFlags::UPDATE; }
 		virtual std::string get_name() const override { return "AssetManager"; }
-		virtual int get_priority() const override { return -100; }
+		virtual int get_priority() const override { return ModulePriority::AssetManager; }
 
 		// Starts loading (if it is not loaded or loading already) and returns at once. The handle goes Ready or Failed
 		// later; a type that does not match the file is Failed.
@@ -53,8 +53,6 @@ namespace wiwa
 
 		// Every whole asset the catalog lists (a copy), reading the catalog first if it was not read yet. Thread-safe.
 		std::vector<AssetCatalog::Entry> catalog_entries();
-
-		LoadState get_state(AssetGuid resolvedGuid) const;
 
 		// Whether init() reads an assets.wpak next to the program when there is one (a game: yes, the default). A tool that
 		// has a Library of its own and imports live, like the editor, turns it off before the engine initializes, so a

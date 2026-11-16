@@ -4,7 +4,7 @@
 #include "library_source.h"
 #include "pak_source.h"
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {
@@ -25,24 +25,9 @@ namespace wiwa
 		{
 			switch (type)
 			{
-			case AssetType::Texture: return make_asset<TextureData>(payload);
-			case AssetType::Mesh: return make_asset<MeshData>(payload);
-			case AssetType::Material: return make_asset<MaterialData>(payload);
-			case AssetType::Skeleton: return make_asset<SkeletonData>(payload);
-			case AssetType::AnimationClip: return make_asset<AnimationClipData>(payload);
-			case AssetType::Prefab: return make_asset<PrefabData>(payload);
-			case AssetType::Environment: return make_asset<EnvironmentData>(payload);
-			case AssetType::Lut: return make_asset<LutData>(payload);
-			case AssetType::Shader: return make_asset<ShaderData>(payload);
-			case AssetType::Scene: return make_asset<SceneData>(payload);
-			case AssetType::Script: return make_asset<ScriptData>(payload);
-			case AssetType::SurfaceShader: return make_asset<SurfaceShaderData>(payload);
-			case AssetType::Font: return make_asset<FontData>(payload);
-			case AssetType::UiPanel: return make_asset<UiPanelData>(payload);
-			case AssetType::PhysicsMaterial: return make_asset<PhysicsMaterialData>(payload);
-			case AssetType::PhysicsShape: return make_asset<CookedShapeData>(payload);
-			case AssetType::InputMap: return make_asset<InputMapData>(payload);
-			case AssetType::AnimationGraph: return make_asset<AnimationGraphData>(payload);
+#define WI_ASSET_TYPE_LOAD(name, data) case AssetType::name: return make_asset<data>(payload);
+			WI_ASSET_TYPES(WI_ASSET_TYPE_LOAD)
+#undef WI_ASSET_TYPE_LOAD
 			default: return nullptr;
 			}
 		}
@@ -188,14 +173,6 @@ namespace wiwa
 		find_asset({}); // reads the catalog if nobody has yet
 		std::lock_guard<std::mutex> lock(m_CatalogMutex);
 		return m_Catalog.Entries;
-	}
-
-	LoadState AssetManager::get_state(AssetGuid resolvedGuid) const
-	{
-		resolvedGuid = redirected(resolvedGuid);
-		std::lock_guard<std::mutex> lock(m_Mutex);
-		auto found = m_Cache.find(resolvedGuid);
-		return found == m_Cache.end() ? LoadState::Failed : found->second->State.load(std::memory_order_acquire);
 	}
 
 	void AssetManager::unload_unused()

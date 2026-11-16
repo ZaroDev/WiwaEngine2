@@ -48,6 +48,10 @@ namespace wiwa
 		virtual int selected_joint() const { return -1; }
 		virtual int selected_socket() const { return -1; }
 
+		// An editor whose asset is not a skeleton draws its own preview column (controls and image), instead of the panel's skeleton preview.
+		virtual bool draws_own_preview() const { return false; }
+		virtual void draw_preview(ImVec2 size) { (void)size; }
+
 		virtual void draw_tools() = 0;
 		// An editor with a wide part (a timeline) gets the full width under the preview and the tools.
 		virtual bool has_bottom_pane() const { return false; }

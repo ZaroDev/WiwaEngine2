@@ -132,6 +132,7 @@ namespace wiwa
 		m_MainView.Target.destroy();
 		m_Environments.reset();
 		m_Jobs.reset();
+		m_ParticlePool.shutdown();
 		m_Cache.reset();
 		m_Uploads.shutdown();
 		m_Shaders.reset();
@@ -169,7 +170,7 @@ namespace wiwa
 			return true; // nothing to show; resumes with the first normal batch
 		}
 
-		m_Time += batch.DeltaTime;
+		m_Time += batch.DeltaSeconds;
 
 		if (batch.Width != m_Backend->get_width() || batch.Height != m_Backend->get_height())
 		{
@@ -357,6 +358,7 @@ namespace wiwa
 		description.Shaders = m_Shaders.get();
 		description.Textures = &m_Textures;
 		description.Cache = m_Cache.get();
+		description.Particles = &m_ParticlePool;
 		return description;
 	}
 
@@ -367,7 +369,7 @@ namespace wiwa
 		frame.Width = m_Backend->get_width();
 		frame.Height = m_Backend->get_height();
 		frame.Time = m_Time;
-		frame.DeltaTime = batch.DeltaTime;
+		frame.DeltaSeconds = batch.DeltaSeconds;
 		frame.FrameIndex = m_FrameIndex;
 		frame.ImGui = &batch.ImGui;
 		frame.Debug = &batch.Debug;
@@ -395,7 +397,12 @@ namespace wiwa
 
 	void Renderer::set_quality(const RenderQuality& quality)
 	{
+		const u32 previousPool = m_Quality.ParticlePoolSize;
 		m_Quality = sanitized(quality);
+		if (m_Quality.ParticlePoolSize != previousPool)
+		{
+			m_ParticlePool.set_capacity(m_Quality.ParticlePoolSize); // only when the project changed it: a pool made by hand (a test) is left alone
+		}
 		m_MainView.Data.quality() = m_Quality;
 		for (const Scope<ViewState>& view : m_ExtraViews)
 		{
@@ -796,11 +803,6 @@ namespace wiwa
 		{
 			WI_RENDER_LOG(Error, "Resizing the swapchain to {0}x{1} failed", width, height);
 			return false;
-		}
-
-		for (const Scope<IRenderPass>& pass : m_Passes)
-		{
-			pass->on_resize(m_Backend->get_device(), m_Backend->get_width(), m_Backend->get_height());
 		}
 
 		return true;

@@ -4,20 +4,20 @@
 
 #include <gizmo/gizmo_settings.h>
 
-#include "settings_section.h"
+#include <string>
 
 // The editor's own look (gizmo_settings.json, per user, next to the program): which overlays the Viewport shows and how the selection is
 // outlined. The Viewport's "Gizmos" popup and the Settings page edit the same object, so neither saves over the other.
-class EditorSection final : public ISettingsSection
+class EditorSection final
 {
 public:
 	EditorSection() : m_Gizmos(wiwa::GizmoSettings::load()) {}
 
-	virtual const char* name() const override { return "Editor"; }
-	virtual bool load() override;
-	virtual bool save() override;
-	virtual void apply() override {} // the Viewport reads the value every frame
-	virtual const std::string& last_error() const override { return m_Error; }
+	const char* name() const { return "Editor"; }
+	bool load();
+	bool save();
+	void apply() {} // the Viewport reads the value every frame
+	const std::string& last_error() const { return m_Error; }
 
 	const wiwa::GizmoSettings& gizmos() const { return m_Gizmos; }
 	// For a widget to edit in place; follow an edit with touch().

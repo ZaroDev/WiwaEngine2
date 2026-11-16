@@ -5,7 +5,10 @@
 #include <utility>
 #include <vector>
 
+#include <array>
+
 #include <assets/asset_guid.h>
+#include <assets/particle_effect.h>
 #include <math/math.h>
 #include <scene/components.h>
 #include <scene/entity_guid.h>
@@ -27,6 +30,7 @@ namespace wiwa
 		std::vector<glm::vec4> Palette{};
 		std::vector<glm::vec4> PrevPalette{};
 		float BoundsPadding = 0.0f; // the mesh bounds grow by this much in every direction when the instance is culled (a pose reaches past them)
+		bool ReceivesDecals = true;
 		AssetRef Mesh{};
 		std::vector<AssetRef> Materials{}; // overrides per primitive; empty means the mesh's own materials
 	};
@@ -56,6 +60,47 @@ namespace wiwa
 		bool CastsShadows = false;
 	};
 
+	// Which channels of a decal's material are applied (RenderDecal::Channels).
+	constexpr u32 DECAL_CHANNEL_COLOR = 1u << 0;
+	constexpr u32 DECAL_CHANNEL_NORMAL = 1u << 1;
+	constexpr u32 DECAL_CHANNEL_ORM = 1u << 2;
+	constexpr u32 DECAL_CHANNEL_EMISSIVE = 1u << 3;
+
+	// A projected decal: a box at World (unit cube scaled by Size) projecting along its local -Z. Opacity is the current one (the lifetime
+	// fade is already applied on the main thread).
+	struct RenderDecal
+	{
+		bool Alive = false;
+		glm::mat4 World{ 1.0f };
+		AssetRef Material{};
+		glm::vec3 Size{ 1.0f };
+		float Opacity = 1.0f;
+		u32 Channels = DECAL_CHANNEL_COLOR | DECAL_CHANNEL_NORMAL | DECAL_CHANNEL_ORM | DECAL_CHANNEL_EMISSIVE;
+		float AngleFadeStart = 60.0f; // degrees
+		float AngleFadeEnd = 80.0f;
+		float EdgeFade = 0.1f;
+		i32 SortOrder = 0;
+	};
+
+	// A particle system as the render thread knows it (vfx.md): which effect, where it is, how it is scaled, and how many particles each emitter still has
+	// to spawn. The particles themselves live in the GPU pool. Spawns add up (several deltas can arrive between two rendered frames) until the simulation
+	// takes them with take_pending_spawns().
+	struct RenderParticleSystem
+	{
+		bool Alive = false;
+		EntityGuid Guid{};           // set when the system is added
+		glm::mat4 World{ 1.0f };
+		glm::mat4 PrevWorld{ 1.0f }; // World as the last simulated frame had it (emitters inherit the motion)
+		AssetRef Effect{};
+		i32 SortBias = 0;
+		glm::vec4 ColorTint{ 1.0f };
+		float SizeScale = 1.0f;
+		float RateScale = 1.0f;
+		u32 Seed = 0;
+		u32 ClearCount = 0; // counts up when the main thread discards the system's particles: the simulation starts its rings over
+		std::array<u32, PARTICLE_MAX_EMITTERS> PendingSpawns{};
+	};
+
 	struct RenderCamera
 	{
 		glm::mat4 View{ 1.0f };
@@ -75,6 +120,12 @@ namespace wiwa
 		std::vector<std::pair<EntityGuid, std::vector<glm::vec4>>> PaletteUpdates{};
 		std::vector<std::pair<EntityGuid, RenderLight>> LightUpserts{};
 		std::vector<EntityGuid> LightRemovals{};
+		std::vector<std::pair<EntityGuid, RenderDecal>> DecalUpserts{};
+		std::vector<EntityGuid> DecalRemovals{};
+		// The system's configuration (its PendingSpawns and PrevWorld are the render scene's own), when it changed; and what it spawned this frame.
+		std::vector<std::pair<EntityGuid, RenderParticleSystem>> ParticleUpserts{};
+		std::vector<EntityGuid> ParticleRemovals{};
+		std::vector<std::pair<EntityGuid, std::array<u32, PARTICLE_MAX_EMITTERS>>> ParticleSpawns{};
 		std::optional<RenderCamera> Camera{}; // the primary camera, when it changed
 		bool CameraRemoved = false;
 		std::optional<SceneSettings> Settings{}; // when they changed (always with a Reset)
@@ -82,7 +133,7 @@ namespace wiwa
 		bool empty() const
 		{
 			return !Reset && InstanceUpserts.empty() && InstanceRemovals.empty() && PaletteUpdates.empty() && LightUpserts.empty() && LightRemovals.empty()
-				&& !Camera && !CameraRemoved && !Settings;
+				&& DecalUpserts.empty() && DecalRemovals.empty() && ParticleUpserts.empty() && ParticleRemovals.empty() && ParticleSpawns.empty() && !Camera && !CameraRemoved && !Settings;
 		}
 	};
 
@@ -101,10 +152,19 @@ namespace wiwa
 		// How many instances / lights exist, and how many slots there are (some may be dead: check Alive).
 		size_t instance_count() const { return m_InstanceCount; }
 		size_t light_count() const { return m_LightCount; }
+		size_t decal_count() const { return m_DecalCount; }
 		const std::vector<RenderInstance>& instances() const { return m_Instances; }
 		const std::vector<RenderLight>& lights() const { return m_Lights; }
+		const std::vector<RenderDecal>& decals() const { return m_Decals; }
 		std::optional<size_t> find_instance(EntityGuid guid) const;
-		std::optional<size_t> find_light(EntityGuid guid) const;
+		std::optional<size_t> find_decal(EntityGuid guid) const;
+
+		size_t particle_system_count() const { return m_ParticleCount; }
+		const std::vector<RenderParticleSystem>& particle_systems() const { return m_Particles; }
+		std::optional<size_t> find_particle_system(EntityGuid guid) const;
+		// Hands the simulation what the system at `slot` has to spawn and starts counting again; also makes PrevWorld the current World (the simulation
+		// ran for this frame). Zeros for a slot that is not alive.
+		std::array<u32, PARTICLE_MAX_EMITTERS> take_pending_spawns(size_t slot);
 
 		// The scene's primary camera.
 		const std::optional<RenderCamera>& camera() const { return m_Camera; }
@@ -157,6 +217,16 @@ namespace wiwa
 		std::unordered_map<EntityGuid, size_t> m_LightIndex{};
 		std::vector<size_t> m_FreeLights{};
 		size_t m_LightCount = 0;
+
+		std::vector<RenderDecal> m_Decals{};
+		std::unordered_map<EntityGuid, size_t> m_DecalIndex{};
+		std::vector<size_t> m_FreeDecals{};
+		size_t m_DecalCount = 0;
+
+		std::vector<RenderParticleSystem> m_Particles{};
+		std::unordered_map<EntityGuid, size_t> m_ParticleIndex{};
+		std::vector<size_t> m_FreeParticles{};
+		size_t m_ParticleCount = 0;
 
 		std::optional<RenderCamera> m_Camera{};
 		std::optional<RenderCamera> m_CameraOverride{};

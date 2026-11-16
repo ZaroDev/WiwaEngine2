@@ -14,7 +14,11 @@
 #include "passes/forward_pass.h"
 #include "passes/imgui_pass.h"
 #include "passes/ui_pass.h"
+#include "video/video_texture.h"
+#include "passes/decal_pass.h"
 #include "passes/light_cull_pass.h"
+#include "passes/particle_render_pass.h"
+#include "passes/particle_sim_pass.h"
 #include "passes/ao_pass.h"
 #include "passes/bloom_pass.h"
 #include "passes/exposure_pass.h"
@@ -29,10 +33,59 @@
 #include "passes/sky_pass.h"
 #include "shader_library.h"
 #include "render_world.h"
-#include "test/render_test.h"
 #include "window.h"
 
 #define WI_RENDER_LOG(level, ...) WI_LOG(level, "Renderer", __VA_ARGS__)
+
+namespace wiwa
+{
+	namespace
+	{
+		RenderCheckRunner g_RenderCheckRunner{};
+
+		// Runs submit() and remembers the value, unless the render thread already has it (what was last sent is kept on the main thread).
+		template<class T, class Equal, class Submit>
+		void send_if_changed(T& sent, const T& value, Equal&& equal, Submit&& submit)
+		{
+			if (equal(sent, value))
+			{
+				return;
+			}
+			sent = value;
+			submit();
+		}
+
+		template<class T, class Submit>
+		void send_if_changed(T& sent, const T& value, Submit&& submit)
+		{
+			send_if_changed(sent, value, [](const T& a, const T& b) { return a == b; }, std::forward<Submit>(submit));
+		}
+
+		// Where the scene extractor reads joint palettes from: the animation module's instances of `scene` (the active scene when null,
+		// the preview instances of a looked-at scene for an offscreen view). Empty without the module.
+		PaletteSource make_palette_source(const AnimationModule* animation, const Scene* scene)
+		{
+			if (animation == nullptr)
+			{
+				return {};
+			}
+			return [animation, scene](entt::entity animator) -> std::span<const glm::vec4>
+			{
+				const AnimatorInstance* instance = scene != nullptr ? animation->instance_in(scene, animator) : animation->instance_for(animator);
+				if (instance == nullptr || instance->palette().empty())
+				{
+					return {};
+				}
+				return { reinterpret_cast<const glm::vec4*>(instance->palette().data()), instance->palette().size() * 3 };
+			};
+		}
+	}
+
+	void set_render_check_runner(RenderCheckRunner runner)
+	{
+		g_RenderCheckRunner = std::move(runner);
+	}
+}
 
 namespace
 {
@@ -92,9 +145,12 @@ namespace wiwa
 					&& m_Renderer->add_pass(CreateScope<DepthPrepass>())
 					&& m_Renderer->add_pass(CreateScope<LightCullPass>())
 					&& m_Renderer->add_pass(CreateScope<AoPass>())
+					&& m_Renderer->add_pass(CreateScope<DecalPass>())
+					&& m_Renderer->add_pass(CreateScope<ParticleSimPass>())
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Opaque))
 					&& m_Renderer->add_pass(CreateScope<SkyPass>())
 					&& m_Renderer->add_pass(CreateScope<ForwardPass>(ForwardPass::Stage::Blended))
+					&& m_Renderer->add_pass(CreateScope<ParticleRenderPass>())
 					&& m_Renderer->add_pass(CreateScope<VelocityPass>())
 					&& m_Renderer->add_pass(CreateScope<TaaPass>())
 					&& m_Renderer->add_pass(CreateScope<MotionBlurPass>())
@@ -348,6 +404,32 @@ namespace wiwa
 		return id;
 	}
 
+	void RenderModule::upload_video_frame(u32 stream, std::shared_ptr<const VideoFrame> frame)
+	{
+		if (!m_Started || !frame)
+		{
+			return;
+		}
+		UiRenderPass* pass = m_UiPass;
+		submit([stream, pass, frame = std::move(frame)](RenderWorld& world)
+			{
+				upload_video_picture(world, stream, *frame, pass);
+			});
+	}
+
+	void RenderModule::release_video_stream(u32 stream)
+	{
+		if (!m_Started)
+		{
+			return;
+		}
+		UiRenderPass* pass = m_UiPass;
+		submit([stream, pass](RenderWorld& world)
+			{
+				release_video_picture(world, stream, pass);
+			});
+	}
+
 	void RenderModule::release_ui_image(u32 id)
 	{
 		if (id < FIRST_UI_IMAGE_ID || id >= FIRST_VIEW_TEXTURE_ID)
@@ -367,15 +449,12 @@ namespace wiwa
 
 	void RenderModule::set_viewport_size(u32 width, u32 height)
 	{
-		if (width == m_RequestedViewportWidth && height == m_RequestedViewportHeight)
-		{
-			return; // the render thread already knows
-		}
-		m_RequestedViewportWidth = width;
-		m_RequestedViewportHeight = height;
-		submit([width, height](RenderWorld& world)
+		send_if_changed(m_RequestedViewport, glm::uvec2(width, height), [&]()
 			{
-				world.get_renderer().set_viewport_size(width, height);
+				submit([width, height](RenderWorld& world)
+					{
+						world.get_renderer().set_viewport_size(width, height);
+					});
 			});
 	}
 
@@ -551,29 +630,27 @@ namespace wiwa
 
 	void RenderModule::set_scene_in_viewport(bool inViewport)
 	{
-		if (inViewport == m_SentSceneInViewport)
-		{
-			return;
-		}
-		m_SentSceneInViewport = inViewport;
-		submit([inViewport](RenderWorld& world)
+		send_if_changed(m_SentSceneInViewport, inViewport, [&]()
 			{
-				world.get_renderer().set_scene_in_viewport(inViewport);
+				submit([inViewport](RenderWorld& world)
+					{
+						world.get_renderer().set_scene_in_viewport(inViewport);
+					});
 			});
 	}
 
 	void RenderModule::set_camera_override(const std::optional<RenderCamera>& camera)
 	{
-		const bool same = camera.has_value() == m_SentCameraOverride.has_value()
-			&& (!camera || std::memcmp(&*camera, &*m_SentCameraOverride, sizeof(RenderCamera)) == 0);
-		if (same)
+		const auto same = [](const std::optional<RenderCamera>& a, const std::optional<RenderCamera>& b)
 		{
-			return;
-		}
-		m_SentCameraOverride = camera;
-		submit([camera](RenderWorld& world)
+			return a.has_value() == b.has_value() && (!a || std::memcmp(&*a, &*b, sizeof(RenderCamera)) == 0);
+		};
+		send_if_changed(m_SentCameraOverride, camera, same, [&]()
 			{
-				world.get_scene().set_camera_override(camera);
+				submit([camera](RenderWorld& world)
+					{
+						world.get_scene().set_camera_override(camera);
+					});
 			});
 	}
 
@@ -589,28 +666,23 @@ namespace wiwa
 
 	void RenderModule::set_selection(std::optional<EntityGuid> guid)
 	{
-		if (guid == m_SentSelection)
-		{
-			return;
-		}
-		m_SentSelection = guid;
-		submit([guid](RenderWorld& world)
+		send_if_changed(m_SentSelection, guid, [&]()
 			{
-				world.get_scene().set_selection(guid);
+				submit([guid](RenderWorld& world)
+					{
+						world.get_scene().set_selection(guid);
+					});
 			});
 	}
 
 	void RenderModule::set_outline_style(const SelectionOutlineStyle& style)
 	{
-		const SelectionOutlineStyle& sent = m_SentOutlineStyle;
-		if (style.Color == sent.Color && style.WidthPx == sent.WidthPx && style.OccludedAlpha == sent.OccludedAlpha && style.Enabled == sent.Enabled)
-		{
-			return;
-		}
-		m_SentOutlineStyle = style;
-		submit([style](RenderWorld& world)
+		send_if_changed(m_SentOutlineStyle, style, [&]()
 			{
-				world.get_scene().set_outline_style(style);
+				submit([style](RenderWorld& world)
+					{
+						world.get_scene().set_outline_style(style);
+					});
 			});
 	}
 
@@ -729,9 +801,9 @@ namespace wiwa
 
 	glm::vec2 RenderModule::get_canvas_size() const
 	{
-		if (m_RequestedViewportWidth > 0 && m_RequestedViewportHeight > 0)
+		if (m_RequestedViewport.x > 0 && m_RequestedViewport.y > 0)
 		{
-			return glm::vec2(static_cast<float>(m_RequestedViewportWidth), static_cast<float>(m_RequestedViewportHeight));
+			return glm::vec2(static_cast<float>(m_RequestedViewport.x), static_cast<float>(m_RequestedViewport.y));
 		}
 
 		Window* window = Engine::get().get_module<Window>();
@@ -782,7 +854,7 @@ namespace wiwa
 
 		RenderBatch batch;
 		batch.FrameIndex = m_FrameIndex++;
-		batch.DeltaTime = deltaTime;
+		batch.DeltaSeconds = deltaTime * 0.001f; // update() gets milliseconds (Time::get_engine_delta_time)
 		batch.Width = static_cast<u32>(std::max(width, 0));
 		batch.Height = static_cast<u32>(std::max(height, 0));
 		batch.Minimized = width == 0 || height == 0 || glfwGetWindowAttrib(window->get_window(), GLFW_ICONIFIED) != 0;
@@ -796,22 +868,10 @@ namespace wiwa
 		if (SceneModule* scenes = Engine::get().get_module<SceneModule>())
 		{
 			// The scene is drawn at the viewport's size when there is a Viewport panel, else at the window's.
-			const u32 shapeWidth = m_RequestedViewportWidth > 0 ? m_RequestedViewportWidth : batch.Width;
-			const u32 shapeHeight = m_RequestedViewportHeight > 0 ? m_RequestedViewportHeight : batch.Height;
+			const u32 shapeWidth = m_RequestedViewport.x > 0 ? m_RequestedViewport.x : batch.Width;
+			const u32 shapeHeight = m_RequestedViewport.y > 0 ? m_RequestedViewport.y : batch.Height;
 			const float aspect = shapeHeight > 0 ? static_cast<float>(shapeWidth) / static_cast<float>(shapeHeight) : 1.0f;
-			PaletteSource palettes;
-			if (const AnimationModule* animation = Engine::get().get_module<AnimationModule>())
-			{
-				palettes = [animation](entt::entity animator) -> std::span<const glm::vec4>
-				{
-					const AnimatorInstance* instance = animation->instance_for(animator);
-					if (instance == nullptr || instance->palette().empty())
-					{
-						return {};
-					}
-					return { reinterpret_cast<const glm::vec4*>(instance->palette().data()), instance->palette().size() * 3 };
-				};
-			}
+			const PaletteSource palettes = make_palette_source(Engine::get().get_module<AnimationModule>(), nullptr);
 			SceneDelta delta = m_Extractor.extract(scenes->get_active(), aspect, palettes);
 			if (!delta.empty())
 			{
@@ -872,20 +932,7 @@ namespace wiwa
 			scene->update_world_transforms();
 			const float viewAspect = static_cast<float>(record->Width) / static_cast<float>(std::max(record->Height, 1u));
 			// the palettes of a looked-at scene come from the animation module's preview instances of that scene
-			PaletteSource viewPalettes;
-			if (const AnimationModule* animation = Engine::get().get_module<AnimationModule>())
-			{
-				const Scene* viewScene = scene.get();
-				viewPalettes = [animation, viewScene](entt::entity animator) -> std::span<const glm::vec4>
-				{
-					const AnimatorInstance* instance = animation->instance_in(viewScene, animator);
-					if (instance == nullptr || instance->palette().empty())
-					{
-						return {};
-					}
-					return { reinterpret_cast<const glm::vec4*>(instance->palette().data()), instance->palette().size() * 3 };
-				};
-			}
+			const PaletteSource viewPalettes = make_palette_source(Engine::get().get_module<AnimationModule>(), scene.get());
 			SceneDelta viewDelta = record->Extractor.extract(scene, viewAspect, viewPalettes);
 			const ViewId viewId = record->Id;
 			if (!viewDelta.empty())
@@ -1030,7 +1077,14 @@ namespace wiwa
 			return;
 		}
 
-		const bool passed = run_render_checks(world) && m_Renderer->are_passes_ready() && get_error_message_count() == 0;
+		if (!g_RenderCheckRunner)
+		{
+			WI_RENDER_LOG(Error, "--render-test needs the checks of wiwa_tests: run it from wiwa_tests.exe");
+			m_RenderTestResult = 2;
+			return;
+		}
+
+		const bool passed = g_RenderCheckRunner(world) && m_Renderer->are_passes_ready() && get_error_message_count() == 0;
 		if (passed)
 		{
 			WI_RENDER_LOG(Info, "Render test passed ({0})", graphics_api_name(m_Description.Api));

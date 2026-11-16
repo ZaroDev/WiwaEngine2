@@ -3,12 +3,13 @@
 
 #include <fstream>
 
+#include <core/file_io.h>
 #include "assets/asset_catalog.h"
 #include "assets/library_source.h"
 #include "assets/pak_format.h"
 #include "lua_stubs.h"
 
-#define WI_ASSET_LOG(level, ...) WI_LOG(level, "Assets", __VA_ARGS__)
+#include <assets/asset_log.h>
 
 namespace wiwa
 {
@@ -35,16 +36,13 @@ namespace wiwa
 
 		bool read_file(const std::filesystem::path& path, std::vector<std::byte>& bytes)
 		{
-			std::ifstream file(path, std::ios::binary | std::ios::ate);
-			if (!file)
+			std::optional<std::vector<std::byte>> read = read_file_bytes(path);
+			if (!read)
 			{
 				return false;
 			}
-
-			const std::streamsize size = file.tellg();
-			bytes.resize(static_cast<size_t>(size));
-			file.seekg(0);
-			return size == 0 || static_cast<bool>(file.read(reinterpret_cast<char*>(bytes.data()), size));
+			bytes = std::move(*read);
+			return true;
 		}
 	}
 
@@ -100,11 +98,6 @@ namespace wiwa
 			return nullptr; // a LuaLS declaration file next to the scripts is editor support, not an asset
 		}
 		return found->second;
-	}
-
-	bool AssetDatabase::has_importer_for(const std::filesystem::path& source) const
-	{
-		return find_importer(source) != nullptr;
 	}
 
 	const IImporter* AssetDatabase::importer_for(const std::filesystem::path& source) const
@@ -478,17 +471,13 @@ namespace wiwa
 
 	void AssetDatabase::save_cache_locked()
 	{
-		std::error_code error;
-		std::filesystem::create_directories(m_LibraryRoot, error);
-
 		const std::filesystem::path path = m_LibraryRoot / "import_cache.json";
-		std::filesystem::path temp = path;
-		temp += ".tmp";
+		const std::string text = m_ImportCache.dump(1);
+		std::string error;
+		if (!write_file_atomic(path, text.data(), text.size(), error))
 		{
-			std::ofstream file(temp, std::ios::trunc);
-			file << m_ImportCache.dump(1);
+			WI_ASSET_LOG(Error, "{0}", error);
 		}
-		std::filesystem::rename(temp, path, error);
 	}
 
 	Ref<JobProgress> AssetDatabase::scan_async()
@@ -653,49 +642,72 @@ namespace wiwa
 	// guid. The paths start with the name of the source root, as the root was given ("assets", "engine").
 	void AssetDatabase::write_catalog()
 	{
-		AssetCatalog catalog;
+		// What the import cache says, copied under the lock: the lock is also taken by the main thread (path_of, every frame an asset field
+		// is drawn), so the file system checks and the string work below must not run while it is held.
+		struct CachedSource
+		{
+			std::string GuidText{};
+			std::string Source{};
+			nlohmann::json Redirects{};
+		};
+		std::vector<CachedSource> cached;
+		std::vector<SourceRoot> roots;
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex);
+			cached.reserve(m_ImportCache.size());
 			for (auto& [guidText, entry] : m_ImportCache.items())
 			{
-				const std::optional<AssetGuid> guid = AssetGuid::from_string(guidText);
-				const std::string source = entry.value("source", std::string{});
-				std::error_code error;
-				if (!guid || source.empty() || !std::filesystem::exists(source, error))
-				{
-					continue;
-				}
-
+				CachedSource item;
+				item.GuidText = guidText;
+				item.Source = entry.value("source", std::string{});
 				if (const auto list = entry.find("redirects"); list != entry.end() && list->is_array())
 				{
-					for (const nlohmann::json& pair : *list)
+					item.Redirects = *list;
+				}
+				cached.push_back(std::move(item));
+			}
+			roots = m_Roots;
+		}
+
+		AssetCatalog catalog;
+		for (const CachedSource& item : cached)
+		{
+			const std::optional<AssetGuid> guid = AssetGuid::from_string(item.GuidText);
+			std::error_code error;
+			if (!guid || item.Source.empty() || !std::filesystem::exists(item.Source, error))
+			{
+				continue;
+			}
+
+			if (item.Redirects.is_array())
+			{
+				for (const nlohmann::json& pair : item.Redirects)
+				{
+					if (!pair.is_array() || pair.size() != 2 || !pair[0].is_string() || !pair[1].is_string())
 					{
-						if (!pair.is_array() || pair.size() != 2 || !pair[0].is_string() || !pair[1].is_string())
-						{
-							continue;
-						}
-						const std::optional<AssetGuid> from = AssetGuid::from_string(pair[0].get<std::string>());
-						const std::optional<AssetGuid> to = AssetGuid::from_string(pair[1].get<std::string>());
-						if (from && to)
-						{
-							catalog.Redirects.push_back({ *from, *to });
-						}
+						continue;
+					}
+					const std::optional<AssetGuid> from = AssetGuid::from_string(pair[0].get<std::string>());
+					const std::optional<AssetGuid> to = AssetGuid::from_string(pair[1].get<std::string>());
+					if (from && to)
+					{
+						catalog.Redirects.push_back({ *from, *to });
 					}
 				}
+			}
 
-				for (const SourceRoot& root : m_Roots)
+			for (const SourceRoot& root : roots)
+			{
+				const std::string prefix = key_of(root.Source) + "/";
+				if (item.Source.starts_with(prefix))
 				{
-					const std::string prefix = key_of(root.Source) + "/";
-					if (source.starts_with(prefix))
+					std::string name = root.Source.generic_string();
+					while (name.ends_with("/"))
 					{
-						std::string name = root.Source.generic_string();
-						while (name.ends_with("/"))
-						{
-							name.pop_back();
-						}
-						catalog.Entries.push_back({ name + "/" + source.substr(prefix.size()), *guid });
-						break;
+						name.pop_back();
 					}
+					catalog.Entries.push_back({ name + "/" + item.Source.substr(prefix.size()), *guid });
+					break;
 				}
 			}
 		}
@@ -712,15 +724,11 @@ namespace wiwa
 			return;
 		}
 
-		std::error_code error;
-		std::filesystem::create_directories(m_LibraryRoot, error);
-		std::filesystem::path temp = path;
-		temp += ".tmp";
+		std::string error;
+		if (!write_file_atomic(path, bytes.data(), bytes.size(), error))
 		{
-			std::ofstream file(temp, std::ios::binary | std::ios::trunc);
-			file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+			WI_ASSET_LOG(Error, "{0}", error);
 		}
-		std::filesystem::rename(temp, path, error);
 
 		std::vector<std::function<void()>> listeners;
 		{
@@ -762,6 +770,38 @@ namespace wiwa
 				if (!source.empty() && !std::filesystem::exists(source, error) && !error)
 				{
 					orphans.push_back(guid);
+				}
+			}
+
+			// A source whose .meta guid changed (a project regenerated, a .meta replaced by another): the cache still holds an entry for the old guid,
+			// and the catalog would list the file twice (a script would then be offered twice as a component). The entry the .meta names stays.
+			std::unordered_map<std::string, std::vector<std::string>> bySource;
+			for (auto& [guid, entry] : m_ImportCache.items())
+			{
+				const std::string source = entry.value("source", std::string{});
+				if (!source.empty())
+				{
+					bySource[source].push_back(guid);
+				}
+			}
+			for (const auto& [source, guids] : bySource)
+			{
+				if (guids.size() < 2)
+				{
+					continue;
+				}
+				const std::optional<MetaFile> meta = MetaFile::load(MetaFile::meta_path_for(std::filesystem::path(source)));
+				if (!meta || !meta->Guid.valid())
+				{
+					continue;
+				}
+				for (const std::string& guid : guids)
+				{
+					if (guid != meta->Guid.to_string() && std::find(orphans.begin(), orphans.end(), guid) == orphans.end())
+					{
+						WI_ASSET_LOG(Info, "Dropping the stale import record {0} of {1}: its .meta says {2}", guid, source, meta->Guid.to_string());
+						orphans.push_back(guid);
+					}
 				}
 			}
 		}

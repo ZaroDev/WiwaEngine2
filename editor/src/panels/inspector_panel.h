@@ -30,6 +30,7 @@ private:
 	void draw_component(entt::entity entity, const wiwa::ComponentInfo& info);
 	// true if the user changed the value (and the new one is in value)
 	bool draw_joint_picker(entt::entity entity, const std::string& current, wiwa::FieldValue& value);
+	void draw_particle_controls(entt::entity entity);
 	bool draw_field(entt::entity entity, const wiwa::ComponentInfo& info, size_t index, const wiwa::FieldValue& current, wiwa::FieldValue& value);
 	// Three Bool fields named <Prefix>X, <Prefix>Y, <Prefix>Z starting at index: drawn on one line like a vector.
 	bool is_axis_trio(const wiwa::ComponentInfo& info, size_t index) const;

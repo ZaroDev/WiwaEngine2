@@ -15,6 +15,7 @@ namespace wiwa
 		HoverEnter,
 		HoverExit,
 		Focus,        // the widget got the focus
+		Finished,     // a Video widget's video ended (or was stopped, or failed): Skipped and Failed say which; raised by the video module
 	};
 
 	struct UiEvent
@@ -22,6 +23,8 @@ namespace wiwa
 		UiEventKind Kind = UiEventKind::Click;
 		UiId Widget = 0;
 		float Value = 0.0f;
+		bool Skipped = false; // Finished: a script stopped the video
+		bool Failed = false;  // Finished: the video could not play, or broke
 	};
 
 	class UiInteraction

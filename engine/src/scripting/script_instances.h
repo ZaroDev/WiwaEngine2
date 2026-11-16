@@ -8,6 +8,7 @@
 
 #include <sol/sol.hpp>
 
+#include <nav/nav_agents.h>
 #include <physics/physics_snapshot.h>
 #include <scene/scene.h>
 #include "script_context.h"
@@ -69,9 +70,12 @@ namespace wiwa
 
 		ScriptClass* class_of(AssetGuid script);
 		bool alive(const Instance& instance) const;
+		// Forgets a finished instance: the UI and animation listeners it registered, and its (entity, script) entry.
+		void drop_owner(const Instance& instance);
 		void reap();
 		void dispatch_ui_events();
 		void dispatch_animation_events();
+		void dispatch_nav_events();
 		void discover();
 		void make_self(Instance& instance);
 		void begin(Instance instance);
@@ -84,6 +88,8 @@ namespace wiwa
 		ScriptContext m_Context{};
 		UiHandlerTable m_UiHandlers{};
 		AnimHandlerTable m_AnimHandlers{};
+		u32 m_NavListener = 0;                            // the NavModule listener that queues the agents' events (0: none)
+		std::vector<std::pair<EntityGuid, NavAgentState>> m_NavEvents{}; // arrivals and failures since the last update, in order
 		Ref<Scene> m_Scene{};
 		std::vector<Instance> m_Instances{};              // the entity scripts, in the order they were found
 		std::vector<Instance> m_SceneInstances{};         // the scene-level scripts

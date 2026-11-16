@@ -4,6 +4,8 @@
 #include <assets/asset_manager.h>
 #include <assets/handle.h>
 
+#include <unordered_map>
+
 #include "scene.h"
 
 // Small scenes made to look at one thing: asset previews, thumbnails, 3D widgets in the UI (views.md). They are ordinary Scenes, drawn by a RenderView.
@@ -48,6 +50,7 @@ namespace wiwa
 		Ref<Scene> m_Scene;
 		AssetRef m_Prefab{};
 		Handle<PrefabData> m_Handle{};
+		std::unordered_map<AssetGuid, Handle<PrefabData>> m_Nested{}; // the prefabs the model instantiates, kept loaded
 		entt::entity m_Root = entt::null;
 	};
 }

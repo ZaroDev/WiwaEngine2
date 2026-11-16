@@ -4,14 +4,20 @@
 #include "memory.h"
 
 #include <assets/asset_manager.h>
+#include <ai/ai_module.h>
 #include <animation/animation_module.h>
+#include <audio/audio_module.h>
 #include <input/input_module.h>
+#include <nav/nav_module.h>
 #include <physics/physics_module.h>
 #include <renderer/render_module.h>
 #include <renderer/window.h>
+#include <scene/decal_module.h>
+#include <scene/particle_module.h>
 #include <scene/scene_module.h>
 #include <scripting/script_module.h>
 #include <ui/ui_module.h>
+#include <video/video_module.h>
 
 
 
@@ -57,7 +63,13 @@ namespace wiwa
 		m_ModuleManager.add_module<RenderModule>();
 		m_ModuleManager.add_module<UiModule>(); // before the scripts: the clicks of a frame reach them in that frame
 		m_ModuleManager.add_module<AnimationModule>(); // runs after the scripts (priority 10) but must exist when they start: they ask for it
+		m_ModuleManager.add_module<VideoModule>(); // after the UI (it gives the UI the pictures of Video widgets) and the audio; scripts ask for it, so it must exist when they start
+		m_ModuleManager.add_module<AudioModule>(); // must exist when the scripts start: they ask for it. It runs after them and the animation (priority 20)
+		m_ModuleManager.add_module<NavModule>(); // must exist when the scripts start: they ask for it. It runs after them (priority 5) and before the animation
+		m_ModuleManager.add_module<AIModule>(); // must exist when the scripts start: they ask for it. It runs after them and the NavModule (priority 6)
 		m_ModuleManager.add_module<ScriptingModule>();
+		m_ModuleManager.add_module<ParticleModule>(); // after the scripts (priority 12): an effect they spawn gets its first spawn counts in the frame it appears
+		m_ModuleManager.add_module<DecalModule>(); // after the scripts (priority 11): a decal they spawn is aged in the frame it appears
 
 		on_init();
 	}
@@ -110,17 +122,10 @@ namespace wiwa
 
 			float realDeltaTime = m_Time.get_engine_delta_time();
 
-			// Update
 			m_ModuleManager.pre_update(realDeltaTime);
 			m_ModuleManager.update(realDeltaTime);
 			m_ModuleManager.post_update(realDeltaTime);
 
-			// Physics update
-			m_ModuleManager.pre_physics_update(realDeltaTime);
-			m_ModuleManager.physics_update(realDeltaTime);
-			m_ModuleManager.post_physics_update(realDeltaTime);
-
-			// Renderer update
 			m_ModuleManager.pre_render_update(realDeltaTime);
 			m_ModuleManager.render_update(realDeltaTime);
 			m_ModuleManager.post_render_update(realDeltaTime);

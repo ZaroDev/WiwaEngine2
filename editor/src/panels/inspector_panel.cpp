@@ -1,5 +1,6 @@
 #include <editor_common.h>
 #include "inspector_panel.h"
+#include "audio_event_picker.h"
 
 #include <imgui.h>
 
@@ -7,7 +8,9 @@
 
 #include <scene/reflection/component_registry.h>
 #include <core/engine.h>
+#include <nav/nav_module.h>
 #include <assets/asset_manager.h>
+#include <scene/particle_runtime.h>
 
 namespace
 {
@@ -232,9 +235,68 @@ void InspectorPanel::draw_component(entt::entity entity, const wiwa::ComponentIn
 				}
 				ImGui::PopID();
 			}
+			if (info.Name == "ParticleSystem")
+			{
+				draw_particle_controls(entity);
+			}
 		}
 	}
 	ImGui::PopID();
+}
+
+// Play, Stop and Restart of a ParticleSystem in edit mode (the game clock is not running, so nothing else would move it). The state is the system's
+// ParticleRuntime, which is not saved: it only says whether the editor is previewing this system.
+void InspectorPanel::draw_particle_controls(entt::entity entity)
+{
+	entt::registry& registry = m_Editor.scene().registry();
+	if (!registry.all_of<wiwa::ParticleSystem>(entity))
+	{
+		return;
+	}
+	ImGui::BeginDisabled(m_Editor.playing()); // while the game plays, scripts and the game clock run the system
+	wiwa::ParticleRuntime& runtime = wiwa::particle_runtime_of(registry, entity);
+	if (ImGui::Button(runtime.Playing && runtime.Preview ? "Pause" : "Play"))
+	{
+		if (runtime.Playing && runtime.Preview)
+		{
+			runtime.Playing = false;
+		}
+		else
+		{
+			runtime.Preview = true;
+			if (runtime.Finished)
+			{
+				runtime.restart();
+			}
+			runtime.Playing = true;
+		}
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Stop"))
+	{
+		runtime.Playing = false;
+		runtime.Preview = false;
+		runtime.ClearCount++; // the particles in the air go with it
+		runtime.Time = 0.0f;
+		runtime.Finished = false;
+		runtime.Remainder.fill(0.0f);
+		runtime.PreviousLocal.fill(-1.0f);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Restart"))
+	{
+		runtime.Preview = true;
+		runtime.restart();
+	}
+	ImGui::EndDisabled();
+	if (m_Editor.playing())
+	{
+		ImGui::TextDisabled("Playing the game: the system runs with the game clock");
+	}
+	else if (runtime.Preview)
+	{
+		ImGui::TextDisabled("Previewing: %.2f s", runtime.Time);
+	}
 }
 
 // A drag or typing in a widget is one undo step: the scope opens when the widget is activated and closes when it is released. The
@@ -432,9 +494,27 @@ bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& 
 	{
 		int v = std::get<i32>(current);
 		std::vector<const char*> names;
-		for (const std::string& name : field.Meta.EnumNames)
+		std::vector<std::string> shown; // the project's names of navigation areas; an unused slot says so
+		if (field.Meta.NavAreas)
 		{
-			names.push_back(name.c_str());
+			const wiwa::NavModule* nav = wiwa::Engine::get().get_module<wiwa::NavModule>();
+			const wiwa::NavSettings defaults;
+			const wiwa::NavSettings& areas = nav != nullptr ? nav->settings() : defaults;
+			for (size_t i = 0; i < field.Meta.EnumNames.size(); i++)
+			{
+				shown.push_back(areas.used(static_cast<u32>(i)) ? areas.AreaName[i] : "(unused) " + field.Meta.EnumNames[i]);
+			}
+			for (const std::string& name : shown)
+			{
+				names.push_back(name.c_str());
+			}
+		}
+		else
+		{
+			for (const std::string& name : field.Meta.EnumNames)
+			{
+				names.push_back(name.c_str());
+			}
 		}
 		if (!names.empty() && ImGui::Combo(label, &v, names.data(), static_cast<int>(names.size()))) { value = static_cast<i32>(v); changed = true; }
 		break;
@@ -490,6 +570,16 @@ bool InspectorPanel::draw_field(entt::entity entity, const wiwa::ComponentInfo& 
 	}
 	case FieldType::String:
 	{
+		if (field.Meta.AudioEvent)
+		{
+			std::string event = std::get<std::string>(current);
+			if (draw_audio_event_picker(label, event))
+			{
+				value = event;
+				changed = true;
+			}
+			break;
+		}
 		char buffer[256];
 		const std::string& text = std::get<std::string>(current);
 		std::snprintf(buffer, sizeof(buffer), "%s", text.c_str());

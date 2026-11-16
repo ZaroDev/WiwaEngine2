@@ -5,8 +5,8 @@
 // memory first, then adds the result to the global histogram: 256 global atomics per group instead of 256 per pixel.
 // Mirrors luminance_to_bin in ExposureMath.h.
 
-#define GROUP_SIZE 16
-#define BINS 256
+#define GROUP_SIZE WI_EXPOSURE_GROUP_SIZE
+#define BINS WI_EXPOSURE_BINS
 
 // Slots match ExposurePass: SRV 0, UAV 1, push constants 2.
 Texture2D uHdr : register(t0);

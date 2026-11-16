@@ -13,14 +13,10 @@ namespace wiwa
 	bool LightCullPass::initialize(const PassInitializationDescription& description)
 	{
 		m_Device = description.Device;
-		m_Shaders = description.Shaders;
-		if (m_Shaders == nullptr)
+		if (!m_Shaders.initialize(description, "light culling", { { engine_assets::LIGHT_CULL_SHADER, ShaderStage::Compute } }))
 		{
-			WI_CULL_LOG(Error, "The light culling pass needs the shader library");
 			return false;
 		}
-
-		m_Shaders->request(engine_assets::LIGHT_CULL_SHADER, ShaderStage::Compute);
 
 		// Slots match engine/shaders/light_cull.hlsl: b0 frame constants, SRV 3 lights, UAV 6 counts, UAV 7 indices.
 		nvrhi::VulkanBindingOffsets offsets;
@@ -41,12 +37,12 @@ namespace wiwa
 
 	bool LightCullPass::is_ready() const
 	{
-		return m_Shaders->get(engine_assets::LIGHT_CULL_SHADER, ShaderStage::Compute) != nullptr;
+		return m_Shaders.ready();
 	}
 
 	void LightCullPass::update(nvrhi::IDevice* device, nvrhi::IFramebuffer* backbuffer)
 	{
-		if (m_Shaders->has_failed(engine_assets::LIGHT_CULL_SHADER, ShaderStage::Compute))
+		if (m_Shaders.failed())
 		{
 			m_Failed = true;
 		}
@@ -60,10 +56,9 @@ namespace wiwa
 		}
 
 		const SceneRenderData& data = *frame.Scene;
-		const u32 generation = m_Shaders->get_generation();
-		if (m_Pipeline == nullptr || generation != m_BuiltShaderGeneration)
+		const bool shadersChanged = m_Shaders.take_generation_change();
+		if (m_Pipeline == nullptr || shadersChanged)
 		{
-			m_BuiltShaderGeneration = generation;
 			nvrhi::ComputePipelineDesc description;
 			description.CS = m_Shaders->get(engine_assets::LIGHT_CULL_SHADER, ShaderStage::Compute);
 			description.addBindingLayout(m_Layout);
@@ -97,6 +92,6 @@ namespace wiwa
 		state.pipeline = m_Pipeline;
 		state.addBindingSet(cache.BindingSet);
 		commandList->setComputeState(state);
-		commandList->dispatch(CLUSTERS_X / 4, CLUSTERS_Y / 3, CLUSTERS_Z / 4);
+		commandList->dispatch(ceil_div(CLUSTERS_X, LIGHT_CULL_GROUP_X), ceil_div(CLUSTERS_Y, LIGHT_CULL_GROUP_Y), ceil_div(CLUSTERS_Z, LIGHT_CULL_GROUP_Z));
 	}
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "entity_guid.h"
@@ -18,6 +19,25 @@ namespace wiwa
 	constexpr u32 SCENE_MAX_COMPONENTS_PER_ENTITY = 256;
 	constexpr u32 SCENE_MAX_FIELDS_PER_COMPONENT = 256;
 	constexpr u32 SCENE_MAX_CHILD_DEPTH = 8; // AddChild overrides nest an entity record inside an override
+
+	// The components the scene layer knows by name. Every other code asks these (not a string of its own), so that a set of
+	// special components is defined once.
+	inline constexpr const char* ID_COMPONENT = "Id";                         // the entity's guid: in the record's Id, never a component record
+	inline constexpr const char* NAME_COMPONENT = "Name";
+	inline constexpr const char* TRANSFORM_COMPONENT = "Transform";
+	inline constexpr const char* PREFAB_INSTANCE_COMPONENT = "PrefabInstance"; // the link to a prefab: written and read through the record's Overrides
+
+	// Every entity has these, and they cannot be removed.
+	inline bool is_mandatory_component(std::string_view name)
+	{
+		return name == ID_COMPONENT || name == NAME_COMPONENT || name == TRANSFORM_COMPONENT;
+	}
+
+	// The record layer owns these (scene_records.cpp): they are not set, added, removed or listed as ordinary components.
+	inline bool is_record_owned_component(std::string_view name)
+	{
+		return name == ID_COMPONENT || name == PREFAB_INSTANCE_COMPONENT;
+	}
 
 	struct FieldRecord
 	{

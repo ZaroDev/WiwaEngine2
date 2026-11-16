@@ -55,10 +55,4 @@ namespace wiwa
 		}
 		m_GameClock.IsPlaying = !pause;
 	}
-
-	void Time::set_game_time_scale(float value)
-	{
-		m_GameClock.TimeScale = value;
-		m_GameClock.TimeScale = glm::clamp(m_GameClock.TimeScale, 0.f, 5.f);
-	}
 }

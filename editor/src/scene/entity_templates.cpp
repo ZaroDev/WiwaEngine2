@@ -115,7 +115,8 @@ std::vector<EntityTemplate> entity_templates(wiwa::AssetManager& assets)
 		});
 	} });
 
-	templates.push_back({ "Camera", "", [](SceneEditor& editor, entt::entity parent) { return make(editor, parent, "Camera", { "Camera" }); } });
+	templates.push_back({ "Decal", "3D", [](SceneEditor& editor, entt::entity parent) { return make(editor, parent, "Decal", { "Decal" }); } });
+	templates.push_back({ "Camera", "",[](SceneEditor& editor, entt::entity parent) { return make(editor, parent, "Camera", { "Camera" }); } });
 	templates.push_back({ "UI Canvas", "UI", [](SceneEditor& editor, entt::entity parent) { return make(editor, parent, "UI Canvas", { "UICanvas" }); } });
 	templates.push_back({ "Animator", "Animation", [](SceneEditor& editor, entt::entity parent) { return make(editor, parent, "Animated object", { "Animator" }); } });
 	templates.push_back({ "Character controller", "Physics", [](SceneEditor& editor, entt::entity parent) { return make(editor, parent, "Character", { "CharacterController" }); } });

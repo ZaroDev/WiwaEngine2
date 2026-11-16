@@ -1,2 +1,0 @@
-Bricks059, PavingStones070, Metal032 from ambientCG.com, CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/).
-The *_orm.png files pack the AmbientOcclusion, Roughness and Metalness maps (R, G, B).
