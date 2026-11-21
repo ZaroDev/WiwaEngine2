@@ -124,7 +124,8 @@ namespace wiwa
 		std::unordered_set<std::string> m_WarnedViews{}; // names of views a ViewImage asked for that did not exist
 		TextureSizeProvider m_TextureSizes{};
 		std::unordered_map<AssetGuid, Handle<FontData>> m_FontHandles{};
-		std::unordered_map<AssetGuid, Handle<TextureData>> m_TextureHandles{};
+		std::unordered_map<AssetGuid, Handle<TextureData>> m_TextureHandles{}; // textures still loading, only to learn their size
+		std::unordered_map<AssetGuid, glm::vec2> m_TextureSizeCache{};         // the size of the ones that loaded: the pixels are not kept
 
 		const Scene* m_Scene = nullptr; // the scene the instances belong to (identity only)
 		std::unordered_map<EntityGuid, Scope<UiPanelInstance>> m_Instances{};

@@ -37,12 +37,37 @@ namespace wiwa
 		Blend,
 	};
 
+	// How the texels of TextureData::Mips are stored. Written to files: append only.
+	enum class TextureCodec : u32
+	{
+		Rgba8, // 4 bytes per texel
+		Bc7,   // 16 bytes per 4x4 block (1 byte per texel), RGBA
+		Last,
+	};
+
+	// Bytes of one mip level of the given size.
+	inline u64 texture_mip_bytes(TextureCodec codec, u32 width, u32 height)
+	{
+		if (codec == TextureCodec::Bc7)
+		{
+			return static_cast<u64>((width + 3) / 4) * ((height + 3) / 4) * 16;
+		}
+		return static_cast<u64>(width) * height * 4;
+	}
+
+	// Bytes between two rows of a mip level (a row of blocks for a block codec).
+	inline u32 texture_row_bytes(TextureCodec codec, u32 width)
+	{
+		return codec == TextureCodec::Bc7 ? ((width + 3) / 4) * 16 : width * 4;
+	}
+
 	struct TextureData
 	{
 		u32 Width = 0;
 		u32 Height = 0;
 		TextureKind Kind = TextureKind::Color;
-		std::vector<std::vector<u8>> Mips{}; // RGBA8, [0] is full size, each next one half the size (min 1x1)
+		TextureCodec Codec = TextureCodec::Rgba8; // Bc7: the cooker only compresses textures whose size is a multiple of 4
+		std::vector<std::vector<u8>> Mips{};      // [0] is full size, each next one half the size (min 1x1); RGBA8 or blocks, see Codec
 	};
 
 	// An environment as the GPU wants it, cooked from a Radiance .hdr file: the sky as a cube with its roughness-prefiltered mips, and

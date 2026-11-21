@@ -1,8 +1,7 @@
 #include <editor_common.h>
 #include "packager.h"
 
-#include <lz4.h>
-#include <lz4hc.h>
+#include <zstd.h>
 
 #include <assets/asset_catalog.h>
 #include <assets/build_info.h>
@@ -22,6 +21,9 @@
 
 namespace wiwa
 {
+	// 12 is within a few percent of 19 for these data and several times faster; a pack is made by every smoke test.
+	constexpr int PAK_ZSTD_LEVEL = 12;
+
 	std::unordered_set<AssetGuid> select_pack_set(const std::vector<PackCandidate>& candidates, const BuildSettings& settings, std::vector<AssetGuid>& missing, const std::unordered_map<AssetGuid, AssetGuid>& redirects)
 	{
 		missing.clear();
@@ -275,28 +277,31 @@ namespace wiwa
 		// Compresses one blob into the pack and notes it in the index.
 		auto add_blob = [&](AssetGuid guid, u32 type, const std::vector<std::byte>& blob, const std::filesystem::path& what) -> bool
 		{
-			if (blob.size() > static_cast<size_t>(LZ4_MAX_INPUT_SIZE))
-			{
-				WI_ASSET_LOG(Error, "{0} is too big to pack", what.string());
-				return false;
-			}
-
-			std::vector<char> compressed(static_cast<size_t>(LZ4_compressBound(static_cast<int>(blob.size()))));
-			const int compressedSize = LZ4_compress_HC(reinterpret_cast<const char*>(blob.data()), compressed.data(),
-				static_cast<int>(blob.size()), static_cast<int>(compressed.size()), LZ4HC_CLEVEL_DEFAULT);
-			if (compressedSize <= 0)
+			// Zstd, but a blob that does not shrink by at least 5% (audio, video, already packed data) is stored as is: it then also
+			// loads without a decoder pass.
+			std::vector<char> compressed(ZSTD_compressBound(blob.size()));
+			const size_t compressedSize = ZSTD_compress(compressed.data(), compressed.size(), blob.data(), blob.size(), PAK_ZSTD_LEVEL);
+			if (ZSTD_isError(compressedSize))
 			{
 				WI_ASSET_LOG(Error, "Compression of {0} failed", what.string());
 				return false;
 			}
-
-			out.write(compressed.data(), compressedSize);
+			const bool stored = compressedSize + blob.size() / 20 >= blob.size();
+			if (stored)
+			{
+				out.write(reinterpret_cast<const char*>(blob.data()), static_cast<std::streamsize>(blob.size()));
+			}
+			else
+			{
+				out.write(compressed.data(), static_cast<std::streamsize>(compressedSize));
+			}
 
 			PakEntry entry;
 			entry.Guid = guid;
 			entry.Type = type;
+			entry.Codec = static_cast<u32>(stored ? PakCodec::Stored : PakCodec::Zstd);
 			entry.Offset = offset;
-			entry.CompressedSize = static_cast<u64>(compressedSize);
+			entry.CompressedSize = stored ? static_cast<u64>(blob.size()) : static_cast<u64>(compressedSize);
 			entry.UncompressedSize = blob.size();
 			entry.Hash = hash64(blob.data(), blob.size());
 			index.push_back(entry);

@@ -1,6 +1,8 @@
 #include <editor_common.h>
 #include "image_utils.h"
 
+#include <cstring>
+#include <mutex>
 #include <thread>
 
 #include <renderer/ibl/environment_pack.h>
@@ -16,6 +18,8 @@
 #define STBI_NO_PNM
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+#include <bc7enc.h>
 
 namespace wiwa
 {
@@ -157,6 +161,91 @@ namespace wiwa
 		return count;
 	}
 
+	bool compress_texture_bc7(TextureData& texture)
+	{
+		if (texture.Codec != TextureCodec::Rgba8 || texture.Width < 4 || texture.Height < 4 || texture.Width % 4 != 0 || texture.Height % 4 != 0)
+		{
+			return false; // a block format needs a multiple of 4 on the first level
+		}
+
+		static std::once_flag initialised;
+		std::call_once(initialised, []() { bc7enc_compress_block_init(); });
+
+		bc7enc_compress_block_params params;
+		bc7enc_compress_block_params_init(&params);
+		if (texture.Kind == TextureKind::Color)
+		{
+			bc7enc_compress_block_params_init_perceptual_weights(&params);
+		}
+		else
+		{
+			bc7enc_compress_block_params_init_linear_weights(&params); // normals and data: plain error on the channels
+		}
+
+		const unsigned workerCount = std::clamp(std::thread::hardware_concurrency() / 2, 1u, 4u);
+		std::vector<std::vector<u8>> compressed;
+		compressed.reserve(texture.Mips.size());
+		for (size_t mip = 0; mip < texture.Mips.size(); mip++)
+		{
+			const u32 width = std::max(texture.Width >> mip, 1u);
+			const u32 height = std::max(texture.Height >> mip, 1u);
+			const u32 blocksX = (width + 3) / 4;
+			const u32 blocksY = (height + 3) / 4;
+			const std::vector<u8>& source = texture.Mips[mip];
+			std::vector<u8> blocks(static_cast<size_t>(blocksX) * blocksY * 16);
+
+			auto encodeRows = [&](u32 firstRow, u32 endRow)
+			{
+				u8 tile[16 * 4];
+				for (u32 by = firstRow; by < endRow; by++)
+				{
+					for (u32 bx = 0; bx < blocksX; bx++)
+					{
+						// a level smaller than a block (the 2x2 and 1x1 tail) repeats its edge texels
+						for (u32 y = 0; y < 4; y++)
+						{
+							const u32 sy = std::min(by * 4 + y, height - 1);
+							for (u32 x = 0; x < 4; x++)
+							{
+								const u32 sx = std::min(bx * 4 + x, width - 1);
+								std::memcpy(tile + (y * 4 + x) * 4, source.data() + (static_cast<size_t>(sy) * width + sx) * 4, 4);
+							}
+						}
+						bc7enc_compress_block(blocks.data() + (static_cast<size_t>(by) * blocksX + bx) * 16, tile, &params);
+					}
+				}
+			};
+
+			if (workerCount == 1 || blocksX * blocksY < 4096)
+			{
+				encodeRows(0, blocksY);
+			}
+			else
+			{
+				std::vector<std::thread> workers;
+				const u32 rowsPerWorker = (blocksY + workerCount - 1) / workerCount;
+				for (u32 worker = 0; worker < workerCount; worker++)
+				{
+					const u32 first = worker * rowsPerWorker;
+					const u32 end = std::min(first + rowsPerWorker, blocksY);
+					if (first < end)
+					{
+						workers.emplace_back(encodeRows, first, end);
+					}
+				}
+				for (std::thread& worker : workers)
+				{
+					worker.join();
+				}
+			}
+			compressed.push_back(std::move(blocks));
+		}
+
+		texture.Mips = std::move(compressed);
+		texture.Codec = TextureCodec::Bc7;
+		return true;
+	}
+
 	std::optional<TextureData> decode_texture(std::span<const std::byte> bytes, TextureKind kind, const std::string& name, std::string& error, const TextureImportOptions& options)
 	{
 		int width = 0;
@@ -253,6 +342,11 @@ namespace wiwa
 		if (!options.GenerateMipmaps && texture.Mips.size() > 1)
 		{
 			texture.Mips.resize(1);
+		}
+
+		if (options.CompressBc7)
+		{
+			compress_texture_bc7(texture); // stays RGBA8 when the size does not fit a block format
 		}
 
 		return texture;

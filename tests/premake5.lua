@@ -40,6 +40,8 @@ project "wiwa_tests"
 		"%{IncludeDirs.CGLTF}",
 		"%{IncludeDirs.UFBX}",
 		"%{IncludeDirs.LZ4}",
+		"%{IncludeDirs.zstd}",
+		"%{IncludeDirs.bc7enc}",
 		"%{IncludeDirs.ENTT}",
 		"%{IncludeDirs.filewatch}",
 		"%{IncludeDirs.SPDLOG}",
@@ -64,6 +66,8 @@ project "wiwa_tests"
 		"wiwa",
 		"ImGui",
 		"LZ4",
+		"zstd",
+		"bc7enc",
 		"ufbx",
 		"Recast",
 		"d3dcompiler"

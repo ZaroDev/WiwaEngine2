@@ -59,7 +59,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "ShaderImporter"; }
-			virtual u32 version() const override { return 2; }
+			virtual u32 version() const override { return 3; } // 3: DXBC without reflection, debug and test chunks
 			virtual std::vector<std::string> extensions() const override { return { ".hlsl", ".hlsli" }; }
 
 			// not editable in the editor: a shader's debug build is a developer switch

@@ -30,7 +30,7 @@ namespace wiwa
 	std::unordered_set<AssetGuid> select_pack_set(const std::vector<PackCandidate>& candidates, const BuildSettings& settings, std::vector<AssetGuid>& missing, const std::unordered_map<AssetGuid, AssetGuid>& redirects = {});
 
 	// Writes assets.wpak: the cooked assets in Library/ (after bringing it up to date) that the build settings choose, each
-	// LZ4-compressed with a content hash. A game reads it through the AssetManager when it sits next to the program.
+	// Zstd-compressed (or stored when that does not pay) with a content hash. A game reads it through the AssetManager when it sits next to the program.
 	class Packager
 	{
 	public:

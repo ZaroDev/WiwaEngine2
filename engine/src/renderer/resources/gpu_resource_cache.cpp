@@ -32,9 +32,14 @@ namespace wiwa
 			return offsets;
 		}
 
-		nvrhi::Format texture_format(TextureKind kind)
+		nvrhi::Format texture_format(TextureKind kind, TextureCodec codec)
 		{
-			return kind == TextureKind::Color ? nvrhi::Format::SRGBA8_UNORM : nvrhi::Format::RGBA8_UNORM;
+			const bool srgb = kind == TextureKind::Color;
+			if (codec == TextureCodec::Bc7)
+			{
+				return srgb ? nvrhi::Format::BC7_UNORM_SRGB : nvrhi::Format::BC7_UNORM;
+			}
+			return srgb ? nvrhi::Format::SRGBA8_UNORM : nvrhi::Format::RGBA8_UNORM;
 		}
 
 		bool valid_texture(const TextureData& data)
@@ -43,11 +48,15 @@ namespace wiwa
 			{
 				return false;
 			}
+			if (data.Codec != TextureCodec::Rgba8 && (data.Width % 4 != 0 || data.Height % 4 != 0))
+			{
+				return false; // a block format needs a multiple of 4 on the first level
+			}
 			for (size_t mip = 0; mip < data.Mips.size(); mip++)
 			{
-				const size_t width = std::max(data.Width >> mip, 1u);
-				const size_t height = std::max(data.Height >> mip, 1u);
-				if (data.Mips[mip].size() != width * height * 4)
+				const u32 width = std::max(data.Width >> mip, 1u);
+				const u32 height = std::max(data.Height >> mip, 1u);
+				if (data.Mips[mip].size() != texture_mip_bytes(data.Codec, width, height))
 				{
 					return false;
 				}
@@ -505,7 +514,7 @@ namespace wiwa
 		description.width = data.Width;
 		description.height = data.Height;
 		description.mipLevels = static_cast<u32>(data.Mips.size());
-		description.format = texture_format(data.Kind);
+		description.format = texture_format(data.Kind, data.Codec);
 		description.isShaderResource = true;
 		description.initialState = UploadQueue::resting_state(m_Device);
 		description.keepInitialState = true;
@@ -518,8 +527,8 @@ namespace wiwa
 
 		for (u32 mip = 0; mip < data.Mips.size(); mip++)
 		{
-			const size_t width = std::max(data.Width >> mip, 1u);
-			m_Uploads->write_texture(texture, 0, mip, data.Mips[mip].data(), width * 4);
+			const u32 width = std::max(data.Width >> mip, 1u);
+			m_Uploads->write_texture(texture, 0, mip, data.Mips[mip].data(), texture_row_bytes(data.Codec, width));
 		}
 
 		entry.Texture = std::move(texture); // the old one, if any, lives on in the frames that still use it

@@ -3,11 +3,11 @@
 #include <math/math.h>
 #include "asset_guid.h"
 
-// assets.wpak: PakHeader, then the LZ4-compressed .wasset blobs, then the index (PakEntry * EntryCount) at IndexOffset.
+// assets.wpak: PakHeader, then the .wasset blobs (each compressed as its PakEntry::Codec says), then the index (PakEntry * EntryCount) at IndexOffset.
 namespace wiwa
 {
 	constexpr u32 PAK_MAGIC = 0x4B415057; // "WPAK"
-	constexpr u32 PAK_VERSION = 1;
+	constexpr u32 PAK_VERSION = 2; // 2: entries name their codec (Zstd, or stored when compression does not pay). 1: every blob LZ4
 
 	struct PakHeader
 	{
@@ -18,11 +18,19 @@ namespace wiwa
 		u64 IndexOffset = 0;
 	};
 
+	// How a blob is stored in the pack. Written to files: append only.
+	enum class PakCodec : u32
+	{
+		Lz4 = 0,
+		Zstd = 1,
+		Stored = 2, // as is: CompressedSize == UncompressedSize
+	};
+
 	struct PakEntry
 	{
 		AssetGuid Guid{};
 		u32 Type = 0;
-		u32 Reserved = 0;
+		u32 Codec = static_cast<u32>(PakCodec::Lz4);
 		u64 Offset = 0;
 		u64 CompressedSize = 0;
 		u64 UncompressedSize = 0;

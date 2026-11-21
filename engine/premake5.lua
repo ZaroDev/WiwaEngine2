@@ -30,6 +30,7 @@ project "wiwa"
 		"%{IncludeDirs.vkbootstrap}",
 		"%{IncludeDirs.ImGui}",
 		"%{IncludeDirs.LZ4}",
+		"%{IncludeDirs.zstd}",
 		"%{IncludeDirs.ENTT}",
 		"%{IncludeDirs.NJSON}",
 		"%{IncludeDirs.lua}",
@@ -43,6 +44,7 @@ project "wiwa"
 	links
 	{
 		"LZ4",
+		"zstd",
 		"GLFW",
 		"nvrhi",
 		"%{LibraryDirs.VulkanSDK}/vulkan-1.lib",

@@ -6,6 +6,9 @@
 #include <renderer/resources/gpu_resource_cache.h>
 #include "test_meshes.h"
 
+#include <asset_pipeline/image_utils.h>
+#include <bc7decomp.h>
+
 // Checks of the GPU resource cache and the uploads behind it. Each check builds its own queue and cache.
 namespace wiwa
 {
@@ -151,6 +154,82 @@ namespace wiwa
 					context.check((record.Flags & MATERIAL_ALPHA_MASK_BIT) != 0 && (record.Flags & MATERIAL_DOUBLE_SIDED_BIT) != 0, "mask and double sided flags");
 					context.check((record.TextureMask & MATERIAL_HAS_BASE_COLOR) != 0 && (record.TextureMask & MATERIAL_HAS_NORMAL) == 0, "only the base color is a real texture");
 				}
+			});
+
+		register_render_check("cache_bc7_texture", [](RenderCheckContext& context)
+			{
+				// 8x8 diagonal gradient with a full chain: 8, 4, 2, 1
+				TextureData texture;
+				texture.Width = 8;
+				texture.Height = 8;
+				texture.Kind = TextureKind::Color;
+				for (u32 mip = 0; mip < 4; mip++)
+				{
+					const u32 size = 8u >> mip;
+					std::vector<u8> level(static_cast<size_t>(size) * size * 4);
+					for (u32 y = 0; y < size; y++)
+					{
+						for (u32 x = 0; x < size; x++)
+						{
+							u8* texel = level.data() + (static_cast<size_t>(y) * size + x) * 4;
+							const u32 ramp = (x + y) * 255 / std::max(2 * (size - 1), 1u); // one color line: what a BC7 block holds best
+							texel[0] = static_cast<u8>(ramp);
+							texel[1] = static_cast<u8>(255 - ramp);
+							texel[2] = 128;
+							texel[3] = 255;
+						}
+					}
+					texture.Mips.push_back(std::move(level));
+				}
+				const std::vector<u8> original = texture.Mips[0];
+
+				context.check(compress_texture_bc7(texture), "an 8x8 texture compresses");
+				context.check(texture.Codec == TextureCodec::Bc7 && texture.Mips.size() == 4, "it is BC7 with its chain");
+				context.check(texture.Mips[0].size() == 64 && texture.Mips[1].size() == 16 && texture.Mips[3].size() == 16, "a block per 4x4 texels, one block for the small levels");
+				context.check(!compress_texture_bc7(texture), "a BC7 texture is not compressed again");
+
+				// the first level decodes back to something close to the source
+				int worst = 0;
+				for (u32 block = 0; block < 4; block++)
+				{
+					bc7decomp::color_rgba texels[16];
+					context.check(bc7decomp::unpack_bc7(texture.Mips[0].data() + block * 16, texels), "the block is a valid BC7 block");
+					for (u32 i = 0; i < 16; i++)
+					{
+						const u32 x = (block % 2) * 4 + i % 4;
+						const u32 y = (block / 2) * 4 + i / 4;
+						const u8* expected = original.data() + (static_cast<size_t>(y) * 8 + x) * 4;
+						for (u32 channel = 0; channel < 4; channel++)
+						{
+							worst = std::max<int>(worst, std::abs(static_cast<int>(texels[i].m_comps[channel]) - static_cast<int>(expected[channel])));
+						}
+					}
+				}
+				context.check(worst <= 6, "the decoded texels are within 6 of the source (worst " + std::to_string(worst) + ")");
+
+				TextureData odd;
+				odd.Width = 6;
+				odd.Height = 6;
+				odd.Mips.push_back(std::vector<u8>(6 * 6 * 4, 200));
+				context.check(!compress_texture_bc7(odd) && odd.Codec == TextureCodec::Rgba8, "a size that is not a multiple of 4 stays RGBA8");
+
+				CacheFixture fixture(context, 1024 * 1024);
+				const AssetRef ref = fixture.Cache->add_inline_texture(texture);
+				context.check(fixture.pump_until([&] { return fixture.Cache->get_texture(ref) != nullptr; }), "the BC7 texture is uploaded");
+				nvrhi::ITexture* gpu = fixture.Cache->get_texture(ref);
+				if (gpu != nullptr)
+				{
+					context.check(gpu->getDesc().format == nvrhi::Format::BC7_UNORM_SRGB && gpu->getDesc().mipLevels == 4, "as sRGB BC7 with 4 levels");
+				}
+				context.check(fixture.Cache->get_stats().Bytes == 64 + 16 * 3, "its memory is the blocks, a quarter of RGBA8");
+
+				// a block codec with a size that is not a multiple of 4 is refused, not uploaded
+				TextureData broken = texture;
+				broken.Width = 6;
+				broken.Height = 6;
+				const AssetRef brokenRef = fixture.Cache->add_inline_texture(broken);
+				context.check(fixture.Cache->get_texture(brokenRef) == nullptr, "nothing at first"); // asking is what starts the upload
+				context.check(fixture.pump_until([&] { return fixture.Cache->get_stats().Failed == 1; }) && fixture.Cache->get_texture(brokenRef) == nullptr, "a malformed BC7 texture fails");
 			});
 
 		register_render_check("cache_failed_asset", [](RenderCheckContext& context)

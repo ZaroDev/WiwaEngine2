@@ -40,17 +40,26 @@ namespace wiwa
 			{
 				return std::nullopt;
 			}
-			auto it = m_TextureHandles.find(ref.resolved());
+			const AssetGuid guid = ref.resolved();
+			if (auto known = m_TextureSizeCache.find(guid); known != m_TextureSizeCache.end())
+			{
+				return known->second;
+			}
+			// Only the size is kept: the pixels belong to the renderer, and the handle is dropped as soon as the size is known.
+			auto it = m_TextureHandles.find(guid);
 			if (it == m_TextureHandles.end())
 			{
-				it = m_TextureHandles.emplace(ref.resolved(), m_Assets->load<TextureData>(ref)).first;
+				it = m_TextureHandles.emplace(guid, m_Assets->load<TextureData>(ref)).first;
 			}
 			const TextureData* texture = it->second.get();
 			if (texture == nullptr)
 			{
 				return std::nullopt;
 			}
-			return glm::vec2(static_cast<float>(texture->Width), static_cast<float>(texture->Height));
+			const glm::vec2 size(static_cast<float>(texture->Width), static_cast<float>(texture->Height));
+			m_TextureSizeCache[guid] = size;
+			m_TextureHandles.erase(it);
+			return size;
 		};
 
 		// the listener runs on whatever thread cooked the asset: it only notes the guid
@@ -72,6 +81,7 @@ namespace wiwa
 		m_CanvasEntities.clear();
 		m_FontHandles.clear();
 		m_TextureHandles.clear();
+		m_TextureSizeCache.clear();
 	}
 
 	void UiModule::reload_panel(const AssetRef& panel)
@@ -328,6 +338,7 @@ namespace wiwa
 			{
 				m_FontHandles.erase(guid);
 				m_TextureHandles.erase(guid);
+				m_TextureSizeCache.erase(guid);
 				reload_panel(AssetRef{ guid, 0 });
 			}
 		}

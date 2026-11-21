@@ -2,6 +2,7 @@
 #include "pak_source.h"
 
 #include <lz4.h>
+#include <zstd.h>
 
 #include "asset_catalog.h"
 
@@ -30,7 +31,7 @@ namespace wiwa
 			return;
 		}
 
-		if (header.Magic != PAK_MAGIC || header.Version != PAK_VERSION)
+		if (header.Magic != PAK_MAGIC || header.Version < 1 || header.Version > PAK_VERSION)
 		{
 			WI_ASSET_LOG(Error, "Pack {0} has a bad header or an unsupported version", file.string());
 			return;
@@ -87,23 +88,59 @@ namespace wiwa
 
 		const PakEntry& entry = found->second;
 
-		std::vector<char> compressed(static_cast<size_t>(entry.CompressedSize));
+		const PakCodec codec = static_cast<PakCodec>(entry.Codec);
+		if (codec != PakCodec::Lz4 && codec != PakCodec::Zstd && codec != PakCodec::Stored)
+		{
+			WI_ASSET_LOG(Error, "Asset {0} in the pack uses an unknown codec", guid.to_string());
+			return std::nullopt;
+		}
+		if (entry.UncompressedSize > MAX_ASSET_SIZE || (codec == PakCodec::Stored && entry.CompressedSize != entry.UncompressedSize))
+		{
+			WI_ASSET_LOG(Error, "Asset {0} in the pack is corrupt", guid.to_string());
+			return std::nullopt;
+		}
+
+		std::vector<std::byte> bytes(static_cast<size_t>(entry.UncompressedSize));
+		std::vector<char> compressed;
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex);
 			m_File.clear();
 			m_File.seekg(static_cast<std::streamoff>(entry.Offset));
-			if (!compressed.empty() && !m_File.read(compressed.data(), static_cast<std::streamsize>(compressed.size())))
+			// a stored blob is read straight into the result: no second buffer
+			char* target = nullptr;
+			size_t count = static_cast<size_t>(entry.CompressedSize);
+			if (codec == PakCodec::Stored)
+			{
+				target = reinterpret_cast<char*>(bytes.data());
+			}
+			else
+			{
+				compressed.resize(count);
+				target = compressed.data();
+			}
+			if (count != 0 && !m_File.read(target, static_cast<std::streamsize>(count)))
 			{
 				WI_ASSET_LOG(Error, "Cannot read asset {0} from the pack", guid.to_string());
 				return std::nullopt;
 			}
 		}
 
-		std::vector<std::byte> bytes(static_cast<size_t>(entry.UncompressedSize));
-		const int decoded = LZ4_decompress_safe(compressed.data(), reinterpret_cast<char*>(bytes.data()),
-			static_cast<int>(compressed.size()), static_cast<int>(bytes.size()));
+		bool decoded = true;
+		if (codec == PakCodec::Lz4)
+		{
+			const int result = LZ4_decompress_safe(compressed.data(), reinterpret_cast<char*>(bytes.data()),
+				static_cast<int>(compressed.size()), static_cast<int>(bytes.size()));
+			decoded = result >= 0 && static_cast<u64>(result) == entry.UncompressedSize;
+		}
+		else if (codec == PakCodec::Zstd)
+		{
+			// one decoder state per loading thread: creating it per blob costs more than small blobs take to decode
+			thread_local ZSTD_DCtx* context = ZSTD_createDCtx();
+			const size_t result = context != nullptr ? ZSTD_decompressDCtx(context, bytes.data(), bytes.size(), compressed.data(), compressed.size()) : 0;
+			decoded = context != nullptr && !ZSTD_isError(result) && result == entry.UncompressedSize;
+		}
 
-		if (decoded < 0 || static_cast<u64>(decoded) != entry.UncompressedSize || hash64(bytes.data(), bytes.size()) != entry.Hash)
+		if (!decoded || hash64(bytes.data(), bytes.size()) != entry.Hash)
 		{
 			WI_ASSET_LOG(Error, "Asset {0} in the pack is corrupt", guid.to_string());
 			return std::nullopt;

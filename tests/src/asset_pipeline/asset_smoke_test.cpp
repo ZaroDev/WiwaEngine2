@@ -603,6 +603,25 @@ namespace wiwa
 			}
 		}
 
+		// the pack codecs: Zstd for what shrinks, stored for what does not, never the old LZ4 and never a stored blob that changed size
+		{
+			u32 zstdCount = 0;
+			u32 storedCount = 0;
+			u32 otherCount = 0;
+			u32 badStored = 0;
+			for (const auto& [guid, entry] : pak.get_index())
+			{
+				switch (static_cast<PakCodec>(entry.Codec))
+				{
+				case PakCodec::Zstd: zstdCount++; break;
+				case PakCodec::Stored: storedCount++; badStored += entry.CompressedSize != entry.UncompressedSize ? 1 : 0; break;
+				default: otherCount++; break;
+				}
+			}
+			check(zstdCount > 0 && otherCount == 0, "the pack is Zstd (" + std::to_string(zstdCount) + " Zstd, " + std::to_string(storedCount) + " stored)");
+			check(badStored == 0, "a stored blob is as big as its content");
+		}
+
 		// 4. damaged packs are rejected without a crash
 		{
 			std::optional<std::vector<std::byte>> bytes = read_binary_file(temp / "assets.wpak");

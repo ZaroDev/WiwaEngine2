@@ -146,6 +146,15 @@ namespace wiwa
 				return result;
 			}
 
+			// Reflection, debug and test chunks are not read at run time (the input signature stays): a release cook does not carry them.
+			Microsoft::WRL::ComPtr<ID3DBlob> stripped;
+			if (!options.DebugInfo
+				&& SUCCEEDED(D3DStripShader(bytecode->GetBufferPointer(), bytecode->GetBufferSize(),
+					D3DCOMPILER_STRIP_REFLECTION_DATA | D3DCOMPILER_STRIP_DEBUG_INFO | D3DCOMPILER_STRIP_TEST_BLOBS | D3DCOMPILER_STRIP_PRIVATE_DATA, &stripped)))
+			{
+				bytecode = stripped;
+			}
+
 			const u8* begin = static_cast<const u8*>(bytecode->GetBufferPointer());
 			result.Code.assign(begin, begin + bytecode->GetBufferSize());
 			result.Success = true;

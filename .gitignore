@@ -102,3 +102,7 @@ game/wiwa_game.exe
 
 editor/recent_scenes.txt
 editor/layouts/
+
+# the stress hall (scripts/gen_stress_scene.py): Sponza is not CC0, so its models and the scene that names them are generated, never committed
+editor/assets/models/stress/
+editor/assets/scenes/stress.wscene

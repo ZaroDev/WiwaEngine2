@@ -204,11 +204,12 @@ namespace wiwa
 		ar.value(v.Width);
 		ar.value(v.Height);
 		archive_enum(ar, v.Kind, 4);
+		archive_enum(ar, v.Codec, static_cast<u32>(TextureCodec::Last));
 		ar.list(v.Mips, [&](std::vector<u8>& mip) { ar.pod_vector(mip); });
 
 		if (ar.reading() && ar.ok())
 		{
-			const u64 expected = static_cast<u64>(v.Width) * v.Height * 4;
+			const u64 expected = texture_mip_bytes(v.Codec, v.Width, v.Height);
 			if (v.Width == 0 || v.Height == 0 || v.Mips.empty() || v.Mips[0].size() != expected)
 			{
 				ar.fail();

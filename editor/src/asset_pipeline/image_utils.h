@@ -20,7 +20,12 @@ namespace wiwa
 		bool InvertGreen = false;    // flip the green channel (a normal map from the other convention: DirectX y-down against OpenGL y-up)
 		bool ForceOpaque = false;    // alpha 255 everywhere
 		bool PremultiplyAlpha = false; // rgb multiplied by alpha (done on the stored values, before the mips)
+		bool CompressBc7 = true;     // BC7 (a quarter of the memory) when the size is a multiple of 4; false keeps RGBA8
 	};
+
+	// Replaces the RGBA8 levels of the texture with BC7 blocks. Returns false (the texture is left as it was) when it is not RGBA8 or its
+	// size is not a multiple of 4.
+	bool compress_texture_bc7(TextureData& texture);
 
 	// Decodes PNG/JPEG/TGA/BMP bytes to RGBA8 and builds the whole mip chain (averaged the right way for kind).
 	// name is only used in error messages.

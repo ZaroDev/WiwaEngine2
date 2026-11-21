@@ -14,7 +14,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "TextureImporter"; }
-			virtual u32 version() const override { return 1; }
+			virtual u32 version() const override { return 2; } // 2: BC7 compression
 			virtual std::vector<std::string> extensions() const override { return { ".png", ".jpg", ".jpeg", ".tga", ".bmp" }; }
 
 			virtual bool editable() const override { return true; }
@@ -28,6 +28,7 @@ namespace wiwa
 					ImportOption::make_bool("flipVertical", "Flip vertically", false, "Mirror the image top to bottom."),
 					ImportOption::make_bool("invertGreen", "Invert green", false, "Flip the green channel: turns a DirectX (y-down) normal map into an OpenGL (y-up) one and back."),
 					ImportOption::make_bool("forceOpaque", "Force opaque", false, "Set alpha to 255 everywhere (a stray alpha channel in a color map)."),
+					ImportOption::make_bool("compress", "Compress (BC7)", true, "Store the texture as BC7: a quarter of the memory on the GPU and in the pak, with a small loss of quality. Needs a size that is a multiple of 4, otherwise the texture stays uncompressed."),
 					ImportOption::make_bool("premultiplyAlpha", "Premultiply alpha", false, "Multiply color by alpha before the mipmaps are made."),
 				};
 			}
@@ -50,6 +51,7 @@ namespace wiwa
 				options.InvertGreen = ctx.settings().value("invertGreen", false);
 				options.ForceOpaque = ctx.settings().value("forceOpaque", false);
 				options.PremultiplyAlpha = ctx.settings().value("premultiplyAlpha", false);
+				options.CompressBc7 = ctx.settings().value("compress", true);
 				std::optional<TextureData> texture = decode_texture(*bytes, kind, ctx.source().filename().string(), error, options);
 				if (!texture)
 				{

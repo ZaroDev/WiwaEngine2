@@ -21,14 +21,16 @@ project "wiwa_game"
 		"%{IncludeDirs.ENTT}",
 		"%{IncludeDirs.nvrhi}", -- render_module.h exposes NVRHI types
 		"%{IncludeDirs.ImGui}",
-		"%{IncludeDirs.LZ4}"
+		"%{IncludeDirs.LZ4}",
+		"%{IncludeDirs.zstd}"
 	}
 
 	links
 	{
 		"wiwa",
 		"ImGui",
-		"LZ4"
+		"LZ4",
+		"zstd"
 	}
 
 	WwiseDefines()

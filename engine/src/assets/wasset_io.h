@@ -22,7 +22,7 @@
 namespace wiwa
 {
 	constexpr u32 WASSET_MAGIC = 0x53534157; // "WASS"
-	constexpr u32 WASSET_VERSION = 5; // 5: animation graphs. 4: skeletons carry sockets. 3: clips drive joints by name; clips and skinned meshes name their skeleton; skeletons have no node indices. 2: skeletons carry names, parents and a rest pose; clips carry events
+	constexpr u32 WASSET_VERSION = 6; // 6: textures carry a codec (BC7). 5: animation graphs. 4: skeletons carry sockets. 3: clips drive joints by name; clips and skinned meshes name their skeleton; skeletons have no node indices. 2: skeletons carry names, parents and a rest pose; clips carry events
 
 	struct WAssetHeader
 	{
