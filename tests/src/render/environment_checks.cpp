@@ -71,11 +71,24 @@ namespace wiwa
 		{
 			std::vector<u8> bytes;
 			u32 height = 0;
-			if (!read_texture_slice_bytes(context.Device, texture, slice, mip, bytes, width, height, channels * 2))
+			// the environment cubes are R11G11B10: one 32 bit texel, read as RGB with an alpha of 1
+			const bool packed = texture->getDesc().format == nvrhi::Format::R11G11B10_FLOAT;
+			if (!read_texture_slice_bytes(context.Device, texture, slice, mip, bytes, width, height, packed ? 4 : channels * 2))
 			{
 				return false;
 			}
 			out.clear();
+			if (packed)
+			{
+				for (size_t i = 0; i + 3 < bytes.size(); i += 4)
+				{
+					u32 texel;
+					std::memcpy(&texel, &bytes[i], 4);
+					const glm::vec3 rgb = glm::unpackF2x11_1x10(texel);
+					out.insert(out.end(), { rgb.x, rgb.y, rgb.z, 1.0f });
+				}
+				return true;
+			}
 			for (size_t i = 0; i + 1 < bytes.size(); i += 2)
 			{
 				u16 half;

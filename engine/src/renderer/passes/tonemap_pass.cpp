@@ -104,7 +104,8 @@ namespace wiwa
 
 		nvrhi::GraphicsState state;
 		state.pipeline = m_Pipeline;
-		state.framebuffer = frame.Scene->quality().Fxaa ? viewport.pre_fxaa_framebuffer() : viewport.ldr_framebuffer(); // FXAA then writes the final image
+		// FXAA then writes the final image; without its input image (it could not be made) the tonemap draws the final one itself
+		state.framebuffer = (frame.Scene->quality().Fxaa && viewport.pre_fxaa_framebuffer() != nullptr) ? viewport.pre_fxaa_framebuffer() : viewport.ldr_framebuffer();
 		state.viewport.addViewportAndScissorRect(nvrhi::Viewport(static_cast<float>(viewport.width()), static_cast<float>(viewport.height())));
 		state.addBindingSet(c.BindingSet);
 		commandList->setGraphicsState(state);

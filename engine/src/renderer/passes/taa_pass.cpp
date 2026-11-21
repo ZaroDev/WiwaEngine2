@@ -115,6 +115,16 @@ namespace wiwa
 			}
 		}
 
+		if (viewport.taa_history(0) == nullptr)
+		{
+			return; // the targets could not be made: the frame goes without TAA
+		}
+		if (c.TargetGeneration != viewport.taa_generation())
+		{
+			c.BindingSets[0] = nullptr; // the history was made again
+			c.BindingSets[1] = nullptr;
+			c.TargetGeneration = viewport.taa_generation();
+		}
 		if (c.BindingSets[0] == nullptr)
 		{
 			if (!create_binding_sets(viewport, c))

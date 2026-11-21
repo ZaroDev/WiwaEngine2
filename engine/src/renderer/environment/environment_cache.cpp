@@ -16,6 +16,12 @@ namespace wiwa
 	{
 		// The sample count of the BRDF table: it is built once, a few hundred milliseconds on a worker.
 		constexpr u32 BRDF_SAMPLES = 256;
+
+		// Three half floats as one R11G11B10 texel (unsigned: a negative value, which a light never has, becomes 0).
+		u32 pack_r11g11b10(u16 r, u16 g, u16 b)
+		{
+			return glm::packF2x11_1x10(glm::max(glm::vec3(glm::unpackHalf1x16(r), glm::unpackHalf1x16(g), glm::unpackHalf1x16(b)), glm::vec3(0.0f)));
+		}
 	}
 
 	EnvironmentCache::EnvironmentCache(nvrhi::IDevice* device, AssetManager* assets, UploadQueue* uploads, JobSystem* jobs)
@@ -97,7 +103,8 @@ namespace wiwa
 			mipCount++;
 		}
 		description.mipLevels = mipCount;
-		description.format = nvrhi::Format::RGBA16_FLOAT;
+		// Half the memory of RGBA16F (4 bytes a texel): sky and light are never negative and need no alpha. The cooked data stays RGBA half floats.
+		description.format = nvrhi::Format::R11G11B10_FLOAT;
 		description.isShaderResource = true;
 		description.initialState = UploadQueue::resting_state(m_Device);
 		description.keepInitialState = true;
@@ -108,13 +115,20 @@ namespace wiwa
 			return false;
 		}
 
+		std::vector<u32> packed;
 		for (u32 mip = 0; mip < mipCount; mip++)
 		{
 			const u32 size = std::max(data.FaceSize >> mip, 1u);
 			const size_t faceTexels = static_cast<size_t>(size) * size;
 			for (u32 face = 0; face < 6; face++)
 			{
-				m_Uploads->write_texture(cube, face, mip, data.Mips[mip].data() + face * faceTexels * 4, static_cast<size_t>(size) * 8);
+				const u16* texels = data.Mips[mip].data() + face * faceTexels * 4;
+				packed.resize(faceTexels);
+				for (size_t i = 0; i < faceTexels; i++)
+				{
+					packed[i] = pack_r11g11b10(texels[i * 4 + 0], texels[i * 4 + 1], texels[i * 4 + 2]);
+				}
+				m_Uploads->write_texture(cube, face, mip, packed.data(), static_cast<size_t>(size) * sizeof(u32)); // the queue copies the bytes
 			}
 		}
 

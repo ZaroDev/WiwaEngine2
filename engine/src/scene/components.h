@@ -103,6 +103,7 @@ namespace wiwa
 		AssetRef Mesh{};
 		std::vector<AssetRef> Materials{}; // overrides, per primitive; empty means the mesh's own materials
 		bool ReceivesDecals = true;        // false: decals never draw on this mesh
+		bool Static = false;               // true: the mesh never moves while it is drawn. The renderer keeps no previous matrix for it (no motion vectors, no motion blur or TAA reprojection error) and a move still shows
 	};
 
 	// Projects a Material (base color, normal, ORM, emissive, alpha) onto the opaque geometry inside its box. The box is Size in local

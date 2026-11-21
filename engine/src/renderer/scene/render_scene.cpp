@@ -88,7 +88,7 @@ namespace wiwa
 			instance.Guid = guid;
 			// A new instance has no motion; one that exists keeps the matrix of the last rendered frame, however many times it moves before the next.
 			const auto existing = m_InstanceIndex.find(guid);
-			instance.PrevWorld = existing != m_InstanceIndex.end() ? m_Instances[existing->second].PrevWorld : instance.World;
+			instance.PrevWorld = (existing != m_InstanceIndex.end() && !instance.Static) ? m_Instances[existing->second].PrevWorld : instance.World;
 			if (existing != m_InstanceIndex.end())
 			{
 				instance.Palette = m_Instances[existing->second].Palette;
@@ -176,7 +176,7 @@ namespace wiwa
 		bool moved = false;
 		for (RenderInstance& instance : m_Instances)
 		{
-			if (instance.Alive && instance.PrevWorld != instance.World)
+			if (instance.Alive && !instance.Static && instance.PrevWorld != instance.World)
 			{
 				instance.PrevWorld = instance.World;
 				moved = true;

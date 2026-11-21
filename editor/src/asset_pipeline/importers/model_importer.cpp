@@ -11,6 +11,7 @@
 
 #include "../image_utils.h"
 #include "../material_file.h"
+#include "../mesh_lods.h"
 #include "file_names.h"
 #include "model_extract.h"
 #include "model_import.h"
@@ -133,7 +134,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "ModelImporter"; }
-			virtual u32 version() const override { return 9; } // 9: FBX skinned vertices are in model space (bind pose) and rigid meshes below a joint get an AnimationSocket; 8: skeletons, clips and skinned meshes are extracted to .wskel/.wanim/.wmesh files next to the model, once; 7: skeleton joints keep the nodes folded above them in Pre; 6: skeletons have names, parents and a rest pose, clips have events; 5: optional cooked physics shapes; 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
+			virtual u32 version() const override { return 10; } // 10: static meshes get levels of detail (lodLevels); 9: FBX skinned vertices are in model space (bind pose) and rigid meshes below a joint get an AnimationSocket; 8: skeletons, clips and skinned meshes are extracted to .wskel/.wanim/.wmesh files next to the model, once; 7: skeleton joints keep the nodes folded above them in Pre; 6: skeletons have names, parents and a rest pose, clips have events; 5: optional cooked physics shapes; 4: materials are .wmat files next to the model; 3: triangles that run against their normals are turned round; 2: prefab nodes have stable ids
 			virtual bool imports_dependencies() const override { return true; }
 			virtual bool editable() const override { return true; }
 			virtual std::vector<ImportOption> option_schema() const override
@@ -141,6 +142,8 @@ namespace wiwa
 				return {
 					ImportOption::make_float("scale", "Scale", 1.0, 0.001, 1000.0, "Scales the whole prefab (applied to its root nodes and its bounds). Use 0.01 for a model made in centimeters."),
 					ImportOption::make_bool("importAnimations", "Import animations", true, "Off ignores the animation clips of the file (none are extracted)."),
+					ImportOption::make_int("lodLevels", "LOD levels", 3, 0, 3, "Levels of detail baked into the static meshes (meshoptimizer): 0 bakes none. Skinned meshes are files of their own: bake theirs in the Mesh editor."),
+					ImportOption::make_float("lodReduction", "LOD reduction", 0.5, 0.1, 0.9, "Each level keeps this fraction of the triangles of the one before (0.5: 50%, 25%, 12.5%)."),
 					ImportOption::make_bool("generatePhysicsShapes", "Generate physics shapes", false, "Also cook a convex hull and a triangle mesh shape of every mesh, for ConvexHull and Mesh colliders."),
 				};
 			}
@@ -351,6 +354,10 @@ namespace wiwa
 					return false;
 				}
 
+				LodBakeSettings lodSettings;
+				lodSettings.Levels = static_cast<u32>(std::clamp(ctx.settings().value("lodLevels", 3), 0, static_cast<int>(MAX_MESH_LODS) - 1));
+				lodSettings.Reduction = static_cast<float>(ctx.settings().value("lodReduction", 0.5));
+
 				// Meshes
 				std::vector<AssetRef> meshRefs(model.Meshes.size());
 				for (size_t i = 0; i < model.Meshes.size(); i++)
@@ -368,7 +375,10 @@ namespace wiwa
 						dependencies.push_back(primitive.Material);
 					}
 					meshRefs[i] = ctx.sub_asset("mesh/" + std::to_string(i));
-					ctx.emit(meshRefs[i], mesh.Data, dependencies);
+					// the levels go into the cooked copy only: the physics shapes below are made from the full geometry
+					MeshData baked = mesh.Data;
+					bake_mesh_lods(baked, lodSettings);
+					ctx.emit(meshRefs[i], baked, dependencies);
 				}
 
 				// Physics shapes: a convex hull and a triangle mesh of every mesh, at the mesh's local id plus a fixed offset

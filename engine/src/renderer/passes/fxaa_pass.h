@@ -41,6 +41,7 @@ namespace wiwa
 		struct ViewCache
 		{
 			nvrhi::BindingSetHandle BindingSet{};
+			u32 TargetGeneration = 0; // of the input image the binding set was made for
 		};
 		PerView<ViewCache> m_PerView{};
 		nvrhi::GraphicsPipelineHandle m_Pipeline{};

@@ -39,6 +39,7 @@ namespace wiwa
 			std::vector<AssetRef> Materials{};
 			float Padding = 0.0f;
 			bool ReceivesDecals = true;
+			bool Static = false;
 			std::vector<glm::vec4> Palette{};
 			u64 Seen = 0;
 		};

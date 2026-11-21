@@ -102,7 +102,12 @@ namespace wiwa
 			{
 				return {};
 			}
-			std::snprintf(text, sizeof(text), "%zu vertices, %zu triangles, %zu joints", mesh->Vertices.size(), mesh->Indices.size() / 3, mesh->SkinJointNames.size());
+			size_t triangles = 0;
+			for (const MeshPrimitive& primitive : mesh->Primitives)
+			{
+				triangles += primitive.IndexCount / 3; // the full level: the levels of detail are not more triangles in the model
+			}
+			std::snprintf(text, sizeof(text), "%zu vertices, %zu triangles, %zu joints", mesh->Vertices.size(), triangles, mesh->SkinJointNames.size());
 			return text;
 		}
 		return {};

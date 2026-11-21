@@ -7,6 +7,11 @@
 #include "test_meshes.h"
 
 #include <asset_pipeline/image_utils.h>
+#include <asset_editor/mesh_edit_model.h>
+#include <asset_pipeline/mesh_lods.h>
+#include <assets/wasset_io.h>
+#include <renderer/scene/lod_select.h>
+#include <renderer/scene/render_scene.h>
 #include <bc7decomp.h>
 
 // Checks of the GPU resource cache and the uploads behind it. Each check builds its own queue and cache.
@@ -68,6 +73,56 @@ namespace wiwa
 			texture.Mips.push_back(std::vector<u8>{ r, g, b, a, r, g, b, a, r, g, b, a, r, g, b, a });
 			texture.Mips.push_back(std::vector<u8>{ r, g, b, a });
 			return texture;
+		}
+
+		// A UV sphere of radius 1: smooth, so the simplifier has something to remove.
+		MeshData make_test_sphere(u32 rings, u32 segments)
+		{
+			MeshData mesh;
+			mesh.Name = "test sphere";
+			for (u32 y = 0; y <= rings; y++)
+			{
+				const float v = static_cast<float>(y) / static_cast<float>(rings);
+				const float phi = v * 3.14159265f;
+				for (u32 x = 0; x <= segments; x++)
+				{
+					const float u = static_cast<float>(x) / static_cast<float>(segments);
+					const float theta = u * 6.2831853f;
+					MeshVertex vertex;
+					vertex.Normal[0] = std::sin(phi) * std::cos(theta);
+					vertex.Normal[1] = std::cos(phi);
+					vertex.Normal[2] = std::sin(phi) * std::sin(theta);
+					for (int k = 0; k < 3; k++)
+					{
+						vertex.Position[k] = vertex.Normal[k];
+					}
+					vertex.Uv[0] = u;
+					vertex.Uv[1] = v;
+					mesh.Vertices.push_back(vertex);
+				}
+			}
+			for (u32 y = 0; y < rings; y++)
+			{
+				for (u32 x = 0; x < segments; x++)
+				{
+					const u32 a = y * (segments + 1) + x;
+					const u32 b = a + segments + 1;
+					for (u32 index : { a, b, a + 1, a + 1, b, b + 1 })
+					{
+						mesh.Indices.push_back(index);
+					}
+				}
+			}
+			MeshPrimitive primitive;
+			primitive.IndexCount = static_cast<u32>(mesh.Indices.size());
+			primitive.VertexCount = static_cast<u32>(mesh.Vertices.size());
+			primitive.BoundsMin = glm::vec3(-1.0f);
+			primitive.BoundsMax = glm::vec3(1.0f);
+			primitive.Lods[0] = MeshLod{ 0, primitive.IndexCount, 0.0f };
+			mesh.Primitives.push_back(primitive);
+			mesh.BoundsMin = glm::vec3(-1.0f);
+			mesh.BoundsMax = glm::vec3(1.0f);
+			return mesh;
 		}
 
 		bool is_near(float a, float b)
@@ -230,6 +285,118 @@ namespace wiwa
 				const AssetRef brokenRef = fixture.Cache->add_inline_texture(broken);
 				context.check(fixture.Cache->get_texture(brokenRef) == nullptr, "nothing at first"); // asking is what starts the upload
 				context.check(fixture.pump_until([&] { return fixture.Cache->get_stats().Failed == 1; }) && fixture.Cache->get_texture(brokenRef) == nullptr, "a malformed BC7 texture fails");
+			});
+
+		register_render_check("cache_mesh_lods", [](RenderCheckContext& context)
+			{
+				MeshData mesh = make_test_sphere(32, 64);
+				const std::vector<u32> fullIndices = mesh.Indices;
+				const u32 fullCount = mesh.Primitives[0].IndexCount;
+
+				const LodBakeResult result = bake_mesh_lods(mesh, LodBakeSettings{});
+				const MeshPrimitive& primitive = mesh.Primitives[0];
+				context.check(result.Primitives == 1 && result.Levels == 3 && primitive.LodCount == 4, "a smooth sphere gets the three levels");
+				context.check(primitive.Lods[0].FirstIndex == 0 && primitive.Lods[0].IndexCount == fullCount && primitive.IndexCount == fullCount
+					&& std::equal(fullIndices.begin(), fullIndices.end(), mesh.Indices.begin()), "level 0 is the mesh as it was");
+				bool decreasing = true;
+				bool errorsGrow = true;
+				bool inRange = true;
+				for (u32 level = 1; level < primitive.LodCount; level++)
+				{
+					decreasing = decreasing && primitive.Lods[level].IndexCount < primitive.Lods[level - 1].IndexCount && primitive.Lods[level].IndexCount % 3 == 0;
+					errorsGrow = errorsGrow && primitive.Lods[level].Error > primitive.Lods[level - 1].Error;
+					const u64 end = static_cast<u64>(primitive.Lods[level].FirstIndex) + primitive.Lods[level].IndexCount;
+					inRange = inRange && end <= mesh.Indices.size();
+					for (u64 i = primitive.Lods[level].FirstIndex; inRange && i < end; i++)
+					{
+						inRange = mesh.Indices[i] < primitive.VertexCount;
+					}
+				}
+				context.check(decreasing, "every level has fewer triangles than the one before (" + std::to_string(fullCount / 3) + " > " + std::to_string(primitive.Lods[1].IndexCount / 3)
+					+ " > " + std::to_string(primitive.Lods[2].IndexCount / 3) + " > " + std::to_string(primitive.Lods[3].IndexCount / 3) + ")");
+				context.check(errorsGrow && primitive.Lods[3].Error < 0.5f, "the errors grow with the level and stay small");
+				context.check(inRange, "the level indices stay inside the primitive's vertices");
+
+				// the file keeps them
+				BinaryArchive writer = BinaryArchive::writer();
+				archive(writer, mesh);
+				const std::vector<std::byte> bytes = writer.take();
+				BinaryArchive reader = BinaryArchive::reader(bytes);
+				MeshData loaded;
+				archive(reader, loaded);
+				context.check(reader.ok() && loaded.Primitives.size() == 1 && loaded.Primitives[0].LodCount == 4 && loaded.Indices == mesh.Indices
+					&& loaded.Primitives[0].Lods[3].IndexCount == primitive.Lods[3].IndexCount, "the levels survive the asset file");
+
+				// on the GPU, and picked by distance
+				CacheFixture fixture(context, 8 * 1024 * 1024);
+				const AssetRef ref = fixture.Cache->add_inline_mesh(mesh);
+				context.check(fixture.pump_until([&] { return fixture.Cache->get_mesh(ref) != nullptr; }), "the mesh with levels is uploaded");
+				const GpuMesh* gpu = fixture.Cache->get_mesh(ref);
+				if (gpu != nullptr && gpu->Primitives.size() == 1)
+				{
+					const GpuPrimitive& drawn = gpu->Primitives[0];
+					context.check(drawn.LodCount == 4 && drawn.Lods[0].IndexCount == fullCount && drawn.Lods[3].IndexCount == primitive.Lods[3].IndexCount
+						&& drawn.Lods[3].FirstIndex == drawn.Lods[0].FirstIndex + primitive.Lods[3].FirstIndex, "the GPU primitive has its levels, placed with the mesh");
+
+					LodView view;
+					view.PixelsPerUnit = 0.5f * 1080.0f / std::tan(glm::radians(30.0f)); // 60 degrees, 1080 pixels
+					view.PixelError = 1.5f;
+					const auto at = [&](float distance) { return select_mesh_lod(drawn, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -distance)), view); };
+					context.check(at(2.5f) == 0, "close up the full mesh is drawn");
+					context.check(at(2000.0f) == 3, "far away the coarsest level is drawn");
+					context.check(at(40.0f) >= at(10.0f) && at(200.0f) >= at(40.0f), "the level never gets finer with distance");
+					context.check(select_mesh_lod(drawn, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -2000.0f)), LodView{ glm::vec3(0.0f), view.PixelsPerUnit, false, 0.0f }) == 0,
+						"a pixel error of 0 turns the levels off");
+					context.check(select_mesh_lod(drawn, glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -2000.0f)), glm::vec3(1000.0f)), view) < 3,
+						"a big instance needs finer levels than a small one at the same distance");
+				}
+
+				clear_mesh_lods(mesh);
+				context.check(mesh.Indices == fullIndices && mesh.Primitives[0].LodCount == 1, "clearing the levels gives the mesh back");
+
+				// the Mesh editor's document: baking is an undoable edit
+				MeshEditModel model(make_test_sphere(32, 64));
+				context.check(!model.dirty() && !model.clear_lods(), "a mesh without levels has nothing to clear");
+				const LodBakeResult baked = model.bake_lods(LodBakeSettings{});
+				context.check(baked.Levels == 3 && model.dirty() && model.data().Primitives[0].LodCount == 4 && model.data().Indices.size() > fullIndices.size(), "baking in the editor adds the levels");
+				model.undo();
+				context.check(model.data().Primitives[0].LodCount == 1 && model.data().Indices == fullIndices && !model.dirty(), "undo removes them");
+				model.redo();
+				context.check(model.data().Primitives[0].LodCount == 4 && model.data().Indices.size() > fullIndices.size(), "redo brings them back");
+				context.check(model.clear_lods() && model.data().Primitives[0].LodCount == 1 && model.data().Indices == fullIndices, "clearing in the editor removes them");
+				model.undo();
+				context.check(model.data().Primitives[0].LodCount == 4, "and that can be undone");
+				const LodBakeResult tiny = bake_mesh_lods(mesh, LodBakeSettings{ 3, 0.5f, 0.05f, 100000 });
+				context.check(tiny.Levels == 0 && mesh.Indices == fullIndices, "a mesh under the triangle minimum gets none");
+			});
+
+		register_render_check("static_instance_has_no_motion", [](RenderCheckContext& context)
+			{
+				RenderScene scene;
+				const EntityGuid movable = EntityGuid::generate();
+				const EntityGuid fixed = EntityGuid::generate();
+				const auto place = [&](const EntityGuid& guid, bool isStatic, float x)
+				{
+					RenderInstance instance;
+					instance.Alive = true;
+					instance.Static = isStatic;
+					instance.World = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, 0.0f));
+					SceneDelta delta;
+					delta.InstanceUpserts.emplace_back(guid, std::move(instance));
+					scene.apply(std::move(delta));
+				};
+				place(movable, false, 0.0f);
+				place(fixed, true, 0.0f);
+				scene.end_frame();
+				place(movable, false, 5.0f);
+				place(fixed, true, 5.0f);
+
+				const RenderInstance& moving = scene.instances()[*scene.find_instance(movable)];
+				const RenderInstance& still = scene.instances()[*scene.find_instance(fixed)];
+				context.check(moving.PrevWorld[3].x == 0.0f && moving.World[3].x == 5.0f, "a moving instance remembers where it was last frame");
+				context.check(still.PrevWorld == still.World && still.World[3].x == 5.0f, "a static one has no previous matrix: it moved, with no motion");
+				scene.end_frame();
+				context.check(scene.instances()[*scene.find_instance(movable)].PrevWorld[3].x == 5.0f, "the moving one catches up at the end of the frame");
 			});
 
 		register_render_check("cache_failed_asset", [](RenderCheckContext& context)

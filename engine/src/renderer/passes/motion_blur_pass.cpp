@@ -110,6 +110,15 @@ namespace wiwa
 			}
 		}
 
+		if (viewport.post_scratch() == nullptr)
+		{
+			return;
+		}
+		if (c.TargetGeneration != viewport.post_scratch_generation())
+		{
+			c.BindingSet = nullptr;
+			c.TargetGeneration = viewport.post_scratch_generation();
+		}
 		if (c.BindingSet == nullptr)
 		{
 			if (!create_binding_set(viewport, c))

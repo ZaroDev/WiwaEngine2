@@ -10,6 +10,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <vector>
+
+using wiwa::LogLevel; // the WI_LOG macro names its level through it
 // A game on the engine. It has no editor in it: scenes and assets come from the pack (assets.wpak) next to the program.
 //
 //   wiwa_game                                        load the default scene of the pack (chosen in the editor's Build Settings)
@@ -72,7 +74,7 @@ protected:
 			m_BenchStart = std::chrono::steady_clock::now();
 			if (load != nullptr && load->finished() && !load->succeeded())
 			{
-				WI_LOG(Error, "Bench: the scene did not load");
+				WI_LOG(Error, "Bench", "the scene did not load");
 				set_exit_code(1);
 				request_quit();
 			}
@@ -80,7 +82,7 @@ protected:
 		}
 		if (!load->succeeded())
 		{
-			WI_LOG(Error, "Bench: the scene did not load");
+			WI_LOG(Error, "Bench", "the scene did not load");
 			set_exit_code(1);
 			request_quit();
 			return;
@@ -93,21 +95,25 @@ protected:
 		if (!m_BenchMeasuring)
 		{
 			// settled: the asset uploads are spread over frames, so wait until the cache has nothing pending for two seconds (at most 120 s)
-			m_BenchQuiet = snapshot.CachePending == 0 ? m_BenchQuiet + deltaTime : 0.0f;
+			m_BenchQuiet = snapshot.CachePending == 0 ? m_BenchQuiet + deltaTime * 0.001f : 0.0f; // deltaTime is in milliseconds
 			if ((m_BenchQuiet >= 2.0f && elapsed >= 4.0) || elapsed >= 120.0)
 			{
 				m_BenchMeasuring = true;
 				m_BenchStart = std::chrono::steady_clock::now();
 				m_BenchFrames.reserve(static_cast<size_t>(m_BenchSeconds * 400));
-				WI_LOG(Info, "Bench: measuring {0} s ({1} instances, {2} lights, {3} textures, {4} pending)", m_BenchSeconds, snapshot.SceneInstances, snapshot.SceneLights, snapshot.CacheTextures, snapshot.CachePending);
+				WI_LOG(Info, "Bench", "measuring {0} s ({1} instances, {2} lights, {3} textures, {4} pending)", m_BenchSeconds, snapshot.SceneInstances, snapshot.SceneLights, snapshot.CacheTextures, snapshot.CachePending);
 			}
 			return;
 		}
 
-		m_BenchFrames.push_back(deltaTime * 1000.0f);
+		m_BenchFrames.push_back(deltaTime); // milliseconds
 		m_BenchRenderMs += snapshot.FrameMs;
 		m_BenchVisible = std::max(m_BenchVisible, snapshot.VisibleInstances);
 		m_BenchDraws = std::max(m_BenchDraws, snapshot.DrawCalls);
+		for (int level = 0; level < 4; level++)
+		{
+			m_BenchLods[level] = std::max(m_BenchLods[level], snapshot.LodPrimitives[level]);
+		}
 
 		if (elapsed < m_BenchSeconds)
 		{
@@ -125,13 +131,14 @@ protected:
 		const auto percentile = [&](double fraction) { return sorted[std::min(sorted.size() - 1, static_cast<size_t>(static_cast<double>(sorted.size()) * fraction))]; };
 		const double fps = 1000.0 / averageMs;
 		const wiwa::PerfStats& perf = get_perf();
-		WI_LOG(Info, "Bench: {0} frames, average {1:.1f} FPS ({2:.2f} ms), 1% low {3:.1f} FPS, 0.1% low {4:.1f} FPS, worst {5:.1f} ms", sorted.size(), fps, averageMs,
+		WI_LOG(Info, "Bench", "{0} frames, average {1:.1f} FPS ({2:.2f} ms), 1% low {3:.1f} FPS, 0.1% low {4:.1f} FPS, worst {5:.1f} ms", sorted.size(), fps, averageMs,
 			1000.0 / percentile(0.99), 1000.0 / percentile(0.999), sorted.back());
-		WI_LOG(Info, "Bench: render thread {0:.2f} ms average, up to {1} visible instances and {2} draw calls, {3} instances in the scene, {4} lights, {5} cache bytes",
+		WI_LOG(Info, "Bench", "render thread {0:.2f} ms average, up to {1} visible instances and {2} draw calls, {3} instances in the scene, {4} lights, {5} cache bytes",
 			m_BenchRenderMs / static_cast<double>(sorted.size()), m_BenchVisible, m_BenchDraws, snapshot.SceneInstances, snapshot.SceneLights, snapshot.CacheBytes);
-		WI_LOG(Info, "Bench: {0} on {1}, VRAM up to {2:.0} MB, RAM up to {3:.0} MB", snapshot.Api, snapshot.Adapter, perf.vram_used_mb().max(), perf.process_ram_mb().max());
+		WI_LOG(Info, "Bench", "{0} on {1}, VRAM up to {2:.0} MB, RAM up to {3:.0} MB", snapshot.Api, snapshot.Adapter, perf.vram_used_mb().max(), perf.process_ram_mb().max());
+		WI_LOG(Info, "Bench", "most primitives drawn per level of detail: full {0}, then {1}, {2}, {3}", m_BenchLods[0], m_BenchLods[1], m_BenchLods[2], m_BenchLods[3]);
 		const bool reached = fps >= m_BenchTarget;
-		WI_LOG(Info, "Bench: {0} the target of {1:.0} FPS", reached ? "reached" : "MISSED", m_BenchTarget);
+		WI_LOG(Info, "Bench", "{0} the target of {1:.0} FPS", reached ? "reached" : "MISSED", m_BenchTarget);
 		set_exit_code(reached ? 0 : 1);
 		request_quit();
 	}
@@ -172,8 +179,9 @@ private:
 	std::chrono::steady_clock::time_point m_BenchStart = std::chrono::steady_clock::now();
 	std::vector<float> m_BenchFrames{};
 	double m_BenchRenderMs = 0.0;
-	u32 m_BenchVisible = 0;
-	u32 m_BenchDraws = 0;
+	wiwa::u32 m_BenchVisible = 0;
+	wiwa::u32 m_BenchDraws = 0;
+	wiwa::u32 m_BenchLods[4]{};
 };
 
 wiwa::Engine* wiwa::create_engine(int argc, char** argv)

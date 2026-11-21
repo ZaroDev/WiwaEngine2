@@ -206,7 +206,7 @@ namespace wiwa
 			}
 
 			const ComponentInfo* mesh = components.find("MeshRenderer");
-			check(mesh != nullptr && field_names(*mesh) == std::vector<std::string>{ "Mesh", "Materials", "ReceivesDecals" }, "MeshRenderer lists its fields");
+			check(mesh != nullptr && field_names(*mesh) == std::vector<std::string>{ "Mesh", "Materials", "ReceivesDecals", "Static" }, "MeshRenderer lists its fields");
 			if (mesh != nullptr && mesh->Fields.size() == 3)
 			{
 				check(mesh->Fields[0].Type == FieldType::Asset && mesh->Fields[0].Meta.Asset == AssetType::Mesh, "MeshRenderer.Mesh accepts a Mesh asset");

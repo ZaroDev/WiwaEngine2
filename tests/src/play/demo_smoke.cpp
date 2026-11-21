@@ -413,6 +413,51 @@ namespace wiwa
 		return true;
 	}
 
+	// The memory work of the demo: the ground, the backdrop and the PBR spheres are marked Static (a crate is not), and the sphere mesh the PBR grid draws was
+	// imported with levels of detail (the model importer bakes them), each coarser than the one before.
+	std::string DemoSmoke::check_static_and_lods(Scene& scene, AssetManager* assets)
+	{
+		const auto renderer_of = [&](const char* name) -> const MeshRenderer*
+		{
+			const entt::entity entity = find_named(scene, name);
+			return entity == entt::null ? nullptr : scene.registry().try_get<MeshRenderer>(entity);
+		};
+		const MeshRenderer* ground = renderer_of("Ground");
+		const MeshRenderer* backdrop = renderer_of("Backdrop");
+		const MeshRenderer* sphere = renderer_of("PBR r0 m0");
+		const MeshRenderer* crate = renderer_of("Crate 1");
+		if (ground == nullptr || backdrop == nullptr || sphere == nullptr || crate == nullptr)
+		{
+			return "the demo scene lacks the Ground, Backdrop, PBR sphere or Crate 1 the memory check reads";
+		}
+		if (!ground->Static || !backdrop->Static || !sphere->Static || crate->Static)
+		{
+			return "the ground, the backdrop and the PBR spheres have to be Static and the crates not (Ground " + std::to_string(ground->Static) + ", Backdrop "
+				+ std::to_string(backdrop->Static) + ", sphere " + std::to_string(sphere->Static) + ", crate " + std::to_string(crate->Static) + ")";
+		}
+
+		Handle<MeshData> mesh = assets->load<MeshData>(sphere->Mesh);
+		assets->wait_idle();
+		const MeshData* data = mesh.get();
+		if (data == nullptr || data->Primitives.empty())
+		{
+			return "the sphere mesh of the PBR grid did not load";
+		}
+		const MeshPrimitive& primitive = data->Primitives[0];
+		bool coarser = primitive.LodCount > 1;
+		for (u32 level = 1; level < primitive.LodCount; level++)
+		{
+			coarser = coarser && primitive.Lods[level].IndexCount < primitive.Lods[level - 1].IndexCount && primitive.Lods[level].Error > primitive.Lods[level - 1].Error;
+		}
+		if (!coarser)
+		{
+			return "the sphere mesh has " + std::to_string(primitive.LodCount) + " level(s) of detail: the model importer should have baked coarser ones";
+		}
+		WI_INFO("Editor", "Demo smoke: memory ok (static ground, sphere with {0} levels: {1} down to {2} triangles)", primitive.LodCount, primitive.Lods[0].IndexCount / 3,
+			primitive.Lods[primitive.LodCount - 1].IndexCount / 3);
+		return {};
+	}
+
 	bool DemoSmoke::update(std::string& failure)
 	{
 		AssetManager* assets = Engine::get().get_module<AssetManager>();
@@ -459,6 +504,11 @@ namespace wiwa
 				return true;
 			}
 			Scene& edit = *m_Editor.get_scene();
+			if (const std::string memory = check_static_and_lods(edit, assets); !memory.empty())
+			{
+				failure = memory;
+				return true;
+			}
 			m_RingBefore = edit.registry().get<Transform>(find_named(edit, "Blue ring")).Rotation.x;
 			m_Play.play(); // refused while a prefab expansion or a load is still going: tried again next frame
 			if (m_Play.state() == PlayState::Playing)

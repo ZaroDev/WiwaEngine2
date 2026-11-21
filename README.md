@@ -110,6 +110,7 @@ models keep their own licenses.
 - [ufbx](https://github.com/ufbx/ufbx)
 - [LZ4](https://github.com/lz4/lz4) and [Zstandard](https://github.com/facebook/zstd)
 - [bc7enc_rdo](https://github.com/richgel999/bc7enc_rdo) (BC7 texture encoder)
+- [meshoptimizer](https://github.com/zeux/meshoptimizer) (mesh simplification for LODs)
 - [filewatch](https://github.com/ThomasMonkman/filewatch)
 - [Jolt Physics](https://github.com/jrouwe/JoltPhysics)
 - [Lua](https://www.lua.org/) and [sol2](https://github.com/ThePhD/sol2)

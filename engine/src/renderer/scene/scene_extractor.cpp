@@ -270,16 +270,18 @@ namespace wiwa
 			SentInstance& sent = known ? found->second : m_Instances[id.Guid];
 			sent.Seen = pass;
 			if (!known || !same_matrix(sent.World, matrix) || sent.Mesh != renderer.Mesh || sent.Materials != renderer.Materials || sent.Padding != padding
-				|| sent.ReceivesDecals != renderer.ReceivesDecals)
+				|| sent.ReceivesDecals != renderer.ReceivesDecals || sent.Static != renderer.Static)
 			{
 				sent.World = matrix;
 				sent.Mesh = renderer.Mesh;
 				sent.Materials = renderer.Materials;
 				sent.Padding = padding;
 				sent.ReceivesDecals = renderer.ReceivesDecals;
+				sent.Static = renderer.Static;
 
 				RenderInstance instance;
 				instance.ReceivesDecals = renderer.ReceivesDecals;
+				instance.Static = renderer.Static;
 				instance.World = matrix;
 				instance.Mesh = renderer.Mesh;
 				instance.Materials = renderer.Materials;

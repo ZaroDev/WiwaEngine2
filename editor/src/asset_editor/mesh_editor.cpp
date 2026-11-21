@@ -82,7 +82,12 @@ namespace wiwa
 			return;
 		}
 		const MeshData& mesh = m_Model->data();
-		ImGui::Text("%zu vertices, %zu triangles, %zu slots", mesh.Vertices.size(), mesh.Indices.size() / 3, mesh.Primitives.size());
+		size_t fullTriangles = 0;
+		for (const MeshPrimitive& primitive : mesh.Primitives)
+		{
+			fullTriangles += primitive.IndexCount / 3;
+		}
+		ImGui::Text("%zu vertices, %zu triangles, %zu slots", mesh.Vertices.size(), fullTriangles, mesh.Primitives.size());
 		ImGui::TextDisabled("Bounds %.2f %.2f %.2f  to  %.2f %.2f %.2f", mesh.BoundsMin.x, mesh.BoundsMin.y, mesh.BoundsMin.z, mesh.BoundsMax.x, mesh.BoundsMax.y, mesh.BoundsMax.z);
 		ImGui::TextDisabled("%zu joints in its skin", mesh.SkinJointNames.size());
 		if (!m_Message.empty())
@@ -132,6 +137,54 @@ namespace wiwa
 				{
 					ImGui::BulletText("%s", name.c_str());
 				}
+			}
+		}
+
+		if (ImGui::CollapsingHeader("Levels of detail", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			int levels = static_cast<int>(m_LodSettings.Levels);
+			ImGui::SetNextItemWidth(160.0f);
+			if (ImGui::SliderInt("Levels", &levels, 1, static_cast<int>(MAX_MESH_LODS) - 1))
+			{
+				m_LodSettings.Levels = static_cast<u32>(levels);
+			}
+			ImGui::SetNextItemWidth(160.0f);
+			ImGui::SliderFloat("Reduction per level", &m_LodSettings.Reduction, 0.1f, 0.9f, "%.2f");
+			ImGui::SetNextItemWidth(160.0f);
+			ImGui::SliderFloat("Largest error", &m_LodSettings.MaxError, 0.005f, 0.3f, "%.3f of the slot size");
+			int minimum = static_cast<int>(m_LodSettings.MinTriangles);
+			ImGui::SetNextItemWidth(160.0f);
+			if (ImGui::DragInt("Fewest triangles", &minimum, 1.0f, 12, 100000))
+			{
+				m_LodSettings.MinTriangles = static_cast<u32>(std::max(minimum, 12));
+			}
+			if (ImGui::Button("Bake LODs"))
+			{
+				const LodBakeResult result = m_Model->bake_lods(m_LodSettings);
+				m_LodMessage = result.Levels == 0 ? "No slot got a level: they are too small or cannot be simplified further"
+					: "Baked " + std::to_string(result.Levels) + " levels on " + std::to_string(result.Primitives) + " slots: " + std::to_string(result.TrianglesBefore) + " triangles down to "
+						+ std::to_string(result.TrianglesLast) + " at the coarsest level. Save to keep them.";
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Clear LODs"))
+			{
+				m_LodMessage = m_Model->clear_lods() ? "Levels removed" : "The mesh has no levels";
+			}
+			if (!m_LodMessage.empty())
+			{
+				ImGui::TextWrapped("%s", m_LodMessage.c_str());
+			}
+			for (size_t i = 0; i < mesh.Primitives.size(); i++)
+			{
+				const MeshPrimitive& primitive = mesh.Primitives[i];
+				std::string line = "Slot " + std::to_string(i) + ": " + std::to_string(primitive.Lods[0].IndexCount / 3);
+				for (u32 level = 1; level < primitive.LodCount; level++)
+				{
+					char error[32];
+					std::snprintf(error, sizeof(error), " (error %.4f)", primitive.Lods[level].Error);
+					line += " > " + std::to_string(primitive.Lods[level].IndexCount / 3) + error;
+				}
+				ImGui::TextDisabled("%s triangles", line.c_str());
 			}
 		}
 

@@ -31,6 +31,7 @@ namespace wiwa
 		std::vector<glm::vec4> PrevPalette{};
 		float BoundsPadding = 0.0f; // the mesh bounds grow by this much in every direction when the instance is culled (a pose reaches past them)
 		bool ReceivesDecals = true;
+		bool Static = false; // PrevWorld is always World: nothing tracks the previous matrix of this instance, so it has no motion vectors and a move does not rewrite the instance buffer a second time
 		AssetRef Mesh{};
 		std::vector<AssetRef> Materials{}; // overrides per primitive; empty means the mesh's own materials
 	};

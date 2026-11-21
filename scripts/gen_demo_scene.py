@@ -1968,8 +1968,11 @@ def build_scene(g):
 	"""g: dict of guids: shapes, mat (name -> guid), scripts (name -> guid), ui, models (name -> (guid, clips)), lamp, bouncy, env, ..."""
 	s = Scene()
 
-	def mesh(shape, material):
-		return {"MeshRenderer": {"Mesh": ref(g["shapes"], MESH[shape]), "Materials": [ref(g["mat"][material])]}}
+	def mesh(shape, material, static=False):
+		renderer = {"Mesh": ref(g["shapes"], MESH[shape]), "Materials": [ref(g["mat"][material])]}
+		if static:
+			renderer["Static"] = True  # never moves: the renderer keeps no previous matrix for it (tests/src/play/demo_smoke.cpp checks the flag)
+		return {"MeshRenderer": renderer}
 
 	def script(name, **props):
 		return {"script:" + g["scripts"][name]: props}
@@ -2001,7 +2004,7 @@ def build_scene(g):
 
 	# --- ground: textured, with the physics ground under every station --------------------------------------
 	s.add("World")
-	s.add("Ground", "World", scale=(120, 1, 120), **mesh("plane_tiled", "ground"))
+	s.add("Ground", "World", scale=(120, 1, 120), **mesh("plane_tiled", "ground", static=True))
 	s.add("Physics demo")
 	s.add("Ground collider", "Physics demo", pos=(0, -0.5, 0), scale=(120, 1, 120), Collider=BOX)
 
@@ -2028,11 +2031,11 @@ def build_scene(g):
 
 	# --- station 2: materials and shaders --------------------------------------------------------------------
 	s.add("Materials station", "World")
-	s.add("Backdrop", "Materials station", pos=(0, 5, -28), scale=(40, 10, 1), **mesh("cube", "backdrop"))
+	s.add("Backdrop", "Materials station", pos=(0, 5, -28), scale=(40, 10, 1), **mesh("cube", "backdrop", static=True))
 	s.add("PBR grid", "Materials station")
 	for r in range(5):
 		for m in range(3):
-			s.add("PBR r%d m%d" % (r, m), "PBR grid", pos=((r - 2) * 1.3, 0.7 + m * 1.3, -16), scale=(1.1, 1.1, 1.1), **mesh("sphere", "pbr_r%d_m%d" % (r, m)))
+			s.add("PBR r%d m%d" % (r, m), "PBR grid", pos=((r - 2) * 1.3, 0.7 + m * 1.3, -16), scale=(1.1, 1.1, 1.1), **mesh("sphere", "pbr_r%d_m%d" % (r, m), static=True))
 	specials = (("Carpaint sphere", "sphere", "carpaint", (-9, 0.9, -11), 1.5), ("Cloth sphere", "sphere", "cloth", (-6.5, 0.9, -11), 1.5),
 		("Glass cube", "cube", "glass", (-3.5, 0.9, -11), 1.4), ("Red sphere behind glass", "sphere", "plastic_red", (-3.5, 0.7, -12.2), 1.0),
 		("Double sided leaf", "plane", "double_sided", (3.5, 1.6, -11), 2.0), ("Hologram cylinder", "cylinder", "hologram", (6, 1.1, -11), 2.0),

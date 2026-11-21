@@ -51,6 +51,7 @@ namespace wiwa
 		bool ai_done() const;
 		void sample_nav(Scene& play);
 		std::string check_nav() const;
+		std::string check_static_and_lods(Scene& scene, AssetManager* assets);
 		bool nav_arrived() const;
 		std::string finish_checks();
 		bool sample_physics(Scene& play, std::string& failure);

@@ -252,6 +252,7 @@ namespace wiwa
 		m_NeedCascades = false;
 		m_NeedSpotAtlas = false;
 		m_VisibleInstances = 0;
+		std::fill(std::begin(m_LodDrawn), std::end(m_LodDrawn), 0u);
 		m_DroppedLights = 0;
 		m_Active = viewport.valid();
 		m_Viewport = &viewport;
@@ -263,6 +264,23 @@ namespace wiwa
 		m_Settings.Exposure.Auto = m_Settings.Exposure.Auto && m_Flags.AutoExposure;
 		m_Settings.MotionBlur.Enabled = m_Settings.MotionBlur.Enabled && m_Flags.MotionBlur;
 		m_AoActive = false;
+		if (m_Active)
+		{
+			// the targets of the effects that run this frame (the ones that do not are dropped after a while)
+			viewport.trim_effect_targets();
+			if (m_Quality.Taa && m_Flags.Taa)
+			{
+				viewport.ensure_taa_targets(m_Device);
+			}
+			if (m_Settings.MotionBlur.Enabled || m_DebugVelocity)
+			{
+				viewport.ensure_post_scratch(m_Device);
+			}
+			if (m_Quality.Fxaa)
+			{
+				viewport.ensure_fxaa_target(m_Device); // the tonemap pass draws into it whenever FXAA is on
+			}
+		}
 		if (!m_Active)
 		{
 			m_HasCamera = false;
@@ -445,6 +463,12 @@ namespace wiwa
 			const float sliceScale = static_cast<float>(CLUSTERS_Z) / depthRatio;
 			constants.ClusterParams = glm::vec4(sliceScale, -std::log2(camera->Near) * sliceScale, camera->Projection[3][3] == 1.0f ? 1.0f : 0.0f, (m_ClusterCulling && m_Flags.LightCulling) ? 0.0f : 1.0f);
 
+			// levels of detail: chosen by the camera of the main draw lists, for the shadow casters too
+			m_LodView.CameraPosition = camera->Position;
+			m_LodView.Orthographic = camera->Projection[3][3] == 1.0f;
+			m_LodView.PixelsPerUnit = 0.5f * static_cast<float>(viewport.height()) * std::abs(camera->Projection[1][1]);
+			m_LodView.PixelError = m_Quality.LodPixelError;
+
 			const Frustum frustum(constants.UnjitteredViewProjection);
 			const std::vector<RenderInstance>& instances = scene.instances();
 			for (u32 slot = 0; slot < instances.size(); slot++)
@@ -481,6 +505,9 @@ namespace wiwa
 					const u32 material = overridden ? cache.get_material_slot(instance.Materials[p]) : primitive.MaterialSlot;
 					const GpuMaterialRecord& record = cache.material_record(material);
 
+					const u32 lod = select_mesh_lod(primitive, instance.World, m_LodView);
+					m_LodDrawn[lod]++;
+
 					DrawItem item;
 					item.Instance = slot;
 					item.Material = material;
@@ -488,8 +515,8 @@ namespace wiwa
 					item.Shader = cache.get_material_shader(material);
 					item.Masked = (record.Flags & MATERIAL_ALPHA_MASK_BIT) != 0;
 					item.Page = mesh->Page;
-					item.FirstIndex = primitive.FirstIndex;
-					item.IndexCount = primitive.IndexCount;
+					item.FirstIndex = primitive.Lods[lod].FirstIndex;
+					item.IndexCount = primitive.Lods[lod].IndexCount;
 					item.BaseVertex = primitive.BaseVertex;
 					item.DoubleSided = (record.Flags & MATERIAL_DOUBLE_SIDED_BIT) != 0;
 					item.ReceivesDecals = instance.ReceivesDecals;
@@ -656,6 +683,8 @@ namespace wiwa
 					continue;
 				}
 
+				const u32 lod = select_mesh_lod(primitive, instance.World, m_LodView);
+
 				DrawItem item;
 				item.Instance = slot;
 				item.Material = matrixIndex; // the shadow shader reads this as the matrix index
@@ -663,8 +692,8 @@ namespace wiwa
 				item.Shader = m_Cache->get_material_shader(material);
 				item.Masked = (record.Flags & MATERIAL_ALPHA_MASK_BIT) != 0;
 				item.Page = mesh->Page;
-				item.FirstIndex = primitive.FirstIndex;
-				item.IndexCount = primitive.IndexCount;
+				item.FirstIndex = primitive.Lods[lod].FirstIndex;
+				item.IndexCount = primitive.Lods[lod].IndexCount;
 				item.BaseVertex = primitive.BaseVertex;
 				item.DoubleSided = true;
 				items.push_back(item);

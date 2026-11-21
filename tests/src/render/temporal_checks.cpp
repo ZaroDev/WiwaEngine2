@@ -871,6 +871,52 @@ namespace wiwa
 				context.check(!real.empty() && worst <= 3, "the wall that the box uncovers shows no trace of it (worst " + std::to_string(worst) + ")");
 			});
 
+		register_render_check("effect_targets_are_lazy", [](RenderCheckContext& context)
+			{
+				SceneTester test(context);
+				SceneSettings off;
+				off.MotionBlur.Enabled = false;
+				test.scene().set_settings(off);
+				test.add_instance(cube_mesh(test, 0.6f, 2.0f), glm::mat4(1.0f));
+				ViewportTarget& viewport = test.renderer().get_viewport();
+				RenderQuality quality = test.renderer().get_quality();
+				quality.Taa = false;
+				quality.Fxaa = false;
+				test.renderer().set_quality(quality);
+				test.render(static_cast<u32>(ViewportTarget::EFFECT_TARGET_LINGER_FRAMES) + 4); // what an earlier check left in the shared viewport lingers out
+				context.check(viewport.taa_history(0) == nullptr && viewport.post_scratch() == nullptr && viewport.pre_fxaa() == nullptr,
+					"with TAA, motion blur and FXAA off their images are not made");
+
+				quality.Taa = true;
+				test.renderer().set_quality(quality);
+				SceneSettings settings;
+				settings.MotionBlur.Enabled = true;
+				test.scene().set_settings(settings);
+				test.render();
+				context.check(viewport.taa_history(0) != nullptr && viewport.taa_depth_history(1) != nullptr && viewport.post_scratch() != nullptr, "TAA and motion blur make theirs");
+				const u32 taaGeneration = viewport.taa_generation();
+
+				quality.Taa = false;
+				quality.Fxaa = true;
+				test.renderer().set_quality(quality);
+				test.scene().set_settings(off);
+				test.render();
+				context.check(viewport.pre_fxaa() != nullptr && viewport.pre_fxaa_framebuffer() != nullptr, "FXAA makes the image it reads");
+				context.check(viewport.taa_history(0) != nullptr, "the TAA history stays for a while after TAA stops (turning it on again is free)");
+
+				test.render(static_cast<u32>(ViewportTarget::EFFECT_TARGET_LINGER_FRAMES) + 4);
+				context.check(viewport.taa_history(0) == nullptr && viewport.post_scratch() == nullptr && viewport.pre_fxaa() != nullptr, "after the linger the unused images are dropped, the one in use stays");
+				context.check(viewport.taa_generation() > taaGeneration, "a drop is counted, so what was bound to the images is rebuilt");
+
+				quality.Taa = true;
+				quality.Fxaa = false;
+				test.renderer().set_quality(quality);
+				context.check(test.render() && viewport.taa_history(0) != nullptr, "TAA turned on again makes its history again");
+
+				quality.Taa = false; // the renderer is shared with the checks that follow
+				test.renderer().set_quality(quality);
+			});
+
 		register_render_check("taa_history_dropped", [](RenderCheckContext& context)
 			{
 				struct Case

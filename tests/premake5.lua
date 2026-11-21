@@ -42,6 +42,7 @@ project "wiwa_tests"
 		"%{IncludeDirs.LZ4}",
 		"%{IncludeDirs.zstd}",
 		"%{IncludeDirs.bc7enc}",
+		"%{IncludeDirs.meshoptimizer}",
 		"%{IncludeDirs.ENTT}",
 		"%{IncludeDirs.filewatch}",
 		"%{IncludeDirs.SPDLOG}",
@@ -68,6 +69,7 @@ project "wiwa_tests"
 		"LZ4",
 		"zstd",
 		"bc7enc",
+		"meshoptimizer",
 		"ufbx",
 		"Recast",
 		"d3dcompiler"

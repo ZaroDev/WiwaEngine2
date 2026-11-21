@@ -35,7 +35,8 @@ namespace wiwa
 		registry.register_component(WI_COMPONENT(MeshRenderer,
 			WI_FIELD_META(Mesh, FieldMeta::asset(AssetType::Mesh)),
 			WI_FIELD_META(Materials, FieldMeta::asset(AssetType::Material)),
-			WI_FIELD(ReceivesDecals)));
+			WI_FIELD(ReceivesDecals),
+			WI_FIELD(Static)));
 
 		registry.register_component(WI_COMPONENT(Decal,
 			WI_FIELD_META(Material, FieldMeta::asset(AssetType::Material)),

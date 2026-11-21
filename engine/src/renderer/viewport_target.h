@@ -57,11 +57,11 @@ namespace wiwa
 		// RG16F, zero where nothing was drawn), written by the depth prepass and the transparent velocity pass.
 		nvrhi::ITexture* velocity() const { return m_Velocity; }
 		// TAA: the resolved image of the last two frames it ran (RGBA16F) and the depth of those frames (R32F), written by the TAA compute
-		// pass. Index i is for the pass to ping-pong between; zero until the pass has written it.
+		// pass. Index i is for the pass to ping-pong between; zero until the pass has written it. Null until ensure_taa_targets().
 		nvrhi::ITexture* taa_history(u32 i) const { return m_TaaHistory[i & 1]; }
 		nvrhi::ITexture* taa_depth_history(u32 i) const { return m_TaaDepthHistory[i & 1]; }
 		// A second HDR image for the full-screen compute effects after the scene (motion blur): they read hdr(), write this one and copy it
-		// back. RGBA16F, UAV + SRV.
+		// back. RGBA16F, UAV + SRV. Null until ensure_post_scratch().
 		nvrhi::ITexture* post_scratch() const { return m_PostScratch; }
 		nvrhi::IFramebuffer* prepass_framebuffer() const { return m_PrepassFramebuffer; } // normal + velocity + depth
 		nvrhi::IFramebuffer* velocity_framebuffer() const { return m_VelocityFramebuffer; } // velocity + depth
@@ -70,9 +70,22 @@ namespace wiwa
 		nvrhi::IFramebuffer* ldr_depth_framebuffer() const { return m_LdrDepthFramebuffer; }
 		// The format to bind depth() with to sample its stencil plane (the depth plane is the default view).
 		static constexpr nvrhi::Format STENCIL_VIEW_FORMAT = nvrhi::Format::X32G8_UINT;
-		// Where the tonemap pass draws when FXAA runs: the image FXAA reads and writes to ldr(). Same format as ldr().
+		// Where the tonemap pass draws when FXAA runs: the image FXAA reads and writes to ldr(). Same format as ldr(). Null until ensure_fxaa_target().
 		nvrhi::ITexture* pre_fxaa() const { return m_PreFxaa; }
 		nvrhi::IFramebuffer* pre_fxaa_framebuffer() const { return m_PreFxaaFramebuffer; }
+
+		// Effect-only targets: the TAA history (about 50 MB at 1080p), the motion blur scratch image (16 MB) and the image FXAA reads (8 MB) are made the
+		// first frame their effect runs and dropped after EFFECT_TARGET_LINGER_FRAMES frames without it, so a project that leaves them off never pays for them.
+		// Each ensure_*() is called every frame the effect runs; trim_effect_targets() once a frame, whether it runs or not. The generations count up on
+		// every make and drop: what was bound to the targets (a pass's binding sets) is rebuilt when it changes.
+		static constexpr u64 EFFECT_TARGET_LINGER_FRAMES = 120;
+		bool ensure_taa_targets(nvrhi::IDevice* device);
+		bool ensure_post_scratch(nvrhi::IDevice* device);
+		bool ensure_fxaa_target(nvrhi::IDevice* device);
+		void trim_effect_targets();
+		u32 taa_generation() const { return m_TaaGeneration; }
+		u32 post_scratch_generation() const { return m_ScratchGeneration; }
+		u32 fxaa_generation() const { return m_FxaaGeneration; }
 
 		// Decals: four screen-sized targets the decal pass draws the decals' contributions into and the forward shaders read (decals.md). They
 		// exist only while the view has visible decals (16 bytes a pixel): ensure_decal_targets() makes them, release_decal_targets() drops them.
@@ -115,6 +128,16 @@ namespace wiwa
 		nvrhi::TextureHandle m_Normal{};
 		nvrhi::FramebufferHandle m_PrepassFramebuffer{};
 		nvrhi::TextureHandle m_Velocity{};
+		u64 m_Tick = 0;
+		u64 m_TaaUse = 0;
+		u64 m_ScratchUse = 0;
+		u64 m_FxaaUse = 0;
+		u32 m_TaaGeneration = 0;
+		u32 m_ScratchGeneration = 0;
+		u32 m_FxaaGeneration = 0;
+		void release_taa_targets();
+		void release_post_scratch();
+		void release_fxaa_target();
 		nvrhi::TextureHandle m_TaaHistory[2]{};
 		nvrhi::TextureHandle m_PostScratch{};
 		nvrhi::TextureHandle m_TaaDepthHistory[2]{};

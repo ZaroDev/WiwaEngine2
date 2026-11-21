@@ -51,6 +51,7 @@ namespace wiwa
 			bool HasRun = false;
 			u64 LastRunFrame = 0; // the frame index of the last frame this pass resolved
 			u32 LastRunGeneration = 0;
+			u32 TargetGeneration = 0; // of the history targets the binding sets were made for
 		};
 		PerView<ViewCache> m_PerView{};
 		bool create_binding_sets(ViewportTarget& viewport, ViewCache& c);

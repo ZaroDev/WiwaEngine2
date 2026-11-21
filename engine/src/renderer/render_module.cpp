@@ -724,6 +724,10 @@ namespace wiwa
 		const SceneRenderData& sceneData = m_Renderer->get_scene_data();
 		snapshot.VisibleInstances = sceneData.visible_instances();
 		snapshot.DrawCalls = static_cast<u32>(sceneData.opaque().size() + sceneData.masked().size() + sceneData.blended().size());
+		for (u32 level = 0; level < 4; level++)
+		{
+			snapshot.LodPrimitives[level] = sceneData.lod_primitives(level);
+		}
 		snapshot.ShadowViews = static_cast<u32>(sceneData.shadow_views().size());
 		const GpuResourceCache::Stats cacheStats = m_Renderer->get_cache().get_stats();
 		snapshot.CacheMeshes = cacheStats.Meshes;

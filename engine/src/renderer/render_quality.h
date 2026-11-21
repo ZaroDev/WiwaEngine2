@@ -28,6 +28,7 @@ namespace wiwa
 		u32 ParticleMaxPerEmitter = 65536; // 64..65536: a ring never holds more than this, whatever the effect's own MaxParticles says
 		float ParticleRateScale = 1.0f;   // 0..4: multiplies every emission rate (bursts are not scaled): the quality lever for weaker machines
 		bool ParticleCollision = true;    // false: no particle collides with the depth buffer (it passes through, as if the effect said None)
+		float LodPixelError = 1.5f;       // 0..16: how many pixels a lower level of detail may stray from the full mesh on screen; 0 draws every mesh at full detail
 
 		bool operator==(const RenderQuality&) const = default;
 	};

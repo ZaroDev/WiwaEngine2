@@ -13,6 +13,7 @@
 #include "../render_quality.h"
 #include "../view/view_types.h"
 #include "../viewport_target.h"
+#include "lod_select.h"
 #include "render_scene.h"
 
 namespace wiwa
@@ -213,6 +214,8 @@ namespace wiwa
 
 		// Draw counts of the last build, for the stats.
 		u32 visible_instances() const { return m_VisibleInstances; }
+		// How many primitives the last build drew (main view's draw lists) at each level of detail.
+		u32 lod_primitives(u32 level) const { return level < GPU_MAX_LODS ? m_LodDrawn[level] : 0; }
 
 		// The point and spot lights of this frame (at most MAX_LIGHTS; the rest are counted in dropped_lights()).
 		const std::vector<GpuLight>& lights() const { return m_Lights; }
@@ -266,6 +269,8 @@ namespace wiwa
 		std::vector<DrawItem> m_Masked{};
 		std::vector<DrawItem> m_Blended{};
 		u32 m_VisibleInstances = 0;
+		LodView m_LodView{};
+		u32 m_LodDrawn[GPU_MAX_LODS]{};
 		bool visible(const Frustum& frustum, const glm::mat4& world, const glm::vec3& boundsMin, const glm::vec3& boundsMax) const;
 		void collect_casters(const glm::mat4& viewProjection, u32 matrixIndex, std::vector<DrawItem>& items);
 		std::vector<const GpuMesh*> m_Meshes{}; // per instance slot, looked up once per frame

@@ -78,6 +78,15 @@ namespace wiwa
 			}
 		}
 
+		if (viewport.pre_fxaa() == nullptr)
+		{
+			return;
+		}
+		if (c.TargetGeneration != viewport.fxaa_generation())
+		{
+			c.BindingSet = nullptr;
+			c.TargetGeneration = viewport.fxaa_generation();
+		}
 		if (c.BindingSet == nullptr)
 		{
 			nvrhi::BindingSetDesc set;

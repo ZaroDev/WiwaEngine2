@@ -30,6 +30,7 @@ project "wiwa_editor"
 		"%{IncludeDirs.LZ4}",
 		"%{IncludeDirs.zstd}",
 		"%{IncludeDirs.bc7enc}",
+		"%{IncludeDirs.meshoptimizer}",
 		"%{IncludeDirs.ENTT}",
 		"%{IncludeDirs.filewatch}",
 		"%{IncludeDirs.SPDLOG}",
@@ -48,6 +49,7 @@ project "wiwa_editor"
 		"LZ4",
 		"zstd",
 		"bc7enc",
+		"meshoptimizer",
 		"ufbx",
 		"Recast",
 		"d3dcompiler"

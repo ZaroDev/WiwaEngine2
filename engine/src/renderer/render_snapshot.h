@@ -28,6 +28,7 @@ namespace wiwa
 		u32 SceneLights = 0;
 		u32 VisibleInstances = 0;   // inside the camera's view last frame
 		u32 DrawCalls = 0;          // opaque + masked + blended primitives drawn by the forward pass
+		u32 LodPrimitives[4]{};     // of the main view's draw lists: primitives drawn at each level of detail (0 is the full mesh)
 		u32 ShadowViews = 0;
 		u32 CacheMeshes = 0;
 		u32 CacheMaterials = 0;

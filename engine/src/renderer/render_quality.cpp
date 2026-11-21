@@ -33,6 +33,7 @@ namespace wiwa
 		quality.ParticlePoolSize = std::clamp(quality.ParticlePoolSize, 4096u, 4194304u);
 		quality.ParticleMaxPerEmitter = std::clamp(quality.ParticleMaxPerEmitter, 64u, 65536u);
 		quality.ParticleRateScale = clamp_finite(quality.ParticleRateScale, defaults.ParticleRateScale, 0.0f, 4.0f);
+		quality.LodPixelError = clamp_finite(quality.LodPixelError, defaults.LodPixelError, 0.0f, 16.0f);
 		return quality;
 	}
 
@@ -88,6 +89,7 @@ namespace wiwa
 		count("aoSlices", quality.AoSlices);
 		count("aoSteps", quality.AoSteps);
 		number("particleRateScale", quality.ParticleRateScale);
+		number("lodPixelError", quality.LodPixelError);
 		if (json.contains("particlePoolSize") && json["particlePoolSize"].is_number_integer())
 		{
 			quality.ParticlePoolSize = static_cast<u32>(std::clamp<i64>(json["particlePoolSize"].get<i64>(), 0, 100000000));
@@ -131,6 +133,7 @@ namespace wiwa
 		json["particleMaxPerEmitter"] = quality.ParticleMaxPerEmitter;
 		json["particleRateScale"] = quality.ParticleRateScale;
 		json["particleCollision"] = quality.ParticleCollision;
+		json["lodPixelError"] = quality.LodPixelError;
 
 		std::ofstream file(path, std::ios::binary | std::ios::trunc);
 		if (!file)

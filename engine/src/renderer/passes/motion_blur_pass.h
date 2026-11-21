@@ -47,6 +47,7 @@ namespace wiwa
 		struct ViewCache
 		{
 			nvrhi::BindingSetHandle BindingSet{};
+			u32 TargetGeneration = 0; // of the scratch image the binding set was made for
 		};
 		PerView<ViewCache> m_PerView{};
 		bool create_binding_set(ViewportTarget& viewport, ViewCache& c);

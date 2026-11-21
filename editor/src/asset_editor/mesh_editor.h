@@ -36,5 +36,7 @@ namespace wiwa
 		std::unique_ptr<MeshEditModel> m_Model{};
 		std::string m_Message{};
 		std::vector<std::string> m_Missing{};
+		LodBakeSettings m_LodSettings{};
+		std::string m_LodMessage{};
 	};
 }

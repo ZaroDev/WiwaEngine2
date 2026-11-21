@@ -374,6 +374,12 @@ namespace wiwa
 			gpu.MaterialSlot = get_material_slot(primitive.Material);
 			gpu.BoundsMin = primitive.BoundsMin;
 			gpu.BoundsMax = primitive.BoundsMax;
+			gpu.LodCount = std::clamp(primitive.LodCount, 1u, GPU_MAX_LODS);
+			for (u32 lod = 0; lod < gpu.LodCount; lod++)
+			{
+				gpu.Lods[lod] = GpuLod{ static_cast<u32>(where->IndexOffset) + primitive.Lods[lod].FirstIndex, primitive.Lods[lod].IndexCount, primitive.Lods[lod].Error };
+			}
+			gpu.Lods[0] = GpuLod{ gpu.FirstIndex, gpu.IndexCount, 0.0f };
 			mesh.Primitives.push_back(gpu);
 		}
 

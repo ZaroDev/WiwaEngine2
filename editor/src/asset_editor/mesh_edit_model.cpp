@@ -1,12 +1,14 @@
 #include <editor_common.h>
 #include "mesh_edit_model.h"
 
+#include <algorithm>
 #include <unordered_map>
 
 namespace wiwa
 {
 	MeshEditModel::MeshEditModel(MeshData mesh)
-		: m_Mesh(std::move(mesh)), m_Skin(std::make_shared<const std::vector<MeshSkinVertex>>(m_Mesh.SkinVertices))
+		: m_Mesh(std::move(mesh)), m_Skin(std::make_shared<const std::vector<MeshSkinVertex>>(m_Mesh.SkinVertices)),
+		m_Indices(std::make_shared<const std::vector<u32>>(m_Mesh.Indices))
 	{
 	}
 
@@ -16,7 +18,11 @@ namespace wiwa
 		for (const MeshPrimitive& primitive : m_Mesh.Primitives)
 		{
 			state.Materials.push_back(primitive.Material);
+			std::array<MeshLod, MAX_MESH_LODS> levels{};
+			std::copy(std::begin(primitive.Lods), std::end(primitive.Lods), levels.begin());
+			state.Lods.emplace_back(primitive.LodCount, levels);
 		}
+		state.Indices = m_Indices;
 		state.Skeleton = m_Mesh.Skeleton;
 		state.JointNames = m_Mesh.SkinJointNames;
 		state.Skin = m_Skin;
@@ -28,6 +34,16 @@ namespace wiwa
 		for (size_t i = 0; i < m_Mesh.Primitives.size() && i < state.Materials.size(); i++)
 		{
 			m_Mesh.Primitives[i].Material = state.Materials[i];
+		}
+		for (size_t i = 0; i < m_Mesh.Primitives.size() && i < state.Lods.size(); i++)
+		{
+			m_Mesh.Primitives[i].LodCount = state.Lods[i].first;
+			std::copy(state.Lods[i].second.begin(), state.Lods[i].second.end(), m_Mesh.Primitives[i].Lods);
+		}
+		if (state.Indices != m_Indices)
+		{
+			m_Indices = state.Indices;
+			m_Mesh.Indices = *m_Indices;
 		}
 		m_Mesh.Skeleton = state.Skeleton;
 		m_Mesh.SkinJointNames = state.JointNames;
@@ -50,6 +66,33 @@ namespace wiwa
 		}
 		State before = capture();
 		m_Mesh.Primitives[primitive].Material = material;
+		m_History.push(std::move(before));
+		return true;
+	}
+
+	LodBakeResult MeshEditModel::bake_lods(const LodBakeSettings& settings)
+	{
+		State before = capture();
+		const LodBakeResult result = bake_mesh_lods(m_Mesh, settings);
+		m_Indices = std::make_shared<const std::vector<u32>>(m_Mesh.Indices);
+		m_History.push(std::move(before));
+		return result;
+	}
+
+	bool MeshEditModel::clear_lods()
+	{
+		bool any = false;
+		for (const MeshPrimitive& primitive : m_Mesh.Primitives)
+		{
+			any = any || primitive.LodCount > 1;
+		}
+		if (!any)
+		{
+			return false;
+		}
+		State before = capture();
+		clear_mesh_lods(m_Mesh);
+		m_Indices = std::make_shared<const std::vector<u32>>(m_Mesh.Indices);
 		m_History.push(std::move(before));
 		return true;
 	}

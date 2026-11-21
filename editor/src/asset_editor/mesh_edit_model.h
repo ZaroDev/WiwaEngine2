@@ -1,17 +1,20 @@
 #pragma once
 
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include <assets/asset_data.h>
 
+#include <asset_pipeline/mesh_lods.h>
+
 #include "edit_history.h"
 
 namespace wiwa
 {
 	// The document the Mesh editor edits: a skinned mesh's material slots (the material of each primitive) and its skeleton binding, and the
-	// history. No ImGui. Geometry never changes. A call that is refused changes nothing and makes no undo step.
+	// history. No ImGui. The geometry of the full level never changes; levels of detail can be baked and cleared. A call that is refused changes nothing and makes no undo step.
 	class MeshEditModel
 	{
 	public:
@@ -28,6 +31,10 @@ namespace wiwa
 		// recorded joint names become the target's. Refused (false, missing says why) when can_rebind is false.
 		bool rebind(const AssetRef& skeleton, const SkeletonData& target, std::vector<std::string>& missing);
 
+		// Bakes levels of detail (the ones the mesh had are replaced) or removes them. The simplifier runs on the calling thread, a second or two for a big mesh.
+		LodBakeResult bake_lods(const LodBakeSettings& settings);
+		bool clear_lods();
+
 		void undo();
 		void redo();
 		bool can_undo() const { return m_History.can_undo(); }
@@ -43,6 +50,8 @@ namespace wiwa
 			AssetRef Skeleton{};
 			std::vector<std::string> JointNames{};
 			std::shared_ptr<const std::vector<MeshSkinVertex>> Skin{};
+			std::shared_ptr<const std::vector<u32>> Indices{};
+			std::vector<std::pair<u32, std::array<MeshLod, MAX_MESH_LODS>>> Lods{}; // per primitive: how many levels, and them
 		};
 
 		State capture() const;
@@ -50,6 +59,7 @@ namespace wiwa
 
 		MeshData m_Mesh;
 		std::shared_ptr<const std::vector<MeshSkinVertex>> m_Skin;
+		std::shared_ptr<const std::vector<u32>> m_Indices;
 		EditHistory<State> m_History;
 	};
 }

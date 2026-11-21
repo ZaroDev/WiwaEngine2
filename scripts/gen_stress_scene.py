@@ -4,10 +4,14 @@ keep the engine at the edge of 60 FPS: the Sponza atrium (262k triangles, 25 mat
 150k triangles, a crowd of animated skinned characters, hundreds of point lights, shadow casting spot lights, particle fires and a wall of
 physics crates, seen by a camera that flies through the atrium, out over the plaza and back (a loop of about a minute).
 
-    python scripts/gen_stress_scene.py [cache_dir] [--scale=1.0] [--seed=1]
+    python scripts/gen_stress_scene.py [cache_dir] [--scale=4.0] [--seed=1]
+
+The models are imported with levels of detail (the importer's lodLevels, so the ships and the props draw fewer triangles with distance; RenderQuality
+lodPixelError sets how soon) and the static things (Sponza, the plaza, the props, the ships) are marked Static; the crowd is skinned and animated, so it is
+not. The bench log shows how many primitives were drawn at each level.
 
 Run scripts/gen_demo_scene.py first: the stress hall reuses its characters, materials, particle effects, scripts and sky (by their guids).
---scale multiplies the counts of props, characters, lights, fires and crates (1.0 is the size tuned to just reach 60 FPS on an RTX 3070 Ti at 1920x1080).
+--scale multiplies the counts of props, characters, lights, fires and crates (4.0, the default, is the size measured at 60.1 FPS on average, 46 FPS 0.1% low, on an RTX 3070 Ti with vsync off, Vulkan; 3.0 gave 78 FPS).
 
 Models (downloaded once into cache_dir, default .demo_cache):
 - Sponza, Khronos glTF-Sample-Assets (Crytek's Sponza, textures by Alexandre Pestana). NOT CC0: its license is in the folder written here. These
@@ -28,7 +32,7 @@ import gen_demo_scene as demo  # noqa: E402  (its helpers; importing it generate
 
 ROOT = demo.ROOT
 FLAGS = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
-SCALE = float(FLAGS.get("scale", "1.0"))
+SCALE = float(FLAGS.get("scale", "4.0"))
 SEED = int(FLAGS.get("seed", "1"))
 
 SPONZA_API = "https://api.github.com/repos/KhronosGroup/glTF-Sample-Assets/contents/Models/Sponza/glTF"
@@ -40,7 +44,8 @@ PLAZA_SIZE = 200.0  # and is this wide and long
 
 
 def write_model(rel, importer_settings=None):
-	return demo.write_meta(rel, "ModelImporter", 9, importer_settings or {"generatePhysicsShapes": False})
+	# lodLevels/lodReduction: the importer bakes levels of detail into the static meshes (3 levels, each half the triangles of the one before)
+	return demo.write_meta(rel, "ModelImporter", 10, importer_settings or {"generatePhysicsShapes": False, "lodLevels": 3, "lodReduction": 0.5})
 
 
 def import_sponza():
@@ -66,6 +71,28 @@ def import_poly_haven(asset):
 	demo.write("models/stress/%s/LICENSE.txt" % asset, "%s from Poly Haven (https://polyhaven.com/a/%s), CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/).\n" % (asset, asset))
 	return write_model("models/stress/%s/%s" % (asset, name))
 
+
+STATIC_LUA = """-- Marks every mesh below the entity Static (MeshRenderer.Static): they never move, so the renderer keeps no previous matrix for them.
+local MakeStatic = Script:extend{}
+
+local function mark(entity)
+  for _, child in ipairs(entity.children) do
+    if child:has("MeshRenderer") then
+      child:get("MeshRenderer").static = true
+    end
+    mark(child)
+  end
+end
+
+function MakeStatic:on_init()
+  if self.entity:has("MeshRenderer") then
+    self.entity:get("MeshRenderer").static = true
+  end
+  mark(self.entity)
+end
+
+return MakeStatic
+"""
 
 CAMERA_LUA = """-- The stress hall's camera: a loop through the atrium, up out of it, over the plaza and back. Waypoints are position and the point looked at.
 local PATH = {
@@ -137,6 +164,10 @@ def main():
 	camera_script = "scripts/stress_camera.lua"
 	demo.write(camera_script, CAMERA_LUA)
 	camera_guid = demo.write_meta(camera_script, "ScriptImporter", 1)
+	static_script = "scripts/stress_static.lua"
+	demo.write(static_script, STATIC_LUA)
+	static_guid = demo.write_meta(static_script, "ScriptImporter", 1)
+	make_static = {"script:" + static_guid: {}}
 
 	# the demo's assets, by their guids (gen_demo_scene.py wrote them)
 	assets = demo.ASSETS
@@ -176,10 +207,10 @@ def main():
 
 	# --- the atrium and the plaza -----------------------------------------------------------------------------------
 	s.add("World")
-	s.add("Sponza", "World", **prefab("Sponza"))
+	s.add("Sponza", "World", **prefab("Sponza"), **make_static)
 	plaza_centre = PLAZA_Z0 + PLAZA_SIZE / 2
 	s.add("Plaza", "World", pos=(0, -0.02, plaza_centre), scale=(PLAZA_SIZE, 1, PLAZA_SIZE),
-		MeshRenderer={"Mesh": ref(shapes, demo.MESH["plane_tiled"]), "Materials": [ref(ground_material)]})
+		MeshRenderer={"Mesh": ref(shapes, demo.MESH["plane_tiled"]), "Materials": [ref(ground_material)], "Static": True})
 	s.add("Plaza collider", "World", pos=(0, -0.5, plaza_centre), scale=(PLAZA_SIZE, 1, PLAZA_SIZE), Collider=demo.BOX)
 
 	# --- props: a grid of a few thousand, jittered, each a real model --------------------------------------------------
@@ -192,7 +223,7 @@ def main():
 	prop_target = int(1500 * SCALE)
 	cell_list = [(i, j) for i in range(cells) for j in range(cells)]
 	rng.shuffle(cell_list)
-	s.add("Props", "World")
+	s.add("Props", "World", **make_static)
 	count = 0
 	for i, j in cell_list:
 		if count >= prop_target:
@@ -207,7 +238,7 @@ def main():
 		count += 1
 
 	# --- ships: the heavy meshes -------------------------------------------------------------------------------------
-	s.add("Ships", "World")
+	s.add("Ships", "World", **make_static)
 	ship_count = max(1, int(10 * SCALE))
 	for k in range(ship_count):
 		side = -1 if k % 2 == 0 else 1

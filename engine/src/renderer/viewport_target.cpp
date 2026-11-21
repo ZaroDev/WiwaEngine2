@@ -136,42 +136,10 @@ namespace wiwa
 		velocity.debugName = "Viewport velocity";
 		m_Velocity = device->createTexture(velocity);
 
-		bool taaOk = true;
-		for (u32 i = 0; i < 2; i++)
-		{
-			nvrhi::TextureDesc history;
-			history.width = width;
-			history.height = height;
-			history.format = nvrhi::Format::RGBA16_FLOAT;
-			history.isUAV = true;
-			history.isShaderResource = true;
-			history.initialState = nvrhi::ResourceStates::ShaderResource;
-			history.keepInitialState = true;
-			history.debugName = "TAA history " + std::to_string(i);
-			m_TaaHistory[i] = device->createTexture(history);
-			history.format = nvrhi::Format::R32_FLOAT;
-			history.debugName = "TAA depth history " + std::to_string(i);
-			m_TaaDepthHistory[i] = device->createTexture(history);
-			taaOk = taaOk && m_TaaHistory[i] != nullptr && m_TaaDepthHistory[i] != nullptr;
-		}
-
-		nvrhi::TextureDesc scratch;
-		scratch.width = width;
-		scratch.height = height;
-		scratch.format = nvrhi::Format::RGBA16_FLOAT;
-		scratch.isUAV = true;
-		scratch.isShaderResource = true;
-		scratch.initialState = nvrhi::ResourceStates::ShaderResource;
-		scratch.keepInitialState = true;
-		scratch.debugName = "Viewport post scratch";
-		m_PostScratch = device->createTexture(scratch);
-
 		m_Hdr = device->createTexture(hdr);
 		m_Depth = device->createTexture(depth);
 		m_Ldr = device->createTexture(ldr);
-		ldr.debugName = "Viewport tonemapped (before FXAA)";
-		m_PreFxaa = device->createTexture(ldr);
-		if (!m_Hdr || !m_Depth || !m_Ldr || !m_PreFxaa || !m_Normal || !m_Velocity || !m_Exposure || !m_Histogram || !bloomOk || !taaOk || !m_PostScratch || !m_AoRaw || !m_Ao || !m_AoDistance)
+		if (!m_Hdr || !m_Depth || !m_Ldr || !m_Normal || !m_Velocity || !m_Exposure || !m_Histogram || !bloomOk || !m_AoRaw || !m_Ao || !m_AoDistance)
 		{
 			WI_LOG(Error, "Renderer", "could not create the {0}x{1} viewport targets", width, height);
 			destroy();
@@ -211,11 +179,7 @@ namespace wiwa
 		velocityFramebuffer.setDepthAttachment(m_Depth);
 		m_VelocityFramebuffer = device->createFramebuffer(velocityFramebuffer);
 
-		nvrhi::FramebufferDesc preFxaaFramebuffer;
-		preFxaaFramebuffer.addColorAttachment(m_PreFxaa);
-		m_PreFxaaFramebuffer = device->createFramebuffer(preFxaaFramebuffer);
-
-		if (!m_HdrFramebuffer || !m_HdrColorFramebuffer || !m_DepthFramebuffer || !m_LdrFramebuffer || !m_LdrDepthFramebuffer || !m_PreFxaaFramebuffer || !m_PrepassFramebuffer || !m_VelocityFramebuffer)
+		if (!m_HdrFramebuffer || !m_HdrColorFramebuffer || !m_DepthFramebuffer || !m_LdrFramebuffer || !m_LdrDepthFramebuffer || !m_PrepassFramebuffer || !m_VelocityFramebuffer)
 		{
 			WI_LOG(Error, "Renderer", "could not create the viewport framebuffers");
 			destroy();
@@ -294,6 +258,159 @@ namespace wiwa
 		}
 	}
 
+	bool ViewportTarget::ensure_taa_targets(nvrhi::IDevice* device)
+	{
+		m_TaaUse = m_Tick;
+		if (m_TaaHistory[0] != nullptr)
+		{
+			return true;
+		}
+		if (!valid())
+		{
+			return false;
+		}
+
+		nvrhi::TextureDesc history;
+		history.width = m_Width;
+		history.height = m_Height;
+		history.isUAV = true;
+		history.isShaderResource = true;
+		history.initialState = nvrhi::ResourceStates::ShaderResource;
+		history.keepInitialState = true;
+		bool ok = true;
+		for (u32 i = 0; i < 2; i++)
+		{
+			history.format = nvrhi::Format::RGBA16_FLOAT;
+			history.debugName = "TAA history " + std::to_string(i);
+			m_TaaHistory[i] = device->createTexture(history);
+			history.format = nvrhi::Format::R32_FLOAT;
+			history.debugName = "TAA depth history " + std::to_string(i);
+			m_TaaDepthHistory[i] = device->createTexture(history);
+			ok = ok && m_TaaHistory[i] != nullptr && m_TaaDepthHistory[i] != nullptr;
+		}
+		if (!ok)
+		{
+			WI_LOG(Error, "Renderer", "could not create the {0}x{1} TAA history", m_Width, m_Height);
+			release_taa_targets();
+			return false;
+		}
+		m_TaaGeneration++;
+		return true;
+	}
+
+	void ViewportTarget::release_taa_targets()
+	{
+		const bool had = m_TaaHistory[0] != nullptr;
+		for (u32 i = 0; i < 2; i++)
+		{
+			m_TaaHistory[i] = nullptr;
+			m_TaaDepthHistory[i] = nullptr;
+		}
+		if (had)
+		{
+			m_TaaGeneration++;
+		}
+	}
+
+	bool ViewportTarget::ensure_post_scratch(nvrhi::IDevice* device)
+	{
+		m_ScratchUse = m_Tick;
+		if (m_PostScratch != nullptr)
+		{
+			return true;
+		}
+		if (!valid())
+		{
+			return false;
+		}
+
+		nvrhi::TextureDesc scratch;
+		scratch.width = m_Width;
+		scratch.height = m_Height;
+		scratch.format = nvrhi::Format::RGBA16_FLOAT;
+		scratch.isUAV = true;
+		scratch.isShaderResource = true;
+		scratch.initialState = nvrhi::ResourceStates::ShaderResource;
+		scratch.keepInitialState = true;
+		scratch.debugName = "Viewport post scratch";
+		m_PostScratch = device->createTexture(scratch);
+		if (m_PostScratch == nullptr)
+		{
+			WI_LOG(Error, "Renderer", "could not create the {0}x{1} post scratch image", m_Width, m_Height);
+			return false;
+		}
+		m_ScratchGeneration++;
+		return true;
+	}
+
+	void ViewportTarget::release_post_scratch()
+	{
+		if (m_PostScratch != nullptr)
+		{
+			m_PostScratch = nullptr;
+			m_ScratchGeneration++;
+		}
+	}
+
+	bool ViewportTarget::ensure_fxaa_target(nvrhi::IDevice* device)
+	{
+		m_FxaaUse = m_Tick;
+		if (m_PreFxaa != nullptr)
+		{
+			return true;
+		}
+		if (!valid())
+		{
+			return false;
+		}
+
+		nvrhi::TextureDesc description = m_Ldr->getDesc(); // the same as the final image
+		description.debugName = "Viewport tonemapped (before FXAA)";
+		m_PreFxaa = device->createTexture(description);
+		if (m_PreFxaa != nullptr)
+		{
+			nvrhi::FramebufferDesc framebuffer;
+			framebuffer.addColorAttachment(m_PreFxaa);
+			m_PreFxaaFramebuffer = device->createFramebuffer(framebuffer);
+		}
+		if (m_PreFxaa == nullptr || m_PreFxaaFramebuffer == nullptr)
+		{
+			WI_LOG(Error, "Renderer", "could not create the {0}x{1} FXAA input image", m_Width, m_Height);
+			release_fxaa_target();
+			return false;
+		}
+		m_FxaaGeneration++;
+		return true;
+	}
+
+	void ViewportTarget::release_fxaa_target()
+	{
+		const bool had = m_PreFxaa != nullptr;
+		m_PreFxaaFramebuffer = nullptr;
+		m_PreFxaa = nullptr;
+		if (had)
+		{
+			m_FxaaGeneration++;
+		}
+	}
+
+	void ViewportTarget::trim_effect_targets()
+	{
+		m_Tick++;
+		if (m_TaaHistory[0] != nullptr && m_Tick - m_TaaUse > EFFECT_TARGET_LINGER_FRAMES)
+		{
+			release_taa_targets();
+		}
+		if (m_PostScratch != nullptr && m_Tick - m_ScratchUse > EFFECT_TARGET_LINGER_FRAMES)
+		{
+			release_post_scratch();
+		}
+		if (m_PreFxaa != nullptr && m_Tick - m_FxaaUse > EFFECT_TARGET_LINGER_FRAMES)
+		{
+			release_fxaa_target();
+		}
+	}
+
 	void ViewportTarget::destroy()
 	{
 		release_decal_targets();
@@ -303,15 +420,13 @@ namespace wiwa
 		m_LdrFramebuffer = nullptr;
 		m_LdrDepthFramebuffer = nullptr;
 		m_PreFxaaFramebuffer = nullptr;
+		m_PreFxaa = nullptr;
 		m_PrepassFramebuffer = nullptr;
 		m_VelocityFramebuffer = nullptr;
 		m_Velocity = nullptr;
-		m_PostScratch = nullptr;
-		for (u32 i = 0; i < 2; i++)
-		{
-			m_TaaHistory[i] = nullptr;
-			m_TaaDepthHistory[i] = nullptr;
-		}
+		release_post_scratch();
+		release_taa_targets();
+		release_fxaa_target();
 		m_Normal = nullptr;
 		for (nvrhi::TextureHandle& texture : m_BloomDown)
 		{

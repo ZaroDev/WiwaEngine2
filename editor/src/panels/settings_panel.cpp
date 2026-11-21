@@ -392,6 +392,7 @@ void SettingsPanel::renderer_rows()
 		});
 	field("Spawn rate scale", [&]() { ImGui::SetNextItemWidth(180.0f); ImGui::SliderFloat("Spawn rate scale", &q.ParticleRateScale, 0.0f, 4.0f, "%.2fx"); });
 	field("Particles collide with the depth", [&]() { ImGui::Checkbox("Particles collide with the depth", &q.ParticleCollision); });
+	field("LOD error (pixels)", [&]() { ImGui::SetNextItemWidth(180.0f); ImGui::SliderFloat("LOD error (pixels)", &q.LodPixelError, 0.0f, 16.0f, q.LodPixelError == 0.0f ? "off (full detail)" : "%.1f px"); });
 
 	group("Display");
 	field("Vertical sync", [&]() { ImGui::Checkbox("Vertical sync", &q.Vsync); });
