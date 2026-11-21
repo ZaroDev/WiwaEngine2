@@ -39,6 +39,7 @@ The test sources are in `tests/src/<area>/` (`*_smoke_test.cpp`, `anim_*_checks.
 | `--render-test` | tests | GPU pixel checks in `tests/src/render/*_checks.cpp`, run on the render thread |
 | `--render-smoke <frames>` | any (engine) | render N frames then exit (1 if a validation message or error was logged) |
 | `--scene-smoke-load` | game | load the `--scene` (or the pak's default scene) and quit |
+| `--bench [seconds]` | game | measure the `--scene` with vsync off, optionally write every frame (`--bench-out`, `--bench-label`, `--bench-meta`) for `scripts/bench_report.py`; exit 0 when the average reaches `--bench-target` (benchmarking.md) |
 
 Other flags: `--write-demo-video` (tests: writes the demo clip `editor/assets/video/Intro.mp4` with Media Foundation), `--nav-bake <file>` (editor, with `--scene`: bakes the scene's first navmesh volume to the file), `--debug-draw` (game: a game starts with debug draw off), `--scene <path>`, `--pack <outdir>`, `--api=vulkan|d3d11|d3d12` (default Vulkan, no silent fallback), `--gpu-validation`, `--no-copy-queue`. Panel smokes run with ImGui asserts on.
 
@@ -72,6 +73,7 @@ Rules that cut across areas:
 | Behaviour trees and perception (`.wbt`, `AIController`, Lua leaves `BtAction`/`BtCondition`, `Perceiver`, the tree editor) | [behavior-trees.md](docs/superpowers/documentation/behavior-trees.md) | `engine/src/ai`, `editor/src/ai` |
 | Navigation (Recast bake in the editor, Detour queries and DetourCrowd agents, `.wnav`, the `Nav` Lua API) | [navigation.md](docs/superpowers/documentation/navigation.md) | `engine/src/nav`, `editor/src/asset_pipeline/nav_bake.*`, `editor/src/nav`; vendored `engine/vendor/recastnavigation`; `dt*` stays in `engine/src/nav`, `rc*` in the editor |
 | Video (`Video` UI widget, mp4 playback with sound, `IVideoDecoder` platform seam, Media Foundation, `video_*` Lua API) | [video.md](docs/superpowers/documentation/video.md) | `engine/src/video`, `engine/src/video/mf` (`IMF*` stays inside it), `engine/src/renderer/video`, `engine/src/ui/ui_video_fit.*`, `editor/src/asset_pipeline/importers/video_importer.cpp` |
+| Benchmarking (`--bench`, per-frame recording, HTML reports with hotspots and baselines) | [benchmarking.md](docs/superpowers/documentation/benchmarking.md) | `engine/src/core/bench_recorder.*`, `game/src/game.cpp`, `scripts/bench_stress.py`, `scripts/bench_report.py` |
 | Input | [input.md](docs/superpowers/documentation/input.md) | `engine/src/input` |
 | Game UI | [ui.md](docs/superpowers/documentation/ui.md) | `engine/src/ui`, `editor/src/ui` |
 | Project settings, Settings page | [project-settings.md](docs/superpowers/documentation/project-settings.md) | `engine/src/core/project_settings.*`, `editor/src/settings` |

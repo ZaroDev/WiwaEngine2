@@ -106,3 +106,6 @@ editor/layouts/
 # the stress hall (scripts/gen_stress_scene.py): Sponza is not CC0, so its models and the scene that names them are generated, never committed
 editor/assets/models/stress/
 editor/assets/scenes/stress.wscene
+
+# benchmark runs (scripts/bench_stress.py): frames, reports and logs
+bench_results/
