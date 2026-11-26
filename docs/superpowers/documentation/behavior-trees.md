@@ -41,7 +41,7 @@ All return Success / Failure / Running. Sequence and Selector have a `reactive` 
 
 ## Demo
 
-The guard of the Navigation station: patrols east of the wall, sees the thief across the arena and chases it, looks at the crash the noise maker makes. `python scripts/gen_demo_scene.py --ai-only` adds it (no downloads, no other `.meta` touched; the full run rewrites ignored `.meta` files: do not run it casually). `--demo-smoke` checks the guard has a controller, saw the thief, heard the crash and came within 3 m of the thief; it runs before the other checks.
+The guard of the navigation and AI demo (`demo_ai.wscene`): patrols east of the wall, sees the thief across the arena and chases it, looks at the crash the noise maker makes. Its HUD (`ai_ui.lua`) reads the guard's blackboard (`AI.controller`), makes a noise (`AI.emit_noise`) and moves the thief. `--demo-smoke` checks the guard has a controller, saw the thief, heard the crash and came within 3 m of the thief.
 
 ## Verification
 

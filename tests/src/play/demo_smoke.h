@@ -3,6 +3,7 @@
 #include <chrono>
 #include <set>
 #include <string>
+#include <vector>
 
 #include <core/common.h>
 #include <input/scripted_input_backend.h>
@@ -13,10 +14,12 @@
 
 namespace wiwa
 {
-	// wiwa_editor --demo-smoke: drives the real editor through the demo scene, one step per frame. It opens assets/scenes/demo.wscene, plays it
-	// and checks that the demo scripts moved things and logged no error; then it writes a script of its own into assets/scripts/, adds it to
-	// an entity of the running scene, rewrites the file, and checks that the running instance runs the new code (file watcher, import,
-	// reload, in-place swap: the whole way). The script files it made are deleted at the end.
+	// wiwa_tests --demo-smoke: drives the real editor through the demo, one step per frame. The demo is a hub (assets/scenes/demo.wscene) and a scene
+	// per group of features (scripts/gen_demo_scene.py, DEMO_SCENES): it plays the hub and clicks the first button of its menu (the lighting scene must
+	// replace it), then opens and plays each feature scene in turn and checks that its demo scripts moved things and its HUD script ran. In the last one
+	// (scripts, input and UI) it drives the HUD and the input demo, writes a script of its own into assets/scripts/, adds it to an entity of the running
+	// scene, rewrites the file, and checks that the running instance runs the new code (file watcher, import, reload, in-place swap: the whole way).
+	// Nothing may be logged as an error along the way. The script files it made are deleted at the end.
 	class DemoSmoke
 	{
 	public:
@@ -34,7 +37,6 @@ namespace wiwa
 			Run,
 			Ui,
 			Input,
-			Physics,
 			HotCreate,
 			HotFirst,
 			HotSecond,
@@ -42,6 +44,15 @@ namespace wiwa
 		};
 
 		bool wait(u32 frames, const char* what, std::string& failure);
+		void next_segment();
+		void sample(Scene& play);
+		std::string check_segment(Scene& play);
+		std::string check_hud_status(Scene& play) const;
+		std::string check_lighting() const;
+		std::string check_features() const;
+		std::string check_physics() const;
+		std::string check_car() const;
+		void sample_features(Scene& play);
 		void sample_fox(Scene& play);
 		std::string check_fox() const;
 		void sample_audio(Scene& play);
@@ -54,7 +65,8 @@ namespace wiwa
 		std::string check_static_and_lods(Scene& scene, AssetManager* assets);
 		bool nav_arrived() const;
 		std::string finish_checks();
-		bool sample_physics(Scene& play, std::string& failure);
+		void sample_physics(Scene& play);
+		void sample_car(Scene& play);
 
 		// The HUD of the demo scene while it plays (the Ui phase), one step per frame.
 		enum class UiResult
@@ -65,6 +77,22 @@ namespace wiwa
 		};
 		UiResult run_ui_step(std::string& failure);
 		void restore_ui();
+
+		// The hub: its menu is drawn and its first button loads the lighting scene in place of the hub (load_scene from hub_menu.lua).
+		enum class HubStep
+		{
+			Setup,
+			WaitDrawn,
+			WaitLoaded,
+		};
+		UiResult run_hub_step(std::string& failure);
+
+		// A feature scene whose checks held: every button of its HUD's Controls panel is clicked once (its handler must run without an error).
+		UiResult run_controls_step(Scene& play, std::string& failure);
+		bool m_ClickingControls = false;
+		std::vector<UiId> m_Controls{};
+		size_t m_ControlIndex = 0;
+		u32 m_ControlFrames = 0;
 
 		// The Input phase: the input demo of the scene (a ball that moves, jumps and rebinds Jump) driven by a scripted input backend.
 		enum class InputStep
@@ -84,6 +112,10 @@ namespace wiwa
 
 		SceneEditor& m_Editor;
 		PlayMode& m_Play;
+		size_t m_Segment = 0; // the scene of the demo being checked (SEGMENTS in demo_smoke.cpp)
+		std::chrono::steady_clock::time_point m_RunStart{};
+		HubStep m_HubStep = HubStep::Setup;
+		u32 m_HubFrames = 0;
 		Phase m_Phase = Phase::Open;
 		u32 m_PhaseFrames = 0;
 		std::chrono::steady_clock::time_point m_PhaseStart{};
@@ -92,6 +124,7 @@ namespace wiwa
 		std::uintmax_t m_LogStart = 0;
 
 		// what the run phase watches: the lowest and highest value seen, per quantity
+		bool m_RingSeen = false;
 		float m_RingBefore = 0.0f, m_RingAfter = 0.0f;
 		float m_BallLow = 1e9f, m_BallHigh = -1e9f;
 		float m_CameraLow = 1e9f, m_CameraHigh = -1e9f;
@@ -159,8 +192,8 @@ namespace wiwa
 		AiWatch m_Ai{};
 		std::chrono::steady_clock::time_point m_NavDeadline{};
 
-		// the Physics phase: the joints demo (door, cart, pendulum, bridge, breaking box) and the character demo (a patrolling character, a sliding
-		// platform) of the scene while it plays
+		// the physics scene: the joints demo (door, cart, pendulum, bridge, breaking box) and the character demo (a patrolling character, a sliding
+		// platform); and the vehicles scene: the autopilot car
 		struct PhysicsWatch
 		{
 			float DoorSwing = 0.0f;                  // the largest |rotation.y| of the door
@@ -174,7 +207,8 @@ namespace wiwa
 			float PatrolLowX = 1e9f, PatrolHighX = -1e9f; // the character that walks its lane on its own
 			float PatrolLowY = 1e9f, PatrolHighY = -1e9f;
 			float PlatformLow = 1e9f, PlatformHigh = -1e9f; // x of the platform that slides
-			glm::vec3 CarStart{ 0.0f };              // the autopilot car (station 9): where it started and which way it faced
+			bool JointsSeen = false;                 // the physics scene's entities were found
+			glm::vec3 CarStart{ 0.0f };              // the autopilot car: where it started and which way it faced
 			glm::vec3 CarStartForward{ 0.0f, 0.0f, -1.0f };
 			bool CarSeen = false;
 			float CarFarthest = 0.0f;                // the farthest it got from the start

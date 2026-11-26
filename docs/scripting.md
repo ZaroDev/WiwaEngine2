@@ -386,21 +386,23 @@ The editor sets this up itself each time it starts, so there is nothing to confi
 
 ## The demo scene
 
-`assets/scenes/demo.wscene` is a hall of seven stations (written by `scripts/gen_demo_scene.py`; the sources are in `assets/scripts/`). Press
-Play, click the Viewport and press **1 to 7** to jump between them; the labels over the stations are widgets of the HUD anchored to entities.
+`assets/scenes/demo.wscene` is the demo's menu (written by `scripts/gen_demo_scene.py`; the sources are in `assets/scripts/`): press Play, click
+the Viewport and click a demo, or press **1 to 8**. Each demo is a scene of its own (`assets/scenes/demo_<group>.wscene`) with a HUD: what it shows,
+a status line and controls written by its UI script (`<group>_ui.lua`), and Previous / Menu / Next at the top (`demo_nav.lua`, `load_scene`; **Tab**
+goes to the next demo). Keys **1 to 9** move the camera to the scene's viewpoints (the entities `View 1`, `View 2`, ...).
 
-| Station | Scripts and what they show |
-| --- | --- |
-| 1 Lighting and post | **spinner** (blue ring), **light_pulse** (podium spot, neon lights), **bobber** (neon balls, `lib/wave.lua`), a prefab (`street_lamp.wprefab`) instanced three times |
-| 2 Materials and shaders | PBR grid, textured bricks, glass, carpaint, cloth, double-sided, the `toon` and `hologram` surface shaders |
-| 3 Models and animation | **animation_demo** (the warrior crossfades Idle and Run, counts `footstep` events, has a head socket), **clip_player** (a lineup of FBX characters and monsters) |
-| 4 Physics | **physics_hopper** (velocity, raycast, collision events), bouncy balls, crates, **trigger_zone** (a trigger that lights up) |
-| 5 Joints | **joint_motor_swing** (door and cart motors), a spring pendulum, a bridge, **joint_breaker** and **joint_wrecker** |
-| 6 Character controller | **character_demo** (Hero is yours, Patrol walks and jumps by itself), steps, ramps, **slide_platform** |
-| 7 Scripts, input and UI | **demo_ui** (HUD: score, health bar, light button and slider, a tag following the Beacon), **input_demo** (the "Input demo" ball moves with WASD or the stick, jumps with Space or pad A, fires with the left mouse button; "Rebind Jump" waits for a key and saves it to `input_overrides.json`) |
+| Demo | Scripts and what they show | Its HUD's controls |
+| --- | --- | --- |
+| 1 Lighting and post | **spinner** (blue ring), **light_pulse** (podium spot, neon lights), **bobber** (neon balls, `lib/wave.lua`), a prefab (`street_lamp.wprefab`) instanced three times and a prefab of two of them (`lamp_pair.wprefab`) | **lighting_ui**: the sun's height, exposure, bloom, AO and motion blur (`settings.scene`) |
+| 2 Materials and shaders | PBR grid, textured bricks, glass, carpaint, cloth, double-sided, the `toon` and `hologram` surface shaders | **materials_ui**: a turntable, the warm light, the toon fill light |
+| 3 Models and animation | **animation_graph_demo** (the warrior's animation graph: blend space, upper body layer, footstep events, a head socket), **decal_footprints**, **vfx_footsteps**, **clip_player** (a lineup of FBX characters and monsters) | **animation_ui**: autopilot, speed, a sword swing; the graph's states |
+| 4 Physics, joints and characters | **physics_hopper** (velocity, raycast, collision events), bouncy balls, crates, **trigger_zone**; **joint_motor_swing** (door and cart motors), a spring pendulum, a bridge, **joint_breaker** and **joint_wrecker**; **character_demo** (Hero is yours, Patrol walks and jumps by itself), steps, ramps, **slide_platform**; **scene_overlay** (a scene-level script listed in the scene settings) | **physics_ui**: launch the balls, kick the crates, moon gravity |
+| 5 Vehicles | **drive** (Demo car is yours: arrows, Left Shift, E/Q; Autopilot car drives a loop) on asphalt and grass | **vehicles_ui**: speed, gear, rpm, the assists on and off |
+| 6 Navigation and AI | **nav_patrol** (three agents round a wall and costly areas), a guard on a behaviour tree (`ai/guard.wbt`, **heard_check**) that sees, hears (**noise_maker**) and chases a thief | **ai_ui**: a noise, the thief moved, the guard's path (`Nav.find_path`) |
+| 7 Particles and decals | a campfire, a spark fountain, rune motes, **vfx_demo** (impact sparks); a rune circle, bullet holes, a scorch mark | **vfx_ui**: the campfire out and on, a burst, the fountain's speed, scorch marks (`Decal.spawn`) |
+| 8 Scripts, input, UI and media | **demo_ui** (HUD: score, health bar, light button and slider, a tag following the Beacon, the intro video), **input_demo** (the "Input demo" ball moves with WASD or the stick, jumps with Space or pad A, fires with the left mouse button; "Rebind Jump" waits for a key and saves it to `input_overrides.json`), **audio_demo**, a 3D widget of the wizard | the HUD itself |
 
-Scripts that act on the whole hall: **camera_rig** (the camera drifts and handles the station keys) and **scene_overlay** (a scene-level script
-listed in the scene settings: logs on Play and Stop and draws debug boxes). The project's default input map is `assets/input/demo.winput`
+Every scene has **camera_rig** (the camera drifts and handles the viewpoint keys). The project's default input map is `assets/input/demo.winput`
 (`input.wsettings`).
 
 Try: Pause, then Step; edit a script into a syntax error and save (the old version keeps running, the Console says why); fix it; add a

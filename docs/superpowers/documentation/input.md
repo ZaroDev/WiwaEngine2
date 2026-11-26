@@ -32,4 +32,4 @@ Code: `engine/src/input`, Lua `scripting/bindings/bind_input.cpp`, editor `edito
 
 ## Demo
 
-`editor/assets/scenes/demo.wscene` shows it: `demo.winput` (`Gameplay` with Move/Look/Jump/Fire, `UI`), a script moving an entity, HUD readouts of last device and action values, a Rebind Jump button using `input.listen`. `--demo-smoke` drives it with `ScriptedInputBackend`.
+The scripts, input and UI demo (`editor/assets/scenes/demo_ui.wscene`) shows it: `demo.winput` (`Gameplay` with Move/Look/Jump/Fire, `UI`), a script moving an entity, HUD readouts of last device and action values, a Rebind Jump button using `input.listen`. `--demo-smoke` drives it with `ScriptedInputBackend`.

@@ -27,7 +27,26 @@ namespace wiwa
 {
 	namespace
 	{
-		const char* const DEMO_SCENE = "assets/scenes/demo.wscene";
+		// The scenes of the demo, in the order they are checked (scripts/gen_demo_scene.py, DEMO_SCENES), and an entity that tells each has opened.
+		struct Segment
+		{
+			const char* Key;
+			const char* Scene;
+			const char* Marker;
+		};
+		const Segment SEGMENTS[] = {
+			{ "hub", "assets/scenes/demo.wscene", "Hub ring" },
+			{ "lighting", "assets/scenes/demo_lighting.wscene", "Blue ring" },
+			{ "materials", "assets/scenes/demo_materials.wscene", "Backdrop" },
+			{ "animation", "assets/scenes/demo_animation.wscene", "Warrior head socket" },
+			{ "physics", "assets/scenes/demo_physics.wscene", "Door" },
+			{ "vehicles", "assets/scenes/demo_vehicles.wscene", "Autopilot car" },
+			{ "ai", "assets/scenes/demo_ai.wscene", "Guard" },
+			{ "vfx", "assets/scenes/demo_vfx.wscene", "Campfire" },
+			{ "ui", "assets/scenes/demo_ui.wscene", "Beacon" },
+		};
+		constexpr size_t SEGMENT_COUNT = sizeof(SEGMENTS) / sizeof(SEGMENTS[0]);
+		const char* const LIGHTING_ONLY = "Podium spot"; // in the lighting scene and nowhere else: the hub's first button loaded it
 		const std::filesystem::path HOT_SCRIPT = "assets/scripts/zz_hot_smoke.lua";
 
 		entt::entity find_named(Scene& scene, const std::string& name)
@@ -89,52 +108,6 @@ namespace wiwa
 		m_Fox.HasAnimator = m_Fox.HasAnimator || play.registry().all_of<Animator>(fox);
 		m_Fox.EventsSeen = animation->events_total() - m_Fox.EventsBefore;
 
-		// the decals of the demo: those the scene places ("Decal ..."), and the footprints the script of the warrior spawns on its footsteps
-		u32 placed = 0;
-		u32 footprints = 0;
-		for (const auto [entity, decal, name] : play.registry().view<Decal, Name>().each())
-		{
-			(name.Value.rfind("Footprint", 0) == 0 ? footprints : placed)++;
-		}
-		// the lamp pair: a prefab that holds two lamp prefabs, the scene brightens one head (an override two levels deep), the pair prefab makes the other blue
-		u32 bright = 0;
-		u32 blue = 0;
-		for (const auto [entity, light, name] : play.registry().view<Light, Name>().each())
-		{
-			if (name.Value == "Head" && play.registry().all_of<PrefabChild>(entity))
-			{
-				bright += std::abs(light.Intensity - 40.0f) < 0.01f ? 1 : 0;
-				blue += light.Color.z > 0.9f && light.Color.x < 0.5f ? 1 : 0;
-			}
-		}
-		m_Fox.NestedBright = std::max(m_Fox.NestedBright, bright);
-		m_Fox.NestedBlue = std::max(m_Fox.NestedBlue, blue);
-		m_Fox.PlacedDecals = std::max(m_Fox.PlacedDecals, placed);
-		m_Fox.MostFootprints = std::max(m_Fox.MostFootprints, footprints);
-
-		// the particle effects of the demo: the systems the scene places (playing), the dust of the warrior's footsteps and the sparks the script of the station spawns
-		u32 placedEffects = 0;
-		u32 dust = 0;
-		u32 sparks = 0;
-		for (const auto [entity, system, name] : play.registry().view<ParticleSystem, Name>().each())
-		{
-			if (name.Value == "Footstep dust")
-			{
-				dust++;
-			}
-			else if (name.Value == "Impact sparks")
-			{
-				sparks++;
-			}
-			else if (const ParticleRuntime* runtime = play.registry().try_get<ParticleRuntime>(entity); runtime != nullptr && runtime->Playing)
-			{
-				placedEffects++;
-			}
-		}
-		m_Fox.PlayingEffects = std::max(m_Fox.PlayingEffects, placedEffects);
-		m_Fox.MostDust = std::max(m_Fox.MostDust, dust);
-		m_Fox.MostSparks = std::max(m_Fox.MostSparks, sparks);
-
 		m_Fox.WarriorMeshes = 0;
 		m_Fox.WarriorMeshesReceiving = 0;
 		for (const auto [entity, renderer, hierarchy] : play.registry().view<MeshRenderer, Hierarchy>().each())
@@ -174,6 +147,56 @@ namespace wiwa
 		}
 	}
 
+	// What the scenes place: decals (and the warrior's footprints), particle effects (and the warrior's dust, the script's sparks), the lamp pair (prefabs in prefabs).
+	void DemoSmoke::sample_features(Scene& play)
+	{
+		// the decals of the demo: those the scene places ("Decal ..."), and the footprints the script of the warrior spawns on its footsteps
+		u32 placed = 0;
+		u32 footprints = 0;
+		for (const auto [entity, decal, name] : play.registry().view<Decal, Name>().each())
+		{
+			(name.Value.rfind("Footprint", 0) == 0 ? footprints : placed)++;
+		}
+		// the lamp pair: a prefab that holds two lamp prefabs, the scene brightens one head (an override two levels deep), the pair prefab makes the other blue
+		u32 bright = 0;
+		u32 blue = 0;
+		for (const auto [entity, light, name] : play.registry().view<Light, Name>().each())
+		{
+			if (name.Value == "Head" && play.registry().all_of<PrefabChild>(entity))
+			{
+				bright += std::abs(light.Intensity - 40.0f) < 0.01f ? 1 : 0;
+				blue += light.Color.z > 0.9f && light.Color.x < 0.5f ? 1 : 0;
+			}
+		}
+		m_Fox.NestedBright = std::max(m_Fox.NestedBright, bright);
+		m_Fox.NestedBlue = std::max(m_Fox.NestedBlue, blue);
+		m_Fox.PlacedDecals = std::max(m_Fox.PlacedDecals, placed);
+		m_Fox.MostFootprints = std::max(m_Fox.MostFootprints, footprints);
+
+		// the particle effects of the demo: the systems the scene places (playing), the dust of the warrior's footsteps and the sparks the script of the scene spawns
+		u32 placedEffects = 0;
+		u32 dust = 0;
+		u32 sparks = 0;
+		for (const auto [entity, system, name] : play.registry().view<ParticleSystem, Name>().each())
+		{
+			if (name.Value == "Footstep dust")
+			{
+				dust++;
+			}
+			else if (name.Value == "Impact sparks")
+			{
+				sparks++;
+			}
+			else if (const ParticleRuntime* runtime = play.registry().try_get<ParticleRuntime>(entity); runtime != nullptr && runtime->Playing)
+			{
+				placedEffects++;
+			}
+		}
+		m_Fox.PlayingEffects = std::max(m_Fox.PlayingEffects, placedEffects);
+		m_Fox.MostDust = std::max(m_Fox.MostDust, dust);
+		m_Fox.MostSparks = std::max(m_Fox.MostSparks, sparks);
+	}
+
 	std::string DemoSmoke::check_fox() const
 	{
 		if (!m_Fox.HasAnimator)
@@ -204,14 +227,6 @@ namespace wiwa
 		{
 			return "no footstep of the warrior was fired";
 		}
-		if (m_Fox.NestedBright == 0 || m_Fox.NestedBlue == 0)
-		{
-			return "the lamp pair (a prefab that holds two prefabs) did not get its overrides: " + std::to_string(m_Fox.NestedBright) + " bright head(s) from the scene, " + std::to_string(m_Fox.NestedBlue) + " blue head(s) from the pair prefab";
-		}
-		if (m_Fox.PlacedDecals < 6)
-		{
-			return "the demo scene's decals are missing (a rune circle, four bullet holes and a scorch mark; found " + std::to_string(m_Fox.PlacedDecals) + ")";
-		}
 		if (m_Fox.MostFootprints == 0)
 		{
 			return "the footsteps of the warrior spawned no footprint decals (decal_footprints.lua, Decal.spawn)";
@@ -220,13 +235,49 @@ namespace wiwa
 		{
 			return "decal_footprints.lua did not turn off ReceivesDecals on the meshes of the warrior (" + std::to_string(m_Fox.WarriorMeshesReceiving) + " of " + std::to_string(m_Fox.WarriorMeshes) + " still receive)";
 		}
-		if (m_Fox.PlayingEffects < 3)
-		{
-			return "the demo scene's particle effects are not playing (a campfire, a spark fountain and the rune motes; found " + std::to_string(m_Fox.PlayingEffects) + ")";
-		}
 		if (m_Fox.MostDust == 0)
 		{
 			return "the footsteps of the warrior spawned no dust (vfx_footsteps.lua, Vfx.spawn)";
+		}
+		return {};
+	}
+
+	// The lighting scene: the scripts turned the ring, bobbed the neon ball, pulsed the spot light and swayed the camera; the lamp pair has its overrides.
+	std::string DemoSmoke::check_lighting() const
+	{
+		if (!m_RingSeen || m_RingAfter == m_RingBefore)
+		{
+			return "spinner did not turn the ring";
+		}
+		if (m_BallHigh - m_BallLow < 0.01f)
+		{
+			return "bobber did not move the neon ball";
+		}
+		if (m_CameraHigh - m_CameraLow < 0.001f)
+		{
+			return "camera_rig did not move the camera";
+		}
+		if (m_LightHigh - m_LightLow < 0.5f)
+		{
+			return "light_pulse did not change the spot light";
+		}
+		if (m_Fox.NestedBright == 0 || m_Fox.NestedBlue == 0)
+		{
+			return "the lamp pair (a prefab that holds two prefabs) did not get its overrides: " + std::to_string(m_Fox.NestedBright) + " bright head(s) from the scene, " + std::to_string(m_Fox.NestedBlue) + " blue head(s) from the pair prefab";
+		}
+		return {};
+	}
+
+	// The particles and decals scene: what it places, and the sparks its script spawns.
+	std::string DemoSmoke::check_features() const
+	{
+		if (m_Fox.PlacedDecals < 6)
+		{
+			return "the decals are missing (a rune circle, four bullet holes and a scorch mark; found " + std::to_string(m_Fox.PlacedDecals) + ")";
+		}
+		if (m_Fox.PlayingEffects < 3)
+		{
+			return "the particle effects are not playing (a campfire, a spark fountain and the rune motes; found " + std::to_string(m_Fox.PlayingEffects) + ")";
 		}
 		if (m_Fox.MostSparks == 0)
 		{
@@ -235,7 +286,7 @@ namespace wiwa
 		return {};
 	}
 
-	void DemoSmoke::sample_audio(Scene& play)
+		void DemoSmoke::sample_audio(Scene& play)
 	{
 		AudioModule* audio = Engine::get().get_module<AudioModule>();
 		const entt::entity entity = find_named(play, "Audio demo");
@@ -378,11 +429,11 @@ namespace wiwa
 	{
 		if (m_Nav.Agents != 3)
 		{
-			return "the navigation station's three agents (Nav agent 1..3 with a NavAgent) are not in the scene";
+			return "the navigation scene's three agents (Nav agent 1..3 with a NavAgent) are not in it";
 		}
 		if (!m_Nav.HasMesh)
 		{
-			return "the navigation module never had a navmesh for the demo scene (bake it: wiwa_editor --scene assets/scenes/demo.wscene --nav-bake <the volume's .wnav>, see scripts/gen_demo_scene.py)";
+			return "the navigation module never had a navmesh for the navigation scene (bake it: wiwa_editor --scene assets/scenes/demo_ai.wscene --nav-bake <the volume's .wnav>, see scripts/gen_demo_scene.py)";
 		}
 		if (const NavModule* nav = Engine::get().get_module<NavModule>(); nav == nullptr || nav->settings().AreaName[4] != "Swamp" || !(nav->settings().AreaCost[4] > 1.0f) || nav->settings().AreaName[2] != "Mud")
 		{
@@ -414,7 +465,8 @@ namespace wiwa
 		return true;
 	}
 
-	// The memory work of the demo: the ground, the backdrop and the PBR spheres are marked Static (a crate is not), and the sphere mesh the PBR grid draws was
+	// The memory work of the demo (the materials scene): the ground, the backdrop and the PBR spheres are marked Static (the brick cube, which the HUD's
+	// turntable turns, is not), and the sphere mesh the PBR grid draws was
 	// imported with levels of detail (the model importer bakes them), each coarser than the one before.
 	std::string DemoSmoke::check_static_and_lods(Scene& scene, AssetManager* assets)
 	{
@@ -426,15 +478,15 @@ namespace wiwa
 		const MeshRenderer* ground = renderer_of("Ground");
 		const MeshRenderer* backdrop = renderer_of("Backdrop");
 		const MeshRenderer* sphere = renderer_of("PBR r0 m0");
-		const MeshRenderer* crate = renderer_of("Crate 1");
+		const MeshRenderer* crate = renderer_of("Brick cube");
 		if (ground == nullptr || backdrop == nullptr || sphere == nullptr || crate == nullptr)
 		{
-			return "the demo scene lacks the Ground, Backdrop, PBR sphere or Crate 1 the memory check reads";
+			return "the materials scene lacks the Ground, Backdrop, PBR sphere or Brick cube the memory check reads";
 		}
 		if (!ground->Static || !backdrop->Static || !sphere->Static || crate->Static)
 		{
-			return "the ground, the backdrop and the PBR spheres have to be Static and the crates not (Ground " + std::to_string(ground->Static) + ", Backdrop "
-				+ std::to_string(backdrop->Static) + ", sphere " + std::to_string(sphere->Static) + ", crate " + std::to_string(crate->Static) + ")";
+			return "the ground, the backdrop and the PBR spheres have to be Static and the brick cube not (Ground " + std::to_string(ground->Static) + ", Backdrop "
+				+ std::to_string(backdrop->Static) + ", sphere " + std::to_string(sphere->Static) + ", brick cube " + std::to_string(crate->Static) + ")";
 		}
 
 		Handle<MeshData> mesh = assets->load<MeshData>(sphere->Mesh);
@@ -462,7 +514,6 @@ namespace wiwa
 	bool DemoSmoke::update(std::string& failure)
 	{
 		AssetManager* assets = Engine::get().get_module<AssetManager>();
-		ScriptingModule* scripting = Engine::get().get_module<ScriptingModule>();
 
 		if (!m_Started)
 		{
@@ -471,26 +522,22 @@ namespace wiwa
 			m_Started = true;
 		}
 
-		// the joints and character demos are watched from the start of the play to the end of the Input phase
-		if (m_Phase >= Phase::Run && m_Phase <= Phase::Physics && m_Play.play_scene() != nullptr && !sample_physics(*m_Play.play_scene(), failure))
-		{
-			m_Phase = Phase::Done;
-			return true;
-		}
-
 		switch (m_Phase)
 		{
 		case Phase::Open:
 		{
+			const Segment& segment = SEGMENTS[m_Segment];
 			if (m_PhaseFrames == 0)
 			{
-				m_Editor.open(DEMO_SCENE);
+				WI_INFO("Editor", "Demo smoke: {0}", segment.Scene);
+				m_Editor.open(segment.Scene);
 			}
-			if (!wait(1800, "the demo scene to open", failure))
+			if (!wait(1800, "a demo scene to open", failure))
 			{
+				failure += std::string(" (") + segment.Scene + ")";
 				return true;
 			}
-			if (!m_Editor.is_opening() && m_Editor.get_scene() != nullptr && find_named(*m_Editor.get_scene(), "Blue ring") != entt::null)
+			if (!m_Editor.is_opening() && m_Editor.get_scene() != nullptr && find_named(*m_Editor.get_scene(), segment.Marker) != entt::null)
 			{
 				m_Phase = Phase::Play;
 				m_PhaseFrames = 0;
@@ -505,18 +552,21 @@ namespace wiwa
 				return true;
 			}
 			Scene& edit = *m_Editor.get_scene();
-			if (const std::string memory = check_static_and_lods(edit, assets); !memory.empty())
+			if (m_PhaseFrames == 1 && std::string_view(SEGMENTS[m_Segment].Key) == "materials")
 			{
-				failure = memory;
-				return true;
+				if (const std::string memory = check_static_and_lods(edit, assets); !memory.empty())
+				{
+					failure = memory;
+					return true;
+				}
 			}
-			m_RingBefore = edit.registry().get<Transform>(find_named(edit, "Blue ring")).Rotation.x;
 			m_Play.play(); // refused while a prefab expansion or a load is still going: tried again next frame
 			if (m_Play.state() == PlayState::Playing)
 			{
 				m_Phase = Phase::Run;
 				m_PhaseFrames = 0;
 				m_RunFrames = 0;
+				m_RunStart = std::chrono::steady_clock::now();
 			}
 			return false;
 		}
@@ -525,150 +575,81 @@ namespace wiwa
 		{
 			if (m_Play.play_scene() == nullptr)
 			{
-				failure = "play stopped by itself";
+				failure = std::string("play stopped by itself in ") + SEGMENTS[m_Segment].Scene;
+				restore_ui();
 				return true;
 			}
-			Scene& play = *m_Play.play_scene();
-			const entt::entity ring = find_named(play, "Blue ring");
-			const entt::entity ball = find_named(play, "Neon cyan");
-			const entt::entity camera = find_named(play, "Camera");
-			const entt::entity spot = find_named(play, "Podium spot");
-			if (ring == entt::null || ball == entt::null || camera == entt::null || spot == entt::null)
+			const std::string_view key = SEGMENTS[m_Segment].Key;
+			if (key == "hub")
 			{
-				failure = "the demo entities are missing in the running scene";
-				return true;
-			}
-
-			m_RingAfter = play.registry().get<Transform>(ring).Rotation.x;
-			const float y = play.registry().get<Transform>(ball).Position.y;
-			const float x = play.registry().get<Transform>(camera).Position.x;
-			const float intensity = play.registry().get<Light>(spot).Intensity;
-			m_BallLow = std::min(m_BallLow, y);
-			m_BallHigh = std::max(m_BallHigh, y);
-			m_CameraLow = std::min(m_CameraLow, x);
-			m_CameraHigh = std::max(m_CameraHigh, x);
-			m_LightLow = std::min(m_LightLow, intensity);
-			m_LightHigh = std::max(m_LightHigh, intensity);
-
-			sample_fox(play);
-			sample_audio(play);
-			sample_nav(play);
-			sample_ai(play);
-
-			// 150 frames, and the agents get up to 25 seconds (frames are far shorter than the game's seconds here) to cross the arena: the navmesh loads a few
-			// frames after the play starts
-			if (m_RunFrames == 0)
-			{
-				m_NavDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(25);
-			}
-			if (++m_RunFrames < 150 || ((!nav_arrived() || !ai_done()) && std::chrono::steady_clock::now() < m_NavDeadline))
-			{
+				switch (run_hub_step(failure))
+				{
+				case UiResult::Running:
+					return false;
+				case UiResult::Failed:
+					restore_ui();
+					m_Phase = Phase::Done;
+					return true;
+				case UiResult::Passed:
+					restore_ui();
+					WI_INFO("Editor", "Demo smoke: hub ok (its menu loaded the lighting scene)");
+					next_segment();
+					return false;
+				}
 				return false;
 			}
 
-			// first: the navigation demo does not depend on the other stations
-			if (const std::string navigation = check_nav(); !navigation.empty())
+			Scene& play = *m_Play.play_scene();
+			if (m_ClickingControls)
 			{
-				failure = navigation;
-				return true;
+				switch (run_controls_step(play, failure))
+				{
+				case UiResult::Running:
+					return false;
+				case UiResult::Failed:
+					restore_ui();
+					m_Phase = Phase::Done;
+					return true;
+				case UiResult::Passed:
+					restore_ui();
+					WI_INFO("Editor", "Demo smoke: clicked the {0} controls of {1}", m_Controls.size(), SEGMENTS[m_Segment].Scene);
+					m_ClickingControls = false;
+					next_segment();
+					return false;
+				}
+				return false;
 			}
-			if (const std::string intelligence = check_ai(); !intelligence.empty())
-			{
-				failure = intelligence;
-				return true;
-			}
-			WI_INFO("Editor", "Demo smoke: behaviour trees ok (the guard saw the thief and heard the noise, closest {0:.2f} m)", m_Ai.Closest);
-			WI_INFO("Editor", "Demo smoke: navigation ok (the agents came within {0:.2f}, {1:.2f} and {2:.2f} m of their goals)", m_Nav.Closest[0], m_Nav.Closest[1], m_Nav.Closest[2]);
+			sample(play);
 
-			if (const std::string fox = check_fox(); !fox.empty())
+			// at least 150 frames, then until the checks of the scene hold, for up to 40 seconds (frames are far shorter than the game's seconds here: the
+			// motors turn round every few seconds, the agents need time to cross the arena and the car drives a loop of 9 seconds)
+			if (++m_RunFrames < 150)
 			{
-				failure = fox;
+				return false;
+			}
+			const std::string problem = check_segment(play);
+			if (problem.empty())
+			{
+				WI_INFO("Editor", "Demo smoke: {0} ok", SEGMENTS[m_Segment].Scene);
+				if (key == "ui")
+				{
+					m_Phase = Phase::Ui;
+					m_PhaseFrames = 0;
+				}
+				else
+				{
+					m_ClickingControls = true;
+					m_Controls.clear();
+					m_ControlIndex = 0;
+					m_ControlFrames = 0;
+				}
+				return false;
+			}
+			if (std::chrono::steady_clock::now() - m_RunStart > std::chrono::seconds(40))
+			{
+				failure = std::string(SEGMENTS[m_Segment].Scene) + ": " + problem;
 				return true;
 			}
-
-			if (const std::string audio = check_audio(); !audio.empty())
-			{
-				failure = audio;
-				return true;
-			}
-
-			if (!scripting->running())
-			{
-				failure = "the scripts are not running";
-				return true;
-			}
-			if (m_RingAfter == m_RingBefore)
-			{
-				failure = "spinner did not turn the ring";
-				return true;
-			}
-			if (m_BallHigh - m_BallLow < 0.01f)
-			{
-				failure = "bobber did not move the neon ball";
-				return true;
-			}
-			if (m_CameraHigh - m_CameraLow < 0.001f)
-			{
-				failure = "camera_sway did not move the camera";
-				return true;
-			}
-			if (m_LightHigh - m_LightLow < 0.5f)
-			{
-				failure = "light_pulse did not change the spot light";
-				return true;
-			}
-			m_Phase = Phase::Ui;
-			m_PhaseFrames = 0;
-			return false;
-		}
-
-		case Phase::Physics:
-		{
-			// what sample_physics watched since the play started (the motors turn around every 2.5 to 3 seconds, so the run has seen whole swings)
-			const PhysicsWatch& watch = m_Watch;
-			if (!(watch.DoorSwing > 0.5f && watch.DoorSwing < 0.82f))
-			{
-				failure = "the door did not swing within its limits (largest |rotation.y| " + std::to_string(watch.DoorSwing) + ", expected 0.5 to 0.82)";
-				return true;
-			}
-			if (!(watch.CartHigh - watch.CartLow > 2.0f && watch.CartLow > -14.4f && watch.CartHigh < -9.6f))
-			{
-				failure = "the cart did not slide along its rail within its limits (x " + std::to_string(watch.CartLow) + " to " + std::to_string(watch.CartHigh) + ")";
-				return true;
-			}
-			if (watch.BobPath < 1.5f)
-			{
-				failure = "the spring pendulum did not swing (it travelled " + std::to_string(watch.BobPath) + " m)";
-				return true;
-			}
-			if (watch.BridgeStretch > 1.25f || watch.BridgeLow < 1.0f)
-			{
-				failure = "the bridge came apart (longest link distance " + std::to_string(watch.BridgeStretch) + ", lowest plank " + std::to_string(watch.BridgeLow) + ")";
-				return true;
-			}
-			if (watch.WeakLow > 3.0f)
-			{
-				failure = "the hanging box never broke away (lowest y " + std::to_string(watch.WeakLow) + ")";
-				return true;
-			}
-			if (!(watch.PatrolHighX - watch.PatrolLowX > 4.0f && watch.PatrolLowY > -0.3f && watch.PatrolHighY > 0.9f))
-			{
-				failure = "the patrolling character did not walk and jump on its lane (x " + std::to_string(watch.PatrolLowX) + " to " + std::to_string(watch.PatrolHighX) + ", y " + std::to_string(watch.PatrolLowY) + " to " + std::to_string(watch.PatrolHighY) + ")";
-				return true;
-			}
-			if (!(watch.PlatformHigh - watch.PlatformLow > 2.0f))
-			{
-				failure = "the platform did not slide (x " + std::to_string(watch.PlatformLow) + " to " + std::to_string(watch.PlatformHigh) + ")";
-				return true;
-			}
-			if (!(watch.CarFarthest > 5.0f && watch.CarTurn > 10.0f && watch.CarFast && watch.CarStopped))
-			{
-				failure = "the autopilot car did not drive, turn and stop (farthest " + std::to_string(watch.CarFarthest) + " m, turned " + std::to_string(watch.CarTurn) +
-					" degrees, faster than 3 m/s " + (watch.CarFast ? "yes" : "no") + ", stopped " + (watch.CarStopped ? "yes" : "no") + ")";
-				return true;
-			}
-			m_Phase = Phase::HotCreate;
-			m_PhaseFrames = 0;
 			return false;
 		}
 
@@ -727,7 +708,7 @@ namespace wiwa
 				return true;
 			case UiResult::Passed:
 				restore_input();
-				m_Phase = Phase::Physics;
+				m_Phase = Phase::HotCreate;
 				m_PhaseFrames = 0;
 				return false;
 			}
@@ -1378,8 +1359,142 @@ namespace wiwa
 		return UiResult::Passed;
 	}
 
-	// One frame of the joints demo (door on a hinge, cart on a slider, spring pendulum, bridge, box that breaks away): what the Joints phase judges.
-	bool DemoSmoke::sample_physics(Scene& play, std::string& failure)
+	// The scene checked is over: stop, and open the next one.
+	void DemoSmoke::next_segment()
+	{
+		m_Play.stop();
+		m_Segment++;
+		m_Phase = m_Segment < SEGMENT_COUNT ? Phase::Open : Phase::Done;
+		m_PhaseFrames = 0;
+		m_RunFrames = 0;
+	}
+
+	// One frame of the scene that plays: every watcher looks for its entities and leaves what is not there alone.
+	void DemoSmoke::sample(Scene& play)
+	{
+		const entt::entity ring = find_named(play, "Blue ring");
+		const entt::entity ball = find_named(play, "Neon cyan");
+		const entt::entity camera = find_named(play, "Camera");
+		const entt::entity spot = find_named(play, "Podium spot");
+		if (ring != entt::null && ball != entt::null && camera != entt::null && spot != entt::null)
+		{
+			m_RingAfter = play.registry().get<Transform>(ring).Rotation.x;
+			if (!m_RingSeen)
+			{
+				m_RingBefore = m_RingAfter;
+				m_RingSeen = true;
+			}
+			const float y = play.registry().get<Transform>(ball).Position.y;
+			const float x = play.registry().get<Transform>(camera).Position.x;
+			const float intensity = play.registry().get<Light>(spot).Intensity;
+			m_BallLow = std::min(m_BallLow, y);
+			m_BallHigh = std::max(m_BallHigh, y);
+			m_CameraLow = std::min(m_CameraLow, x);
+			m_CameraHigh = std::max(m_CameraHigh, x);
+			m_LightLow = std::min(m_LightLow, intensity);
+			m_LightHigh = std::max(m_LightHigh, intensity);
+		}
+
+		sample_features(play);
+		sample_fox(play);
+		sample_audio(play);
+		sample_ai(play);
+		sample_physics(play);
+		sample_car(play);
+		if (std::string_view(SEGMENTS[m_Segment].Key) == "ai")
+		{
+			sample_nav(play);
+		}
+	}
+
+	// What the scene that plays has to have done by now: empty when it holds.
+	std::string DemoSmoke::check_segment(Scene& play)
+	{
+		ScriptingModule* scripting = Engine::get().get_module<ScriptingModule>();
+		if (scripting == nullptr || !scripting->running())
+		{
+			return "the scripts are not running";
+		}
+		if (const std::string hud = check_hud_status(play); !hud.empty())
+		{
+			return hud;
+		}
+		const std::string_view key = SEGMENTS[m_Segment].Key;
+		if (key == "lighting")
+		{
+			return check_lighting();
+		}
+		if (key == "animation")
+		{
+			return check_fox();
+		}
+		if (key == "physics")
+		{
+			return check_physics();
+		}
+		if (key == "vehicles")
+		{
+			return check_car();
+		}
+		if (key == "ai")
+		{
+			if (const std::string navigation = check_nav(); !navigation.empty())
+			{
+				return navigation;
+			}
+			return check_ai();
+		}
+		if (key == "vfx")
+		{
+			return check_features();
+		}
+		if (key == "ui")
+		{
+			return check_audio();
+		}
+		return {};
+	}
+
+	// The HUD of a demo scene: its panel is loaded, it has the bar that goes to the other scenes, and the scene's UI script (scripts/<key>_ui.lua) writes
+	// Info/Status (the scripts and UI scene's own HUD is driven by the Ui phase).
+	std::string DemoSmoke::check_hud_status(Scene& play) const
+	{
+		UiModule* ui = Engine::get().get_module<UiModule>();
+		const entt::entity hud = find_named(play, "Hud");
+		if (ui == nullptr || hud == entt::null || !play.registry().all_of<Id>(hud))
+		{
+			return "the scene has no Hud entity";
+		}
+		UiPanelInstance* instance = ui->instance_for(play, play.registry().get<Id>(hud).Guid);
+		if (instance == nullptr || !instance->ready())
+		{
+			return "the HUD panel did not load";
+		}
+		for (const char* path : { "Nav/Previous", "Nav/Menu", "Nav/Next" })
+		{
+			if (!instance->find(path))
+			{
+				return std::string("the HUD has no ") + path + " button (demo_nav.lua)";
+			}
+		}
+		if (std::string_view(SEGMENTS[m_Segment].Key) == "ui")
+		{
+			return {};
+		}
+		const std::optional<UiId> status = instance->find("Info/Status");
+		if (!status)
+		{
+			return "the HUD has no Info/Status text";
+		}
+		if (instance->data().find(*status)->Text.empty())
+		{
+			return std::string("the HUD script of the scene never wrote Info/Status (did scripts/") + SEGMENTS[m_Segment].Key + "_ui.lua start without an error?)";
+		}
+		return {};
+	}
+
+	// The joints demo (door on a hinge, cart on a slider, spring pendulum, bridge, box that breaks away) and the character demo of the physics scene.
+	void DemoSmoke::sample_physics(Scene& play)
 	{
 		const auto transform_of = [&](const std::string& name) -> const Transform*
 		{
@@ -1392,7 +1507,6 @@ namespace wiwa
 		const Transform* weak = transform_of("Weak box");
 		const Transform* patrol = transform_of("Patrol");
 		const Transform* platform = transform_of("Sliding platform");
-		const entt::entity carEntity = find_named(play, "Autopilot car");
 		const Transform* links[5];
 		bool linksFound = true;
 		for (int i = 0; i < 5; i++)
@@ -1400,19 +1514,13 @@ namespace wiwa
 			links[i] = transform_of("Bridge link " + std::to_string(i));
 			linksFound = linksFound && links[i] != nullptr;
 		}
-		if (carEntity == entt::null)
-		{
-			failure = "the autopilot car of the driving station is missing in the running scene";
-			return false;
-		}
 		if (door == nullptr || cart == nullptr || bob == nullptr || weak == nullptr || !linksFound || patrol == nullptr || platform == nullptr)
 		{
-			failure = std::string("the joints and character demo entities are missing in the running scene (patrol ") + (patrol ? "yes" : "NO") + ", platform " + (platform ? "yes" : "NO") + ", door " + (door ? "yes" : "NO") + ", cart " + (cart ? "yes" : "NO") +
-				", bob " + (bob ? "yes" : "NO") + ", weak box " + (weak ? "yes" : "NO") + ", bridge " + (linksFound ? "yes" : "NO") + ")";
-			return false;
+			return;
 		}
 
 		PhysicsWatch& watch = m_Watch;
+		watch.JointsSeen = true;
 		watch.DoorSwing = std::max(watch.DoorSwing, std::abs(door->Rotation.y));
 		watch.CartLow = std::min(watch.CartLow, cart->Position.x);
 		watch.CartHigh = std::max(watch.CartHigh, cart->Position.x);
@@ -1426,7 +1534,25 @@ namespace wiwa
 		watch.PatrolHighY = std::max(watch.PatrolHighY, patrol->Position.y);
 		watch.PlatformLow = std::min(watch.PlatformLow, platform->Position.x);
 		watch.PlatformHigh = std::max(watch.PlatformHigh, platform->Position.x);
+		for (int i = 0; i < 5; i++)
+		{
+			watch.BridgeLow = std::min(watch.BridgeLow, links[i]->Position.y);
+			if (i > 0)
+			{
+				watch.BridgeStretch = std::max(watch.BridgeStretch, glm::length(links[i]->Position - links[i - 1]->Position));
+			}
+		}
+	}
 
+	// The autopilot car of the vehicles scene.
+	void DemoSmoke::sample_car(Scene& play)
+	{
+		const entt::entity carEntity = find_named(play, "Autopilot car");
+		if (carEntity == entt::null)
+		{
+			return;
+		}
+		PhysicsWatch& watch = m_Watch;
 		const Transform& car = play.registry().get<Transform>(carEntity);
 		const glm::vec3 heading = car.Rotation * glm::vec3(0.0f, 0.0f, -1.0f);
 		if (!watch.CarSeen)
@@ -1445,15 +1571,209 @@ namespace wiwa
 				watch.CarStopped = watch.CarStopped || (watch.CarFast && std::abs(pose->Speed) < 0.5f);
 			}
 		}
-		for (int i = 0; i < 5; i++)
+	}
+
+	std::string DemoSmoke::check_physics() const
+	{
+		const PhysicsWatch& watch = m_Watch;
+		if (!watch.JointsSeen)
 		{
-			watch.BridgeLow = std::min(watch.BridgeLow, links[i]->Position.y);
-			if (i > 0)
-			{
-				watch.BridgeStretch = std::max(watch.BridgeStretch, glm::length(links[i]->Position - links[i - 1]->Position));
-			}
+			return "the joints and character demo entities are missing in the running scene (Door, Slider cart, Pendulum bob, Weak box, Bridge link 0..4, Patrol, Sliding platform)";
 		}
-		return true;
+		if (!(watch.DoorSwing > 0.5f && watch.DoorSwing < 0.82f))
+		{
+			return "the door did not swing within its limits (largest |rotation.y| " + std::to_string(watch.DoorSwing) + ", expected 0.5 to 0.82)";
+		}
+		if (!(watch.CartHigh - watch.CartLow > 2.0f && watch.CartLow > -14.4f && watch.CartHigh < -9.6f))
+		{
+			return "the cart did not slide along its rail within its limits (x " + std::to_string(watch.CartLow) + " to " + std::to_string(watch.CartHigh) + ")";
+		}
+		if (watch.BobPath < 1.5f)
+		{
+			return "the spring pendulum did not swing (it travelled " + std::to_string(watch.BobPath) + " m)";
+		}
+		if (watch.BridgeStretch > 1.25f || watch.BridgeLow < 1.0f)
+		{
+			return "the bridge came apart (longest link distance " + std::to_string(watch.BridgeStretch) + ", lowest plank " + std::to_string(watch.BridgeLow) + ")";
+		}
+		if (watch.WeakLow > 3.0f)
+		{
+			return "the hanging box never broke away (lowest y " + std::to_string(watch.WeakLow) + ")";
+		}
+		if (!(watch.PatrolHighX - watch.PatrolLowX > 4.0f && watch.PatrolLowY > -0.3f && watch.PatrolHighY > 0.9f))
+		{
+			return "the patrolling character did not walk and jump on its lane (x " + std::to_string(watch.PatrolLowX) + " to " + std::to_string(watch.PatrolHighX) + ", y " + std::to_string(watch.PatrolLowY) + " to " + std::to_string(watch.PatrolHighY) + ")";
+		}
+		if (!(watch.PlatformHigh - watch.PlatformLow > 2.0f))
+		{
+			return "the platform did not slide (x " + std::to_string(watch.PlatformLow) + " to " + std::to_string(watch.PlatformHigh) + ")";
+		}
+		return {};
+	}
+
+	std::string DemoSmoke::check_car() const
+	{
+		const PhysicsWatch& watch = m_Watch;
+		if (!watch.CarSeen)
+		{
+			return "the autopilot car is missing in the running scene";
+		}
+		if (!(watch.CarFarthest > 5.0f && watch.CarTurn > 10.0f && watch.CarFast && watch.CarStopped))
+		{
+			return "the autopilot car did not drive, turn and stop (farthest " + std::to_string(watch.CarFarthest) + " m, turned " + std::to_string(watch.CarTurn) +
+				" degrees, faster than 3 m/s " + (watch.CarFast ? "yes" : "no") + ", stopped " + (watch.CarStopped ? "yes" : "no") + ")";
+		}
+		return {};
+	}
+
+	// Each button of the Controls panel of a feature scene's HUD, clicked once through scripted input (the path a mouse takes), 20 frames apart. The
+	// buttons share a colour: the one to click is given a colour of its own while the draw list that finds it is built.
+	DemoSmoke::UiResult DemoSmoke::run_controls_step(Scene& play, std::string& failure)
+	{
+		const glm::vec4 PROBE_COLOR{ 0.01f, 0.99f, 0.02f, 1.0f };
+		UiModule* ui = Engine::get().get_module<UiModule>();
+		const entt::entity hud = find_named(play, "Hud");
+		UiPanelInstance* instance = ui != nullptr && hud != entt::null ? ui->instance_for(play, play.registry().get<Id>(hud).Guid) : nullptr;
+		if (instance == nullptr || !instance->ready())
+		{
+			failure = "the HUD went away before its controls were clicked";
+			return UiResult::Failed;
+		}
+
+		if (!m_UiTouched)
+		{
+			m_UiPreviousInput = ui->input_source();
+			ui->set_canvas_override(HUD_CANVAS);
+			ui->set_input_source(&ui->scripted_input());
+			ui->scripted_input().clear_pointer();
+			m_UiTouched = true;
+			const std::optional<UiId> controls = instance->find("Controls");
+			for (const UiWidget& widget : instance->data().Widgets)
+			{
+				if (controls && widget.Parent == *controls && widget.Kind == WidgetKind::Button)
+				{
+					m_Controls.push_back(widget.Id);
+				}
+			}
+			if (m_Controls.empty())
+			{
+				failure = "the HUD has no buttons in its Controls panel";
+				return UiResult::Failed;
+			}
+			return UiResult::Running;
+		}
+
+		if (++m_ControlFrames < 20)
+		{
+			return UiResult::Running;
+		}
+		if (m_ControlIndex >= m_Controls.size())
+		{
+			return UiResult::Passed;
+		}
+		// every colour of the button, so that it is found whatever state it is in (hovered, or focused by the UI navigation)
+		UiWidget* widget = instance->data().find(m_Controls[m_ControlIndex]);
+		const UiWidget saved = *widget;
+		widget->Color = widget->HoverColor = widget->PressedColor = widget->DisabledColor = PROBE_COLOR;
+		play.update_world_transforms();
+		UiDrawList list;
+		ui->build_draw_list(play, HUD_CANVAS, list);
+		widget->Color = saved.Color;
+		widget->HoverColor = saved.HoverColor;
+		widget->PressedColor = saved.PressedColor;
+		widget->DisabledColor = saved.DisabledColor;
+		const std::optional<UiRect> quad = find_quad(list, PROBE_COLOR);
+		if (!quad)
+		{
+			failure = "the HUD's control Controls/" + widget->Name + " is not drawn (" + std::to_string(list.Vertices.size() / 4) + " quads)";
+			return UiResult::Failed;
+		}
+		ui->scripted_input().move_to((quad->Min + quad->Max) * 0.5f);
+		ui->scripted_input().press(0);
+		ui->scripted_input().release(0);
+		m_ControlIndex++;
+		m_ControlFrames = 0;
+		return UiResult::Running;
+	}
+
+	// The hub: its menu is drawn, and a click on its first button (through scripted input, the path a mouse takes) makes hub_menu.lua load the lighting
+	// scene, which replaces the hub as the scene that plays (editor.md, play mode).
+	DemoSmoke::UiResult DemoSmoke::run_hub_step(std::string& failure)
+	{
+		const glm::vec4 MENU_BUTTON_COLOR{ 0.12f, 0.28f, 0.4f, 0.92f }; // the menu's buttons (MENU_BUTTON in scripts/gen_demo_scene.py), while the pointer is not on them
+		UiModule* ui = Engine::get().get_module<UiModule>();
+		Scene& play = *m_Play.play_scene();
+		m_HubFrames++;
+		const auto click_at = [&](const glm::vec2& point)
+		{
+			ui->scripted_input().move_to(point);
+			ui->scripted_input().press(0);
+			ui->scripted_input().release(0);
+		};
+
+		switch (m_HubStep)
+		{
+		case HubStep::Setup:
+		{
+			if (ui == nullptr)
+			{
+				failure = "no UiModule";
+				return UiResult::Failed;
+			}
+			m_UiPreviousInput = ui->input_source();
+			ui->set_canvas_override(HUD_CANVAS);
+			ui->set_input_source(&ui->scripted_input());
+			ui->scripted_input().clear_pointer();
+			m_UiTouched = true;
+			m_HubStep = HubStep::WaitDrawn;
+			m_HubFrames = 0;
+			return UiResult::Running;
+		}
+
+		case HubStep::WaitDrawn:
+		{
+			const entt::entity hud = find_named(play, "Hud");
+			UiPanelInstance* instance = hud != entt::null ? ui->instance_for(play, play.registry().get<Id>(hud).Guid) : nullptr;
+			std::optional<UiRect> button{};
+			if (instance != nullptr && instance->ready())
+			{
+				play.update_world_transforms();
+				UiDrawList list;
+				ui->build_draw_list(play, HUD_CANVAS, list);
+				button = find_quad(list, MENU_BUTTON_COLOR);
+			}
+			// a few frames more once it is drawn: hub_menu.lua finds its buttons in the update after the panel is ready
+			if (!button || m_HubFrames < 30)
+			{
+				if (m_HubFrames > 900)
+				{
+					failure = std::string("the hub's menu was not drawn: ") + (instance == nullptr ? "no panel instance (an entity Hud with a UICanvas)" : !instance->ready() ? "the panel is not loaded" : "no menu button");
+					return UiResult::Failed;
+				}
+				return UiResult::Running;
+			}
+			m_ButtonCenter = (button->Min + button->Max) * 0.5f;
+			click_at(m_ButtonCenter);
+			m_HubStep = HubStep::WaitLoaded;
+			m_HubFrames = 0;
+			return UiResult::Running;
+		}
+
+		case HubStep::WaitLoaded:
+		{
+			if (find_named(play, LIGHTING_ONLY) != entt::null)
+			{
+				return find_named(play, "Hub ring") == entt::null ? UiResult::Passed : (failure = "the lighting scene was added to the hub instead of replacing it", UiResult::Failed);
+			}
+			if (m_HubFrames > 1800 && std::chrono::steady_clock::now() - m_RunStart > std::chrono::seconds(30))
+			{
+				failure = "clicking the first button of the hub's menu did not load the lighting scene (hub_menu.lua, load_scene)";
+				return UiResult::Failed;
+			}
+			return UiResult::Running;
+		}
+		}
+		return UiResult::Running;
 	}
 
 	// The end of a good run: Stop, remove the files the test made, and see that nothing was logged as an error.

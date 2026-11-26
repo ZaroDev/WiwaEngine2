@@ -48,7 +48,7 @@ Areas: up to 16 (`NAV_AREA_COUNT`, a polygon flag is 16 bits wide). Ids 0 `NotWa
 
 ## Demo
 
-The Navigation station at x = -30 (`add_navigation` in `scripts/gen_demo_scene.py`): a wall with open ways round both ends, mud over the west way (cost 8 in `editor/nav.wsettings`), three agents with `nav_patrol.lua` walking north to south and back. The `.wnav` is baked by the editor (`--nav-bake`, the command is printed by the generator) at `editor/assets/navmeshes/`, its `.meta` fixes the guid the scene's volume refers to. `python scripts/gen_demo_scene.py --nav-only` adds the station to the written scene without downloading or touching other `.meta` files (the full run rewrites ignored `.meta` files: do not run it casually). `--demo-smoke` checks the three agents come within 1.2 m of their goals (the goals in `demo_smoke.cpp` mirror `NAV_GOALS`).
+The navigation and AI demo (`demo_ai.wscene`), at x = -30 (`add_navigation` in `scripts/gen_demo_scene.py`): a wall with open ways round both ends, mud over the west way (cost 8 in `editor/nav.wsettings`), three agents with `nav_patrol.lua` walking north to south and back. The `.wnav` is baked by the editor (`--nav-bake`, the command is printed by the generator) at `editor/assets/navmeshes/`, its `.meta` fixes the guid the scene's volume refers to. The volume's id, and so the file's name, comes from the scene and the entity name (`entity_guid`). Its HUD (`ai_ui.lua`) shows the agents' states and draws the guard's path to the thief (`Nav.find_path`). `--demo-smoke` checks the three agents come within 1.2 m of their goals (the goals in `demo_smoke.cpp` mirror `NAV_GOALS`).
 
 ## Verification
 

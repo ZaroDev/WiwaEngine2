@@ -40,7 +40,7 @@ Cars on Jolt's `VehicleConstraint` with our own tire model and driver assists: "
 
 ## Demo
 
-Station 9 of `demo.wscene` (`scripts/gen_demo_scene.py`, `--vehicles-only` adds it to an existing demo without downloads): an asphalt track with a grass patch (`tireGrip` 0.55), "Demo car" driven by the `Driving` actions (arrows or the pad's triggers and left stick, Left Shift/B handbrake, E/Q or the bumpers to shift a manual gearbox) and "Autopilot car" (`drive.lua` autopilot) that `--demo-smoke` watches in its Physics phase. The demo's physics runs at 120 Hz.
+The vehicles demo (`demo_vehicles.wscene`, `scripts/gen_demo_scene.py`): an asphalt track with a grass patch (`tireGrip` 0.55), "Demo car" driven by the `Driving` actions (arrows or the pad's triggers and left stick, Left Shift/B handbrake, E/Q or the bumpers to shift a manual gearbox) and "Autopilot car" (`drive.lua` autopilot) that `--demo-smoke` watches. Its HUD (`vehicles_ui.lua`) shows the speed, gear and rpm of Demo car (`vehicle.state`) and turns its assists off and on (`vehicle.set_assist`). The demo scenes' physics runs at 120 Hz.
 
 ## Verification
 

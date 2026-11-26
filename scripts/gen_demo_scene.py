@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Writes the demo hall: editor/assets/** (scene, scripts, materials, UI, input, models, textures) and their .meta files.
+"""Writes the demo: editor/assets/** (scenes, scripts, materials, UI, input, models, textures) and their .meta files.
+
+The demo is a hub and one scene per group of features (DEMO_SCENES below): scenes/demo.wscene is the hub (the project's default scene), a menu that
+loads the others with load_scene; each feature scene has its own HUD (ui/demo_<key>_hud.wuipanel) with a bar that goes to the previous scene, the
+menu and the next one, a panel that says what the scene shows, and controls of its own (scripts/<key>_ui.lua).
 
     python scripts/gen_demo_scene.py [cache_dir]
 
@@ -11,8 +15,8 @@ Skeletons, clips and skinned meshes of the models are extracted by the editor in
 the animationEvents setting written to the model .meta below only seeds the clips of that first extraction (the files own the events afterwards), and the
 scene's references to the old sub-asset ids keep working through the catalog's redirects.
 
-The demo smoke test (tests/src/play/demo_smoke.cpp) depends on entity names, positions of the joints and the character lane, the
-HUD widget names and colours and the behaviour of the scripts below. Change them together.
+The demo smoke test (tests/src/play/demo_smoke.cpp) depends on the scene files, entity names, positions of the joints and the character lane,
+the HUD widget names and colours and the behaviour of the scripts below. Change them together.
 """
 import hashlib
 import io
@@ -581,19 +585,9 @@ end
 return LightPulse
 """
 
-SCRIPTS["camera_rig.lua"] = """-- The demo camera: drifts sideways, and keys 1 to 7 jump to a station of the hall.
+SCRIPTS["camera_rig.lua"] = """-- The demo camera: drifts sideways, and keys 1 to 9 jump to the viewpoints of the scene: the entities "View 1", "View 2", ... (their position
+-- and rotation). The camera starts at View 1.
 local wave = require("assets/scripts/lib/wave.lua")
-
--- name, position, pitch and yaw in degrees (plain tables: vec3 is only made while the game runs)
-local STATIONS = {
-  { "Lighting and post", { 0, 4.5, 17 }, -4, 0 },
-  { "Materials and shaders", { 0, 5, -4 }, -6, 0 },
-  { "Models and animation", { 0, 2.6, 3.5 }, -5, 180 },
-  { "Physics", { 11, 5, 11 }, -22, 0 },
-  { "Joints", { -10, 5, 19 }, -16, 0 },
-  { "Character controller", { 24, 6, 14 }, -22, 0 },
-  { "Scripts, input and UI", { 2, 4, 14 }, -14, 0 },
-}
 
 local CameraRig = Script:extend{
   properties = {
@@ -603,23 +597,28 @@ local CameraRig = Script:extend{
 }
 
 function CameraRig:on_init()
+  self.views = {}
+  for index = 1, 9 do
+    local view = find_entity("View " .. index)
+    if view == nil then
+      break
+    end
+    self.views[index] = view
+  end
   self.base_x = self.transform.position.x
   self.t = 0
 end
 
 function CameraRig:go(index)
-  local station = STATIONS[index]
-  local p = station[2]
-  self.base_x = p[1]
-  self.transform.position.x = p[1]
-  self.transform.position.y = p[2]
-  self.transform.position.z = p[3]
-  self.transform.rotation = quat.from_euler(station[3], station[4], 0)
-  log("Camera", "Station " .. index .. ": " .. station[1])
+  local view = self.views[index]:get("Transform")
+  self.base_x = view.position.x
+  self.transform.position = vec3(view.position.x, view.position.y, view.position.z)
+  self.transform.rotation = view.rotation
+  log("Camera", "View " .. index .. " of " .. #self.views)
 end
 
 function CameraRig:on_update(dt)
-  for index = 1, #STATIONS do
+  for index = 1, #self.views do
     if input.pressed("Key." .. index) then
       self:go(index)
     end
@@ -658,22 +657,21 @@ end
 return AudioDemo
 """
 
-SCRIPTS["scene_overlay.lua"] = """-- A scene-level script (listed in the scene settings, no entity): logs and draws debug shapes around the stations.
+SCRIPTS["scene_overlay.lua"] = """-- A scene-level script (listed in the settings of the physics scene, no entity): logs and draws a debug box round the trigger zone.
 local SceneOverlay = Script:extend{
   properties = {},
 }
 
 function SceneOverlay:on_init()
-  log("Demo", "The demo hall is running: keys 1 to 7 jump between the stations")
+  log("Demo", "The physics demo is running")
 end
 
 function SceneOverlay:on_update(dt)
-  debug_draw.box(vec3(-2.5, 0, -2.5), vec3(2.5, 3.6, 2.5), vec4(1, 0.8, 0.2, 1), 0)
   debug_draw.box(vec3(5.5, 0, 0), vec3(7.5, 2, 3), vec4(0.2, 1, 0.4, 1), 0)
 end
 
 function SceneOverlay:on_destroy()
-  log("Demo", "The demo hall stopped")
+  log("Demo", "The physics demo stopped")
 end
 
 return SceneOverlay
@@ -1129,14 +1127,16 @@ return AnimationDemo
 
 SCRIPTS["animation_graph_demo.lua"] = """-- The animation graph API: the warrior plays a graph (idle, and a walk/run blend space on "speed", with an upper body layer for the sword
 -- attack). The script only sets parameters: it runs and stands every period (it starts running), and swings the sword every attack_every seconds
--- (the layer weight "upper" follows the attack). "footstep" events of the clips are counted. With autopilot off the Move action decides
--- (the Gameplay map must be on the stack).
+-- (the layer weight "upper" follows the attack). "footstep" events of the clips are counted. With autopilot off the Move action or manual_speed
+-- (the faster of the two) decides, and attack_now swings the sword once: the HUD of the animation scene (animation_ui.lua) sets them.
 local AnimationGraphDemo = Script:extend{
   properties = {
     autopilot = { type = "bool", default = true },
     period = { type = "float", default = 4, min = 0.5, max = 20 },
     attack_every = { type = "float", default = 3, min = 0.5, max = 20 },
     run_speed = { type = "float", default = 3, min = 0, max = 5 },
+    manual_speed = { type = "float", default = 0, min = 0, max = 5 },
+    attack_now = { type = "bool", default = false },
   },
 }
 
@@ -1174,14 +1174,18 @@ function AnimationGraphDemo:on_update(dt)
       self.pushed = pcall(input.push_map, "Gameplay")
     end
     local stick = self.pushed and input.action("Gameplay", "Move"):vector() or vec2(0, 0)
-    target = stick:length() * self.run_speed
+    target = math.max(stick:length() * self.run_speed, self.manual_speed)
   end
   self.speed = self.speed + (target - self.speed) * math.min(1, dt * 20)
   self.anim:set("speed", self.speed)
 
   -- the sword swing: the upper body layer fades in, then the trigger starts the swing, and the layer fades out when it is over
-  if self.t >= self.next_attack then
+  if self.t >= self.next_attack and self.autopilot then
     self.next_attack = self.t + self.attack_every
+    self.attack_pending = true
+  end
+  if self.attack_now then
+    self.attack_now = false
     self.attack_pending = true
   end
   local want_upper = (self.attack_pending or self.t < self.attack_until) and 1 or 0
@@ -1385,6 +1389,586 @@ return Drive
 """
 
 
+# The scenes of the demo: the hub, then one scene per group of features, in the order of the menu and of the Previous / Next buttons.
+# (key, file, title, what it shows: the text of the menu button and of the Info panel of the scene's HUD)
+DEMO_SCENES = [
+	("hub", "scenes/demo.wscene", "Wiwa2 demos", "Pick a demo: each scene shows one group of features."),
+	("lighting", "scenes/demo_lighting.wscene", "Lighting and post", "Spot, point and directional lights with shadows, emissive neon, prefabs in prefabs, auto exposure, bloom, AO and motion blur."),
+	("materials", "scenes/demo_materials.wscene", "Materials and shaders", "A PBR grid (roughness by metalness), carpaint, cloth, glass, double sided leaves and the toon and hologram surface shaders."),
+	("animation", "scenes/demo_animation.wscene", "Models and animation", "A warrior on an animation graph (blend space, upper body layer, sockets, footstep events) and a lineup of animated FBX models."),
+	("physics", "scenes/demo_physics.wscene", "Physics, joints and characters", "Rigid bodies, bouncy materials, triggers, collision events, hinge, slider, distance and breakable joints, and character controllers."),
+	("vehicles", "scenes/demo_vehicles.wscene", "Vehicles", "A car to drive with an engine, a gearbox, a tire model and driving assists on asphalt and grass, and one that drives by itself."),
+	("ai", "scenes/demo_ai.wscene", "Navigation and AI", "Agents walking a baked navmesh round costly areas, and a guard on a behaviour tree that sees, hears and chases a thief."),
+	("vfx", "scenes/demo_vfx.wscene", "Particles and decals", "GPU particles (a campfire, a spark fountain that bounces off the ground, rune motes) and projected decals with normal maps."),
+	("ui", "scenes/demo_ui.wscene", "Scripts, input, UI and media", "A HUD driven by Lua, input actions and rebinding, 3D audio, a 3D widget (a view of a model) and a video with sound."),
+]
+
+
+def scene_path(key):
+	return "assets/" + next(file for k, file, _, _ in DEMO_SCENES if k == key)
+
+
+def menu_name(title):
+	"""The name of a scene's button in the hub's menu (Menu/<name>): the first word of its title."""
+	return title.split(" ")[0].rstrip(",")
+
+
+SCRIPTS["demo_nav.lua"] = """-- The bar at the top of the HUD of every demo scene: the previous scene, the menu (the hub, assets/scenes/demo.wscene) and the next scene,
+-- loaded with load_scene. Tab goes to the next scene too. The paths are properties, written by scripts/gen_demo_scene.py.
+local DemoNav = Script:extend{
+  properties = {
+    previous_scene = { type = "string", default = "" },
+    next_scene = { type = "string", default = "" },
+    menu_scene = { type = "string", default = "assets/scenes/demo.wscene" },
+  },
+}
+
+function DemoNav:on_init()
+  self.panel = UI.panel(self.entity)
+  self.ready = false
+  self.loading = nil
+end
+
+function DemoNav:go(path)
+  if path == "" or self.loading ~= nil then
+    return
+  end
+  Audio.post("UI_Click")
+  log("Demo", "loading " .. path)
+  self.loading = load_scene(path, "replace")
+end
+
+function DemoNav:on_update(dt)
+  if not self.ready then
+    if self.panel == nil or not self.panel.ready then
+      return
+    end
+    self.panel:find("Nav/Previous"):on("click", function(me) me:go(me.previous_scene) end)
+    self.panel:find("Nav/Menu"):on("click", function(me) me:go(me.menu_scene) end)
+    self.panel:find("Nav/Next"):on("click", function(me) me:go(me.next_scene) end)
+    self.ready = true
+  end
+  if input.pressed("Key.Tab") then
+    self:go(self.next_scene)
+  end
+  if self.loading ~= nil and self.loading:failed() then
+    log_error("Demo", "the scene did not load: " .. self.loading:stage())
+    self.loading = nil
+  end
+end
+
+return DemoNav
+"""
+
+SCRIPTS["hub_menu.lua"] = """-- The menu of the hub (assets/scenes/demo.wscene): a button per demo scene, or keys 1 to %d, loads it with load_scene.
+local SCENES = {
+%s
+}
+
+local HubMenu = Script:extend{
+  properties = {},
+}
+
+function HubMenu:on_init()
+  self.panel = UI.panel(self.entity)
+  self.ready = false
+  self.loading = nil
+  self.t = 0
+end
+
+function HubMenu:go(index)
+  if self.loading ~= nil then
+    return
+  end
+  Audio.post("UI_Click")
+  log("Demo", "loading " .. SCENES[index][2])
+  self.loading = load_scene(SCENES[index][2], "replace")
+end
+
+function HubMenu:on_update(dt)
+  if not self.ready then
+    if self.panel == nil or not self.panel.ready then
+      return
+    end
+    for index, scene in ipairs(SCENES) do
+      self.panel:find("Menu/" .. scene[1]):on("click", function(me) me:go(index) end)
+    end
+    self.hint = self.panel:find("Hint")
+    self.ready = true
+  end
+  for index = 1, #SCENES do
+    if input.pressed("Key." .. index) then
+      self:go(index)
+    end
+  end
+  if self.loading ~= nil then
+    self.hint.text = string.format("Loading... %%d%%%%", math.floor(self.loading:progress() * 100))
+    if self.loading:failed() then
+      log_error("Demo", "the scene did not load: " .. self.loading:stage())
+      self.loading = nil
+    end
+  else
+    self.t = self.t + dt
+    self.hint.opacity = 0.65 + 0.35 * math.sin(self.t * 2.5)
+  end
+end
+
+return HubMenu
+""" % (len(DEMO_SCENES) - 1, "\n".join('  { "%s", "%s" },' % (menu_name(title), "assets/" + file) for key, file, title, _ in DEMO_SCENES[1:]))
+
+SCRIPTS["lighting_ui.lua"] = """-- The HUD of the lighting scene: the height of the sun (its Transform), and how the scene is shown (settings.scene: the exposure, bloom,
+-- ambient occlusion and motion blur, applied at once and not saved).
+local LightingUi = Script:extend{
+  properties = {},
+}
+
+function LightingUi:on_init()
+  self.panel = UI.panel(self.entity)
+  self.sun = find_entity("Sun")
+  self.ready = false
+  self.height = 45
+end
+
+function LightingUi:setup()
+  local panel = self.panel
+  self.status = panel:find("Info/Status")
+  local sun = panel:find("Controls/Sun")
+  local exposure = panel:find("Controls/Exposure")
+  local current = settings.scene.get()
+  self.state = { bloom = current.bloom, ao = current.ao, motion_blur = current.motion_blur }
+  exposure.value = current.exposure_compensation
+  sun:on("value_changed", function(me, value) me:aim_sun(value) end)
+  exposure:on("value_changed", function(me, value) settings.scene.set{ exposure_compensation = value } end)
+  for _, item in ipairs({ { "Bloom", "bloom", "Bloom" }, { "Ao", "ao", "Ambient occlusion" }, { "MotionBlur", "motion_blur", "Motion blur" } }) do
+    local key, text = item[2], item[3]
+    local label = panel:find("Controls/" .. item[1] .. "/Label")
+    label.text = text .. ": " .. (self.state[key] and "on" or "off")
+    panel:find("Controls/" .. item[1]):on("click", function(me)
+      Audio.post("UI_Click")
+      me.state[key] = not me.state[key]
+      settings.scene.set{ [key] = me.state[key] }
+      label.text = text .. ": " .. (me.state[key] and "on" or "off")
+    end)
+  end
+  self:aim_sun(sun.value)
+  self.ready = true
+end
+
+-- the sun of the scene file is turned 35 degrees round y and looks 45 degrees down: the slider changes how far down
+function LightingUi:aim_sun(height)
+  self.height = height
+  if self.sun ~= nil and self.sun:is_valid() then
+    self.sun:get("Transform").rotation = quat.from_axis_angle(vec3(0, 1, 0), 35) * quat.from_axis_angle(vec3(1, 0, 0), -height)
+  end
+end
+
+function LightingUi:on_update(dt)
+  if not self.ready then
+    if self.panel == nil or not self.panel.ready then
+      return
+    end
+    self:setup()
+  end
+  self.status.text = string.format("Sun %d degrees up, exposure %+.1f EV", math.floor(self.height + 0.5), settings.scene.get().exposure_compensation)
+end
+
+return LightingUi
+"""
+
+SCRIPTS["materials_ui.lua"] = """-- The HUD of the materials scene: a turntable for the showcase (it turns the Transforms), and the two lights the materials are seen under.
+local TURNTABLE = { "Carpaint sphere", "Cloth sphere", "Glass cube", "Hologram cylinder", "Brick cube", "Toon sphere", "Toon cone", "Toon puffy cube" }
+
+local MaterialsUi = Script:extend{
+  properties = {
+    turn_speed = { type = "float", default = 45, min = 0, max = 360 },
+  },
+}
+
+function MaterialsUi:on_init()
+  self.panel = UI.panel(self.entity)
+  self.warm = find_entity("Warm point light")
+  self.fill = find_entity("Toon fill light")
+  self.turning = {}
+  for _, name in ipairs(TURNTABLE) do
+    local entity = find_entity(name)
+    if entity ~= nil then
+      self.turning[#self.turning + 1] = entity
+    end
+  end
+  self.spin = false
+  self.fill_on = true
+  self.ready = false
+end
+
+function MaterialsUi:setup()
+  local panel = self.panel
+  self.status = panel:find("Info/Status")
+  local spin_label = panel:find("Controls/Turntable/Label")
+  local fill_label = panel:find("Controls/FillLight/Label")
+  panel:find("Controls/Turntable"):on("click", function(me)
+    Audio.post("UI_Click")
+    me.spin = not me.spin
+    spin_label.text = me.spin and "Turntable: on" or "Turntable: off"
+  end)
+  panel:find("Controls/FillLight"):on("click", function(me)
+    Audio.post("UI_Click")
+    me.fill_on = not me.fill_on
+    me.fill:get("Light").intensity = me.fill_on and 25 or 0
+    fill_label.text = me.fill_on and "Toon fill light: on" or "Toon fill light: off"
+  end)
+  panel:find("Controls/WarmLight"):on("value_changed", function(me, value)
+    me.warm:get("Light").intensity = value
+  end)
+  self.ready = true
+end
+
+function MaterialsUi:on_update(dt)
+  if not self.ready then
+    if self.panel == nil or not self.panel.ready then
+      return
+    end
+    self:setup()
+  end
+  if self.spin then
+    local turn = quat.from_axis_angle(vec3(0, 1, 0), self.turn_speed * dt)
+    for _, entity in ipairs(self.turning) do
+      local transform = entity:get("Transform")
+      transform.rotation = turn * transform.rotation
+    end
+  end
+  self.status.text = string.format("Turntable %s, warm light %d, toon fill %s", self.spin and "on" or "off", math.floor(self.warm:get("Light").intensity + 0.5),
+    self.fill_on and "on" or "off")
+end
+
+return MaterialsUi
+"""
+
+SCRIPTS["animation_ui.lua"] = """-- The HUD of the animation scene: drives the warrior's script (animation_graph_demo: autopilot, manual_speed, attack_now, a script's
+-- properties reached with get) and shows the states of its animation graph's layers and the footsteps it heard (Animation API).
+local AnimationUi = Script:extend{
+  properties = {},
+}
+
+function AnimationUi:on_init()
+  self.panel = UI.panel(self.entity)
+  self.warrior = find_entity("Warrior (animated)")
+  self.anim = self.warrior ~= nil and Animation.animator(self.warrior) or nil
+  self.steps = 0
+  self.ready = false
+  if self.anim ~= nil then
+    self.anim:on("footstep", function(me, event) me.steps = me.steps + 1 end)
+  end
+end
+
+function AnimationUi:setup()
+  local panel = self.panel
+  local demo = self.warrior:get("animation_graph_demo")
+  self.status = panel:find("Info/Status")
+  local autopilot_label = panel:find("Controls/Autopilot/Label")
+  local speed = panel:find("Controls/Speed")
+  panel:find("Controls/Autopilot"):on("click", function(me)
+    Audio.post("UI_Click")
+    demo.autopilot = not demo.autopilot
+    demo.manual_speed = demo.autopilot and 0 or speed.value
+    autopilot_label.text = demo.autopilot and "Autopilot: on" or "Autopilot: off (the slider and WASD)"
+  end)
+  speed:on("value_changed", function(me, value)
+    if not demo.autopilot then
+      demo.manual_speed = value
+    end
+  end)
+  panel:find("Controls/Attack"):on("click", function(me)
+    Audio.post("UI_Click")
+    demo.attack_now = true
+  end)
+  self.ready = true
+end
+
+function AnimationUi:on_update(dt)
+  if not self.ready then
+    if self.panel == nil or not self.panel.ready or self.warrior == nil then
+      return
+    end
+    self:setup()
+  end
+  local base = self.anim ~= nil and self.anim:state(1) or nil
+  local upper = self.anim ~= nil and self.anim:state(2) or nil
+  self.status.text = string.format("Base layer: %s, upper body: %s, %d footsteps", tostring(base or "-"), tostring(upper or "-"), self.steps)
+end
+
+return AnimationUi
+"""
+
+SCRIPTS["physics_ui.lua"] = """-- The HUD of the physics scene: body control from a button (set_velocity on the bouncy balls and the crates), the world's gravity
+-- (physics.set_gravity), and what the hero's CharacterController and the door's hinge are doing.
+local PhysicsUi = Script:extend{
+  properties = {},
+}
+
+local function named(prefix, count)
+  local list = {}
+  for index = 1, count do
+    local entity = find_entity(prefix .. index)
+    if entity ~= nil then
+      list[#list + 1] = entity
+    end
+  end
+  return list
+end
+
+function PhysicsUi:on_init()
+  self.panel = UI.panel(self.entity)
+  self.balls = named("Bouncy ball ", 3)
+  self.crates = named("Crate ", 4)
+  self.hero = find_entity("Hero")
+  self.door = find_entity("Door")
+  self.moon = false
+  self.ready = false
+end
+
+function PhysicsUi:setup()
+  local panel = self.panel
+  self.status = panel:find("Info/Status")
+  local gravity_label = panel:find("Controls/Gravity/Label")
+  panel:find("Controls/Launch"):on("click", function(me)
+    Audio.post("UI_Click")
+    for _, ball in ipairs(me.balls) do
+      ball:body():set_velocity(vec3(0, 9, 0))
+    end
+  end)
+  panel:find("Controls/Kick"):on("click", function(me)
+    Audio.post("UI_Click")
+    for index, crate in ipairs(me.crates) do
+      crate:body():set_velocity(vec3(-4, 3, index - 2.5))
+    end
+  end)
+  panel:find("Controls/Gravity"):on("click", function(me)
+    Audio.post("UI_Click")
+    me.moon = not me.moon
+    physics.set_gravity(vec3(0, me.moon and -1.62 or -9.81, 0))
+    gravity_label.text = me.moon and "Gravity: the moon" or "Gravity: the earth"
+  end)
+  self.ready = true
+end
+
+function PhysicsUi:on_update(dt)
+  if not self.ready then
+    if self.panel == nil or not self.panel.ready then
+      return
+    end
+    self:setup()
+  end
+  local hero = self.hero ~= nil and character.state(self.hero) or nil
+  local where = hero == nil and "-" or (hero.grounded and "on the ground" or (hero.sliding and "sliding" or "in the air"))
+  local door = self.door ~= nil and self.door:get("Transform").rotation:to_euler().y or 0
+  self.status.text = string.format("Hero %s, door at %d degrees", where, math.floor(door + 0.5))
+end
+
+function PhysicsUi:on_destroy()
+  if self.moon then
+    pcall(physics.set_gravity, vec3(0, -9.81, 0))
+  end
+end
+
+return PhysicsUi
+"""
+
+SCRIPTS["vehicles_ui.lua"] = """-- The HUD of the vehicles scene: the dashboard of the car you drive (vehicle.state: speed, gear, rpm, and the assists while they work) and
+-- buttons that turn its assists off and on (vehicle.set_assist).
+local VehiclesUi = Script:extend{
+  properties = {
+    max_rpm = { type = "float", default = 7000, min = 1000, max = 20000 },
+  },
+}
+
+function VehiclesUi:on_init()
+  self.panel = UI.panel(self.entity)
+  self.car = find_entity("Demo car")
+  self.assists = { traction_control = true, abs = true, auto_gearbox = true }
+  self.ready = false
+end
+
+function VehiclesUi:setup()
+  local panel = self.panel
+  self.status = panel:find("Info/Status")
+  self.rpm = panel:find("Controls/Rpm")
+  for _, item in ipairs({ { "Traction", "traction_control", "Traction control: on", "Traction control: off" }, { "Abs", "abs", "ABS: on", "ABS: off" },
+      { "Gearbox", "auto_gearbox", "Gearbox: automatic", "Gearbox: manual (E and Q)" } }) do
+    local key = item[2]
+    local label = panel:find("Controls/" .. item[1] .. "/Label")
+    panel:find("Controls/" .. item[1]):on("click", function(me)
+      Audio.post("UI_Click")
+      me.assists[key] = not me.assists[key]
+      vehicle.set_assist(me.car, key, me.assists[key] and 1 or 0)
+      label.text = me.assists[key] and item[3] or item[4]
+    end)
+  end
+  self.ready = true
+end
+
+function VehiclesUi:on_update(dt)
+  if not self.ready then
+    if self.panel == nil or not self.panel.ready or self.car == nil then
+      return
+    end
+    self:setup()
+  end
+  local state = vehicle.state(self.car)
+  if state == nil then
+    self.status.text = "The car is not in the physics world yet"
+    return
+  end
+  local gear = state.gear == 0 and "N" or (state.gear < 0 and "R" or tostring(state.gear))
+  local working = {}
+  if state.abs then working[#working + 1] = "ABS" end
+  if state.tc then working[#working + 1] = "TC" end
+  if state.stability then working[#working + 1] = "ESC" end
+  self.status.text = string.format("%d km/h, gear %s, %d rpm %s", math.floor(math.abs(state.speed) * 3.6 + 0.5), gear, math.floor(state.rpm), table.concat(working, " "))
+  self.rpm.value = math.min(1, state.rpm / self.max_rpm)
+end
+
+return VehiclesUi
+"""
+
+SCRIPTS["ai_ui.lua"] = """-- The HUD of the navigation and AI scene: what the guard's behaviour tree knows (AI.controller, its blackboard), what the agents are doing
+-- (Nav.agent), a noise for the guard to hear (AI.emit_noise), a thief that moves, and the path the guard would take to it (Nav.find_path).
+local AiUi = Script:extend{
+  properties = {},
+}
+
+function AiUi:on_init()
+  self.panel = UI.panel(self.entity)
+  self.guard = find_entity("Guard")
+  self.thief = find_entity("Thief")
+  self.noise = find_entity("Noise maker")
+  self.agents = {}
+  for index = 1, 3 do
+    self.agents[index] = find_entity("Nav agent " .. index)
+  end
+  self.show_path = false
+  self.thief_moved = false
+  self.ready = false
+end
+
+function AiUi:setup()
+  local panel = self.panel
+  self.status = panel:find("Info/Status")
+  local path_label = panel:find("Controls/Path/Label")
+  panel:find("Controls/Noise"):on("click", function(me)
+    Audio.post("UI_Click")
+    AI.emit_noise(me.noise:get("Transform").position, 1.5, "crash")
+  end)
+  panel:find("Controls/Thief"):on("click", function(me)
+    Audio.post("UI_Click")
+    me.thief_moved = not me.thief_moved
+    me.thief:get("Transform").position = me.thief_moved and vec3(-40, 0, -10) or vec3(-20, 0, -10)
+  end)
+  panel:find("Controls/Path"):on("click", function(me)
+    Audio.post("UI_Click")
+    me.show_path = not me.show_path
+    path_label.text = me.show_path and "The guard's path: shown" or "The guard's path: hidden"
+  end)
+  self.ready = true
+end
+
+function AiUi:on_update(dt)
+  if not self.ready then
+    if self.panel == nil or not self.panel.ready or self.guard == nil or self.thief == nil or self.noise == nil then
+      return
+    end
+    self:setup()
+  end
+
+  local mood = "waiting for its tree"
+  local ok, controller = pcall(AI.controller, self.guard)
+  if ok and controller:running() then
+    if controller:get("can_see_target") then
+      mood = "chases the thief"
+    elseif controller:get("heard_kind") ~= "" then
+      mood = "looks for a noise"
+    else
+      mood = "patrols"
+    end
+  end
+  local states = {}
+  for index, agent in ipairs(self.agents) do
+    states[index] = agent ~= nil and Nav.agent(agent):state() or "-"
+  end
+  self.status.text = "The guard " .. mood .. "; agents: " .. table.concat(states, ", ")
+
+  if self.show_path then
+    local from = self.guard:get("Transform").position
+    local to = self.thief:get("Transform").position
+    local path = Nav.find_path(vec3(from.x, from.y, from.z), vec3(to.x, to.y, to.z))
+    for index = 2, #path.points do
+      debug_draw.line(path.points[index - 1] + vec3(0, 0.2, 0), path.points[index] + vec3(0, 0.2, 0), vec4(1, 0.8, 0.2, 1), 0)
+    end
+  end
+end
+
+return AiUi
+"""
+
+SCRIPTS["vfx_ui.lua"] = """-- The HUD of the particles and decals scene: a placed ParticleSystem stopped and played (Vfx.stop, Vfx.play), its speed (Vfx.set_param),
+-- a one-shot effect (Vfx.spawn) and decals made from a script (Decal.spawn) that fade out on their own.
+local VfxUi = Script:extend{
+  properties = {},
+}
+
+function VfxUi:on_init()
+  self.panel = UI.panel(self.entity)
+  self.campfire = find_entity("Campfire")
+  self.fountain = find_entity("Spark fountain")
+  self.sparks = load_asset("assets/vfx/impact_sparks.wfx")
+  self.scorch = load_asset("assets/materials/decal_scorch.wmat")
+  self.fire = true
+  self.speed = 1
+  self.marks = 0
+  self.ready = false
+end
+
+function VfxUi:setup()
+  local panel = self.panel
+  self.status = panel:find("Info/Status")
+  local fire_label = panel:find("Controls/Campfire/Label")
+  panel:find("Controls/Campfire"):on("click", function(me)
+    Audio.post("UI_Click")
+    me.fire = not me.fire
+    if me.fire then Vfx.play(me.campfire) else Vfx.stop(me.campfire) end
+    fire_label.text = me.fire and "Campfire: burning" or "Campfire: out"
+  end)
+  panel:find("Controls/Burst"):on("click", function(me)
+    Audio.post("UI_Click")
+    local p = me.fountain:get("Transform").position
+    Vfx.spawn{ effect = me.sparks, position = vec3(p.x, p.y + 1, p.z), name = "Spark burst" }
+  end)
+  panel:find("Controls/FountainSpeed"):on("value_changed", function(me, value)
+    me.speed = value
+    Vfx.set_param(me.fountain, "time_scale", value)
+  end)
+  panel:find("Controls/Scorch"):on("click", function(me)
+    Audio.post("UI_Click")
+    me.marks = me.marks + 1
+    Decal.spawn{ material = me.scorch, position = vec3(math.random() * 6 - 2, 0, math.random() * 4 + 2), normal = vec3(0, 1, 0), size = vec3(1.6, 1.6, 1),
+      lifetime = 8, fade_out = 1.5, roll = math.random() * 360, name = "Scorch" }
+  end)
+  self.ready = true
+end
+
+function VfxUi:on_update(dt)
+  if not self.ready then
+    if self.panel == nil or not self.panel.ready or self.campfire == nil or self.fountain == nil then
+      return
+    end
+    self:setup()
+  end
+  self.status.text = string.format("Campfire %s, fountain at %.1fx, %d scorch marks made", Vfx.is_playing(self.campfire) and "burning" or "out", self.speed, self.marks)
+end
+
+return VfxUi
+"""
+
+
 def build_scripts():
 	ids = {}
 	for rel, text in SCRIPTS.items():
@@ -1502,20 +2086,6 @@ def add_decals(s, g):
 	s.add("Decal scorch mark", "Decals station", pos=(3.5, 0.2, -3.2), rot=up, **decal("decal_scorch", (3.4, 3.4, 2.0), 0))
 
 
-def patch_scene_with_decals(g):
-	"""--decals-only: adds the decals to the scene that is already written (no downloads): the decals station, and the footprint script on the warrior."""
-	path = ASSETS / "scenes/demo.wscene"
-	scene = json.loads(path.read_text(encoding="utf-8"))
-	fresh = Scene()
-	fresh.ids["World"] = guid("entity:World")
-	add_decals(fresh, g)
-	ours = set(e["id"] for e in fresh.entities)
-	entities = [e for e in scene["entities"] if e["id"] not in ours]
-	entities.extend(fresh.entities)
-	warrior = next(e for e in entities if e["id"] == guid("entity:Warrior (animated)"))
-	warrior["components"]["script:" + g["scripts"]["decal_footprints"]] = {}
-	scene["entities"] = entities
-	write_json("scenes/demo.wscene", scene)
 
 
 # -------------------------------------------------------------------------------------------------------------------- vfx
@@ -1746,14 +2316,14 @@ def add_vfx(s, g):
 # ------------------------------------------------------------------------------------------------------------ navigation
 
 NAV_CENTER = -30  # x of the navigation station: west of the hall, where nothing else stands
-NAV_FILE = "navmeshes/Navmesh_volume_%s.wnav" % guid("entity:Navmesh volume")[:8]  # where the editor's bake puts it (NavigationPanel::bake)
+NAV_FILE = "navmeshes/Navmesh_volume_%s.wnav" % guid("entity:ai/Navmesh volume")[:8]  # where the editor's bake puts it (NavigationPanel::bake); entity_guid("ai", ...)
 NAV_GOALS = [(NAV_CENTER - 4 + 4 * i, -8) for i in range(3)]  # (x, z) of where the agents go; tests/src/play/demo_smoke.cpp checks them
 
 
 def add_navigation(s, g):
 	"""The navigation station (docs/superpowers/documentation/navigation.md): a wall across an arena with an open way round each end, mud over the west way (the cost
 	is in editor/nav.wsettings), and three agents that walk from the north side to the south side and back, round the wall, with nav_patrol.lua. The navmesh
-	is baked by the editor from this scene (wiwa_editor --scene assets/scenes/demo.wscene --nav-bake <file>) into NAV_FILE; the volume refers to it."""
+	is baked by the editor from the navigation scene (wiwa_editor --scene assets/scenes/demo_ai.wscene --nav-bake <file>) into NAV_FILE; the volume refers to it."""
 	cx = NAV_CENTER
 	s.add("Navigation station", "World")
 	s.add("Navmesh volume", "Navigation station", pos=(cx, 2.5, 0), NavMeshVolume={"NavMesh": ref(guid("asset:" + NAV_FILE)), "Size": [24, 7, 24]})
@@ -1781,19 +2351,9 @@ def write_nav_settings():
 	# the record of the navmesh asset, so that the guid the volume refers to is the one the baked file gets (the file itself comes from --nav-bake)
 	(ASSETS / NAV_FILE).parent.mkdir(parents=True, exist_ok=True)
 	write_meta(NAV_FILE, "NavMeshImporter", 1)
-	print("bake the navmesh with: wiwa_editor --scene assets/scenes/demo.wscene --nav-bake assets/" + NAV_FILE)
+	print("bake the navmesh with: wiwa_editor --scene assets/scenes/demo_ai.wscene --nav-bake assets/" + NAV_FILE)
 
 
-def patch_scene_with_nav(g):
-	"""--nav-only: adds the navigation station to the scene that is already written (no downloads, no other .meta files touched)."""
-	path = ASSETS / "scenes/demo.wscene"
-	scene = json.loads(path.read_text(encoding="utf-8"))
-	fresh = Scene()
-	fresh.ids["World"] = guid("entity:World")
-	add_navigation(fresh, g)
-	ours = set(e["id"] for e in fresh.entities)
-	scene["entities"] = [e for e in scene["entities"] if e["id"] not in ours] + fresh.entities
-	write_json("scenes/demo.wscene", scene)
 
 
 # -------------------------------------------------------------------------------------------------------------- behaviour trees
@@ -1854,46 +2414,10 @@ def add_ai(s, g):
 		MeshRenderer={"Mesh": ref(g["shapes"], MESH["sphere"]), "Materials": [ref(g["mat"]["marker"])]}, **{})
 
 
-def patch_scene_with_ai(g):
-	"""--ai-only: adds the behaviour tree demo to the scene that is already written (no downloads, no other .meta files touched)."""
-	path = ASSETS / "scenes/demo.wscene"
-	scene = json.loads(path.read_text(encoding="utf-8"))
-	fresh = Scene()
-	fresh.ids["Navigation station"] = guid("entity:Navigation station")
-	add_ai(fresh, g)
-	ours = set(e["id"] for e in fresh.entities)
-	scene["entities"] = [e for e in scene["entities"] if e["id"] not in ours] + fresh.entities
-	write_json("scenes/demo.wscene", scene)
 
 
-def patch_scene_with_nested(g):
-	"""--nested-only: adds the lamp pair (a prefab that holds prefabs) to the scene that is already written, without downloading anything."""
-	path = ASSETS / "scenes/demo.wscene"
-	scene = json.loads(path.read_text(encoding="utf-8"))
-	fresh = Scene()
-	fresh.ids["Lighting station"] = guid("entity:Lighting station")
-	add_nested_lamps(fresh, g)
-	ours = set(e["id"] for e in fresh.entities)
-	scene["entities"] = [e for e in scene["entities"] if e["id"] not in ours] + fresh.entities
-	write_json("scenes/demo.wscene", scene)
 
 
-def patch_scene_with_vfx(g):
-	"""--vfx-only: adds the effects to the scene that is already written (no downloads): the VFX station, the motes over the rune circle, and the footstep
-	script on the warrior."""
-	path = ASSETS / "scenes/demo.wscene"
-	scene = json.loads(path.read_text(encoding="utf-8"))
-	fresh = Scene()
-	fresh.ids["World"] = guid("entity:World")
-	fresh.ids["Decals station"] = guid("entity:Decals station")
-	add_vfx(fresh, g)
-	ours = set(e["id"] for e in fresh.entities)
-	entities = [e for e in scene["entities"] if e["id"] not in ours]
-	entities.extend(fresh.entities)
-	warrior = next(e for e in entities if e["id"] == guid("entity:Warrior (animated)"))
-	warrior["components"]["script:" + g["scripts"]["vfx_footsteps"]] = {}
-	scene["entities"] = entities
-	write_json("scenes/demo.wscene", scene)
 
 
 # ------------------------------------------------------------------------------------------------------------- vehicles
@@ -1946,17 +2470,6 @@ def add_vehicles(s, g):
 			s.add(wheel_name + " tire", wheel_name, rot=qaxis((0, 0, 1), 90), scale=(0.66, 0.22, 0.66), **mesh("cylinder", "steel"))
 
 
-def patch_scene_with_vehicles(g):
-	"""--vehicles-only: adds the driving station to the scene that is already written (no downloads), runs its physics at 120 Hz and writes the input
-	map with the Driving actions."""
-	path = ASSETS / "scenes/demo.wscene"
-	scene = json.loads(path.read_text(encoding="utf-8"))
-	fresh = Scene()
-	add_vehicles(fresh, g)
-	ours = set(e["id"] for e in fresh.entities)
-	scene["entities"] = [e for e in scene["entities"] if e["id"] not in ours] + fresh.entities
-	scene.setdefault("settings", {})["physics"] = vehicle_physics_settings()
-	write_json("scenes/demo.wscene", scene)
 
 
 def vehicle_physics_settings():
@@ -1966,63 +2479,180 @@ def vehicle_physics_settings():
 
 # ------------------------------------------------------------------------------------------------------- UI and input
 
-FONT = None
+def hud_file(key):
+	"""The HUD panel of a demo scene. The scripts, input and UI scene keeps the name the HUD had when the demo was one hall."""
+	return "ui/demo_hud.wuipanel" if key == "ui" else "ui/demo_%s_hud.wuipanel" % key
 
 
-def build_ui(font, beacon_id, labels):
-	widgets = []
+# Button colours, (normal, hover, pressed). tests/src/play/demo_smoke.cpp finds widgets by the colour of their quads: the colours of the HUD of the
+# scripts and UI scene (ToggleLight, LightIntensity, BeaconBar, RebindJump, PlayIntro, Skip) are used nowhere else, and MENU_BUTTON only by the hub's menu.
+NAV_BUTTON = ([0.25, 0.25, 0.3, 0.9], [0.4, 0.4, 0.5, 1], [0.18, 0.18, 0.22, 1])
+CONTROL_BUTTON = ([0.22, 0.3, 0.4, 1], [0.32, 0.45, 0.6, 1], [0.15, 0.2, 0.3, 1])
+MENU_BUTTON = ([0.12, 0.28, 0.4, 0.92], [0.2, 0.42, 0.6, 1], [0.08, 0.2, 0.3, 1])
 
-	def w(id, kind, name, parent=None, **fields):
-		d = {"id": id, "kind": kind, "Name": name}
+
+class Panel:
+	"""A .wuipanel being written: widgets in tree order (a stack lays its children out in that order), ids from 2."""
+
+	def __init__(self, font):
+		self.widgets = []
+		self.next_id = 2
+		self.font = ref(font)
+
+	def w(self, kind, name, parent=None, **fields):
+		wid = self.next_id
+		self.next_id += 1
+		d = {"id": wid, "kind": kind, "Name": name}
 		if parent:
 			d["parent"] = parent
 		d.update(fields)
-		widgets.append(d)
+		self.widgets.append(d)
+		return wid
 
-	font_ref = ref(font)
-	w(2, "VStack", "Stats", OffsetMin=[24, 24], OffsetMax=[344, 184], Color=[0, 0, 0, 0.35], Spacing=8, Padding=[12, 12, 12, 12])
-	w(3, "Text", "Title", 2, OffsetMax=[296, 36], Text="WIWA2 DEMO HALL", Font=font_ref, FontSize=30, Outline=0.15, OutlineColor=[0.05, 0.1, 0.3, 1], Shadow=True)
-	w(4, "Text", "Score", 2, OffsetMax=[296, 30], Text="Score 0", Font=font_ref, Color=[1, 0.85, 0.3, 1])
-	w(5, "Bar", "Health", 2, OffsetMax=[296, 22], Value=0.75, Color=[0.9, 0.25, 0.25, 1])
-	w(6, "VStack", "Controls", AnchorMin=[0, 1], AnchorMax=[0, 1], OffsetMin=[24, -148], OffsetMax=[344, -24], Color=[0, 0, 0, 0.35], Spacing=10, Padding=[12, 12, 12, 12])
-	w(7, "Button", "ToggleLight", 6, OffsetMax=[296, 44], Color=[0.2, 0.35, 0.6, 1], HoverColor=[0.3, 0.5, 0.85, 1], PressedColor=[0.15, 0.25, 0.45, 1])
-	w(8, "Text", "Label", 7, AnchorMax=[1, 1], OffsetMin=[0, 9], OffsetMax=[0, 0], Text="Light: on", Font=font_ref, FontSize=22, Align="Center")
-	w(9, "Slider", "LightIntensity", 6, OffsetMax=[296, 24], Color=[0.95, 0.6, 0.1, 1], Value=2, MaxValue=20, Step=0.5)
-	w(10, "VStack", "BeaconTag", Pivot=[0.5, 1], OffsetMax=[150, 52], Color=[0, 0, 0, 0.5], Spacing=4, Padding=[6, 4, 6, 4], WorldEntity=beacon_id,
-		WorldOffset=[0, 1.2, 0], WorldScaleWithDistance=True, WorldRefDistance=14, WorldMinScale=0.4, WorldMaxScale=1.5)
-	w(11, "Text", "BeaconName", 10, OffsetMax=[138, 22], Text="Beacon", Font=font_ref, FontSize=18, Align="Center")
-	w(12, "Bar", "BeaconBar", 10, OffsetMax=[138, 14], Value=0.3, Color=[0.2, 0.9, 1, 1], BackgroundColor=[0.9, 0.2, 0.9, 0.8])
-	w(13, "VStack", "InputInfo", AnchorMin=[1, 0], AnchorMax=[1, 0], OffsetMin=[-344, 24], OffsetMax=[-24, 214], Color=[0, 0, 0, 0.35], Spacing=8, Padding=[12, 12, 12, 12])
-	w(14, "Text", "Device", 13, OffsetMax=[296, 26], Text="Device: keyboard_mouse", Font=font_ref, FontSize=20)
-	w(15, "Text", "Move", 13, OffsetMax=[296, 26], Text="Move: 0.00, 0.00", Font=font_ref, FontSize=20)
-	w(16, "Text", "JumpKey", 13, OffsetMax=[296, 26], Text="Jump: Key.Space", Font=font_ref, FontSize=20, Color=[1, 0.85, 0.3, 1])
-	w(17, "Button", "RebindJump", 13, OffsetMax=[296, 44], Color=[0.55, 0.2, 0.5, 1], HoverColor=[0.75, 0.3, 0.7, 1], PressedColor=[0.4, 0.15, 0.35, 1])
-	w(18, "Text", "Label", 17, AnchorMax=[1, 1], OffsetMin=[0, 9], OffsetMax=[0, 0], Text="Rebind Jump", Font=font_ref, FontSize=22, Align="Center")
-	w(19, "Text", "Hint", AnchorMin=[0.5, 1], AnchorMax=[0.5, 1], OffsetMin=[-320, -52], OffsetMax=[320, -16], Text="Keys 1-7: jump between the stations",
-		Font=font_ref, FontSize=24, Align="Center", Color=[0.85, 0.95, 1, 1], Outline=0.2, OutlineColor=[0, 0, 0, 1])
-	next_id = 20
+	def text(self, name, parent, text, size=20, width=296, height=None, **fields):
+		fields.setdefault("OffsetMax", [width, height or size + 6])
+		return self.w("Text", name, parent, Text=text, Font=self.font, FontSize=size, **fields)
+
+	def button(self, name, parent, label, width=296, height=40, colors=CONTROL_BUTTON, size=20, **fields):
+		fields.setdefault("OffsetMax", [width, height])
+		bid = self.w("Button", name, parent, Color=colors[0], HoverColor=colors[1], PressedColor=colors[2], **fields)
+		self.w("Text", "Label", bid, AnchorMax=[1, 1], OffsetMin=[0, (height - size) / 2 - 2], OffsetMax=[0, 0], Text=label, Font=self.font, FontSize=size, Align="Center")
+		return bid
+
+	def write(self, rel):
+		write_json(rel, {"version": 1, "referenceResolution": [1920, 1080], "match": 0.5, "nextId": self.next_id, "widgets": self.widgets})
+		return write_meta(rel, "UiPanelImporter", 1)
+
+
+def add_nav(p):
+	"""The bar at the top of a demo scene's HUD (demo_nav.lua): Nav/Previous, Nav/Menu, Nav/Next."""
+	nav = p.w("HStack", "Nav", AnchorMin=[0.5, 0], AnchorMax=[0.5, 0], OffsetMin=[-250, 20], OffsetMax=[250, 68], Color=[0, 0, 0, 0.35], Spacing=8, Padding=[4, 4, 4, 4])
+	for name, label in (("Previous", "< Previous"), ("Menu", "Menu"), ("Next", "Next >")):
+		p.button(name, nav, label, width=158, height=40, colors=NAV_BUTTON)
+
+
+def add_info(p, key, keys):
+	"""The panel at the top left of a feature scene's HUD: its title, what it shows, Info/Status (its UI script writes it every frame) and the keys."""
+	title, about = next((t, a) for k, _, t, a in DEMO_SCENES if k == key)
+	index = [k for k, _, _, _ in DEMO_SCENES].index(key)
+	info = p.w("VStack", "Info", OffsetMin=[24, 24], OffsetMax=[524, 24 + 194], Color=[0, 0, 0, 0.4], Spacing=6, Padding=[12, 12, 12, 12])
+	p.text("Title", info, "%d  %s" % (index, title), size=30, width=476, height=36, Outline=0.15, OutlineColor=[0.05, 0.1, 0.3, 1], Shadow=True)
+	p.text("About", info, about, size=18, width=476, height=70, Wrap=True, Color=[0.85, 0.9, 1, 1])
+	p.text("Status", info, "", size=18, width=476, height=24, Color=[1, 0.85, 0.3, 1])
+	p.text("Keys", info, keys, size=16, width=476, height=22, Color=[0.7, 0.75, 0.8, 1])
+
+
+def add_controls(p, items):
+	"""The panel at the bottom left of a feature scene's HUD: Controls/<name> for each item, ("button", name, label),
+	("slider", name, caption, min, max, value, step) or ("bar", name, caption). A slider or a bar has a caption above it."""
+	heights = [40 if item[0] == "button" else 22 + 6 + 24 for item in items]
+	height = sum(heights) + 10 * (len(items) - 1) + 24
+	box = p.w("VStack", "Controls", AnchorMin=[0, 1], AnchorMax=[0, 1], OffsetMin=[24, -(height + 24)], OffsetMax=[344, -24], Color=[0, 0, 0, 0.4], Spacing=10, Padding=[12, 12, 12, 12])
+	for item in items:
+		kind, name = item[0], item[1]
+		if kind == "button":
+			p.button(name, box, item[2])
+			continue
+		p.text(name + "Caption", box, item[2], size=18, height=22, Color=[0.85, 0.9, 1, 1])
+		if kind == "slider":
+			p.w("Slider", name, box, OffsetMax=[296, 24], Color=[0.4, 0.8, 1, 1], MinValue=item[3], MaxValue=item[4], Value=item[5], Step=item[6])
+		else:
+			p.w("Bar", name, box, OffsetMax=[296, 24], Value=0, Color=[0.9, 0.35, 0.2, 1])
+
+
+def add_labels(p, labels):
+	"""Texts over places of the scene: widgets anchored to entities (the "Label ..." entities of the scene)."""
 	for text, entity_id in labels:
-		w(next_id, "Text", "Label %d" % (next_id - 19), Pivot=[0.5, 1], OffsetMax=[360, 36], Text=text, Font=font_ref, FontSize=28, Align="Center",
-			Color=[0.9, 0.95, 1, 1], Outline=0.25, OutlineColor=[0, 0, 0, 1], WorldEntity=entity_id, WorldOffset=[0, 0, 0],
-			WorldScaleWithDistance=True, WorldRefDistance=18, WorldMinScale=0.5, WorldMaxScale=2.0)
-		next_id += 1
-	# a ViewImage: the wizard portrait that the "Wizard portrait" ViewHost of the scene draws (views.md), at the top right
-	w(next_id, "ViewImage", "WizardPortrait", AnchorMin=[1, 1], AnchorMax=[1, 1], OffsetMin=[-264, -264], OffsetMax=[-24, -24], ViewName="wizard_portrait")
-	next_id += 1
+		p.text("Label " + text, None, text, size=28, width=360, height=36, Pivot=[0.5, 1], Align="Center", Color=[0.9, 0.95, 1, 1], Outline=0.25, OutlineColor=[0, 0, 0, 1],
+			WorldEntity=entity_id, WorldOffset=[0, 0, 0], WorldScaleWithDistance=True, WorldRefDistance=18, WorldMinScale=0.5, WorldMaxScale=2.0)
+
+
+FEATURE_CONTROLS = {  # the controls of each feature scene's HUD, and the keys it has besides the viewpoints and Tab (scripts/<key>_ui.lua)
+	"lighting": ([("slider", "Sun", "Sun height", 5, 85, 45, 1), ("slider", "Exposure", "Exposure compensation (EV)", -3, 3, -0.3, 0.1),
+		("button", "Bloom", "Bloom: on"), ("button", "Ao", "Ambient occlusion: on"), ("button", "MotionBlur", "Motion blur: on")], ""),
+	"materials": ([("button", "Turntable", "Turntable: off"), ("slider", "WarmLight", "Warm light", 0, 80, 30, 1), ("button", "FillLight", "Toon fill light: on")], ""),
+	"animation": ([("button", "Autopilot", "Autopilot: on"), ("slider", "Speed", "Speed without the autopilot", 0, 3, 1.5, 0.1), ("button", "Attack", "Swing the sword")],
+		"WASD: walk without the autopilot   "),
+	"physics": ([("button", "Launch", "Launch the bouncy balls"), ("button", "Kick", "Kick the crates"), ("button", "Gravity", "Gravity: the earth")],
+		"WASD and Space: the hero   "),
+	"vehicles": ([("bar", "Rpm", "Engine speed"), ("button", "Traction", "Traction control: on"), ("button", "Abs", "ABS: on"), ("button", "Gearbox", "Gearbox: automatic")],
+		"Arrows: drive   Left Shift: handbrake   "),
+	"ai": ([("button", "Noise", "Make a noise"), ("button", "Thief", "Move the thief"), ("button", "Path", "The guard's path: hidden")], ""),
+	"vfx": ([("button", "Campfire", "Campfire: burning"), ("button", "Burst", "Spark burst"), ("slider", "FountainSpeed", "Fountain speed", 0.1, 2, 1, 0.1),
+		("button", "Scorch", "Spawn a scorch mark")], ""),
+}
+
+
+def keys_text(key, extra=""):
+	views = len(VIEWS[key])
+	return extra + ("1-%d: viewpoints   " % views if views > 1 else "") + "Tab: the next demo"
+
+
+def build_feature_ui(font, key, labels):
+	p = Panel(font)
+	controls, extra = FEATURE_CONTROLS[key]
+	add_info(p, key, keys_text(key, extra))
+	add_controls(p, controls)
+	add_labels(p, labels)
+	add_nav(p)
+	return p.write(hud_file(key))
+
+
+def build_hub_ui(font):
+	"""The hub's menu (hub_menu.lua): a button per demo scene, Menu/<first word of its title>, in two columns."""
+	p = Panel(font)
+	p.text("Title", None, "WIWA2 DEMOS", size=64, AnchorMin=[0.5, 0], AnchorMax=[0.5, 0], OffsetMin=[-600, 40], OffsetMax=[600, 116], Align="Center",
+		Outline=0.2, OutlineColor=[0.05, 0.1, 0.3, 1], Shadow=True)
+	p.text("Subtitle", None, DEMO_SCENES[0][3], size=24, AnchorMin=[0.5, 0], AnchorMax=[0.5, 0], OffsetMin=[-600, 120], OffsetMax=[600, 150], Align="Center",
+		Color=[0.85, 0.95, 1, 1], Outline=0.2, OutlineColor=[0, 0, 0, 1])
+	features = DEMO_SCENES[1:]
+	rows = (len(features) + 1) // 2
+	menu = p.w("Panel", "Menu", AnchorMin=[0.5, 0.5], AnchorMax=[0.5, 0.5], OffsetMin=[-560, -rows * 65 + 20], OffsetMax=[560, rows * 65 + 40], Color=[0, 0, 0, 0.3])
+	for i, (key, _, title, about) in enumerate(features):
+		x, y = 20 + (i % 2) * 550, 20 + (i // 2) * 130
+		button = p.w("Button", menu_name(title), menu, OffsetMin=[x, y], OffsetMax=[x + 530, y + 110], Color=MENU_BUTTON[0], HoverColor=MENU_BUTTON[1], PressedColor=MENU_BUTTON[2])
+		p.text("Label", button, "%d  %s" % (i + 1, title), size=28, AnchorMax=[1, 0], OffsetMin=[16, 10], OffsetMax=[-16, 44])
+		p.text("About", button, about, size=16, AnchorMax=[1, 0], OffsetMin=[16, 48], OffsetMax=[-16, 104], Wrap=True, Color=[0.8, 0.88, 1, 1])
+	p.text("Hint", None, "Click a demo or press 1 to %d. In a demo: Menu, Previous and Next at the top, Tab for the next one." % len(features), size=22,
+		AnchorMin=[0.5, 1], AnchorMax=[0.5, 1], OffsetMin=[-700, -56], OffsetMax=[700, -24], Align="Center", Color=[0.85, 0.95, 1, 1], Outline=0.2, OutlineColor=[0, 0, 0, 1])
+	return p.write(hud_file("hub"))
+
+
+def build_ui_scene_hud(font, beacon_id):
+	"""The HUD of the scripts, input and UI scene (demo_ui.lua, input_demo.lua): the widget names and the colours are what tests/src/play/demo_smoke.cpp
+	clicks and reads."""
+	p = Panel(font)
+	f = p.font
+	stats = p.w("VStack", "Stats", OffsetMin=[24, 24], OffsetMax=[344, 184], Color=[0, 0, 0, 0.35], Spacing=8, Padding=[12, 12, 12, 12])
+	p.w("Text", "Title", stats, OffsetMax=[296, 36], Text="SCRIPTS AND UI", Font=f, FontSize=30, Outline=0.15, OutlineColor=[0.05, 0.1, 0.3, 1], Shadow=True)
+	p.w("Text", "Score", stats, OffsetMax=[296, 30], Text="Score 0", Font=f, Color=[1, 0.85, 0.3, 1])
+	p.w("Bar", "Health", stats, OffsetMax=[296, 22], Value=0.75, Color=[0.9, 0.25, 0.25, 1])
+	controls = p.w("VStack", "Controls", AnchorMin=[0, 1], AnchorMax=[0, 1], OffsetMin=[24, -148], OffsetMax=[344, -24], Color=[0, 0, 0, 0.35], Spacing=10, Padding=[12, 12, 12, 12])
+	p.button("ToggleLight", controls, "Light: on", height=44, size=22, colors=([0.2, 0.35, 0.6, 1], [0.3, 0.5, 0.85, 1], [0.15, 0.25, 0.45, 1]))
+	p.w("Slider", "LightIntensity", controls, OffsetMax=[296, 24], Color=[0.95, 0.6, 0.1, 1], Value=2, MaxValue=20, Step=0.5)
+	tag = p.w("VStack", "BeaconTag", Pivot=[0.5, 1], OffsetMax=[150, 52], Color=[0, 0, 0, 0.5], Spacing=4, Padding=[6, 4, 6, 4], WorldEntity=beacon_id,
+		WorldOffset=[0, 1.2, 0], WorldScaleWithDistance=True, WorldRefDistance=14, WorldMinScale=0.4, WorldMaxScale=1.5)
+	p.w("Text", "BeaconName", tag, OffsetMax=[138, 22], Text="Beacon", Font=f, FontSize=18, Align="Center")
+	p.w("Bar", "BeaconBar", tag, OffsetMax=[138, 14], Value=0.3, Color=[0.2, 0.9, 1, 1], BackgroundColor=[0.9, 0.2, 0.9, 0.8])
+	info = p.w("VStack", "InputInfo", AnchorMin=[1, 0], AnchorMax=[1, 0], OffsetMin=[-344, 24], OffsetMax=[-24, 214], Color=[0, 0, 0, 0.35], Spacing=8, Padding=[12, 12, 12, 12])
+	p.w("Text", "Device", info, OffsetMax=[296, 26], Text="Device: keyboard_mouse", Font=f, FontSize=20)
+	p.w("Text", "Move", info, OffsetMax=[296, 26], Text="Move: 0.00, 0.00", Font=f, FontSize=20)
+	p.w("Text", "JumpKey", info, OffsetMax=[296, 26], Text="Jump: Key.Space", Font=f, FontSize=20, Color=[1, 0.85, 0.3, 1])
+	p.button("RebindJump", info, "Rebind Jump", height=44, size=22, colors=([0.55, 0.2, 0.5, 1], [0.75, 0.3, 0.7, 1], [0.4, 0.15, 0.35, 1]))
+	p.w("Text", "Hint", AnchorMin=[0.5, 1], AnchorMax=[0.5, 1], OffsetMin=[-420, -52], OffsetMax=[420, -16], Text=keys_text("ui", "WASD, Space and the left mouse button: the ball   "),
+		Font=f, FontSize=22, Align="Center", Color=[0.85, 0.95, 1, 1], Outline=0.2, OutlineColor=[0, 0, 0, 1])
+	# a ViewImage: the wizard portrait that the "Wizard portrait" ViewHost of the scene draws (views.md), at the bottom right
+	p.w("ViewImage", "WizardPortrait", AnchorMin=[1, 1], AnchorMax=[1, 1], OffsetMin=[-264, -264], OffsetMax=[-24, -24], ViewName="wizard_portrait")
+	add_nav(p)
 	# a Video (video.md): the intro clip (assets/video/Intro.mp4, written by `wiwa_tests --write-demo-video`), full screen and hidden until the "Play intro" button
 	# shows and plays it (demo_ui.lua); it is the last widget, so it covers the rest. The Skip button inside it stops the video.
-	w(next_id, "Button", "PlayIntro", AnchorMin=[0.5, 1], AnchorMax=[0.5, 1], OffsetMin=[-110, -108], OffsetMax=[110, -64], Color=[0.15, 0.45, 0.35, 1],
-		HoverColor=[0.25, 0.65, 0.5, 1], PressedColor=[0.1, 0.3, 0.25, 1])
-	w(next_id + 1, "Text", "Label", next_id, AnchorMax=[1, 1], OffsetMin=[0, 9], OffsetMax=[0, 0], Text="Play intro", Font=font_ref, FontSize=22, Align="Center")
-	w(next_id + 2, "Video", "Intro", AnchorMin=[0, 0], AnchorMax=[1, 1], OffsetMin=[0, 0], OffsetMax=[0, 0], Visible=False, AutoPlay=False, Fit="Letterbox",
+	p.button("PlayIntro", None, "Play intro", height=44, size=22, colors=([0.15, 0.45, 0.35, 1], [0.25, 0.65, 0.5, 1], [0.1, 0.3, 0.25, 1]),
+		AnchorMin=[0.5, 1], AnchorMax=[0.5, 1], OffsetMin=[-110, -108], OffsetMax=[110, -64])
+	intro = p.w("Video", "Intro", AnchorMin=[0, 0], AnchorMax=[1, 1], OffsetMin=[0, 0], OffsetMax=[0, 0], Visible=False, AutoPlay=False, Fit="Letterbox",
 		Video=ref(guid("asset:video/Intro.mp4")))
-	w(next_id + 3, "Button", "Skip", next_id + 2, AnchorMin=[1, 1], AnchorMax=[1, 1], OffsetMin=[-184, -72], OffsetMax=[-24, -24], Color=[0.5, 0.25, 0.15, 1],
-		HoverColor=[0.7, 0.4, 0.25, 1], PressedColor=[0.35, 0.18, 0.1, 1])
-	w(next_id + 4, "Text", "Label", next_id + 3, AnchorMax=[1, 1], OffsetMin=[0, 9], OffsetMax=[0, 0], Text="Skip", Font=font_ref, FontSize=22, Align="Center")
-	next_id += 5
-	rel = "ui/demo_hud.wuipanel"
-	write_json(rel, {"version": 1, "referenceResolution": [1920, 1080], "match": 0.5, "nextId": next_id, "widgets": widgets})
-	return write_meta(rel, "UiPanelImporter", 1)
+	p.button("Skip", intro, "Skip", height=48, size=22, colors=([0.5, 0.25, 0.15, 1], [0.7, 0.4, 0.25, 1], [0.35, 0.18, 0.1, 1]),
+		AnchorMin=[1, 1], AnchorMax=[1, 1], OffsetMin=[-184, -72], OffsetMax=[-24, -24])
+	return p.write(hud_file("ui"))
 
 
 def build_input():
@@ -2072,14 +2702,20 @@ def euler(x=0, y=0, z=0):
 IDENTITY = [0, 0, 0, 1]
 
 
+def entity_guid(scene_key, name):
+	"""The id of an entity: from the scene's key and the entity's name, so that the scenes of the demo never share an id (a Camera in each)."""
+	return guid("entity:%s/%s" % (scene_key, name))
+
+
 class Scene:
-	def __init__(self):
+	def __init__(self, key):
+		self.key = key
 		self.entities = []
 		self.ids = {}
 
 	def add(self, name, parent=None, pos=(0, 0, 0), rot=None, scale=(1, 1, 1), **components):
 		assert name not in self.ids, "duplicate entity name " + name
-		eid = guid("entity:" + name)
+		eid = entity_guid(self.key, name)
 		self.ids[name] = eid
 		comps = {"Name": {"Value": name}, "Transform": {"Position": list(pos), "Rotation": list(rot or IDENTITY), "Scale": list(scale)}}
 		comps.update(components)
@@ -2093,11 +2729,27 @@ class Scene:
 BOX = {"Shape": "Box", "Size": [0.5, 0.5, 0.5], "Offset": [0, 0, 0]}
 BALL = {"Shape": "Sphere", "Size": [0.5, 0.5, 0.5], "Offset": [0, 0, 0]}
 
+# The viewpoints of each scene, (position, pitch, yaw) in degrees: the camera starts at the first, keys 1 to 9 go to the entities "View N" (camera_rig.lua).
+# The places of things are those of the hall the demo used to be, so a viewpoint of one scene is never far from what it looks at.
+VIEWS = {
+	"hub": [((0, 3.2, 10), -10, 0)],
+	"lighting": [((0, 4.5, 17), -8, 0), ((0, 6, 9), -20, 0), ((-9, 3, 6), -10, -30)],
+	"materials": [((0, 5, -4), -6, 0), ((-6, 2.6, -2), -8, 0), ((0, 3, -9), -10, 0)],
+	"animation": [((0, 2.6, 3.5), -5, 180), ((-9, 2.5, 10), -6, -90)],
+	"physics": [((11, 5, 11), -22, 0), ((-10, 5, 19), -16, 0), ((24, 6, 14), -22, 0)],
+	"vehicles": [((0, 14, 66), -22, 0), ((6, 3, 42), -10, 0)],
+	"ai": [((-30, 22, 24), -45, 0), ((-30, 30, 0.1), -89, 0)],
+	"vfx": [((0, 5, 14), -18, 0), ((20, 3, -1), -12, 0)],
+	"ui": [((0, 4.5, 17), -8, 0), ((2, 4, 14), -14, 0)],
+}
 
-def build_scene(g):
-	"""g: dict of guids: shapes, mat (name -> guid), scripts (name -> guid), ui, models (name -> (guid, clips)), lamp, bouncy, env, ..."""
-	s = Scene()
+HUD_SCRIPT = {"hub": "hub_menu", "lighting": "lighting_ui", "materials": "materials_ui", "animation": "animation_ui", "physics": "physics_ui",
+	"vehicles": "vehicles_ui", "ai": "ai_ui", "vfx": "vfx_ui", "ui": "demo_ui"}
 
+
+def build_scenes(g):
+	"""g: dict of guids: shapes, mat (name -> guid), scripts (name -> guid), huds (key -> guid), models (name -> (guid, clips)), lamp, bouncy, env, ...
+	Returns key -> (Scene, labels): labels are (text, entity id) for the texts over places of the scene."""
 	def mesh(shape, material, static=False):
 		renderer = {"Mesh": ref(g["shapes"], MESH[shape]), "Materials": [ref(g["mat"][material])]}
 		if static:
@@ -2119,26 +2771,43 @@ def build_scene(g):
 	def body(motion="Dynamic", **extra):
 		return {"RigidBody": dict({"Motion": motion}, **extra)}
 
-	# --- the camera, the sun, the HUD -----------------------------------------------------------------------
-	s.add("Camera", pos=(0, 4.5, 17), rot=qaxis((1, 0, 0), -8),
-		Camera={"Projection": "Perspective", "FovY": 55, "Near": 0.1, "Far": 400, "OrthoSize": 10, "Primary": True}, **script("camera_rig"))
-	s.add("Audio listener", "Camera", AudioListener={"Active": True})
-	s.add("Audio demo", pos=(-3, 1.5, 3), AudioEmitter={"Event": "Amb_Hall_loop", "PlayOnStart": True, "AttenuationScale": 4.0}, **script("audio_demo", event="Beacon_Blip", every=4))
-	s.add("Sun", pos=(0, 20, 0), rot=euler(-45, 35, 0), **light("Directional", (1, 0.96, 0.9, 1), 3.5, shadows=True))
-	s.add("Hud", UICanvas={"Panel": ref(g["ui"]), "SortOrder": 0, "Visible": True}, **script("demo_ui"))
-	s.add("Demo light", pos=(-5, 3, 6), **light("Point", (0.6, 0.8, 1, 1), 2, rng=14))
-	# a 3D widget of the HUD: the wizard turning in a view of its own, shown by the ViewImage "WizardPortrait" of the HUD
-	s.add("Wizard portrait", ViewHost={"Name": "wizard_portrait", "Model": ref(g["models"]["Wizard"][0]), "Target": [0, 1, 0], "Distance": 5.5, "Yaw": 20, "Pitch": 8,
-		"Fov": 35, "SpinSpeed": 40, "Width": 256, "Height": 256, "Profile": "Preview", "Transparent": True, "Continuous": True})
-	s.add("Beacon", pos=(-3, 1.5, 3), scale=(0.3, 0.3, 0.3), **mesh("sphere", "hologram"))
+	features = [k for k, _, _, _ in DEMO_SCENES[1:]]
 
-	# --- ground: textured, with the physics ground under every station --------------------------------------
-	s.add("World")
-	s.add("Ground", "World", scale=(120, 1, 120), **mesh("plane_tiled", "ground", static=True))
-	s.add("Physics demo")
-	s.add("Ground collider", "Physics demo", pos=(0, -0.5, 0), scale=(120, 1, 120), Collider=BOX)
+	def base(key):
+		"""What every scene has: the camera (and its viewpoints), the listener, the sun, the ground (with a collider) and the HUD."""
+		s = Scene(key)
+		views = VIEWS[key]
+		position, pitch, yaw = views[0]
+		s.add("Camera", pos=position, rot=euler(pitch, yaw),
+			Camera={"Projection": "Perspective", "FovY": 55, "Near": 0.1, "Far": 400, "OrthoSize": 10, "Primary": True}, **script("camera_rig"))
+		s.add("Audio listener", "Camera", AudioListener={"Active": True})
+		s.add("Views")
+		for i, (position, pitch, yaw) in enumerate(views):
+			s.add("View %d" % (i + 1), "Views", pos=position, rot=euler(pitch, yaw))
+		s.add("Sun", pos=(0, 20, 0), rot=euler(-45, 35, 0), **light("Directional", (1, 0.96, 0.9, 1), 3.5, shadows=True))
+		hud = script(HUD_SCRIPT[key])
+		if key != "hub":
+			i = features.index(key)
+			hud.update(script("demo_nav", previous_scene=scene_path(features[i - 1]), next_scene=scene_path(features[(i + 1) % len(features)])))
+		s.add("Hud", UICanvas={"Panel": ref(g["huds"][key]), "SortOrder": 0, "Visible": True}, **hud)
+		s.add("World")
+		s.add("Ground", "World", scale=(120, 1, 120), **mesh("plane_tiled", "ground", static=True))
+		s.add("Ground collider", "World", pos=(0, -0.5, 0), scale=(120, 1, 120), Collider=BOX)
+		return s
 
-	# --- station 1: lighting and post ------------------------------------------------------------------------
+	scenes = {}
+
+	# --- the hub: a menu over a turning ring ------------------------------------------------------------------------
+	s = base("hub")
+	s.add("Hub podium", "World", pos=(0, 0.2, 0), scale=(5, 0.4, 5), **mesh("cylinder", "podium"))
+	s.add("Hub ring", "World", pos=(0, 2.2, 0), rot=qaxis((1, 0, 0), 90), scale=(2.4, 2.4, 2.4), **merge(mesh("torus", "ring_blue"), script("spinner", degrees_per_second=40)))
+	s.add("Hub sphere", "World", pos=(0, 2.2, 0), scale=(1.2, 1.2, 1.2), **mesh("sphere", "gold"))
+	for name, material, color, x, phase in (("Hub neon cyan", "neon_cyan", (0.1, 0.9, 1, 1), -3.5, 0.0), ("Hub neon magenta", "neon_magenta", (1, 0.1, 0.8, 1), 3.5, 2.1)):
+		s.add(name, "World", pos=(x, 1.6, 1), scale=(0.7, 0.7, 0.7), **merge(mesh("sphere", material), light("Point", color, 8, rng=6), script("bobber", phase=phase)))
+	scenes["hub"] = (s, [])
+
+	# --- lighting and post --------------------------------------------------------------------------------------------
+	s = base("lighting")
 	s.add("Lighting station", "World")
 	s.add("Podium", "Lighting station")
 	s.add("Podium base", "Podium", pos=(0, 0.2, 0), scale=(5, 0.4, 5), **mesh("cylinder", "podium"))
@@ -2146,7 +2815,7 @@ def build_scene(g):
 	s.add("Steel cylinder", "Podium", pos=(1.4, 1.2, 0), scale=(1.0, 1.6, 1.0), **mesh("cylinder", "steel"))
 	s.add("Blue ring", "Podium", pos=(0, 3.6, 0), rot=qaxis((1, 0, 0), 90), scale=(2.4, 2.4, 2.4), **merge(mesh("torus", "ring_blue"), script("spinner", degrees_per_second=90)))
 	s.add("Podium spot", "Podium", pos=(0, 7, 5), rot=qaxis((1, 0, 0), -53), **merge(light("Spot", (1, 0.85, 0.6, 1), 60, rng=18, inner=14, outer=24, shadows=True), script("light_pulse", amplitude=25, speed=6)))
-	for i, (name, x, z) in enumerate((("L4", -6, -4), ("R4", 6, -4), ("L8", -6, -8), ("R8", 6, -8))):
+	for name, x, z in (("L4", -6, -4), ("R4", 6, -4), ("L8", -6, -8), ("R8", 6, -8)):
 		s.add("Column " + name, "Lighting station", pos=(x, 2.5, z), scale=(1, 5, 1), **merge(mesh("cube", "column"), {"Collider": BOX}))
 	for i, (x, z, y) in enumerate(((3.2, -3, 0.4), (4.4, -3.6, 0.4), (3.8, -3.3, 1.2))):
 		s.add("Crate " + "ABC"[i], "Lighting station", pos=(x, y, z), scale=(0.8, 0.8, 0.8), **merge(mesh("cube", "crate"), {"Collider": BOX}, body() if i else {}))
@@ -2158,8 +2827,10 @@ def build_scene(g):
 		z = -2 if x else -11
 		s.add("Street lamp %d" % (i + 1), "Lighting station", pos=(x, 0, z), PrefabInstance={"Prefab": ref(g["lamp"])})
 	add_nested_lamps(s, g)
+	scenes["lighting"] = (s, [])
 
-	# --- station 2: materials and shaders --------------------------------------------------------------------
+	# --- materials and shaders ----------------------------------------------------------------------------------------
+	s = base("materials")
 	s.add("Materials station", "World")
 	s.add("Backdrop", "Materials station", pos=(0, 5, -28), scale=(40, 10, 1), **mesh("cube", "backdrop", static=True))
 	s.add("PBR grid", "Materials station")
@@ -2179,8 +2850,10 @@ def build_scene(g):
 		s.add(name, "Toon showcase", pos=(x - 3, 0.9, -6.5), rot=qaxis((1, 0, 0), 90) if shape == "torus" else None, scale=(size, size, size), **mesh(shape, material))
 	s.add("Toon fill light", "Toon showcase", pos=(-8, 4, -4), **light("Point", (1, 0.9, 0.8, 1), 25, rng=12))
 	s.add("Warm point light", "Materials station", pos=(3, 3, -8), **light("Point", (1, 0.6, 0.3, 1), 30, rng=12))
+	scenes["materials"] = (s, [])
 
-	# --- station 3: models and animation ---------------------------------------------------------------------
+	# --- models and animation -----------------------------------------------------------------------------------------
+	s = base("animation")
 	s.add("Animation station", "World")
 	# the warrior plays an animation graph (scripts/gen_demo_graph.py writes it; run that first): the Animator is given here so that the prefab expander does not add its own,
 	# with the same skeleton reference the prefab's skinned node holds (the legacy local id 1 of the model, which the catalog redirects)
@@ -2195,8 +2868,11 @@ def build_scene(g):
 		guid_model, clips = g["models"][name]
 		wanted = (CHARACTERS.get(name) or MONSTERS.get(name))
 		s.add(name, "Animation station", pos=(x, 0, z), PrefabInstance={"Prefab": ref(guid_model)}, **script("clip_player", clip=pick_clip(clips, wanted)))
+	scenes["animation"] = (s, [])
 
-	# --- station 4: physics ----------------------------------------------------------------------------------
+	# --- physics, joints and character controllers ---------------------------------------------------------------------
+	s = base("physics")
+	s.add("Physics demo")
 	s.add("Ramp", "Physics demo", pos=(10.2, 1.1, 1.5), rot=qaxis((0, 0, 1), -20), scale=(4, 0.3, 3), **merge(mesh("cube", "steel"), {"Collider": BOX}))
 	s.add("Back wall", "Physics demo", pos=(14.6, 0.6, 1.5), scale=(0.3, 1.2, 3.4), **merge(mesh("cube", "plain"), {"Collider": BOX}))
 	s.add("Side wall 0", "Physics demo", pos=(11.2, 0.6, 0), scale=(7, 1.2, 0.2), **merge(mesh("cube", "plain"), {"Collider": BOX}))
@@ -2207,10 +2883,8 @@ def build_scene(g):
 	for i, (x, y, z) in enumerate(((8.6, 5, 1), (9.2, 7, 2), (9.6, 9, 1.5))):
 		s.add("Bouncy ball %d" % (i + 1), "Physics demo", pos=(x, y, z), scale=(0.6, 0.6, 0.6),
 			**merge(mesh("sphere", "gold"), {"Collider": dict(BALL, Material=ref(g["bouncy"]))}, body()))
-	s.add("Input demo", "Physics demo", pos=(4, 0.4, 6), scale=(0.8, 0.8, 0.8), **merge(mesh("sphere", "carpaint"), {"Collider": BALL}, body(MassOverride=1), script("input_demo", speed=4, jump_speed=6)))
 	s.add("Trigger zone", "Physics demo", pos=(6.5, 1, 1.5), scale=(2, 2, 3), **merge({"Collider": dict(BOX, IsTrigger=True)}, light("Point", (0.3, 1, 0.5, 1), 0, rng=7), script("trigger_zone", glow=25)))
 
-	# --- station 5: joints ------------------------------------------------------------------------------------
 	s.add("Joints demo")
 	s.add("Door post", "Joints demo", pos=(-14.5, 1.2, 8), scale=(0.2, 2.4, 0.2), **merge(mesh("cube", "steel"), {"Collider": BOX}))
 	s.add("Door", "Joints demo", pos=(-13.65, 1.1, 8), scale=(1.5, 2.0, 0.12), **merge(mesh("cube", "crate"), {"Collider": BOX}, body(),
@@ -2237,7 +2911,6 @@ def build_scene(g):
 		{"Joint": {"Type": "Fixed", "Connected": s.ids["Weak beam"], "AnchorA": [0, 0.25, 0], "AnchorB": [0, -0.15, 0], "BreakForce": 2500}}, script("joint_breaker")))
 	s.add("Wrecker", "Joints demo", pos=(-5.8, 4.7, 6.5), scale=(0.7, 0.7, 0.7), **merge(mesh("sphere", "steel"), {"Collider": BALL}, body(), script("joint_wrecker")))
 
-	# --- station 6: character controller ---------------------------------------------------------------------
 	s.add("Character demo")
 	cc = {"CharacterController": {"Offset": [0, 0.9, 0]}}
 	s.add("Hero", "Character demo", pos=(19, 0, 1.5), **merge(cc, script("character_demo", speed=4, jump_speed=6)))
@@ -2249,37 +2922,59 @@ def build_scene(g):
 	s.add("Walkable ramp", "Character demo", pos=(26.648, 1.413, 5.5), rot=qaxis((0, 0, 1), 30), scale=(6, 0.2, 5), **merge(mesh("cube", "steel"), {"Collider": BOX}))
 	s.add("Steep ramp", "Character demo", pos=(25.0866, 1.682, -1.2), rot=qaxis((0, 0, 1), 60), scale=(4, 0.2, 2), **merge(mesh("cube", "plastic_red"), {"Collider": BOX}))
 	s.add("Sliding platform", "Character demo", pos=(28, 0.15, -4.5), scale=(2.4, 0.3, 2.4), **merge(mesh("cube", "gold"), {"Collider": BOX}, body("Kinematic"), script("slide_platform", amplitude=2.5, speed=0.6)))
+	labels = []
+	for text, position in (("Rigid bodies", (11, 3, 1.5)), ("Joints", (-11, 6.5, 8)), ("Character controller", (24, 4, 1))):
+		labels.append((text, s.add("Label " + text, "World", pos=position)))
+	scenes["physics"] = (s, labels)
 
-	# --- station 7: decals -----------------------------------------------------------------------------------
-	add_decals(s, g)
+	# --- vehicles -----------------------------------------------------------------------------------------------------
+	s = base("vehicles")
+	add_vehicles(s, g)
+	scenes["vehicles"] = (s, [])
 
-	# --- station 8: particle effects -------------------------------------------------------------------------
-	add_vfx(s, g)
+	# --- navigation and behaviour trees ---------------------------------------------------------------------------------
+	s = base("ai")
 	add_navigation(s, g)
 	add_ai(s, g)
+	assert s.ids["Navmesh volume"] == guid("entity:ai/Navmesh volume"), "NAV_FILE is named after the volume's id"
+	scenes["ai"] = (s, [])
 
-	# --- station 9: vehicles ---------------------------------------------------------------------------------
-	add_vehicles(s, g)
+	# --- particles and decals ----------------------------------------------------------------------------------------
+	s = base("vfx")
+	add_decals(s, g)
+	# what the bullet holes and the scorch mark are projected onto (a column and a crate of the lighting scene, where the hall had them)
+	s.add("Decal column", "Decals station", pos=(-6, 2.5, -4), scale=(1, 5, 1), **merge(mesh("cube", "column"), {"Collider": BOX}))
+	s.add("Scorched crate", "Decals station", pos=(3.2, 0.4, -3), scale=(0.8, 0.8, 0.8), **merge(mesh("cube", "crate"), {"Collider": BOX}))
+	add_vfx(s, g)
+	scenes["vfx"] = (s, [])
 
-	# --- station labels (world-anchored text in the HUD) -----------------------------------------------------
-	labels = []
-	for text, position in (("1  Lighting and post", (0, 6.5, 0)), ("2  Materials and shaders", (0, 4.5, -16)), ("3  Models and animation", (0, 3.6, 9)),
-			("4  Physics", (11, 3, 1.5)), ("5  Joints", (-11, 6.5, 8)), ("6  Character controller", (24, 4, 1)), ("7  Scripts, input and UI", (2, 2.6, 6))):
-		label_id = s.add("Label " + text[0], "World", pos=position)
-		labels.append((text, label_id))
+	# --- scripts, input, UI, audio and video -----------------------------------------------------------------------------
+	s = base("ui")
+	s.add("Audio demo", pos=(-3, 1.5, 3), AudioEmitter={"Event": "Amb_Hall_loop", "PlayOnStart": True, "AttenuationScale": 4.0}, **script("audio_demo", event="Beacon_Blip", every=4))
+	s.add("Demo light", pos=(-5, 3, 6), **light("Point", (0.6, 0.8, 1, 1), 2, rng=14))
+	# a 3D widget of the HUD: the wizard turning in a view of its own, shown by the ViewImage "WizardPortrait" of the HUD
+	s.add("Wizard portrait", ViewHost={"Name": "wizard_portrait", "Model": ref(g["models"]["Wizard"][0]), "Target": [0, 1, 0], "Distance": 5.5, "Yaw": 20, "Pitch": 8,
+		"Fov": 35, "SpinSpeed": 40, "Width": 256, "Height": 256, "Profile": "Preview", "Transparent": True, "Continuous": True})
+	s.add("Beacon", pos=(-3, 1.5, 3), scale=(0.3, 0.3, 0.3), **mesh("sphere", "hologram"))
+	s.add("Beacon stand", "World", pos=(-3, 0.1, 3), scale=(2.4, 0.2, 2.4), **mesh("cylinder", "podium"))
+	s.add("Input demo", pos=(4, 0.4, 6), scale=(0.8, 0.8, 0.8), **merge(mesh("sphere", "carpaint"), {"Collider": BALL}, body(MassOverride=1), script("input_demo", speed=4, jump_speed=6)))
+	for i, (x, z) in enumerate(((7, 3), (7.9, 3.4), (1.5, 2))):
+		s.add("Push crate %d" % (i + 1), "World", pos=(x, 0.4, z), scale=(0.8, 0.8, 0.8), **merge(mesh("cube", "crate"), {"Collider": BOX}, body()))
+	scenes["ui"] = (s, [])
+	return scenes
 
-	return s, labels
 
-
-def scene_settings(g):
-	return {"source": "file", "environment": ref(g["env"]), "background": "sky", "ambient": 0.9, "rotation": 120,
-		"scripts": [ref(g["scripts"]["scene_overlay"])],
+def scene_settings(g, key):
+	settings = {"source": "file", "environment": ref(g["env"]), "background": "sky", "ambient": 0.9, "rotation": 120,
 		"exposure": {"auto": True, "compensation": -0.3, "minEv": -3, "maxEv": 3, "adaptSpeed": 2},
 		"bloom": {"enabled": True, "threshold": 1, "knee": 0.5, "intensity": 0.07},
 		"tonemap": {"operator": "aces", "contrast": 1.06, "saturation": 1.12, "temperature": 0.05, "vignette": 0.25},
 		"ao": {"enabled": True, "radius": 1.2, "power": 1.6},
 		"motionBlur": {"enabled": True},
 		"physics": vehicle_physics_settings()}
+	if key == "physics":
+		settings["scripts"] = [ref(g["scripts"]["scene_overlay"])]
+	return settings
 
 
 HEAD_NODE = node_id("Street lamp/Head")  # the lamp head, in the street lamp prefab
@@ -2328,68 +3023,6 @@ def build_lamp(g):
 
 
 def main():
-	if "--vehicles-only" in sys.argv:
-		# adds only the driving station (its car tuning, the track's surfaces, drive.lua and the Driving input actions) to the scene that is already
-		# written, without downloading anything
-		g = {"shapes": guid("asset:models/shapes/shapes.glb"), "mat": {name: guid("asset:materials/%s.wmat" % name) for name in ("plain", "toon_teal", "carpaint", "glass", "steel")}}
-		g.update(write_vehicle_assets())
-		write("scripts/drive.lua", SCRIPTS["drive.lua"])
-		g["scripts"] = {"drive": write_meta("scripts/drive.lua", "ScriptImporter", 1)}
-		input_map = build_input()
-		(ROOT / "editor" / "input.wsettings").write_text(json.dumps({"defaultMap": input_map}, indent=2) + "\n", encoding="utf-8", newline="\n")
-		patch_scene_with_vehicles(g)
-		print("added the driving station to the demo scene")
-		return
-
-	if "--ai-only" in sys.argv:
-		# adds only the behaviour tree demo (the guard's tree and the two scripts it uses, the guard, the thief and the noise maker) to the scene that is
-		# already written, without downloading anything and without touching the .meta files of anything else
-		for name in ("heard_check.lua", "noise_maker.lua"):
-			write("scripts/" + name, SCRIPTS[name])
-		scripts = {name[:-4]: write_meta("scripts/" + name, "ScriptImporter", 1) for name in ("heard_check.lua", "noise_maker.lua")}
-		write_ai_assets()
-		g = {"shapes": guid("asset:models/shapes/shapes.glb"), "scripts": scripts,
-			"mat": {name: guid("asset:materials/%s.wmat" % name) for name in ("toon_red", "toon_yellow", "marker")}}
-		patch_scene_with_ai(g)
-		print("added the behaviour tree demo to the demo scene")
-		return
-
-	if "--nav-only" in sys.argv:
-		# adds only the navigation station to the scene that is already written (its script, its navmesh asset record and nav.wsettings too), without
-		# downloading anything and without touching the .meta files of anything else: the navmesh itself is baked by the editor afterwards (--nav-bake)
-		write("scripts/nav_patrol.lua", SCRIPTS["nav_patrol.lua"])
-		g = {"shapes": guid("asset:models/shapes/shapes.glb"), "mat": {"crate": guid("asset:materials/crate.wmat"), "marker": guid("asset:materials/marker.wmat"),
-			"neon_cyan": guid("asset:materials/neon_cyan.wmat"), "neon_magenta": guid("asset:materials/neon_magenta.wmat"), "neon_orange": guid("asset:materials/neon_orange.wmat")},
-			"scripts": {"nav_patrol": write_meta("scripts/nav_patrol.lua", "ScriptImporter", 1)}}
-		write_nav_settings()
-		patch_scene_with_nav(g)
-		print("added the navigation station to the demo scene")
-		return
-
-	if "--nested-only" in sys.argv:
-		# adds only the lamp pair to the scene that is already written (and its prefab), without downloading anything or touching other .meta files
-		g = {"lamp": guid("asset:prefabs/street_lamp.wprefab")}
-		g["lamp_pair"] = build_lamp_pair(g)
-		patch_scene_with_nested(g)
-		print("added the lamp pair to the demo scene")
-		return
-
-	if "--vfx-only" in sys.argv:
-		# adds only the particle effects to the scene that is already written, without downloading anything
-		g = {"vfx": vfx_effects(), "shapes": guid("asset:models/shapes/shapes.glb"), "mat": {"crate": guid("asset:materials/crate.wmat")}}
-		g["scripts"] = build_scripts()
-		patch_scene_with_vfx(g)
-		print("added the particle effects to the demo scene")
-		return
-
-	if "--decals-only" in sys.argv:
-		# adds only the decals to the scene that is already written, without downloading anything
-		g = {"decals": decal_materials()}
-		g["scripts"] = build_scripts()
-		patch_scene_with_decals(g)
-		print("added the decals to the demo scene")
-		return
-
 	g = {}
 	write("models/shapes/shapes.glb", build_glb(), binary=True)
 	g["shapes"] = write_meta("models/shapes/shapes.glb", "ModelImporter", 7, {"generatePhysicsShapes": False},
@@ -2411,6 +3044,9 @@ def main():
 	font = write_meta("fonts/Lato-Regular.ttf", "FontImporter", 1, {"pixelSize": 48, "sdfRange": 8, "charset": "latin1"})
 
 	import_audio()
+	# the record of the intro clip, so that the guid the HUD refers to is the one the clip gets (the file comes from wiwa_tests --write-demo-video)
+	(ASSETS / "video").mkdir(parents=True, exist_ok=True)
+	write_meta("video/Intro.mp4", "VideoImporter", 1)
 
 	write_json("physics/bouncy.wphysmat", {"friction": 0.4, "restitution": 0.75, "restitutionCombine": "Max"})
 	g["bouncy"] = write_meta("physics/bouncy.wphysmat", "PhysicsMaterialImporter", 2)
@@ -2420,18 +3056,38 @@ def main():
 	g["lamp"] = build_lamp(g)
 	g["lamp_pair"] = build_lamp_pair(g)
 
-	scene, labels = build_scene(g | {"ui": "0" * 32})  # the HUD guid does not depend on its content
-	g["ui"] = build_ui(font, scene.ids["Beacon"], labels)
-	scene, labels = build_scene(g)
+	g["huds"] = {key: guid("asset:" + hud_file(key)) for key, _, _, _ in DEMO_SCENES}  # a panel's guid does not depend on its content
+	scenes = build_scenes(g)
+	for key, _, _, _ in DEMO_SCENES:
+		scene, labels = scenes[key]
+		if key == "hub":
+			made = build_hub_ui(font)
+		elif key == "ui":
+			made = build_ui_scene_hud(font, scene.ids["Beacon"])
+		else:
+			made = build_feature_ui(font, key, labels)
+		assert made == g["huds"][key]
 
-	write_json("scenes/demo.wscene", {"name": "Demo hall", "settings": scene_settings(g), "entities": scene.entities})
-	write_meta("scenes/demo.wscene", "SceneImporter", 5, fixed_guid=SCENE_GUID)
+	scene_guids = []
+	entities = 0
+	for key, rel, title, _ in DEMO_SCENES:
+		scene, _ = scenes[key]
+		write_json(rel, {"name": title, "settings": scene_settings(g, key), "entities": scene.entities})
+		scene_guids.append(write_meta(rel, "SceneImporter", 5, fixed_guid=SCENE_GUID if key == "hub" else None))
+		entities += len(scene.entities)
+
+	# every scene of the demo goes into a build (load_scene finds them in the pak), the hub first
+	build_settings = ROOT / "editor" / "build_settings.json"
+	settings = json.loads(build_settings.read_text(encoding="utf-8")) if build_settings.exists() else {}
+	settings["defaultScene"] = SCENE_GUID
+	settings["scenes"] = scene_guids
+	build_settings.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 	write_nav_settings()
 	write_ai_assets()
 	# the project's default input map is the demo's
 	(ROOT / "editor" / "input.wsettings").write_text(json.dumps({"defaultMap": input_map}, indent=2) + "\n", encoding="utf-8", newline="\n")
-	print("wrote %d entities, %d materials, %d scripts" % (len(scene.entities), len(g["mat"]), len(g["scripts"])))
+	print("wrote %d scenes, %d entities, %d materials, %d scripts" % (len(DEMO_SCENES), entities, len(g["mat"]), len(g["scripts"])))
 
 
 if __name__ == "__main__":
