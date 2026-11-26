@@ -27,7 +27,7 @@ The test sources are in `tests/src/<area>/` (`*_smoke_test.cpp`, `anim_*_checks.
 | `--scene-smoke` | tests | scene save, cook, load, prefab overrides, settings round trips |
 | `--script-smoke` | tests | Lua runtime, play mode state machine, scene clone, LuaLS stubs |
 | `--ui-smoke` / `--ui-editor-smoke` | tests | game UI (files, layout, interaction, edit model) / UI Editor panel for 130 frames |
-| `--physics-smoke` / `--physics-panel-smoke` | tests | Jolt behaviour, queries, dispatch, repeatability / Physics panel for 130 frames |
+| `--physics-smoke` / `--physics-panel-smoke` | tests | Jolt behaviour, queries, dispatch, repeatability, vehicles (tire model, assists, scene sync) / Physics panel for 130 frames, then the vehicle editor for 120 |
 | `--input-smoke` / `--input-panel-smoke` | tests | input, actions, rebinding, `.winput`, Lua API / Input panel for 130 frames |
 | `--audio-smoke` / `--audio-panel-smoke` | tests | audio module on the Null backend, soundbank asset and metadata, emitters and play-mode sync, settings, Lua API, event browser model, audition (and the Wwise backend in a `WWISESDK` build, with banks in `editor/assets/audio`) / Audio panel for 130 frames |
 | `--ai-smoke` / `--ai-panel-smoke` | tests | behaviour tree format and validator, node semantics, blackboard, MoveTo on a baked navmesh, controllers, Lua leaves and the `AI` API, perception, the edit model, gizmo shapes / the tree editor in the Asset Editor for 120 frames. |
@@ -69,6 +69,7 @@ Rules that cut across areas:
 | VFX (GPU particles, `.wfx` effects, `ParticleSystem`, the VFX editor, `Vfx` Lua API) | [vfx.md](docs/superpowers/documentation/vfx.md) | `engine/src/scene/particle_*`, `engine/src/renderer/particles`, `engine/src/renderer/passes/particle_*`, `editor/src/asset_editor/vfx_*` |
 | Lua scripting (user API: [docs/scripting.md](docs/scripting.md)) | [scripting.md](docs/superpowers/documentation/scripting.md) | `engine/src/scripting` |
 | Physics (Jolt) | [physics.md](docs/superpowers/documentation/physics.md) | `engine/src/physics`, vendored `engine/vendor/JoltPhysics`; `JPH::` stays inside it |
+| Vehicles (`Vehicle`, `VehicleWheel`, `.wvehicle`, tire model, assists, Lua `vehicle`) | [vehicles.md](docs/superpowers/documentation/vehicles.md) | `engine/src/physics/vehicle_*`, `engine/src/physics/tire_model.*`, `editor/src/asset_editor/vehicle_*` |
 | Animation (skeletons, GPU skinning, `Animator`, animation graphs `.wgraph`, Lua `Animation`) | [animation.md](docs/superpowers/documentation/animation.md) | `engine/src/animation`, `editor/src/animation` |
 | Offscreen views (previews, 3D UI widgets, readback; `ViewHost`, `ViewImage`) | [views.md](docs/superpowers/documentation/views.md) | `engine/src/renderer/view`, `engine/src/scene/preview_scene.*` |
 | Asset Editor, asset thumbnails (skeleton, mesh, clip, graph, VFX and behaviour tree editors, sockets, joint rename) | [editor.md](docs/superpowers/documentation/editor.md) | `editor/src/asset_editor` |

@@ -1,0 +1,49 @@
+# Vehicles
+
+Cars on Jolt's `VehicleConstraint` with our own tire model and driver assists: "realistic but approachable" (the target is a game in the spirit of Assetto Corsa, playable on a pad). Design: `docs/superpowers/specs/2026-11-26-vehicle-physics-design.md`. Physics around it: physics.md.
+
+## Authoring
+
+- **`Vehicle`** (`Settings`: `AssetRef` to a `.wvehicle`, not set: the defaults; `Enabled`) on an entity with a **dynamic `RigidBody`** and its `Collider` (the chassis). Forward is the entity's **-z**, up **+y**, the wheel axle **x**.
+- **`VehicleWheel`** on any descendant with no other `RigidBody` in between (nested wheels from imported models work): `Radius`, `Width`, `SuspensionMinLength`/`MaxLength`, `SuspensionFrequency` (Hz) and `SuspensionDamping` (ratio), `Steers`, `Brakes`, `Handbrake`, `MaxSteerAngle` (degrees), `Axle` (0 = front), `Side` (Left = -x), `Inertia`. `Axle` + `Side` name a wheel: drive, anti-roll bars, tire choice (axle 0 front, others rear) and brake bias refer to axles, never to wheel indices.
+- **The authored wheel position is the ride height.** The suspension attachment point is placed `wheel_rest_length()` above it (max length + preload - sag `g / (2 pi f)^2`, preload `>= 0` because Jolt asserts it), so the car settles with its wheels where they were placed. A soft spring rests mid-travel, a stiff one above it.
+- **Centre of mass:** `RigidBody::CenterOfMassOffset` (body space) wraps the body's shape in an offset-centre-of-mass shape; a car sets it low (the demo: -0.3 m) and uses `MassOverride` (a chassis hull at the default density weighs tonnes). Without it a car rolls over and weight transfer is wrong.
+- A `Collider` on a wheel is left out of the body's compound (one warning): it would hold the car up off its suspension. A `VehicleWheel` with no `Vehicle` above it warns once.
+- **`.wvehicle`** (JSON, `editor/src/asset_pipeline/vehicle_file.*`, cooked to `VehicleSettingsData`, `AssetType::Vehicle`): engine (torque curve `[[rpm, Nm]...]`, min/max rpm, inertia, damping), transmission (automatic, gears, reverse gears, shift rpms, shift time, clutch), differentials (each names a driven axle; an axle not listed is undriven), anti-roll stiffness per axle, front and rear tires (magic formula `B C D E` longitudinal and lateral, nominal load, load sensitivity, pneumatic trail), aero (drag area, downforce area, front share), brakes (torque, handbrake, front bias), assists (0..1), steering (speed, limit `[[m/s, fraction]...]`). A missing key takes the default; an invalid file fails the import naming the key.
+- **Surfaces:** `PhysicsMaterial::TireGrip` (`"tireGrip"`, default 1; payload version 2, a version 1 payload loads with 1). Tires use only `TireGrip`, never `Friction` (tuned for sliding props), so existing `.wphysmat` files do not change how cars drive.
+
+## Physics thread (`engine/src/physics/vehicle_set.*`, `tire_model.*`, `vehicle_assists.*`)
+
+- `VehicleSet` next to the joint and character tables: one `JPH::VehicleConstraint` + `WheeledVehicleController` per car, named by the body's entity, kept in a `std::map` (the same commands step the vehicles in the same order). A vehicle waits while its body is missing or not dynamic (a body whose shape has not arrived is a placeholder), is unmade when its body goes (`body_destroyed`, before the body is removed) and made again with the next body. A description that cannot be built (invalid settings, a driven axle without exactly one Left and one Right wheel, a bad wheel) is logged once and waits for another `CreateVehicle`. A new `CreateVehicle` for the same body remakes the constraint; the body keeps its motion.
+- Commands: `CreateVehicle`, `DestroyVehicle`, `SetVehicleInput` (kept until the next), `ShiftGear` (manual only), `SetVehicleAssist` (below 0: the asset's value).
+- **Grip:** the constraint's **own** `SetCombineFriction` returns the touched shape's `TireGrip` (`material_of`); the world's combine functions are never touched (they serve every other contact). Jolt's friction curves are flat (1.0). `SetTireMaxImpulseCallback` returns `tire_force_limits(...) * dt`: the force the tire can still give, not the force at the current slip (a cap that is zero at zero slip chatters and gives no static grip). Load is the suspension impulse / dt. Signed slips come from the wheel's contact (`wheel_slip`), with the ground speed floored at 1 m/s so a standstill stays finite.
+- **Tire model** (`tire_model.h`, Jolt-free): Pacejka magic formula per direction, load sensitivity (`1 - s (Fz - Fz0) / Fz0`, clamped 0.5..1.5), combined slip through the normalised slip vector (friction ellipse), aligning torque from the pneumatic trail, gone past the peak. The default longitudinal peak is near slip 0.085: **Jolt does not shift up while a driven wheel slips more than 0.1**, so a tire peaking above that pins a car at the grip limit in first gear.
+- **Assists** (`run_assists`, pure): steering help (the input capped by the speed through `SteerLimit` and rate-limited at `SteerSpeed`, both scaled by the strength); ABS and traction control on bands relative to each tire's peak slip (from 0.8x to 1.6x); TC keeps a cut that rises at once and recovers at 1.5/s and brakes the spinning wheel; stability compares the yaw rate with a bicycle model (capped by the grip) and brakes the outer front (oversteer) or inner rear (understeer). Jolt takes driver input for the whole car, so **per-wheel braking scales each wheel's own `WheelSettingsWV::mMaxBrakeTorque`** (we hold those objects) with a full brake input when any wheel brakes.
+- **Reverse (automatic, a placeholder until the game decides):** brake held 0.3 s at a standstill (below 0.5 m/s, handbrake off) backs up; the pedals then swap; throttle at a standstill drives forward again. The handbrake blocks it (a car held on a hill must not reverse). The `auto_gearbox` assist override replaces the asset's mode for that car.
+- **Aero:** drag `-0.5 rho CdA |v| v` at the centre of mass; downforce `0.5 rho ClA v^2` split between the axle midpoints.
+- Snapshot: a `VehiclePose` per made vehicle (speed along forward, rpm, gear, clutch, applied input, active assists) with a `WheelPose` per wheel (steer, spin, suspension and rest length, contact, contact entity, grip, slips, load, aligning torque, angular velocity); `VehicleCount`.
+- Debug draw: Jolt's constraint drawing (wheels, suspension) comes with `SetDebugDraw`.
+
+## Main thread (`physics_sync.cpp`, `physics_module.*`)
+
+- `PhysicsSync::push_vehicles` sends a vehicle for each enabled `Vehicle` whose dynamic body was sent and whose settings are ready (`resolve_vehicle`: not set gives the defaults; loading waits; failed warns once and makes nothing); wheels sorted by entity guid. **Each wheel's place on the body is taken once and cached**: the physics then writes the wheel entities, which must not read as an edit (the vehicle would be remade every frame). A changed component, wheel set or asset (reimported while playing) sends `CreateVehicle` again.
+- `apply_poses` writes the wheels after the bodies: interpolated suspension, steer and spin (shortest angle); body space up the suspension from the cached place, spin about the body's x (rolling forward is a negative turn), steer about its y; through the wheel's parent as it is now (last frame's parent carried by the body's move, so nested wheels do not lag).
+- `PhysicsModule::set_vehicle_input` sends only a changed input (per world); `shift_gear`, `set_vehicle_assist`, `newest_vehicle`; the Physics panel's Stats count vehicles.
+- Lua `vehicle.*`: docs/scripting.md.
+
+## Editor
+
+- The `.wvehicle` editor in the Asset Editor (`editor/src/asset_editor/vehicle_editor.*`, `vehicle_edit_model.*`): torque/power and tire force plots (front and rear at 0.5x, 1x, 1.5x nominal load) drawn with `ImDrawList`; every value grouped; edits go through `VehicleEditModel`, which refuses an edit that would not be valid and shows why (one drag is one undo step). Save through the panel (Ctrl+S): a save behind its back reads as an outside change.
+- A selected `VehicleWheel` shows its radius and suspension travel (`editor/src/gizmo/vehicle_gizmo.*`).
+
+## Demo
+
+Station 9 of `demo.wscene` (`scripts/gen_demo_scene.py`, `--vehicles-only` adds it to an existing demo without downloads): an asphalt track with a grass patch (`tireGrip` 0.55), "Demo car" driven by the `Driving` actions (arrows or the pad's triggers and left stick, Left Shift/B handbrake, E/Q or the bumpers to shift a manual gearbox) and "Autopilot car" (`drive.lua` autopilot) that `--demo-smoke` watches in its Physics phase. The demo's physics runs at 120 Hz.
+
+## Verification
+
+`--physics-smoke` (`tests/src/physics/vehicle_checks.cpp`, on a world stepped on the test thread at 120 Hz: `SyncWorld` in `physics_test_rig.h`): the tire model and limits, `TireGrip`, the centre-of-mass offset, the `.wvehicle` format and import, settling at ride height, a standstill launch, acceleration and upshifts, braking, steering, surface grip, lifetime and rebuilds, repeatability, debug draw, holding on a 20 degree slope, a turn without chatter, the assists (pure and on a car), reverse, manual shifting, drag, and the scene sync. `--script-smoke`: the Lua API. `--physics-panel-smoke`: the edit model, the gizmo shapes and the editor for 120 frames.
+
+## Not built
+
+Steering wheels and force feedback (the aligning torque is published for them), tire temperature, wear and pressure, camber and toe, damage, clutch pedal, motorcycles and tanks, driving AI, chase camera, engine audio, skid marks. Jolt's friction is a velocity constraint: a braked car on a 20 degree slope still drifts about 1 cm in 5 s. Below about 3 m/s in first gear the engine's idle (Jolt keeps the clutch closed) turns the wheels faster than the car, so a launch shows large slip whatever the throttle.

@@ -34,10 +34,14 @@ The world exists only while a scene plays (the Play clone, or the game's scene o
 
 ## Components and shapes
 
-`RigidBody` (motion Static/Kinematic/Dynamic, mass override, damping, gravity factor, continuous collision, allow sleeping, report contacts, per-axis position/rotation locks) and `Collider` (shape Box/Sphere/Capsule/Cylinder/ConvexHull/Mesh/Compound, size, offset, rotation, `IsTrigger`, layer index, material `AssetRef`, mesh `AssetRef`) are reflected, so serializer/inspector/overrides work for free.
+`RigidBody` (motion Static/Kinematic/Dynamic, mass override, centre-of-mass offset (body space: the shape is wrapped in an offset-centre-of-mass shape; vehicles.md), damping, gravity factor, continuous collision, allow sleeping, report contacts, per-axis position/rotation locks) and `Collider` (shape Box/Sphere/Capsule/Cylinder/ConvexHull/Mesh/Compound, size, offset, rotation, `IsTrigger`, layer index, material `AssetRef`, mesh `AssetRef`) are reflected, so serializer/inspector/overrides work for free.
 
 - A `Collider` on a `RigidBody` entity is that body's shape; with no `RigidBody` on it or an ancestor it is a static body; on a descendant of a `RigidBody` entity it joins the ancestor's compound (rebuilt and sent as `ReplaceShape` when a child collider changes).
 - World scale scales the shape. Non-uniform scale is fine for box/hull/mesh (Jolt scaled shapes); sphere/capsule need uniform scale, otherwise the largest axis is used with a one-time warning.
+
+## Vehicles
+
+Cars (`Vehicle`, `VehicleWheel`, `.wvehicle`, the tire model, assists, the `vehicle` Lua API): vehicles.md. On the physics thread a `VehicleSet` sits next to the joint and character tables; its constraint has its own friction combine function, so the world's are unchanged.
 
 ## Joints
 
@@ -66,7 +70,7 @@ The world exists only while a scene plays (the Play clone, or the game's scene o
 
 ## Assets and settings
 
-- `PhysicsMaterial` (`.wphysmat` JSON: friction, restitution, density, friction/restitution combine Average/Min/Max/Multiply; out-of-range values rejected at import). A built-in default (friction 0.5, restitution 0, density 1000) is used when a collider has none.
+- `PhysicsMaterial` (`.wphysmat` JSON: friction, restitution, density, friction/restitution combine Average/Min/Max/Multiply, `tireGrip` (what a vehicle tire gets on it, vehicles.md); out-of-range values rejected at import). A built-in default (friction 0.5, restitution 0, density 1000, tire grip 1) is used when a collider has none.
 - Convex hulls and triangle meshes are cooked by the model importer when `generatePhysicsShapes` is set in the `.meta`: `PhysicsShape` sub-assets at the mesh's local id plus `PHYSICS_HULL_LOCAL_ID_OFFSET` / `PHYSICS_MESH_LOCAL_ID_OFFSET`, stored as Jolt shape binary state. The game and engine never build hulls/BVH meshes from raw vertices at run time. Only the physics thread holds shape objects.
 - **Project settings** `physics.wsettings` (edited on the Settings page, Physics; the Physics panel keeps the scene settings and stats) (editor working directory, packed under `PHYSICS_SETTINGS_GUID`): up to 32 named layers and the 32x32 collision matrix, mapped to Jolt object layers and broad-phase layers (static, moving, trigger). **Scene settings** (in `.wscene`): gravity, fixed rate, max steps per frame, solver iterations, sleep threshold, debug-draw defaults.
 
@@ -76,4 +80,4 @@ The world exists only while a scene plays (the Play clone, or the game's scene o
 
 ## Editor
 
-Physics panel tabs: **Settings** (scene settings through the normal undo path), **Layers** (names and matrix, saved to `physics.wsettings`), **Stats** (play mode: bodies, active, joints, characters, step time, steps per frame, dropped steps). Debug draw: a Jolt `DebugRenderer` implementation on the physics thread records lines/triangles into the step snapshot (no GPU access) and the main thread submits them to `DebugDraw`; only compiled where `JPH_DEBUG_RENDERER` is defined (Debug, Release).
+Physics panel tabs: **Settings** (scene settings through the normal undo path), **Layers** (names and matrix, saved to `physics.wsettings`), **Stats** (play mode: bodies, active, joints, characters, vehicles, step time, steps per frame, dropped steps). Debug draw: a Jolt `DebugRenderer` implementation on the physics thread records lines/triangles into the step snapshot (no GPU access) and the main thread submits them to `DebugDraw`; only compiled where `JPH_DEBUG_RENDERER` is defined (Debug, Release).
