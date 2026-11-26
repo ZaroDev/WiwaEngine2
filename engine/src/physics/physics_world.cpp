@@ -26,6 +26,7 @@
 #include "physics_material_jolt.h"
 #include "query_snapshot_jolt.h"
 #include "shape_builder.h"
+#include "vehicle_set.h"
 
 namespace wiwa
 {
@@ -119,7 +120,8 @@ namespace wiwa
 
 			~PhysicsWorld() override
 			{
-				m_Joints.clear(); // before the bodies: a constraint must not outlive them
+				m_Vehicles.clear(); // before the bodies: a constraint must not outlive them
+				m_Joints.clear();
 				m_Characters.clear(); // and a character removes its inner body
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
 				for (const auto& [key, entry] : m_Bodies)
@@ -223,6 +225,26 @@ namespace wiwa
 					{
 						m_Characters.teleport(c.Key, c.Position);
 					}
+					else if constexpr (std::is_same_v<T, CreateVehicle>)
+					{
+						m_Vehicles.create(c.Body, c.Desc);
+					}
+					else if constexpr (std::is_same_v<T, DestroyVehicle>)
+					{
+						m_Vehicles.destroy(c.Body);
+					}
+					else if constexpr (std::is_same_v<T, SetVehicleInput>)
+					{
+						m_Vehicles.set_input(c.Body, c.Input);
+					}
+					else if constexpr (std::is_same_v<T, ShiftGear>)
+					{
+						m_Vehicles.shift(c.Body, c.Direction);
+					}
+					else if constexpr (std::is_same_v<T, SetVehicleAssist>)
+					{
+						m_Vehicles.set_assist(c.Body, c.Assist, c.Strength);
+					}
 					else
 					{
 						static_assert(always_false<T>, "a PhysicsCommand kind is not handled by PhysicsWorld::execute");
@@ -233,6 +255,7 @@ namespace wiwa
 			void step() override
 			{
 				m_Characters.step(static_cast<float>(fixed_dt()), m_Temp);
+				m_Vehicles.step(static_cast<float>(fixed_dt()));
 				m_Contacts.begin_step();
 				const JPH::EPhysicsUpdateError error = m_System.Update(static_cast<float>(fixed_dt()), 1, &m_Temp, &m_Jobs);
 				if (error != JPH::EPhysicsUpdateError::None)
@@ -277,6 +300,7 @@ namespace wiwa
 				}
 				snapshot.JointCount = m_Joints.made_count();
 				m_Characters.write(snapshot);
+				m_Vehicles.write(snapshot);
 			}
 
 			void take_events(PhysicsStepSnapshot& snapshot) override { m_Contacts.take_events(snapshot.Events); }
@@ -529,6 +553,7 @@ namespace wiwa
 				}
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
 				m_Joints.body_destroyed(key);
+				m_Vehicles.body_destroyed(key);
 				m_Contacts.unregister_body(it->second.Id);
 				m_StaticDirty = true;
 				bodies.RemoveBody(it->second.Id);
@@ -734,6 +759,8 @@ namespace wiwa
 					}
 				} };
 			JointSet m_Joints{ m_System, [this](BodyKey key) { const auto it = m_Bodies.find(key); return it == m_Bodies.end() ? JPH::BodyID() : it->second.Id; } };
+			VehicleSet m_Vehicles{ m_System, [this](BodyKey key) { const auto it = m_Bodies.find(key); return it == m_Bodies.end() ? JPH::BodyID() : it->second.Id; },
+				[this](JPH::BodyID id) { return m_Contacts.key_of(id); } };
 			std::vector<JPH::BodyID> m_MovedKinematic{};
 			std::shared_ptr<const std::vector<QueryBody>> m_StaticQuery{}; // the static bodies of the query snapshots, until one changes
 			bool m_StaticDirty = true;

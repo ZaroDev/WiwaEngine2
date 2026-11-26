@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "physics_commands.h"
 #include "physics_types.h"
 
 namespace wiwa
@@ -78,6 +79,39 @@ namespace wiwa
 		glm::vec3 GroundNormal{ 0.0f, 1.0f, 0.0f };
 	};
 
+	// The state of one wheel of a vehicle after a step.
+	struct WheelPose
+	{
+		BodyKey Entity{};
+		float SteerAngle = 0.0f;       // radians, about the body's +y (+: left)
+		float SpinAngle = 0.0f;        // radians about the axle, [-pi, pi]; grows while rolling forward
+		float SuspensionLength = 0.0f; // m, from the attachment point down to the wheel centre
+		float RestLength = 0.0f;       // SuspensionLength at rest: where the wheel was authored (the wheel moves up by RestLength - SuspensionLength)
+		bool InContact = false;
+		BodyKey ContactBody{};         // the entity it touches (a null key: none, or a body that is not an entity's)
+		float Grip = 0.0f;             // the TireGrip of what it touches
+		float SlipRatio = 0.0f;        // (wheel speed - ground speed) / ground speed, ground speed at least 1 m/s
+		float SlipAngle = 0.0f;        // radians, + when the contact slides right
+		float Load = 0.0f;             // N
+		float AligningTorque = 0.0f;   // Nm
+		float AngularVelocity = 0.0f;  // rad/s, + rolling forward
+	};
+
+	enum VehicleAssistActive : u32 { AssistAbs = 1u, AssistTc = 2u, AssistStability = 4u };
+
+	// The state of one vehicle after a step.
+	struct VehiclePose
+	{
+		BodyKey Body{};
+		float Speed = 0.0f;      // m/s along the body's forward (-z), signed
+		float EngineRpm = 0.0f;
+		i32 Gear = 0;            // 0 neutral, below 0 reverse
+		float Clutch = 0.0f;     // 0..1
+		VehicleInput Applied{};  // what the vehicle got, after the assists
+		u32 AssistsActive = 0;   // VehicleAssistActive bits
+		std::vector<WheelPose> Wheels{}; // in VehicleDesc order
+	};
+
 	class QuerySnapshot;
 
 	// What the physics thread publishes after each step. Immutable once published; the main thread never reads Jolt structures.
@@ -89,6 +123,7 @@ namespace wiwa
 		float FixedDt = 0.0f; // the length of the step that produced this snapshot
 		std::vector<BodyPose> Poses{};
 		std::vector<CharacterPose> Characters{};
+		std::vector<VehiclePose> Vehicles{};
 		// This step's events, sorted: first those made by the commands applied before the step (a destroyed body's exits), then the
 		// step's own, each group by (Kind, A, B). When the main thread fell far behind, a snapshot can also carry the begin and end events
 		// of older steps that were folded into it (PhysicsThread::take_steps), before its own.
@@ -103,6 +138,7 @@ namespace wiwa
 		u32 ActiveBodies = 0;   // awake (not sleeping)
 		u32 JointCount = 0;     // joints that are made (not waiting for a body)
 		u32 CharacterCount = 0;
+		u32 VehicleCount = 0;   // vehicles that are made (not waiting for a body)
 		float StepMs = 0.0f;    // wall time of PhysicsSystem::Update
 	};
 }

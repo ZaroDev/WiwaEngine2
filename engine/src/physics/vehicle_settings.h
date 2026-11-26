@@ -42,7 +42,7 @@ namespace wiwa
 		std::vector<TorquePoint> TorqueCurve{ { 1000.0f, 250.0f }, { 4500.0f, 400.0f }, { 7000.0f, 300.0f } };
 		float MinRpm = 1000.0f;
 		float MaxRpm = 7000.0f;
-		float EngineInertia = 0.5f; // kg m2
+		float EngineInertia = 0.2f; // kg m2 (the flywheel and crank of a road car)
 		float EngineDamping = 0.2f;
 		// transmission
 		bool AutomaticGearbox = true;

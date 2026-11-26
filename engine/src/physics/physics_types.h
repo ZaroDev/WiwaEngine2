@@ -13,6 +13,8 @@ namespace wiwa
 	// Only append: the values are saved (Joint component).
 	enum class JointType : u32 { Fixed, Point, Hinge, Slider, Distance, Cone, SwingTwist, SixDof };
 	enum class JointMotorMode : u32 { Off, Velocity, Position };
+	// Only append: saved (VehicleWheel component). Left is the vehicle's -x side (forward is -z, up +y).
+	enum class WheelSide : u32 { Left, Right };
 
 	// The per-scene step settings. Plain data: copied to the physics thread through a SetSettings command.
 	struct PhysicsSettings

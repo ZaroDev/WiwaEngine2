@@ -18,7 +18,7 @@ namespace wiwa
 	// A tire as the vehicles' tire model sees it (vehicles.md). Plain data and Jolt-free.
 	struct TireModel
 	{
-		TireCurve Longitudinal{ 12.0f, 1.65f, 1.0f, 0.0f }; // x: slip ratio
+		TireCurve Longitudinal{ 22.0f, 1.45f, 1.0f, 0.0f }; // x: slip ratio (peak near 0.085: below the 0.1 at which Jolt stops shifting up)
 		TireCurve Lateral{ 10.0f, 1.35f, 1.0f, -0.5f };     // x: slip angle, radians
 		float NominalLoad = 4000.0f;   // N (Fz0)
 		float LoadSensitivity = 0.15f; // fraction of mu lost per NominalLoad above nominal (gained below)

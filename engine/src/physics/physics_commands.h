@@ -8,6 +8,7 @@
 #include "physics_layers.h"
 #include "physics_material_asset.h"
 #include "physics_types.h"
+#include "vehicle_settings.h"
 
 namespace wiwa
 {
@@ -271,7 +272,82 @@ namespace wiwa
 		glm::vec3 Position{ 0.0f };
 	};
 
+	// One wheel of a vehicle (see the VehicleWheel component), in the space of the vehicle's body (forward -z, up +y, the axle along x).
+	struct WheelDesc
+	{
+		BodyKey Entity{};            // the wheel's entity, for the snapshot
+		glm::vec3 Position{ 0.0f };  // the wheel centre at ride height (the middle of the suspension travel)
+		float Radius = 0.33f;
+		float Width = 0.22f;
+		float SuspensionMinLength = 0.05f;
+		float SuspensionMaxLength = 0.30f;
+		float SuspensionFrequency = 1.5f; // Hz
+		float SuspensionDamping = 0.5f;   // ratio
+		bool Steers = false;
+		bool Brakes = true;
+		bool Handbrake = false;
+		float MaxSteerAngle = 35.0f; // degrees
+		i32 Axle = 0;                // 0: front; axle 0 uses the front tire, every other the rear
+		WheelSide Side = WheelSide::Left;
+		float Inertia = 0.9f;        // kg m2
+		bool operator==(const WheelDesc&) const = default;
+	};
+
+	struct VehicleDesc
+	{
+		std::vector<WheelDesc> Wheels{};
+		VehicleSettingsData Settings{};
+		bool operator==(const VehicleDesc&) const = default;
+	};
+
+	// The driver's input: throttle, brake and handbrake 0..1, steer -1..1 (+: right).
+	struct VehicleInput
+	{
+		float Throttle = 0.0f;
+		float Brake = 0.0f;
+		float Steer = 0.0f;
+		float Handbrake = 0.0f;
+		bool operator==(const VehicleInput&) const = default;
+	};
+
+	enum class VehicleAssist : u32 { TractionControl, Abs, Stability, SteeringHelp, AutoGearbox, Count };
+
+	// Makes the vehicle on that body (one that exists there is replaced; the body keeps its motion). It waits, unmade, until the body exists
+	// and is dynamic. A description that cannot be built is logged once and stays unmade until it is replaced.
+	struct CreateVehicle
+	{
+		BodyKey Body{};
+		VehicleDesc Desc{};
+	};
+
+	struct DestroyVehicle
+	{
+		BodyKey Body{};
+	};
+
+	// Kept until the next one.
+	struct SetVehicleInput
+	{
+		BodyKey Body{};
+		VehicleInput Input{};
+	};
+
+	// A manual gearbox moves one gear (+1 up, -1 down: ... 1, 0 neutral, -1 reverse ...); an automatic one ignores it.
+	struct ShiftGear
+	{
+		BodyKey Body{};
+		i32 Direction = 1;
+	};
+
+	// Overrides the asset's strength of an assist (0..1; AutoGearbox: 0 manual, 1 automatic); below 0 goes back to the asset's value.
+	struct SetVehicleAssist
+	{
+		BodyKey Body{};
+		VehicleAssist Assist = VehicleAssist::TractionControl;
+		float Strength = -1.0f;
+	};
+
 	// Plain-data commands from the main thread to the physics thread, applied at the start of the next step in submission order.
 	// New kinds are added as new alternatives. Commands for a key that has no body are ignored.
-	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial, SetLayer, SetLayers, AddForce, AddTorque, AddImpulse, SetVelocity, SetAngularVelocity, WakeBody, SetGravity, SetDebugDraw, CreateJoint, DestroyJoint, SetJointMotor, SetJointLimits, CreateCharacter, DestroyCharacter, SetCharacterVelocity, CharacterJump, TeleportCharacter>;
+	using PhysicsCommand = std::variant<SetSettings, CreateBody, DestroyBody, SetTransform, SetKinematicTarget, ReplaceShape, SetMaterial, SetLayer, SetLayers, AddForce, AddTorque, AddImpulse, SetVelocity, SetAngularVelocity, WakeBody, SetGravity, SetDebugDraw, CreateJoint, DestroyJoint, SetJointMotor, SetJointLimits, CreateCharacter, DestroyCharacter, SetCharacterVelocity, CharacterJump, TeleportCharacter, CreateVehicle, DestroyVehicle, SetVehicleInput, ShiftGear, SetVehicleAssist>;
 }
