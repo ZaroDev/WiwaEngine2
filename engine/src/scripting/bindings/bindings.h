@@ -65,7 +65,8 @@ namespace wiwa
 	// time.delta / time.total, and quit.
 	void bind_engine(ScriptRuntime& runtime, ScriptContext& context);
 
-	// physics.raycast / raycast_all / overlap_sphere / overlap_box / shape_cast / set_gravity, and entity:body() with its Body methods.
+	// physics.raycast / raycast_all / overlap_sphere / overlap_box / shape_cast / set_gravity, and entity:body() with its Body methods;
+	// joint.*, character.*, and vehicle.set_input / shift_up / shift_down / set_assist / state / wheel_count / wheel.
 	void bind_physics(ScriptRuntime& runtime, ScriptContext& context);
 
 	// input.down / pressed / released / value / mouse / mouse_delta / scroll / pad_connected / last_device / set_cursor, input.action (a handle with

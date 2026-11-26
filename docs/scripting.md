@@ -277,6 +277,18 @@ read the newest step (`nil` while the world has no such character). Like the bod
 call on an entity without a `CharacterController` is a Lua error. Triggers see characters: `on_trigger_enter/exit` arrive with the character
 as `other` (and the trigger for the character). Physics queries hit characters too.
 
+**Vehicles** are the `Vehicle` component with `VehicleWheel`s below it (see the vehicles documentation). `vehicle.set_input(entity,
+throttle, brake, steer [, handbrake])` sets the driver's input (throttle, brake and handbrake 0..1, steer -1..1 with + to the right) until
+the next call; the assists (traction control, ABS, stability, steering help) then decide what the car gets. With an automatic gearbox,
+holding the brake at a standstill (handbrake off) backs up and the throttle at a standstill drives forward again; with a manual one
+`vehicle.shift_up(entity)` and `vehicle.shift_down(entity)` change gear (... 1, 0 neutral, -1 reverse). `vehicle.set_assist(entity, name,
+strength)` overrides an assist of this car (`"traction_control"`, `"abs"`, `"stability"`, `"steering_help"` 0..1, `"auto_gearbox"` 0 or 1;
+`nil` goes back to the asset's value). `vehicle.state(entity)` (`speed` m/s, negative backing up, `rpm`, `gear`, `clutch`, the applied
+`throttle`, `brake`, `steer`, `handbrake`, and `abs`, `tc`, `stability` while they work), `vehicle.wheel_count(entity)` and
+`vehicle.wheel(entity, index)` (1-based: `steer`, `spin`, `suspension`, `contact`, `contact_entity`, `grip`, `slip_ratio`, `slip_angle`,
+`load`, `aligning_torque`) read the newest step (`nil` while the world has no such vehicle). Commands take effect one step later; a call on
+an entity without a `Vehicle`, an unknown assist and a NaN input are Lua errors.
+
 **Joints** are the `Joint` component (see the physics documentation). `joint.set_motor(entity, mode, target, max_force)` (`mode` is `"off"`,
 `"velocity"` or `"position"`) and `joint.set_limits(entity, min, max)` write the component, and the physics world gets the change at the
 start of the next step like the body control above, keeping the joint's rest pose. A positive target turns (hinge, rad/s or degrees) or

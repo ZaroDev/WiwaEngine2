@@ -3017,6 +3017,106 @@ namespace wiwa
 			check(h.count("air:true") == 1, "character_scripts_jump: character.jump takes it off the ground");
 			check(h.count("bad_move:false") == 1 && h.count("bad_jump:false") == 1 && h.count("bad_state:false") == 1, "character_scripts_errors: an entity without a CharacterController is a Lua error");
 		}
+
+		// Check 6d: Lua and vehicles. A script on a car drives it with vehicle.set_input and reads vehicle.state and vehicle.wheel; a call on
+		// an entity without a Vehicle, or an unknown assist, is a Lua error naming what is wrong.
+		void check_vehicle_scripts(Check& check)
+		{
+			Harness h;
+			PhysicsModule physics;
+			physics.set_auto_start(false);
+			h.Instances.context().Physics = &physics;
+
+			const entt::entity ground = h.TheScene->create("Ground");
+			Collider groundCollider;
+			groundCollider.Size = glm::vec3(40.0f, 0.5f, 40.0f);
+			h.TheScene->registry().emplace<Collider>(ground, groundCollider);
+
+			const AssetRef carScript = h.add_script("car", R"(return Script:extend{
+				on_physics_update = function(self, dt)
+					self.n = (self.n or 0) + 1
+					if self.n == 30 then
+						vehicle.set_assist(self.entity, 'abs', 1)
+						vehicle.set_assist(self.entity, 'abs', nil)
+						vehicle.set_input(self.entity, 1, 0, 0)
+					end
+					if self.n == 150 then
+						local s = vehicle.state(self.entity)
+						record('state:' .. tostring(s ~= nil and s.speed > 0.5) .. ':' .. tostring(s ~= nil and s.gear >= 1) .. ':' .. tostring(s ~= nil and s.throttle > 0))
+						local w = vehicle.wheel(self.entity, 1)
+						record('wheels:' .. tostring(vehicle.wheel_count(self.entity)) .. ':' .. tostring(w ~= nil and w.contact) .. ':' .. tostring(w ~= nil and w.load > 0))
+						record('no_wheel:' .. tostring(vehicle.wheel(self.entity, 9) == nil))
+						vehicle.set_input(self.entity, 0, 1, 0, 1)
+					end
+				end })");
+			const AssetRef plainScript = h.add_script("plain_car", R"(return Script:extend{
+				on_physics_update = function(self, dt)
+					if not self.done then
+						self.done = true
+						local ok, message = pcall(vehicle.set_input, self.entity, 1, 0, 0)
+						record('bad_input:' .. tostring(ok) .. ':' .. tostring(string.find(message, 'has no Vehicle', 1, true) ~= nil))
+						record('bad_state:' .. tostring(pcall(vehicle.state, self.entity)))
+						record('bad_shift:' .. tostring(pcall(vehicle.shift_up, self.entity)))
+					end
+				end })");
+			const AssetRef assistScript = h.add_script("bad_assist", R"(return Script:extend{
+				on_physics_update = function(self, dt)
+					if not self.done then
+						self.done = true
+						local ok, message = pcall(vehicle.set_assist, self.entity, 'nope', 1)
+						record('bad_assist:' .. tostring(ok) .. ':' .. tostring(string.find(message, 'traction_control', 1, true) ~= nil))
+						record('bad_number:' .. tostring(pcall(vehicle.set_input, self.entity, 0/0, 0, 0)))
+					end
+				end })");
+
+			const entt::entity car = h.spawn("Car", { carScript });
+			h.TheScene->registry().get<Transform>(car).Position = glm::vec3(0.0f, 1.13f, 0.0f);
+			RigidBody body;
+			body.Motion = MotionType::Dynamic;
+			body.MassOverride = 1200.0f;
+			body.CenterOfMassOffset = glm::vec3(0.0f, -0.3f, 0.0f);
+			h.TheScene->registry().emplace<RigidBody>(car, body);
+			Collider chassis;
+			chassis.Size = glm::vec3(0.9f, 0.25f, 2.1f);
+			h.TheScene->registry().emplace<Collider>(car, chassis);
+			h.TheScene->registry().emplace<Vehicle>(car);
+			for (const auto& [x, z, axle] : { std::tuple{ -0.8f, -1.3f, 0 }, std::tuple{ 0.8f, -1.3f, 0 }, std::tuple{ -0.8f, 1.3f, 1 }, std::tuple{ 0.8f, 1.3f, 1 } })
+			{
+				const entt::entity wheel = h.TheScene->create("Wheel", car);
+				h.TheScene->registry().get<Transform>(wheel).Position = glm::vec3(x, -0.3f, z);
+				VehicleWheel component;
+				component.Axle = axle;
+				component.Side = x < 0.0f ? WheelSide::Left : WheelSide::Right;
+				component.Steers = axle == 0;
+				h.TheScene->registry().emplace<VehicleWheel>(wheel, component);
+			}
+			const entt::entity plain = h.spawn("Plain", { plainScript });
+			h.TheScene->registry().get<Transform>(plain).Position = glm::vec3(10.0f, 5.0f, 0.0f);
+			const entt::entity other = h.spawn("Other", { assistScript });
+			h.TheScene->registry().get<Transform>(other).Position = glm::vec3(-10.0f, 5.0f, 0.0f);
+			h.TheScene->registry().emplace<Vehicle>(other); // a Vehicle the world never makes (no body): the assist name is still checked
+
+			check(physics.start_world(h.TheScene), "vehicle_scripts_world: the world starts");
+			physics.thread().set_paused(false);
+			h.Instances.start(h.TheScene);
+			for (int frame = 0; frame < 900 && h.count("no_wheel:true") + h.count("no_wheel:false") == 0; frame++)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(16));
+				physics.pump();
+				h.Instances.dispatch_physics(physics);
+				h.Instances.update(0.016f);
+				physics.pre_render_update(0.016f);
+			}
+			h.Instances.stop();
+			physics.stop_world();
+
+			check(h.count("state:true:true:true") == 1, "vehicle_lua_api: vehicle.set_input drives the car and vehicle.state reads speed, gear and the applied throttle");
+			check(h.count("wheels:4:true:true") == 1, "vehicle_lua_api: vehicle.wheel_count and vehicle.wheel read the wheels");
+			check(h.count("no_wheel:true") == 1, "vehicle_lua_api: a wheel index past the last is nil");
+			check(h.count("bad_input:false:true") == 1 && h.count("bad_state:false") == 1 && h.count("bad_shift:false") == 1, "vehicle_lua_errors: an entity without a Vehicle is a Lua error that says so");
+			check(h.count("bad_assist:false:true") == 1, "vehicle_lua_errors: an unknown assist is an error naming the valid ones");
+			check(h.count("bad_number:false") == 1, "vehicle_lua_errors: a NaN input is an error");
+		}
 	}
 
 	namespace
@@ -3301,6 +3401,7 @@ namespace wiwa
 		check_physics_scripts(check);
 		check_joint_scripts(check);
 		check_character_scripts(check);
+		check_vehicle_scripts(check);
 		check_settings_api(check);
 		check_stub_globals(check);
 		check_component_stubs(check);

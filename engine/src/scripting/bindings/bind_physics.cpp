@@ -73,6 +73,30 @@ namespace wiwa
 			}
 		}
 
+		// The entity of a vehicle.* call: it must exist and have a Vehicle.
+		void require_vehicle(const EntityHandle& handle, const char* function)
+		{
+			const entt::entity entity = handle.resolve();
+			if (entity == entt::null)
+			{
+				throw sol::error(std::string("vehicle.") + function + ": the entity no longer exists");
+			}
+			if (!handle.Context->ActiveScene->registry().all_of<Vehicle>(entity))
+			{
+				throw sol::error(std::string("vehicle.") + function + ": the entity has no Vehicle");
+			}
+		}
+
+		VehicleAssist vehicle_assist_of(const std::string& name)
+		{
+			if (name == "traction_control") return VehicleAssist::TractionControl;
+			if (name == "abs") return VehicleAssist::Abs;
+			if (name == "stability") return VehicleAssist::Stability;
+			if (name == "steering_help") return VehicleAssist::SteeringHelp;
+			if (name == "auto_gearbox") return VehicleAssist::AutoGearbox;
+			throw sol::error("vehicle.set_assist: unknown assist '" + name + "' (traction_control, abs, stability, steering_help or auto_gearbox)");
+		}
+
 		JointMotorMode joint_mode_of(const std::string& mode)
 		{
 			if (mode == "off")
@@ -316,5 +340,95 @@ namespace wiwa
 			return result;
 		});
 		runtime.sandbox()["character"] = character;
+
+		// vehicle.set_input(entity, throttle, brake, steer [, handbrake]), shift_up/shift_down(entity), set_assist(entity, name, strength|nil),
+		// state(entity), wheel_count(entity), wheel(entity, index): see docs/scripting.md
+		sol::table vehicle = lua.create_table();
+		vehicle.set_function("set_input", [&context](const EntityHandle& entity, float throttle, float brake, float steer, sol::optional<float> handbrake)
+		{
+			require_vehicle(entity, "set_input");
+			const float hand = handbrake.value_or(0.0f);
+			if (!std::isfinite(throttle) || !std::isfinite(brake) || !std::isfinite(steer) || !std::isfinite(hand))
+			{
+				throw sol::error("vehicle.set_input: the inputs must be finite numbers");
+			}
+			physics_of(context).set_vehicle_input(entity.Guid, VehicleInput{ std::clamp(throttle, 0.0f, 1.0f), std::clamp(brake, 0.0f, 1.0f),
+				std::clamp(steer, -1.0f, 1.0f), std::clamp(hand, 0.0f, 1.0f) });
+		});
+		vehicle.set_function("shift_up", [&context](const EntityHandle& entity)
+		{
+			require_vehicle(entity, "shift_up");
+			physics_of(context).shift_gear(entity.Guid, 1);
+		});
+		vehicle.set_function("shift_down", [&context](const EntityHandle& entity)
+		{
+			require_vehicle(entity, "shift_down");
+			physics_of(context).shift_gear(entity.Guid, -1);
+		});
+		vehicle.set_function("set_assist", [&context](const EntityHandle& entity, const std::string& name, sol::optional<float> strength)
+		{
+			require_vehicle(entity, "set_assist");
+			const VehicleAssist assist = vehicle_assist_of(name);
+			if (strength && !std::isfinite(*strength))
+			{
+				throw sol::error("vehicle.set_assist: the strength must be a finite number, or nil for the asset's");
+			}
+			physics_of(context).set_vehicle_assist(entity.Guid, assist, strength ? std::clamp(*strength, 0.0f, 1.0f) : -1.0f);
+		});
+		// { speed, rpm, gear, clutch, throttle, brake, steer, handbrake (what the car got, after the assists), abs, tc, stability (working now) }
+		vehicle.set_function("state", [&context](const EntityHandle& entity, sol::this_state state) -> sol::object
+		{
+			require_vehicle(entity, "state");
+			sol::state_view view(state);
+			const std::optional<VehiclePose> pose = physics_of(context).newest_vehicle(entity.Guid);
+			if (!pose)
+			{
+				return sol::object(view, sol::lua_nil);
+			}
+			sol::table result = view.create_table();
+			result["speed"] = pose->Speed;
+			result["rpm"] = pose->EngineRpm;
+			result["gear"] = pose->Gear;
+			result["clutch"] = pose->Clutch;
+			result["throttle"] = pose->Applied.Throttle;
+			result["brake"] = pose->Applied.Brake;
+			result["steer"] = pose->Applied.Steer;
+			result["handbrake"] = pose->Applied.Handbrake;
+			result["abs"] = (pose->AssistsActive & AssistAbs) != 0;
+			result["tc"] = (pose->AssistsActive & AssistTc) != 0;
+			result["stability"] = (pose->AssistsActive & AssistStability) != 0;
+			return result;
+		});
+		vehicle.set_function("wheel_count", [&context](const EntityHandle& entity)
+		{
+			require_vehicle(entity, "wheel_count");
+			const std::optional<VehiclePose> pose = physics_of(context).newest_vehicle(entity.Guid);
+			return pose ? static_cast<int>(pose->Wheels.size()) : 0;
+		});
+		// { steer, spin, suspension, contact, contact_entity, grip, slip_ratio, slip_angle, load, aligning_torque }; nil past the last wheel
+		vehicle.set_function("wheel", [&context](const EntityHandle& entity, int index, sol::this_state state) -> sol::object
+		{
+			require_vehicle(entity, "wheel");
+			sol::state_view view(state);
+			const std::optional<VehiclePose> pose = physics_of(context).newest_vehicle(entity.Guid);
+			if (!pose || index < 1 || index > static_cast<int>(pose->Wheels.size()))
+			{
+				return sol::object(view, sol::lua_nil);
+			}
+			const WheelPose& wheel = pose->Wheels[static_cast<size_t>(index - 1)];
+			sol::table result = view.create_table();
+			result["steer"] = wheel.SteerAngle;
+			result["spin"] = wheel.SpinAngle;
+			result["suspension"] = wheel.SuspensionLength;
+			result["contact"] = wheel.InContact;
+			result["contact_entity"] = wheel.ContactBody.valid() ? sol::object(sol::make_object(state, EntityHandle{ wheel.ContactBody, &context })) : sol::object(view, sol::lua_nil);
+			result["grip"] = wheel.Grip;
+			result["slip_ratio"] = wheel.SlipRatio;
+			result["slip_angle"] = wheel.SlipAngle;
+			result["load"] = wheel.Load;
+			result["aligning_torque"] = wheel.AligningTorque;
+			return result;
+		});
+		runtime.sandbox()["vehicle"] = vehicle;
 	}
 }

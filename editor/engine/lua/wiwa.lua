@@ -451,6 +451,64 @@ function character.is_grounded(entity) end
 ---@return CharacterState?
 function character.state(entity) end
 
+--- Vehicles (a Vehicle on an entity with a dynamic RigidBody, VehicleWheels below it). Every call errors on an entity without a Vehicle.
+vehicle = {}
+--- The driver's input, kept until the next call: throttle, brake and handbrake 0..1, steer -1..1 (+ right). With an automatic gearbox,
+--- holding the brake at a standstill (handbrake off) backs up, and the throttle at a standstill drives forward again.
+---@param entity Entity
+---@param throttle number
+---@param brake number
+---@param steer number
+---@param handbrake? number
+function vehicle.set_input(entity, throttle, brake, steer, handbrake) end
+--- One gear up (manual gearbox only).
+---@param entity Entity
+function vehicle.shift_up(entity) end
+--- One gear down: ... 1, 0 neutral, -1 reverse (manual gearbox only).
+---@param entity Entity
+function vehicle.shift_down(entity) end
+--- Overrides an assist of this car: "traction_control", "abs", "stability", "steering_help" (0..1) or "auto_gearbox" (0 manual, 1 automatic); nil goes back to the asset's value.
+---@param entity Entity
+---@param name string
+---@param strength number|nil
+function vehicle.set_assist(entity, name, strength) end
+---@class VehicleState
+---@field speed number m/s along the car's forward, negative backing up
+---@field rpm number
+---@field gear integer 0 neutral, negative reverse
+---@field clutch number
+---@field throttle number what the car got, after the assists
+---@field brake number
+---@field steer number
+---@field handbrake number
+---@field abs boolean working now
+---@field tc boolean
+---@field stability boolean
+--- The car after the newest physics step; nil while the world has no such vehicle.
+---@param entity Entity
+---@return VehicleState|nil
+function vehicle.state(entity) end
+--- How many wheels the made vehicle has (0 while it is not made).
+---@param entity Entity
+---@return integer
+function vehicle.wheel_count(entity) end
+---@class VehicleWheelState
+---@field steer number radians, + left
+---@field spin number radians
+---@field suspension number m
+---@field contact boolean
+---@field contact_entity Entity|nil
+---@field grip number the TireGrip of what it touches
+---@field slip_ratio number
+---@field slip_angle number radians
+---@field load number N
+---@field aligning_torque number Nm
+--- A wheel (1-based, in the order of the wheel entities' guids) after the newest step; nil past the last.
+---@param entity Entity
+---@param index integer
+---@return VehicleWheelState|nil
+function vehicle.wheel(entity, index) end
+
 --------------------------------------------------------------------------------------------------------------------------------
 -- Input
 --------------------------------------------------------------------------------------------------------------------------------
