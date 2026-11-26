@@ -5,6 +5,7 @@
 
 #include <math/gizmo_math.h>
 #include "perception_gizmo.h"
+#include "vehicle_gizmo.h"
 #include <renderer/scene/scene_extractor.h>
 #include <core/engine.h>
 #include <scene/components.h>
@@ -31,6 +32,7 @@ namespace wiwa
 		const glm::vec4 PERCEPTION_COLOR(1.0f, 0.85f, 0.2f, 1.0f);
 		const glm::vec4 PERCEPTION_HEARING_COLOR(0.3f, 0.8f, 1.0f, 0.8f);
 		const glm::vec4 GRID_COLOR(0.6f, 0.6f, 0.6f, 0.6f);
+		const glm::vec4 WHEEL_COLOR(0.4f, 1.0f, 0.8f, 1.0f);
 		constexpr i32 GRID_HALF_COUNT = 50;     // lines on each side of the camera, per level
 
 		// One level of the ground grid, centered under the camera and snapped to its own cells so it never swims; lines fade out toward the edge.
@@ -285,6 +287,19 @@ namespace wiwa
 			if (shapes.HearingRadius > 0.0f)
 			{
 				draw.sphere(shapes.HearingCentre, shapes.HearingRadius, PERCEPTION_HEARING_COLOR, DebugDepth::Faded, 1.0f);
+			}
+		}
+
+		if (hasSelection && registry.all_of<VehicleWheel, WorldTransform>(selected))
+		{
+			const VehicleWheelGizmoShapes shapes = vehicle_wheel_gizmo_shapes(registry.get<VehicleWheel>(selected), registry.get<WorldTransform>(selected).Matrix);
+			for (size_t i = 0; i < shapes.Circle.size(); i++)
+			{
+				draw.line(shapes.Circle[i], shapes.Circle[(i + 1) % shapes.Circle.size()], WHEEL_COLOR, DebugDepth::Faded, 1.5f);
+			}
+			if (!shapes.Circle.empty())
+			{
+				draw.line(shapes.TravelTop, shapes.TravelBottom, WHEEL_COLOR, DebugDepth::AlwaysOnTop, 2.0f);
 			}
 		}
 

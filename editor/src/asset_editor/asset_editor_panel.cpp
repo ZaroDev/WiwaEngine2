@@ -16,6 +16,7 @@
 #include "mesh_editor.h"
 #include "preview_mesh_resolver.h"
 #include "skeleton_editor.h"
+#include "vehicle_editor.h"
 
 using wiwa::LogLevel; // for WI_LOG
 #define WI_ASSET_LOG(level, ...) WI_LOG(level, "AssetEditor", __VA_ARGS__)
@@ -82,6 +83,7 @@ bool AssetEditorPanel::load_now(const std::filesystem::path& file)
 	case wiwa::AssetEditorKind::Effect: editor = std::make_unique<wiwa::VfxEditor>(host); break;
 	case wiwa::AssetEditorKind::BehaviorTree: editor = std::make_unique<wiwa::BehaviorTreeEditor>(host); break;
 	case wiwa::AssetEditorKind::Mesh: editor = std::make_unique<wiwa::MeshEditor>(host); break;
+	case wiwa::AssetEditorKind::Vehicle: editor = std::make_unique<wiwa::VehicleEditor>(host); break;
 	case wiwa::AssetEditorKind::None:
 		m_Error = file.filename().string() + ": no Asset Editor tool opens this kind of file";
 		m_Editor.reset();

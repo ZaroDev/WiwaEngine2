@@ -10,6 +10,9 @@
 #include <ai/bt_editor.h>
 #include <animation/animation_panel.h>
 #include <asset_editor/asset_editor_panel.h>
+#include <asset_editor/vehicle_editor.h>
+#include <asset_editor/vehicle_editor_checks.h>
+#include <asset_pipeline/vehicle_file.h>
 #include <asset_pipeline/asset_pipeline_module.h>
 #include <asset_pipeline/physics_settings_file.h>
 #include <input/input_edit_model.h>
@@ -117,6 +120,7 @@ void EditorSmokeDriver::update(EditorModule& editor)
 			m_PhysicsPanel->section()->set_layer_name(1, "Smoke");
 			m_PhysicsPanel->section()->set_collides(0, 1, false);
 		}
+
 		if (m_Frame == 130)
 		{
 			wiwa::PhysicsLayers saved;
@@ -128,7 +132,67 @@ void EditorSmokeDriver::update(EditorModule& editor)
 			WI_INFO("Editor", "Physics panel smoke test {0} (frames {1}, read {2}, layer 1 \"{3}\", 0-1 collide {4}, error \"{5}\")", passed ? "passed" : "FAILED", m_PhysicsPanel->frames_drawn(), read, saved.Names[1], saved.collides(0, 1), m_PhysicsPanel->section()->last_error());
 			std::error_code removed;
 			std::filesystem::remove(m_PhysicsPanelFile, removed);
-			wiwa::Engine::get().set_exit_code(passed ? 0 : 1);
+			if (!passed)
+			{
+				wiwa::Engine::get().set_exit_code(1);
+				wiwa::Engine::get().request_quit();
+			}
+		}
+
+		// then the vehicle tools (the Asset Editor shares a dock with the Physics panel, so after it): the checks that need no frame, and a
+		// .wvehicle in the Asset Editor for 120 frames with ImGui asserts on, edited through the model and saved
+		if (m_Frame == 135)
+		{
+			m_VehicleFailure = wiwa::run_vehicle_editor_checks();
+			m_VehiclePanelFile = std::filesystem::temp_directory_path() / "wiwa_physics_panel_smoke.wvehicle";
+			std::ofstream(m_VehiclePanelFile, std::ios::binary) << wiwa::vehicle_to_json(wiwa::default_vehicle_settings()).dump(2);
+			if (m_AssetEditor == nullptr)
+			{
+				m_VehicleFailure += " no Asset Editor panel";
+			}
+			else
+			{
+				m_AssetEditor->set_open(true);
+				if (!m_AssetEditor->open_file(m_VehiclePanelFile))
+				{
+					m_VehicleFailure += " the .wvehicle did not open (" + m_AssetEditor->last_error() + ")";
+				}
+			}
+		}
+		if (m_Frame == 200 && m_AssetEditor != nullptr)
+		{
+			wiwa::VehicleEditor* vehicleEditor = dynamic_cast<wiwa::VehicleEditor*>(m_AssetEditor->editor());
+			wiwa::VehicleSettingsData next = vehicleEditor != nullptr && vehicleEditor->model() != nullptr ? vehicleEditor->model()->data() : wiwa::VehicleSettingsData{};
+			next.MaxBrakeTorque = 1234.0f;
+			if (vehicleEditor == nullptr || vehicleEditor->model() == nullptr || !vehicleEditor->model()->edit(next))
+			{
+				m_VehicleFailure += " the vehicle editor did not take the edit";
+			}
+			else
+			{
+				m_AssetEditor->save(); // the panel's Save (Ctrl+S): it knows the change on disk is its own
+				if (!m_AssetEditor->last_error().empty())
+				{
+					m_VehicleFailure += " the vehicle did not save (" + m_AssetEditor->last_error() + ")";
+				}
+			}
+		}
+		if (m_Frame == 260)
+		{
+			wiwa::VehicleEditor* vehicleEditor = m_AssetEditor != nullptr ? dynamic_cast<wiwa::VehicleEditor*>(m_AssetEditor->editor()) : nullptr;
+			std::ifstream stream(m_VehiclePanelFile, std::ios::binary);
+			const std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+			stream.close();
+			wiwa::VehicleSettingsData reloaded;
+			std::string readError;
+			const bool savedVehicle = wiwa::vehicle_from_text(text, reloaded, readError) && reloaded.MaxBrakeTorque == 1234.0f;
+			const bool vehiclePassed = m_VehicleFailure.empty() && vehicleEditor != nullptr && m_AssetEditor->open_kind() == "Vehicle" && vehicleEditor->frames_drawn() >= 100
+				&& savedVehicle && !vehicleEditor->dirty();
+			WI_INFO("Editor", "Vehicle editor smoke {0} (kind '{1}', frames {2}, panel frames {5}, saved and reloaded {3}, {4})", vehiclePassed ? "passed" : "FAILED", m_AssetEditor != nullptr ? m_AssetEditor->open_kind() : "",
+				vehicleEditor != nullptr ? vehicleEditor->frames_drawn() : 0u, savedVehicle, m_VehicleFailure, m_AssetEditor != nullptr ? m_AssetEditor->frames_with_editor() : 0u);
+			std::error_code vehicleRemoved;
+			std::filesystem::remove(m_VehiclePanelFile, vehicleRemoved);
+			wiwa::Engine::get().set_exit_code(vehiclePassed ? 0 : 1);
 			wiwa::Engine::get().request_quit();
 		}
 	}

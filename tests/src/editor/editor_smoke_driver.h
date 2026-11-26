@@ -28,7 +28,9 @@ private:
 
 	bool m_PlaySmoke = false;
 	bool m_UiEditorSmoke = false;              // --ui-editor-smoke: open a panel in the UI Editor, run for a while, check it is previewing
-	bool m_PhysicsPanelSmoke = false;          // --physics-panel-smoke: draw the Physics panel for a while with ImGui asserts on, edit the matrix, check it was saved
+	bool m_PhysicsPanelSmoke = false;          // --physics-panel-smoke: draw the Physics panel for a while with ImGui asserts on, edit the matrix, check it was saved; and the vehicle editor
+	std::filesystem::path m_VehiclePanelFile{};
+	std::string m_VehicleFailure{};
 	bool m_InputPanelSmoke = false;            // --input-panel-smoke: draw the Input panel for a while with ImGui asserts on, edit a map through the panel, check it was saved
 	bool m_AudioPanelSmoke = false;            // --audio-panel-smoke: draw the Audio panel for a while, audition an event through it, check it stops
 	bool m_NavPanelSmoke = false;              // --nav-panel-smoke: draw the Navigation panel for a while, make a volume through it, check it

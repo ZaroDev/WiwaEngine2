@@ -15,7 +15,8 @@ namespace wiwa
 		Clip,
 		Graph,
 		Effect,
-		BehaviorTree
+		BehaviorTree,
+		Vehicle
 	};
 
 	// One source file kind of the editor, found by its extension. The single table behind "which icon", "does it open in the Asset Editor",
