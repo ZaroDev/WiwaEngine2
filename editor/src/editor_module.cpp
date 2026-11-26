@@ -771,6 +771,33 @@ void EditorModule::update(float deltaTime)
 			action();
 		}
 	}
+	// A project the launcher just made gets its starter scene once the first scan has imported the template (project/starter_scene.h).
+	if (m_StarterScene == wiwa::StarterSceneStep::NotYet && !m_SceneEditor->playing())
+	{
+		wiwa::AssetPipelineModule* pipeline = wiwa::Engine::get().get_module<wiwa::AssetPipelineModule>();
+		std::string error;
+		std::error_code cwd;
+		m_StarterScene = wiwa::build_starter_scene(std::filesystem::current_path(cwd), scanFinished, *wiwa::Engine::get().get_module<wiwa::AssetManager>(),
+			*m_SceneEditor, [pipeline](const std::filesystem::path& file) { pipeline->get_database().reimport(file); }, error);
+		if (m_StarterScene == wiwa::StarterSceneStep::NotYet && scanFinished)
+		{
+			const auto now = std::chrono::steady_clock::now();
+			if (!m_StarterSceneWaitStart)
+			{
+				m_StarterSceneWaitStart = now;
+			}
+			if (now - *m_StarterSceneWaitStart > std::chrono::duration<float>(wiwa::STARTER_SCENE_WAIT_SECONDS))
+			{
+				m_StarterScene = wiwa::StarterSceneStep::Failed;
+				error = "the template's Assets/models/shapes/shapes.glb, or the saved scene, never showed up in the asset catalog";
+			}
+		}
+		if (m_StarterScene == wiwa::StarterSceneStep::Failed)
+		{
+			using wiwa::LogLevel;
+			WI_LOG(Error, "Editor", "The starter scene of this new project could not be made: {0}", error);
+		}
+	}
 	if (!m_SceneEditor->playing() && !wiwa::Engine::get().get_module<wiwa::InputModule>()->backend_injected())
 	{
 		wiwa::Engine::get().get_module<wiwa::InputModule>()->set_capture(false); // the Viewport turns it on while it draws, in play mode

@@ -11,6 +11,7 @@
 #include "input/input_smoke_test.h"
 #include "core/project_dir_smoke_test.h"
 #include "launcher/launcher_smoke_test.h"
+#include "launcher/new_project_smoke.h"
 #include "nav/nav_smoke_test.h"
 #include "physics/physics_smoke_test.h"
 #include "scene/scene_smoke_test.h"
@@ -66,9 +67,13 @@ protected:
 		}
 		setup.OpenAudioPanel = m_Driver.audio_panel_smoke();
 		setup.OnFrame = [this](EditorModule& editor) { m_Driver.update(editor); };
+		if (has_argument("--starter-scene-child")) // the editor run of --new-project-smoke, on its scratch project
+		{
+			setup.OnFrame = [](EditorModule& editor) { wiwa::starter_scene_child_frame(editor); };
+		}
 		m_ModuleManager.add_module<EditorModule>(std::move(setup));
 
-		if (!m_Driver.any_requested() && !has_argument("--render-test") && !has_argument("--render-smoke") && !has_headless_smoke())
+		if (!m_Driver.any_requested() && !has_argument("--render-test") && !has_argument("--render-smoke") && !has_headless_smoke() && !has_argument("--starter-scene-child"))
 		{
 			WI_ERROR("Tests", "wiwa_tests needs a flag (--asset-smoke, --scene-smoke, --render-test, ...): see the table in CLAUDE.md");
 			set_exit_code(1);
@@ -88,6 +93,7 @@ protected:
 			{ "--input-smoke", &wiwa::run_input_smoke_test },
 			{ "--project-dir-smoke", &wiwa::run_project_dir_smoke_test },
 			{ "--launcher-smoke", &wiwa::run_launcher_smoke_test },
+			{ "--new-project-smoke", &wiwa::run_new_project_smoke_test },
 			{ "--audio-smoke", &wiwa::run_audio_smoke_test },
 			{ "--nav-smoke", &wiwa::run_nav_smoke_test },
 			{ "--ai-smoke", &wiwa::run_ai_smoke_test },
@@ -118,7 +124,7 @@ private:
 
 	bool has_headless_smoke() const
 	{
-		for (const char* flag : { "--asset-smoke", "--scene-smoke", "--script-smoke", "--ui-smoke", "--physics-smoke", "--input-smoke", "--project-dir-smoke", "--launcher-smoke", "--audio-smoke", "--nav-smoke", "--ai-smoke", "--anim-smoke", "--video-smoke", "--video-mf-smoke", "--write-demo-video" })
+		for (const char* flag : { "--asset-smoke", "--scene-smoke", "--script-smoke", "--ui-smoke", "--physics-smoke", "--input-smoke", "--project-dir-smoke", "--launcher-smoke", "--new-project-smoke", "--audio-smoke", "--nav-smoke", "--ai-smoke", "--anim-smoke", "--video-smoke", "--video-mf-smoke", "--write-demo-video" })
 		{
 			if (has_argument(flag))
 			{

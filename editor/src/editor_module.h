@@ -11,6 +11,7 @@
 #include <panels/panels.h>
 #include <play/play_mode.h>
 #include <scene/scene_editor.h>
+#include "project/starter_scene.h"
 
 #include <asset_pipeline/reference_finder.h>
 
@@ -66,9 +67,15 @@ public:
 	// action needs). Actions run in the order they were added; one added after the scan has finished runs at the next update().
 	void when_scan_finished(std::function<void()> action) { m_AfterScan.push_back(std::move(action)); }
 
+	wiwa::SceneEditor& scene_editor() { return *m_SceneEditor; }
+	// Where the starter scene of a new project is (project/starter_scene.h): NotYet until it settles, then what it settled on.
+	wiwa::StarterSceneStep starter_scene_step() const { return m_StarterScene; }
+
 private:
 	friend class EditorSmokeDriver; // wiwa_tests: the panel, play and demo smokes
 	EditorTestSetup m_Test{};
+	wiwa::StarterSceneStep m_StarterScene = wiwa::StarterSceneStep::NotYet;
+	std::optional<std::chrono::steady_clock::time_point> m_StarterSceneWaitStart{}; // the first NotYet after the first scan finished
 
 	void dock_space();
 	void main_bar();

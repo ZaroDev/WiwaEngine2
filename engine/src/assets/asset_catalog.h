@@ -40,7 +40,7 @@ namespace wiwa
 		};
 		std::vector<Redirect> Redirects{};
 
-		// nullopt if the path is not in the catalog. Slashes either way, and a leading "./", are accepted.
+		// nullopt if the path is not in the catalog. Slashes either way, a leading "./" and any case (ASCII) are accepted.
 		std::optional<AssetRef> find(std::string_view path) const;
 
 		static std::string normalize(std::string_view path);

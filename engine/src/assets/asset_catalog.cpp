@@ -18,10 +18,18 @@ namespace wiwa
 
 	std::optional<AssetRef> AssetCatalog::find(std::string_view path) const
 	{
+		// project files live on a case-insensitive file system: "Assets/x.glb" and the catalogued "assets/x.glb" are one file
+		const auto same = [](std::string_view a, std::string_view b)
+		{
+			return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y)
+			{
+				return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
+			});
+		};
 		const std::string wanted = normalize(path);
 		for (const Entry& entry : Entries)
 		{
-			if (entry.Path == wanted)
+			if (same(entry.Path, wanted))
 			{
 				return AssetRef{ entry.Guid, 0 };
 			}

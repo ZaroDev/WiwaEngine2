@@ -1,6 +1,7 @@
 #include <editor_common.h>
 #include "launcher_smoke_test.h"
 
+#include <assets/asset_catalog.h>
 #include <core/launch.h>
 #include <core/project_creator.h>
 #include <core/project_registry.h>
@@ -255,6 +256,12 @@ namespace wiwa
 		registry_checks(check, root);
 		creator_checks(check, root);
 		launch_checks(check, root);
+
+		// ---- a new project's assets are catalogued under its folder name, assets/; the editor looks them up as "Assets/..." (entity templates)
+		AssetCatalog catalog;
+		catalog.Entries.push_back({ "assets/models/shapes/shapes.glb", AssetGuid{ 1, 2 } });
+		check(catalog.find("Assets/models/shapes/shapes.glb").has_value(), "the catalog finds a path whatever its case (Windows paths)");
+		check(!catalog.find("Assets/models/shapes/other.glb").has_value(), "the catalog still tells paths apart");
 
 		std::filesystem::remove_all(root, error);
 		if (check.Failures == 0)
