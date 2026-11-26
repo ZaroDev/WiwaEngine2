@@ -162,6 +162,7 @@ namespace wiwa
 	{
 		MotionType Motion = MotionType::Dynamic;
 		float MassOverride = 0.0f; // 0: from the shape and its material density
+		glm::vec3 CenterOfMassOffset{ 0.0f }; // body space, metres; zero: the shape's own centre of mass (a car sets it low)
 		float LinearDamping = 0.05f;
 		float AngularDamping = 0.05f;
 		float GravityFactor = 1.0f;

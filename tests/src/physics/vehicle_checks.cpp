@@ -72,11 +72,39 @@ namespace wiwa
 			const std::optional<PhysicsMaterialData> old = deserialize<PhysicsMaterialData>(v1Bytes);
 			check(old && old->Friction == 0.7f && old->Density == 900.0f && old->TireGrip == 1.0f, "physmat_v1_payload: a version 1 payload loads with TireGrip 1");
 		}
+
+		// RigidBody::CenterOfMassOffset: a tall box tipped 30 degrees rights itself with its mass low, and falls over without.
+		float upright_after_tip(glm::vec3 comOffset)
+		{
+			SyncWorld world;
+			if (!world.start())
+			{
+				return -2.0f;
+			}
+			world.send(CreateBody{ EntityGuid::generate(), box_body(MotionType::Static, glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(40.0f, 0.5f, 40.0f)) });
+			const BodyKey tall = EntityGuid::generate();
+			BodyDesc desc = box_body(MotionType::Dynamic, glm::vec3(0.0f, 1.2f, 0.0f), glm::vec3(0.3f, 1.0f, 0.3f));
+			desc.Rotation = glm::angleAxis(glm::radians(30.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+			desc.CenterOfMassOffset = comOffset;
+			world.send(CreateBody{ tall, desc });
+			const PhysicsStepSnapshot after = world.step(360);
+			const BodyPose* pose = find_pose(&after, tall);
+			return pose ? glm::dot(pose->Rotation * glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)) : -2.0f;
+		}
+
+		void check_body_com_offset(Check& check)
+		{
+			const float low = upright_after_tip(glm::vec3(0.0f, -0.9f, 0.0f));
+			const float centred = upright_after_tip(glm::vec3(0.0f));
+			check(low > 0.95f, "body_com_offset: a tall box with its mass low rights itself, up.y " + std::to_string(low));
+			check(centred < 0.3f, "body_com_offset: the same box with its mass centred falls over, up.y " + std::to_string(centred));
+		}
 	}
 
 	void run_vehicle_checks(Check& check)
 	{
 		check_tire_model(check);
 		check_physmat_tire_grip(check);
+		check_body_com_offset(check);
 	}
 }

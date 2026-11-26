@@ -5,7 +5,9 @@
 #include <thread>
 #include <vector>
 
+#include <physics/jolt_runtime.h>
 #include <physics/physics_thread.h>
+#include <physics/physics_world.h>
 #include <physics/physics_snapshot.h>
 #include <physics/physics_commands.h>
 
@@ -92,4 +94,38 @@ namespace wiwa::physics_test
 		world.send(CreateBody{ floor, box_body(MotionType::Static, glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(40.0f, 0.5f, 10.0f)) });
 		return floor;
 	}
+
+	// A world stepped on the calling thread, one fixed step at a time: commands land on a known step, so dynamics checks are repeatable
+	// and do not wait on the wall clock. The threaded CommandWorld stays for lifetime and sync checks.
+	struct SyncWorld
+	{
+		JoltRuntimeScope Runtime{};
+		Scope<IPhysicsWorld> World{};
+
+		bool start(u32 rateHz = 120, glm::vec3 gravity = glm::vec3(0.0f, -9.81f, 0.0f))
+		{
+			PhysicsSettings settings;
+			settings.Gravity = gravity;
+			settings.FixedRateHz = rateHz;
+			World = create_physics_world(settings, PhysicsLayers{});
+			return World != nullptr;
+		}
+
+		void send(const PhysicsCommand& command) { World->execute(command); }
+
+		// Runs `steps` steps and returns the snapshot of the last one.
+		PhysicsStepSnapshot step(u32 steps = 1)
+		{
+			for (u32 i = 0; i < steps; i++)
+			{
+				World->step();
+			}
+			PhysicsStepSnapshot snapshot;
+			snapshot.FixedDt = static_cast<float>(World->fixed_dt());
+			World->write_poses(snapshot);
+			World->take_events(snapshot);
+			World->write_debug(snapshot);
+			return snapshot;
+		}
+	};
 }

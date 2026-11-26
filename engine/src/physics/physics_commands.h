@@ -44,6 +44,7 @@ namespace wiwa
 	{
 		MotionType Motion = MotionType::Static;
 		float MassOverride = 0.0f; // 0 (or less): from the shape and its density
+		glm::vec3 CenterOfMassOffset{ 0.0f }; // body space; zero: the shape's own (non-finite: treated as zero)
 		float LinearDamping = 0.05f;
 		float AngularDamping = 0.05f;
 		float GravityFactor = 1.0f;

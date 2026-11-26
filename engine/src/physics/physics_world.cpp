@@ -13,6 +13,7 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Body/BodyLock.h>
+#include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
@@ -375,6 +376,7 @@ namespace wiwa
 				MotionType Motion = MotionType::Static;    // what the body is (a placeholder or a fully locked body does not move by itself)
 				JPH::EAllowedDOFs Dofs = JPH::EAllowedDOFs::All;
 				float MassOverride = 0.0f;                 // 0: from the shape
+				glm::vec3 ComOffset{ 0.0f };               // RigidBody::CenterOfMassOffset (finite)
 				i32 Layer = 0;
 				bool IsTrigger = false;
 				bool ReportContacts = false;
@@ -384,6 +386,18 @@ namespace wiwa
 			};
 
 			enum class BodyWarning : u32 { AllLocked, Placeholder, MustBeStatic };
+
+			// The shape with its centre of mass moved by the offset (the shape itself, unchanged, when there is none).
+			static JPH::RefConst<JPH::Shape> with_com_offset(JPH::RefConst<JPH::Shape> shape, glm::vec3 offset)
+			{
+				if (shape == nullptr || offset == glm::vec3(0.0f))
+				{
+					return shape;
+				}
+				JPH::OffsetCenterOfMassShapeSettings settings(to_jolt(offset), shape.GetPtr());
+				JPH::ShapeSettings::ShapeResult result = settings.Create();
+				return result.IsValid() ? result.Get() : shape;
+			}
 
 			// A triangle mesh cannot move: a body that asks to is left without a shape (it becomes a non-colliding placeholder).
 			JPH::RefConst<JPH::Shape> movable_or_null(BodyKey key, MotionType requested, JPH::RefConst<JPH::Shape> shape)
@@ -452,7 +466,12 @@ namespace wiwa
 			{
 				destroy_body(key); // a CreateBody for a key that has a body replaces it
 
-				JPH::RefConst<JPH::Shape> shape = movable_or_null(key, desc.Motion, m_Shapes.build(desc.Shape));
+				const glm::vec3 comOffset = finite(desc.CenterOfMassOffset) ? desc.CenterOfMassOffset : glm::vec3(0.0f);
+				if (!finite(desc.CenterOfMassOffset))
+				{
+					WI_PHYSICS_LOG(Warning, "Body {0}: the centre of mass offset is not finite; it is ignored", key.to_string());
+				}
+				JPH::RefConst<JPH::Shape> shape = movable_or_null(key, desc.Motion, with_com_offset(m_Shapes.build(desc.Shape), comOffset));
 				const bool placeholder = shape == nullptr;
 				const JPH::EAllowedDOFs dofs = allowed_dofs(desc);
 
@@ -461,6 +480,7 @@ namespace wiwa
 				entry.Motion = effective_motion(key, desc.Motion, placeholder, dofs);
 				entry.Dofs = dofs;
 				entry.MassOverride = std::isfinite(desc.MassOverride) ? std::max(desc.MassOverride, 0.0f) : 0.0f; // negative: treated as 0
+				entry.ComOffset = comOffset;
 				entry.Layer = desc.Layer;
 				entry.IsTrigger = desc.IsTrigger;
 				entry.ReportContacts = desc.ReportContacts;
@@ -580,7 +600,7 @@ namespace wiwa
 				m_StaticDirty = true;
 				JPH::BodyInterface& bodies = m_System.GetBodyInterfaceNoLock();
 
-				JPH::RefConst<JPH::Shape> shape = movable_or_null(key, entry.Requested, m_Shapes.build(desc));
+				JPH::RefConst<JPH::Shape> shape = movable_or_null(key, entry.Requested, with_com_offset(m_Shapes.build(desc), entry.ComOffset));
 				const bool placeholder = shape == nullptr;
 				entry.Placeholder = placeholder;
 				entry.Built = shape;

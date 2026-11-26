@@ -76,6 +76,7 @@ namespace wiwa
 		registry.register_component(WI_COMPONENT(RigidBody,
 			WI_FIELD_META(Motion, FieldMeta::enumeration({ "Static", "Kinematic", "Dynamic" })),
 			WI_FIELD(MassOverride),
+			WI_FIELD(CenterOfMassOffset),
 			WI_FIELD(LinearDamping),
 			WI_FIELD(AngularDamping),
 			WI_FIELD(GravityFactor),

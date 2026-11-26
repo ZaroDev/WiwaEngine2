@@ -112,7 +112,7 @@ namespace wiwa
 		// Everything but the pose, the shape and the layer (a layer change is a SetLayer).
 		bool same_body(const BodyDesc& a, const BodyDesc& b)
 		{
-			return a.Motion == b.Motion && a.MassOverride == b.MassOverride && a.LinearDamping == b.LinearDamping && a.AngularDamping == b.AngularDamping
+			return a.Motion == b.Motion && a.MassOverride == b.MassOverride && a.CenterOfMassOffset == b.CenterOfMassOffset && a.LinearDamping == b.LinearDamping && a.AngularDamping == b.AngularDamping
 				&& a.GravityFactor == b.GravityFactor && a.ContinuousCollision == b.ContinuousCollision && a.AllowSleeping == b.AllowSleeping
 				&& a.ReportContacts == b.ReportContacts && std::equal(std::begin(a.LockPosition), std::end(a.LockPosition), std::begin(b.LockPosition))
 				&& std::equal(std::begin(a.LockRotation), std::end(a.LockRotation), std::begin(b.LockRotation)) && a.IsTrigger == b.IsTrigger;
@@ -175,6 +175,7 @@ namespace wiwa
 				{
 					desc.Motion = rigid->Motion;
 					desc.MassOverride = std::max(rigid->MassOverride, 0.0f); // negative: from the shape
+					desc.CenterOfMassOffset = rigid->CenterOfMassOffset;
 					desc.LinearDamping = rigid->LinearDamping;
 					desc.AngularDamping = rigid->AngularDamping;
 					desc.GravityFactor = rigid->GravityFactor;
