@@ -58,3 +58,5 @@ Every relative path of the engine (`assets/`, `library/`, `engine/`, `project.wp
 The editor also needs the engine's own assets (`editor/engine`: shaders, fonts, Lua stubs) as `engine/` in that folder (the source root name `engine` is part of their guids). When the project has none, a **directory junction** to them is created (no administrator rights; a symbolic link on other platforms), found from `WIWA_ENGINE_ASSETS` or by walking up from the executable (`bin/<config>/<project>` -> `<repo>/editor/engine`). A game started with `--project` reads its pack and settings from the folder; it needs no `engine/`. If the assets are not found the program still starts and prints a warning (stderr: the log is not up yet). `--project` alone does not make an editor run a command-line run (the window stays interactive).
 
 `--project-dir-smoke` checks the parsing, the lookup and the link without changing the smoke process's own working directory.
+
+The launcher (`wiwa_launcher`, [launcher.md](launcher.md)) is the usual way to get here: it lists and creates projects and starts the editor with `--project`.

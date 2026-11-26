@@ -3,7 +3,13 @@
 #include <fstream>
 #include <sstream>
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h> // GetModuleFileNameW: where the editor runs from, to find the launcher next to it
+
 #include <input/input_map_io.h>
+#include <core/launch.h>
 
 #include <asset_pipeline/asset_pipeline_module.h>
 #include <asset_pipeline/asset_templates.h>
@@ -823,6 +829,7 @@ void EditorModule::update(float deltaTime)
 	reference_update_popup();
 	export_modal();
 	reimport_modal();
+	switch_project_modal();
 	scene_popups();
 	m_BuildSettings->on_draw();
 	if (m_Browser != nullptr)
@@ -982,6 +989,11 @@ void EditorModule::main_bar()
 			if (ImGui::MenuItem("Update references to extracted assets..."))
 			{
 				m_UpdateReferencesRequested = true;
+			}
+			ImGui::Separator();
+			if (ImGui::MenuItem("Switch Project...", nullptr, false, m_PlayMode->state() == wiwa::PlayState::Edit))
+			{
+				m_SwitchProjectRequested = true;
 			}
 			ImGui::EndMenu();
 		}
@@ -1435,4 +1447,69 @@ void EditorModule::set_theme()
 		io.Fonts->AddFontFromFileTTF("engine/fonts/forkawesome-webfont.ttf", 16.0f, &icons_config, icons_ranges);
 	}
 	io.Fonts->Build();
+}
+
+void EditorModule::switch_project_modal()
+{
+	if (m_SwitchProjectRequested)
+	{
+		m_SwitchProjectRequested = false;
+		if (!m_SceneEditor->dirty())
+		{
+			start_launcher();
+			return;
+		}
+		ImGui::OpenPopup("Switch Project");
+	}
+	if (!ImGui::BeginPopupModal("Switch Project", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		return;
+	}
+	ImGui::Text("The scene has unsaved changes.");
+	const bool hasPath = !m_SceneEditor->path().empty();
+	ImGui::BeginDisabled(!hasPath);
+	if (ImGui::Button("Save and switch"))
+	{
+		if (m_SceneEditor->save())
+		{
+			ImGui::CloseCurrentPopup();
+			start_launcher();
+		}
+		else
+		{
+			show_scene_status("Could not save " + m_SceneEditor->path().string() + " (see the log)");
+		}
+	}
+	ImGui::EndDisabled();
+	if (!hasPath && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+	{
+		ImGui::SetTooltip("The scene has never been saved: use Save As first, or switch without saving");
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Switch without saving"))
+	{
+		ImGui::CloseCurrentPopup();
+		start_launcher();
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Cancel"))
+	{
+		ImGui::CloseCurrentPopup();
+	}
+	ImGui::EndPopup();
+}
+
+void EditorModule::start_launcher()
+{
+	wchar_t buffer[4096];
+	const DWORD length = GetModuleFileNameW(nullptr, buffer, static_cast<DWORD>(std::size(buffer)));
+	const std::filesystem::path folder = length > 0 && length < std::size(buffer) ? std::filesystem::path(buffer).parent_path() : std::filesystem::path{};
+	const std::filesystem::path launcher = wiwa::find_sibling_executable(folder, "wiwa_launcher");
+	std::string error = "wiwa_launcher.exe was not found next to the editor or in its build folder";
+	if (!launcher.empty() && wiwa::start_process(launcher, L"\"" + launcher.wstring() + L"\"", launcher.parent_path(), error))
+	{
+		wiwa::Engine::get().request_quit();
+		return;
+	}
+	show_scene_status("Could not start the launcher: " + error);
 }

@@ -84,6 +84,10 @@ private:
 	void export_button();
 	void export_modal();
 	void reimport_modal();
+	// File > Switch Project...: asks about unsaved changes, then starts the launcher (wiwa_launcher.exe) and quits (launcher.md).
+	void switch_project_modal();
+	void start_launcher();
+	bool m_SwitchProjectRequested = false;
 	Ref<wiwa::JobProgress> m_ReimportShownJob{}; // the reimport job the modal was opened for
 	bool m_ReimportShown = false;
 	std::vector<std::string> m_ReimportErrors{};

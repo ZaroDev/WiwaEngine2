@@ -9,6 +9,9 @@ project "wiwa_editor"
 	{
 		"src/**.h",
 		"src/**.cpp",
+		-- File > Switch Project starts the launcher: the same lookup and process start as the launcher's own
+		"%{wks.location}/launcher/src/core/launch.h",
+		"%{wks.location}/launcher/src/core/launch.cpp",
 		"vendor/ImGuizmo/ImGuizmo.h",
 		"vendor/ImGuizmo/ImGuizmo.cpp",
 		"vendor/ImGuizmo/ImCurveEdit.h",
@@ -20,6 +23,7 @@ project "wiwa_editor"
 	includedirs
 	{
 		"src",
+		"%{wks.location}/launcher/src",
 		"vendor/ImGuizmo",
 		"%{IncludeDirs.ImGui}",
 		"%{IncludeDirs.nvrhi}", -- render_module.h exposes NVRHI types

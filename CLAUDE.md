@@ -13,7 +13,7 @@ msbuild Wiwa2.sln /p:Configuration=Release /p:Platform=x64
 
 The `scripts\GenerateProjects*.bat` files do `cd ..` first: run them from `scripts\`, never from the root (from the root they generate nothing and msbuild builds the stale projects without a word). Build Release to verify; Debug only to debug a problem.
 
-Configurations `Debug`, `Release`, `Shipping`; output in `bin/<cfg>-windows-x86_64/<project>`. `scripts/Build*2022.bat` are stale, don't use them. Projects: `wiwa` (static lib, `engine/`), `wiwa_editor` (`editor/`, debugdir `editor/`), `wiwa_game` (`game/`, debugdir `game/`), `wiwa_tests` (`tests/`, debugdir `editor/`). The game links only the engine, never editor code. The editor and the game contain no test code: every check lives in `wiwa_tests`, which compiles `editor/src` (minus `editor.cpp`) next to its own sources and links the engine.
+Configurations `Debug`, `Release`, `Shipping`; output in `bin/<cfg>-windows-x86_64/<project>`. `scripts/Build*2022.bat` are stale, don't use them. Projects: `wiwa` (static lib, `engine/`), `wiwa_editor` (`editor/`, debugdir `editor/`), `wiwa_game` (`game/`, debugdir `game/`), `wiwa_tests` (`tests/`, debugdir `editor/`), `wiwa_launcher` (`launcher/`, debugdir `launcher/`: the project list that starts the editor on a project, launcher.md). The game links only the engine, never editor code. The editor and the game contain no test code: every check lives in `wiwa_tests`, which compiles `editor/src` (minus `editor.cpp`) next to its own sources and links the engine.
 
 ### Verification
 
@@ -33,6 +33,8 @@ The test sources are in `tests/src/<area>/` (`*_smoke_test.cpp`, `anim_*_checks.
 | `--ai-smoke` / `--ai-panel-smoke` | tests | behaviour tree format and validator, node semantics, blackboard, MoveTo on a baked navmesh, controllers, Lua leaves and the `AI` API, perception, the edit model, gizmo shapes / the tree editor in the Asset Editor for 120 frames. |
 | `--nav-smoke` / `--nav-panel-smoke` | tests | `.wnav` format, components and settings, Recast bake, Detour queries, crowd agents, Lua API and arrival hooks, the bake model (worker, stale check, cancel), overlay shapes, path tool / Navigation panel for 130 frames. |
 | `--anim-smoke` / `--anim-panel-smoke` | tests | skeleton import, pose math and nodes, Animator module, sockets, extraction, Lua API, animation graphs (file, state machine, blend spaces, layers, edit model) / Animation panel for 130 frames and the Graph editor on the demo warrior's graph |
+| `--launcher-smoke` | tests | the launcher's core: recent list, project folders, Add Existing, creating a project from a template, finding and starting the editor; case-insensitive catalog lookup (launcher.md) |
+| `--new-project-smoke` | tests | a project made by `create_project` gets its starter scene: runs a child `wiwa_tests --project <scratch> --starter-scene-child` (launcher.md) |
 | `--project-dir-smoke` | tests | the `--project` argument: parsing, finding the engine's assets, the directory link a project gets to them (project-settings.md) |
 | `--play-smoke` / `--demo-smoke` | tests | play mode / the demo scene end to end (it waits for the startup scan, so it never plays a stale cook) |
 | `--vfx-editor-smoke` | tests | the VFX editor panel: edit model, preview, readback, effect thumbnail |
@@ -78,6 +80,7 @@ Rules that cut across areas:
 | Input | [input.md](docs/superpowers/documentation/input.md) | `engine/src/input` |
 | Game UI | [ui.md](docs/superpowers/documentation/ui.md) | `engine/src/ui`, `editor/src/ui` |
 | Project settings, Settings page | [project-settings.md](docs/superpowers/documentation/project-settings.md) | `engine/src/core/project_settings.*`, `editor/src/settings` |
+| Project launcher (`wiwa_launcher`, recent projects, new projects and their starter scene, Switch Project) | [launcher.md](docs/superpowers/documentation/launcher.md) | `launcher/src`, `editor/src/project` |
 | Editor, play mode, gizmos, performance stats | [editor.md](docs/superpowers/documentation/editor.md) | `editor/src` |
 
 Animation in one line (the warrior of the demo plays `Warrior_animation/warrior.wgraph`, written by `scripts/gen_demo_graph.py`, run before `gen_demo_scene.py`): `AnimationModule` (after the scripts) evaluates a tree of pose nodes per `Animator` into a joint palette; palettes ride the scene delta to the render thread, which keeps the previous palette like `PrevWorld`, and vertex shaders skin through their own last binding set (`t22`/`t23`). The demo hall (`editor/assets/scenes/demo.wscene`) is written by `scripts/gen_demo_scene.py`, with CC0 FBX characters (the warrior's footstep events live in its `.wanim` clips, extracted from the model once, `<Model>_animation/`; the scene points at the GUIDs and legacy sub-asset ids in the models' `.meta` files, which redirect to the extracted assets; `editor/assets/` is git-ignored, so the scripts regenerate all of it).
