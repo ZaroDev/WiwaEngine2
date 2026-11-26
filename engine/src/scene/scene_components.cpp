@@ -138,7 +138,8 @@ namespace wiwa
 			WI_FIELD(Speed),
 			WI_FIELD(Enabled),
 			WI_FIELD_META(BoundsPadding, FieldMeta::range(0.0f, 100.0f)),
-			WI_FIELD_META(Graph, FieldMeta::asset(AssetType::AnimationGraph))));
+			WI_FIELD_META(Graph, FieldMeta::asset(AssetType::AnimationGraph)),
+			WI_FIELD_META(ModelScale, FieldMeta::range(0.001f, 100000.0f))));
 
 		registry.register_component(WI_COMPONENT(AudioListener,
 			WI_FIELD(Active)));

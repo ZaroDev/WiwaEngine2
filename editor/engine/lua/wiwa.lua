@@ -170,6 +170,7 @@ function mat4.from_quat(q) end
 ---@field name string
 ---@field parent Entity?
 ---@field children Entity[]
+---@field prefab_ready boolean false while an instance made by instantiate_prefab waits for its prefab to load; true for every other entity
 local Entity = {}
 ---@return boolean
 function Entity:is_valid() end
@@ -201,6 +202,13 @@ function SceneLoad:stage() end
 ---@return Entity
 function create_entity(name, parent) end
 
+--- Puts an instance of a prefab (a .wprefab, or a model: `models/props/crate.fbx`) into the scene. The root entity exists at once, so place it with its Transform;
+--- the entities the prefab makes appear when it has loaded, normally at the start of the next frame (`root.prefab_ready` tells). Destroying the root destroys them too.
+---@param path string catalog path of the prefab
+---@param parent Entity?
+---@return Entity
+function instantiate_prefab(path, parent) end
+
 ---@param entity Entity
 function destroy_entity(entity) end
 
@@ -209,10 +217,12 @@ function destroy_entity(entity) end
 ---@return Entity?
 function find_entity(name_or_guid) end
 
---- The asset a catalog path names ("assets/textures/rock.png").
+--- The asset a catalog path names ("assets/textures/rock.png"). With `local_id`, the sub-asset of that file with that id (the number its .meta lists under
+--- subAssets, e.g. `"mesh/0": 1`), for a field that wants a mesh and not the whole model.
 ---@param path string
+---@param local_id integer?
 ---@return Asset
-function load_asset(path) end
+function load_asset(path, local_id) end
 
 --- Starts loading a scene and returns at once. "replace" (the default) swaps the active scene when it is complete.
 ---@param path string
@@ -631,6 +641,10 @@ local UiPanel = {}
 function UiPanel:find(path) end
 
 UI = {}
+--- The size in pixels of what the scene is drawn into, the area `input.mouse()` is in ((0, 0) before the first frame).
+---@return vec2
+function UI.viewport() end
+
 --- The panel shown by the entity's UICanvas, or nil if it has none.
 ---@param entity Entity
 ---@return UiPanel?
@@ -750,10 +764,19 @@ function AudioHandle:is_valid() end
 --- Audio through the project's backend (Wwise, or Null when none is available). Names are the vendor's own (Wwise event, RTPC, switch and state names).
 Audio = {}
 --- Starts an event from the entity (it needs an AudioEmitter component, whose Event may be empty) or globally without one. Returns a handle, or nil when the event did not start (an unknown name is logged once).
+--- Options of Audio.post: `loop` (unset: the backend's rule; MiniAudio loops a clip whose name ends in `_loop`) and `volume` (a gain of 0 or more, 1 = as authored). A Wwise backend ignores both: they live in the authored event.
+---@class AudioPostOptions
+---@field loop? boolean
+---@field volume? number
 ---@param event string
----@param entity? Entity
+---@param entity? Entity|AudioPostOptions an entity, or the options when there is no entity
+---@param options? AudioPostOptions
 ---@return AudioHandle?
-function Audio.post(event, entity) end
+function Audio.post(event, entity, options) end
+--- The gain of a sound that plays (1 = as authored). Not for a Wwise backend.
+---@param handle AudioHandle
+---@param volume number 0 or more
+function Audio.set_volume(handle, volume) end
 ---@param handle AudioHandle
 function Audio.stop(handle) end
 --- Stops everything the entity's emitter plays.

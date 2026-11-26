@@ -583,6 +583,16 @@ namespace wiwa
 			}
 		}
 
+		// The import scale came after the nested instances: older payloads end before it. Always written.
+		if (!(ar.reading() && ar.ok() && ar.remaining() == 0))
+		{
+			ar.value(v.ImportScale);
+			if (ar.reading() && ar.ok() && !(v.ImportScale > 0.0f))
+			{
+				v.ImportScale = 1.0f;
+			}
+		}
+
 		if (ar.reading() && ar.ok())
 		{
 			for (const PrefabNode& n : v.Nodes)

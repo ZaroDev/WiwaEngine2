@@ -650,6 +650,35 @@ namespace wiwa
 			check(list.Vertices.size() == 36 && list.Batches.size() == 1 && near_rect(quad_rect(list, 4), { 16, 16 }, { 112, 112 }) && all_finite(list), "draw_slice9: nine quads, the middle one inside the borders");
 			image.SliceBorders = { 100.0f, 100.0f, 100.0f, 100.0f };
 			check(all_finite(build({ image })), "draw_slice9: borders bigger than the widget stay finite");
+			// a part of the texture (a sprite sheet cell): the quad's UVs are that part, for an image, a panel and a button, and the nine slices stay inside it
+			{
+				const auto uv_bounds = [](const UiDrawList& drawn)
+				{
+					glm::vec4 bounds{ 9.0f, 9.0f, -9.0f, -9.0f };
+					for (const UiVertex& vertex : drawn.Vertices)
+					{
+						bounds = { std::min(bounds.x, vertex.Uv.x), std::min(bounds.y, vertex.Uv.y), std::max(bounds.z, vertex.Uv.x), std::max(bounds.w, vertex.Uv.y) };
+					}
+					return bounds;
+				};
+				const glm::vec4 cell{ 0.25f, 0.5f, 0.5f, 1.0f };
+				UiWidget sheet = image;
+				sheet.Slice9 = false;
+				sheet.UvRect = cell;
+				list = build({ sheet });
+				check(list.Vertices.size() == 4 && uv_bounds(list) == cell, "draw_uv_rect: an image shows only the part of the texture UvRect names");
+				sheet.Kind = WidgetKind::Button;
+				check(uv_bounds(build({ sheet })) == cell, "draw_uv_rect: a button too");
+				sheet.Kind = WidgetKind::Panel;
+				check(uv_bounds(build({ sheet })) == cell, "draw_uv_rect: and a panel");
+				sheet.Kind = WidgetKind::Image;
+				sheet.Slice9 = true;
+				sheet.SliceBorders = { 16.0f, 16.0f, 16.0f, 16.0f };
+				list = build({ sheet });
+				const glm::vec4 sliced = uv_bounds(list);
+				check(list.Vertices.size() == 36 && sliced == cell && all_finite(list), "draw_uv_rect: the nine slices of a cell stay inside it");
+				check(uv_bounds(build({ image })) == glm::vec4(0.0f, 0.0f, 1.0f, 1.0f), "draw_uv_rect: the default is the whole texture");
+			}
 			UiWidget plain = image;
 			plain.Texture = AssetRef{};
 			plain.Slice9 = false;

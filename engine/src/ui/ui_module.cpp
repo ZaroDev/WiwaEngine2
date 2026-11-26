@@ -255,6 +255,10 @@ namespace wiwa
 		}
 
 		const bool hasArea = canvasSize.x > 0.0f && canvasSize.y > 0.0f;
+		if (hasArea)
+		{
+			m_LastCanvasSize = canvasSize;
+		}
 		UiInputFrame input = m_Input != nullptr ? m_Input->poll() : UiInputFrame{};
 		if (!hasArea)
 		{

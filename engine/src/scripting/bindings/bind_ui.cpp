@@ -364,6 +364,8 @@ namespace wiwa
 		bind_widget(lua, context, methods);
 
 		sol::table ui = lua.create_table();
+		// UI.viewport(): the size in pixels of what the scene is drawn into (vec2), the area input.mouse() is in; (0, 0) before the first frame
+		ui.set_function("viewport", [&context]() { return LuaVec2{ ui_of(context).canvas_size(), {} }; });
 		// UI.panel(entity): the panel shown by the entity's UICanvas, or nil if it has none
 		ui.set_function("panel", [&context](const EntityHandle& entity, sol::this_state state) -> sol::object
 			{

@@ -77,7 +77,7 @@ namespace wiwa
 				case WidgetKind::Panel:
 				case WidgetKind::HStack:
 				case WidgetKind::VStack:
-					fill(rect, with_opacity(widget.Color, opacity), widget.Kind == WidgetKind::Panel ? widget.Texture : AssetRef{}, clip);
+					fill(rect, with_opacity(widget.Color, opacity), widget.Kind == WidgetKind::Panel ? widget.Texture : AssetRef{}, clip, widget.UvRect);
 					break;
 
 				case WidgetKind::Image:
@@ -107,7 +107,7 @@ namespace wiwa
 					{
 						color = widget.HoverColor;
 					}
-					fill(rect, with_opacity(color, opacity), widget.Texture, clip);
+					fill(rect, with_opacity(color, opacity), widget.Texture, clip, widget.UvRect);
 					break;
 				}
 
@@ -261,11 +261,17 @@ namespace wiwa
 				}
 				if (!textureSize || !(textureSize->x > 0.0f) || !(textureSize->y > 0.0f))
 				{
-					fill(rect, color, widget.Texture, clip);
+					fill(rect, color, widget.Texture, clip, widget.UvRect);
 					return;
 				}
 
-				// columns and rows: pixels on the canvas, and the same cut points in UV
+				// columns and rows: pixels on the canvas, and the same cut points in UV. The borders are texels of the shown part (UvRect), not of the whole texture.
+				const glm::vec4 uv = widget.UvRect;
+				const glm::vec2 region = *textureSize * glm::vec2(std::abs(uv.z - uv.x), std::abs(uv.w - uv.y));
+				if (!(region.x > 0.0f) || !(region.y > 0.0f))
+				{
+					return;
+				}
 				const float scale = m_Layout.Scale[i];
 				const glm::vec2 size = rect.size();
 				float left = std::max(widget.SliceBorders.x, 0.0f);
@@ -281,8 +287,8 @@ namespace wiwa
 						b *= factor;
 					}
 				};
-				fit(left, right, textureSize->x);
-				fit(top, bottom, textureSize->y);
+				fit(left, right, region.x);
+				fit(top, bottom, region.y);
 
 				float l = left * scale;
 				float r = right * scale;
@@ -292,8 +298,9 @@ namespace wiwa
 				fit(t, b, size.y);
 				const float xs[4] = { rect.Min.x, rect.Min.x + l, rect.Max.x - r, rect.Max.x };
 				const float ys[4] = { rect.Min.y, rect.Min.y + t, rect.Max.y - b, rect.Max.y };
-				const float us[4] = { 0.0f, left / textureSize->x, 1.0f - right / textureSize->x, 1.0f };
-				const float vs[4] = { 0.0f, top / textureSize->y, 1.0f - bottom / textureSize->y, 1.0f };
+				const auto along = [](float from, float to, float t) { return from + (to - from) * t; };
+				const float us[4] = { uv.x, along(uv.x, uv.z, left / region.x), along(uv.x, uv.z, 1.0f - right / region.x), uv.z };
+				const float vs[4] = { uv.y, along(uv.y, uv.w, top / region.y), along(uv.y, uv.w, 1.0f - bottom / region.y), uv.w };
 
 				for (int row = 0; row < 3; row++)
 				{
@@ -336,13 +343,13 @@ namespace wiwa
 			}
 
 			// A colour, or a texture times a colour, over a rect.
-			void fill(const UiRect& rect, const glm::vec4& color, const AssetRef& texture, const glm::vec4& clip)
+			void fill(const UiRect& rect, const glm::vec4& color, const AssetRef& texture, const glm::vec4& clip, const glm::vec4& uvRect = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f))
 			{
 				if (!(color.a > 0.0f))
 				{
 					return;
 				}
-				quad(texture.valid() ? UiQuadKind::Image : UiQuadKind::Solid, texture, clip, SdfParameters{}, rect, glm::vec2(0.0f), glm::vec2(1.0f), color);
+				quad(texture.valid() ? UiQuadKind::Image : UiQuadKind::Solid, texture, clip, SdfParameters{}, rect, glm::vec2(uvRect.x, uvRect.y), glm::vec2(uvRect.z, uvRect.w), color);
 			}
 
 			void quad(UiQuadKind kind, const AssetRef& texture, const glm::vec4& clip, const SdfParameters& sdf, const UiRect& rect, const glm::vec2& uvMin, const glm::vec2& uvMax, const glm::vec4& color)

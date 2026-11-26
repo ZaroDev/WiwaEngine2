@@ -49,6 +49,7 @@ namespace wiwa
 			std::string Event{};
 			Handle<AudioClipData> Clip{};
 			bool Loop = false;
+			float Volume = 1.0f; // the gain Audio.post / set_volume asked for
 			bool Started = false;
 			std::unique_ptr<ma_decoder> Decoder{};
 			std::unique_ptr<ma_sound> Sound{};
@@ -130,6 +131,7 @@ namespace wiwa
 			if (instance.Emitter == 0 || emitter == Emitters.end())
 			{
 				ma_sound_set_spatialization_enabled(&sound, MA_FALSE);
+				ma_sound_set_volume(&sound, instance.Volume);
 				ma_sound_set_pitch(&sound, GlobalPitch);
 				return;
 			}
@@ -141,7 +143,7 @@ namespace wiwa
 			ma_sound_set_max_distance(&sound, std::max(2.0f, DEFAULT_MAX_DISTANCE * e.Scale));
 			ma_sound_set_position(&sound, e.Transform.Position.X, e.Transform.Position.Y, e.Transform.Position.Z);
 			ma_sound_set_direction(&sound, e.Transform.Forward.X, e.Transform.Forward.Y, e.Transform.Forward.Z);
-			ma_sound_set_volume(&sound, e.Volume);
+			ma_sound_set_volume(&sound, e.Volume * instance.Volume);
 			ma_sound_set_pitch(&sound, e.Pitch * GlobalPitch);
 		}
 
@@ -389,6 +391,24 @@ namespace wiwa
 
 	PlayingId MiniAudioBackend::post_event(std::string_view event, EmitterHandle emitter)
 	{
+		return post_event_with(event, emitter, PostOptions{});
+	}
+
+	void MiniAudioBackend::set_playing_volume(PlayingId playing, float volume)
+	{
+		for (auto& instance : m_State->Instances)
+		{
+			if (instance->Id == playing.Value)
+			{
+				instance->Volume = volume;
+				m_State->apply(*instance);
+				return;
+			}
+		}
+	}
+
+	PlayingId MiniAudioBackend::post_event_with(std::string_view event, EmitterHandle emitter, const PostOptions& options)
+	{
 		if (!m_State->EngineReady || m_State->Assets == nullptr)
 		{
 			return {};
@@ -408,7 +428,8 @@ namespace wiwa
 		instance->Emitter = emitter.valid() && m_State->Emitters.contains(emitter.Value) ? emitter.Value : 0;
 		instance->Event = std::string(event);
 		const std::string key = lower(event);
-		instance->Loop = key.size() >= 5 && key.compare(key.size() - 5, 5, "_loop") == 0;
+		instance->Loop = options.Loop.value_or(key.size() >= 5 && key.compare(key.size() - 5, 5, "_loop") == 0);
+		instance->Volume = options.Volume;
 		instance->Clip = m_State->Assets->load<AudioClipData>(*clip);
 
 		const PlayingId id{ instance->Id };

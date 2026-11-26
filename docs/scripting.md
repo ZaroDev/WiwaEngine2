@@ -69,13 +69,17 @@ or `debug`.
 - **Math:** `vec2`, `vec3`, `vec4`, `quat`, `mat4`. `+ - *` and `/`, `length`, `normalize`, `dot`, `distance`, `lerp`, `cross` (vec3).
   `quat.from_euler(x, y, z)` and `quat.from_axis_angle(axis, degrees)` take degrees; `quat * vec3` rotates. `mat4.translate`,
   `mat4.scale`, `mat4.from_quat`, `mat4.identity`, `m:transform_point(v)`, `m:inverse()`.
-- **Entities:** `create_entity(name, parent?)`, `destroy_entity(e)`, `find_entity(name_or_guid)` (nil if none). An entity handle has
-  `is_valid()`, `name`, `parent`, `children`, `set_parent(e)`, `has(component)`, `get(component)`, `add(component)`,
+- **Entities:** `create_entity(name, parent?)`, `instantiate_prefab(path, parent?)`, `destroy_entity(e)`, `find_entity(name_or_guid)` (nil if none).
+  `instantiate_prefab` puts an instance of a prefab (a `.wprefab`, or an imported model) into the scene: the root entity is returned at once (set its
+  `Transform` before anything else), the entities of the prefab are made when it and the prefabs it nests have loaded (the start of the next frame for
+  a prefab that is already loaded; `root.prefab_ready` is false until then), and `destroy_entity(root)` removes them all. An unknown path is an error;
+  a file that is not a prefab leaves an empty root and logs an error. An entity handle has
+  `is_valid()`, `name`, `parent`, `children`, `prefab_ready`, `set_parent(e)`, `has(component)`, `get(component)`, `add(component)`,
   `remove(component)`. A handle never dangles: once the entity is destroyed `is_valid()` is false.
 - **Components:** `e:get("Light").intensity = 3`. Field names are matched exactly, then ignoring case. A script's component is
   addressed by its file name (`other:get("Enemy").health`); two scripts with the same file name are an error that names both.
   Vectors read from a field write through: `t.position.x = 4` changes the transform.
-- **Assets and scenes:** `load_asset(path)` gives the asset a catalog path names (for an asset property); `load_scene(path, mode?)`
+- **Assets and scenes:** `load_asset(path [, local_id])` gives the asset a catalog path names (for an asset property); with `local_id` it is the sub-asset of that file with that id (the number the file's `.meta` lists under `subAssets`, e.g. `"mesh/0": 1`: what `MeshRenderer.mesh` wants, where the bare path is the whole model); `load_scene(path, mode?)`
   (`"replace"` or `"additive"`) returns a handle with `progress()`, `done()`, `failed()`, `stage()`.
 - **Rendering:** `debug_draw.line / box / sphere / arrow(..., color?, duration?)`; `camera.primary()` and
   `camera.set_primary(entity)`.
@@ -87,7 +91,7 @@ or `debug`.
 - **Particles:** `Vfx.spawn{ effect, position, rotation, scale, parent, name, looping, time_scale, params, animator, joint }` plays a particle effect (a `.wfx` from `load_asset`) in a new entity that removes itself when the effect is over (`looping = true` plays until stopped or destroyed). `params` sets `color` (a vec4), `size`, `rate` and `time_scale`. With `animator` (an entity with an Animator) and `joint` the effect is placed at that joint, `position` and `rotation` then being offsets in the joint's space: `anim:on("footstep", function(me, event) Vfx.spawn{ effect = me.step_fx, animator = me.entity, joint = "Foot_R" } end)`. A placed `ParticleSystem` is controlled with `Vfx.play(e)`, `Vfx.stop(e, clear?)` (the particles in the air live out their lives, or are discarded with `clear`), `Vfx.restart(e)`, `Vfx.is_playing(e)` and `Vfx.set_param(e, name, value)`; the component is also reachable as `e:get("ParticleSystem")`. Effects play only while the game clock plays. A missing effect, a non-finite number or a name that is not a parameter is an error.
 - **Engine:** `time.delta()`, `time.total()`; `project.name`, `project.company`, `project.description`, `project.version` (`"1.2.3"` or `"1.2.3-label"`), `project.version_major/minor/patch` (read-only, from the Settings panel's Project page); `log(title, message)`, `log_warning`, `log_error`; `quit()` asks the host to end the program (a game closes, the editor's Play stops).
 - **Settings and prefs:** `settings.graphics.get()` / `.set{ vsync, shadow_distance, shadow_cascades, bloom_mips, ao_slices, ao_steps, fxaa, taa }` read and change the renderer's quality settings of the project (applied at once, sanitized, saved to `render_quality.json`; an unknown key or a wrong type is an error that names it). `settings.scene.get()` / `.set{ bloom, ao, motion_blur, exposure_compensation }` change how the active scene is shown (at once, not saved). `prefs.get(key, default)`, `prefs.set(key, value)` (boolean, number or string) and `prefs.save()` keep the player's own options in `user_prefs.json` next to the program.
-- **Audio:** `Audio.post(event [, entity])` starts an event of the project's audio backend (Wwise, or a silent Null backend) and returns a handle, or `nil` when
+- **Audio:** `Audio.post(event [, entity] [, { loop, volume }])` (the options table may come second when there is no entity; `loop` overrides the backend's rule, `volume` is a gain of 0 or more, both for MiniAudio only: Wwise keeps them in the authored event) and `Audio.set_volume(handle, v)` start an event of the project's audio backend (Wwise, or a silent Null backend) and returns a handle, or `nil` when
   it did not start (an unknown name is logged once). An entity needs an `AudioEmitter` component (its `Event` may be empty) to have a position; posting
   without an entity plays globally. `Audio.stop(handle)`, `Audio.stop_entity(e)`, `Audio.stop_all()`, `Audio.set_rtpc(name, value [, entity])`,
   `Audio.set_switch(group, state [, entity])`, `Audio.set_state(group, state)`, `Audio.load_bank(load_asset("assets/audio/Music.bnk"))`,
@@ -107,7 +111,7 @@ or `debug`.
   `:set_destination(v)` (false when there is no route), `:stop()`, `:warp(v)`, `:state()` (`"idle"`, `"moving"`, `"arrived"`, `"no_path"`), `:remaining_distance()`,
   `:velocity()`. A script on the entity gets `on_nav_arrived(self)` and `on_nav_failed(self)` at the start of the update after the agent arrived or lost its way. Agents only
   walk while the game clock plays.
-- **UI:** `UI.panel(entity)`, widgets by path, `widget:on(event, fn)`, `UI.input` (see "UI" below).
+- **UI:** `UI.panel(entity)`, `UI.viewport()` (the size in pixels of what the scene is drawn into, the area `input.mouse()` is in, `vec2`; `(0, 0)` before the first frame: it is what turns the mouse position into a direction), widgets by path, `widget:on(event, fn)`, `UI.input` (see "UI" below).
 
 ## UI
 
@@ -406,6 +410,6 @@ list is left out.
   is not interrupted, and memory is not capped. Scripts are trusted code written by the project, not a sandbox against hostile ones.
 - In `on_destroy` of a script whose entity was destroyed, `self.entity:is_valid()` is false and `self.transform`, `self.name` and the
   properties are not available (the entity is gone); fields you set on `self` still are.
-- Scripts cannot add or remove `Id`, `Name`, `Transform` or `PrefabInstance`.
+- Scripts cannot add or remove `Id`, `Name`, `Transform` or `PrefabInstance` with `add` / `remove`; `instantiate_prefab` is how a script makes an instance.
 - Numbers assigned to fields must be finite; an `int` property must be in the 32-bit range.
 - Script source is text only: precompiled Lua chunks are rejected.

@@ -26,6 +26,8 @@ namespace wiwa
 		virtual void set_paused(bool paused) override;
 
 		virtual PlayingId post_event(std::string_view event, EmitterHandle emitter) override;
+		virtual PlayingId post_event_with(std::string_view event, EmitterHandle emitter, const PostOptions& options) override;
+		virtual void set_playing_volume(PlayingId playing, float volume) override;
 		virtual void stop_playing(PlayingId playing) override;
 		virtual void stop_emitter(EmitterHandle emitter) override;
 		virtual void stop_all() override;

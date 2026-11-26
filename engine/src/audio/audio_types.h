@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -42,6 +43,13 @@ namespace wiwa
 		float Y = 0.0f;
 		float Z = 0.0f;
 		bool operator==(const AudioVec3&) const = default;
+	};
+
+	// What Audio.post can ask for besides the event.
+	struct PostOptions
+	{
+		std::optional<bool> Loop{}; // unset: the backend's rule
+		float Volume = 1.0f;        // gain, 0 or more
 	};
 
 	// Position and orientation of an emitter or the listener (Forward and Up are unit vectors).

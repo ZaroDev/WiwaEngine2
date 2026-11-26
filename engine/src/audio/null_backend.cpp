@@ -78,6 +78,21 @@ namespace wiwa
 		return id;
 	}
 
+	PlayingId NullAudioBackend::post_event_with(std::string_view event, EmitterHandle emitter, const PostOptions& options)
+	{
+		const PlayingId id = post_event(event, emitter);
+		if (id.valid())
+		{
+			record(FMT("post_options:{0} loop={1} volume={2}", id.Value, options.Loop ? (*options.Loop ? "true" : "false") : "default", options.Volume));
+		}
+		return id;
+	}
+
+	void NullAudioBackend::set_playing_volume(PlayingId playing, float volume)
+	{
+		record(FMT("volume:{0}={1}", playing.Value, volume));
+	}
+
 	void NullAudioBackend::stop_playing(PlayingId playing)
 	{
 		std::erase_if(m_Playing, [&](const Playing& p) { return p.Id == playing.Value; });

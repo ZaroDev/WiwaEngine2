@@ -68,10 +68,20 @@ namespace wiwa
 					parentDirectory = parent->second;
 				}
 
+				// Resolve junctions first: Windows takes ".." lexically, so "<project>/engine/shaders/../../../engine/src" (engine/ being a junction
+				// into the engine repository, see --project) would leave the project instead of the repository.
+				std::error_code realError;
+				if (const fs::path real = fs::canonical(parentDirectory, realError); !realError)
+				{
+					parentDirectory = real;
+				}
+
 				std::vector<fs::path> candidates{ parentDirectory / fileName };
 				for (const fs::path& directory : m_IncludeDirectories)
 				{
-					candidates.push_back(directory / fileName);
+					std::error_code includeError;
+					const fs::path realDirectory = fs::canonical(directory, includeError);
+					candidates.push_back((includeError ? directory : realDirectory) / fileName);
 				}
 
 				for (const fs::path& candidate : candidates)
@@ -244,9 +254,15 @@ namespace wiwa
 			for (const fs::path& directory : options.IncludeDirectories)
 			{
 				arguments.push_back("-I");
-				arguments.push_back(directory.string());
+				std::error_code includeError;
+				const fs::path realDirectory = fs::canonical(directory, includeError); // through a --project junction, see below
+				arguments.push_back((includeError ? directory : realDirectory).string());
 			}
-			arguments.push_back(sourcePath.string());
+			// dxc resolves "../" of an #include lexically from the path it is given: through the engine/ junction of a --project folder that leaves the
+			// repository, so it gets the real path.
+			std::error_code realError;
+			const fs::path realSource = fs::canonical(sourcePath, realError);
+			arguments.push_back((realError ? sourcePath : realSource).string());
 			arguments.push_back("-Fo");
 			arguments.push_back(outputPath.string());
 			arguments.push_back("-Fe"); // warnings and errors go to a file

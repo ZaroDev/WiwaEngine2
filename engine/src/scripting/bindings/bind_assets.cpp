@@ -22,7 +22,8 @@ namespace wiwa
 			"stage", [](const LuaSceneLoad& load) { return load.Progress->stage(); });
 
 		// The asset a source path names ("assets/textures/rock.png"), to put in an asset property. Loading is left to whoever uses it.
-		runtime.sandbox().set_function("load_asset", [&context](const std::string& path)
+		// With a second argument the sub-asset of the file with that local id (the number the file's .meta lists under subAssets, e.g. "mesh/0": 1, for a MeshRenderer.mesh).
+		runtime.sandbox().set_function("load_asset", [&context](const std::string& path, sol::optional<double> localId)
 			{
 				if (context.Assets == nullptr)
 				{
@@ -33,7 +34,16 @@ namespace wiwa
 				{
 					throw sol::error("there is no asset at '" + path + "'");
 				}
-				return LuaAsset{ *asset };
+				AssetRef ref = *asset;
+				if (localId)
+				{
+					if (*localId < 0.0 || *localId != std::floor(*localId))
+					{
+						throw sol::error("the local id of load_asset is a whole number of 0 or more");
+					}
+					ref.LocalId = static_cast<u64>(*localId);
+				}
+				return LuaAsset{ ref };
 			});
 
 		// Starts loading a scene and returns at once: 'replace' (the default) swaps the active scene when it is complete, 'additive' adds to it.

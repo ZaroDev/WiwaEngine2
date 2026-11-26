@@ -34,6 +34,7 @@ namespace wiwa
 		ScriptContext& context = m_Instances->context();
 		context.Assets = assets;
 		context.Scenes = Engine::get().get_module<SceneModule>();
+		context.Prefabs = context.Scenes != nullptr ? context.Scenes->prefabs() : nullptr;
 		context.Ui = Engine::get().get_module<UiModule>();
 		context.Physics = Engine::get().get_module<PhysicsModule>();
 		context.Input = Engine::get().get_module<InputModule>();

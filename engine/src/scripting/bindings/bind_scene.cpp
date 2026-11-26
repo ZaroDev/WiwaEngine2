@@ -3,6 +3,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <assets/asset_manager.h>
+#include <scene/scene_module.h>
 
 #include <scene/reflection/component_registry.h>
 
@@ -170,6 +173,12 @@ namespace wiwa
 				"guid", sol::property([](const EntityHandle& handle) { return handle.Guid.to_string(); }),
 				sol::meta_function::equal_to, [](const EntityHandle& a, const EntityHandle& b) { return a.Guid == b.Guid; },
 
+				// false while an instance made by instantiate_prefab still waits for its prefab to load; true for every other entity
+				"prefab_ready", sol::property([&context](const EntityHandle& handle)
+					{
+						return context.Prefabs == nullptr || !context.Prefabs->pending(handle.Guid);
+					}),
+
 				"has", [&context](const EntityHandle& handle, const std::string& name)
 				{
 					const ComponentInfo& info = find_component(context, name);
@@ -238,6 +247,28 @@ namespace wiwa
 			{
 				Scene& scene = scene_of(context);
 				return handle_of(context, scene.create(name, parent ? entity_of(*parent) : entt::null));
+			});
+
+		// A prefab instance: the root exists at once (place it with its Transform); the entities the prefab makes appear when it has loaded, normally
+		// at the start of the next frame (entity.prefab_ready tells). Destroying the root destroys them with it.
+		sandbox.set_function("instantiate_prefab", [&context](const std::string& path, sol::optional<EntityHandle> parent)
+			{
+				if (context.Assets == nullptr || context.Prefabs == nullptr)
+				{
+					throw sol::error("prefabs cannot be instantiated here");
+				}
+				const std::optional<AssetRef> asset = context.Assets->find_asset(path);
+				if (!asset)
+				{
+					throw sol::error("there is no asset at '" + path + "'");
+				}
+				const std::string name = std::filesystem::path(path).stem().string();
+				const entt::entity root = context.Prefabs->spawn(context.ActiveSceneRef, *asset, name, parent ? entity_of(*parent) : entt::null);
+				if (root == entt::null)
+				{
+					throw sol::error("'" + path + "' is not a valid asset");
+				}
+				return handle_of(context, root);
 			});
 
 		sandbox.set_function("destroy_entity", [&context](const EntityHandle& handle)

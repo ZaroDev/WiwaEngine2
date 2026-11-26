@@ -1,10 +1,53 @@
 #include <pch.h>
 #include "engine.h"
+#include "project_dir.h"
+
+#ifdef WI_PLATFORM_WINDOWS
+#include <windows.h>
+#endif
 
 #define USE_WIN_MAIN WI_SHIPPING && WI_PLATFORM_WINDOWS
 
+// The running executable: GetModuleFileName on Windows (argv[0] may be a bare name when started through PATH), else argv[0] made absolute.
+static std::filesystem::path executable_path(const char* argv0)
+{
+#ifdef WI_PLATFORM_WINDOWS
+	wchar_t buffer[4096];
+	const DWORD length = GetModuleFileNameW(nullptr, buffer, static_cast<DWORD>(std::size(buffer)));
+	if (length > 0 && length < std::size(buffer))
+	{
+		return std::filesystem::path(buffer);
+	}
+#endif
+	std::error_code ec;
+	return std::filesystem::absolute(argv0, ec);
+}
+
 int wiwa_main(int argc, char** argv)
 {
+	// --project <dir>: work in that folder (before anything reads a relative path).
+	{
+		std::vector<std::string> arguments;
+		for (int i = 1; i < argc; i++)
+		{
+			arguments.emplace_back(argv[i]);
+		}
+		if (const std::optional<std::filesystem::path> project = wiwa::project_argument(arguments))
+		{
+			const std::filesystem::path executable = executable_path(argv[0]);
+			std::string error, warning;
+			if (!wiwa::enter_project(*project, wiwa::find_engine_assets(executable.parent_path()), error, warning))
+			{
+				std::fprintf(stderr, "--project: %s\n", error.c_str());
+				return 1;
+			}
+			if (!warning.empty())
+			{
+				std::fprintf(stderr, "--project: %s\n", warning.c_str());
+			}
+		}
+	}
+
 	wiwa::Engine* engine = wiwa::create_engine(argc, argv);
 
 	engine->init();

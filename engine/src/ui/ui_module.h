@@ -95,9 +95,13 @@ namespace wiwa
 
 		// The two halves of a frame. canvasSize is the size of what the scene is drawn into, in pixels.
 		void update_interaction(Scene& scene, const glm::vec2& canvasSize);
+		// The size (pixels) of what the scene was drawn into at the last update_interaction: the area the mouse position is in (scripts: UI.viewport()).
+		glm::vec2 canvas_size() const { return m_LastCanvasSize; }
 		void build_draw_list(Scene& scene, const glm::vec2& canvasSize, UiDrawList& out);
 
 	private:
+		glm::vec2 m_LastCanvasSize{ 0.0f };
+
 		struct Active
 		{
 			UiPanelInstance* Instance = nullptr;

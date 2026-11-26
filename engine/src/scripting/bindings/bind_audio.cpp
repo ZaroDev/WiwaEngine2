@@ -51,15 +51,66 @@ namespace wiwa
 
 		// Posts an event (the vendor's name, such as Play_Footstep) from the entity, or globally without one. Returns a handle, or nil when the event did
 		// not start (an unknown name is logged once).
-		audio.set_function("post", [&context](const std::string& event, sol::optional<EntityHandle> entity) -> sol::optional<LuaAudioHandle>
+		// Audio.post(event [, entity] [, { loop = bool, volume = number }]): the options table may come second when there is no entity.
+		audio.set_function("post", [&context](const std::string& event, sol::object second, sol::optional<sol::table> third) -> sol::optional<LuaAudioHandle>
 			{
 				AudioModule& module = audio_of(context);
-				const PlayingId playing = module.backend().post_event(event, emitter_of(context, entity));
+				sol::optional<EntityHandle> entity;
+				sol::optional<sol::table> optionsTable = third;
+				if (second.is<EntityHandle>())
+				{
+					entity = second.as<EntityHandle>();
+				}
+				else if (second.is<sol::table>())
+				{
+					optionsTable = second.as<sol::table>();
+				}
+				else if (second.valid() && second.get_type() != sol::type::lua_nil)
+				{
+					throw sol::error("the second argument of Audio.post is an entity or an options table");
+				}
+
+				PostOptions options;
+				if (optionsTable)
+				{
+					for (const auto& [key, value] : *optionsTable)
+					{
+						const std::string name = key.is<std::string>() ? key.as<std::string>() : std::string();
+						if (name == "loop" && value.is<bool>())
+						{
+							options.Loop = value.as<bool>();
+						}
+						else if (name == "volume" && value.is<double>())
+						{
+							const double volume = value.as<double>();
+							if (!std::isfinite(volume) || volume < 0.0)
+							{
+								throw sol::error("Audio.post volume is a number of 0 or more");
+							}
+							options.Volume = static_cast<float>(volume);
+						}
+						else
+						{
+							throw sol::error("Audio.post options are loop (boolean) and volume (number), not '" + name + "'");
+						}
+					}
+				}
+				const PlayingId playing = module.backend().post_event_with(event, emitter_of(context, entity), options);
 				if (!playing.valid())
 				{
 					return sol::nullopt;
 				}
 				return LuaAudioHandle{ playing };
+			});
+
+		// The gain of a sound that plays (1 = as authored). Not for a Wwise backend: its gain lives in the authored event.
+		audio.set_function("set_volume", [&context](const LuaAudioHandle& handle, double volume)
+			{
+				if (!std::isfinite(volume) || volume < 0.0)
+				{
+					throw sol::error("Audio.set_volume takes a number of 0 or more");
+				}
+				audio_of(context).backend().set_playing_volume(handle.Id, static_cast<float>(volume));
 			});
 
 		audio.set_function("stop", [&context](const LuaAudioHandle& handle) { audio_of(context).backend().stop_playing(handle.Id); });

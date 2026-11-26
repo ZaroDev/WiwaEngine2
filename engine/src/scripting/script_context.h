@@ -19,6 +19,7 @@ namespace wiwa
 	class NavModule;
 	class PhysicsModule;
 	class SceneModule;
+	class PrefabSpawner;
 	class UiHandlerTable;
 	class UiModule;
 	class VideoModule;
@@ -31,6 +32,7 @@ namespace wiwa
 		ScriptRuntime* Runtime = nullptr;
 		AssetManager* Assets = nullptr; // null where there is no such module (a test): the calls that need them are Lua errors
 		SceneModule* Scenes = nullptr;
+		PrefabSpawner* Prefabs = nullptr; // where instantiate_prefab queues instances: the scene module's spawner (a test gives its own)
 		DebugDraw* Debug = nullptr;     // null without a renderer: debug drawing is ignored
 		UiModule* Ui = nullptr;         // null where there is no such module (a test): the UI calls are Lua errors
 		PhysicsModule* Physics = nullptr; // null where there is no such module (a test): the physics calls are Lua errors

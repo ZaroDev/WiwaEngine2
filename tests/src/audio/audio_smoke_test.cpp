@@ -47,6 +47,12 @@ namespace wiwa
 			return std::find(backend.calls().begin(), backend.calls().end(), call) != backend.calls().end();
 		}
 
+		// The calls that contain the text (for ones that carry an id the test cannot know).
+		u32 count_containing(const NullAudioBackend& backend, const std::string& text)
+		{
+			return static_cast<u32>(std::count_if(backend.calls().begin(), backend.calls().end(), [&](const std::string& call) { return call.find(text) != std::string::npos; }));
+		}
+
 		u32 count_calls(const NullAudioBackend& backend, const std::string& prefix)
 		{
 			u32 count = 0;
@@ -421,6 +427,17 @@ namespace wiwa
 				check(count_calls(h.backend(), "create_emitter:Lamp") == 1 && count_calls(h.backend(), "post:Play_Test@1") == 1, "lua_post_entity: the emitter is made on the spot and used");
 				h.Module.tick(nullptr, true);
 				check(count_calls(h.backend(), "create_emitter:Lamp") == 1, "lua_post_entity: the next frame does not make it twice");
+				h.backend().clear_calls();
+				h.backend().clear_calls();
+				check(h.run("return Audio.post('Play_Test', { loop = true, volume = 0.5 }):is_valid()") == "true"
+					&& count_containing(h.backend(), "loop=true volume=0.5") == 1, "lua_post_options: loop and volume reach the backend (the table may come second)");
+				check(h.run("return Audio.post('Play_Test', find_entity('Lamp'), { volume = 0.25 }):is_valid()") == "true" && count_containing(h.backend(), "loop=default volume=0.25") == 1,
+					"lua_post_options_entity: an entity and the options together");
+				h.run("local a = Audio.post('Play_Test'); Audio.set_volume(a, 0.75)");
+				check(count_containing(h.backend(), "=0.75") == 1, "lua_set_volume: the gain of a playing sound changes");
+				check(h.fails("Audio.post('Play_Test', { volume = -1 })", "volume") && h.fails("Audio.post('Play_Test', { pan = 1 })", "pan") && h.fails("Audio.post('Play_Test', 5)", "entity or an options table"),
+					"lua_post_options_bad: a negative volume, an unknown option and a number are errors");
+				check(h.fails("Audio.set_volume(Audio.post('Play_Test'), 0/0)", "0 or more") && h.fails("Audio.set_volume(Audio.post('Play_Test'), -2)", "0 or more"), "lua_set_volume_bad: a non-finite or negative gain is an error");
 			}
 
 			{
@@ -764,6 +781,25 @@ namespace wiwa
 				check(backend.playing_count() == 1, "mini_stop_emitter: stopping an emitter leaves the others");
 				backend.stop_playing(loop);
 				check(backend.playing_count() == 0, "mini_stop: a stopped sound is gone");
+
+				// options: a one-shot asked to loop keeps playing, a _loop clip asked not to loop ends, and a gain can change while it plays
+				PostOptions looping;
+				looping.Loop = true;
+				looping.Volume = 0.5f;
+				const PlayingId forced = backend.post_event_with("zz_smoke_shot", {}, looping);
+				PostOptions oneShot;
+				oneShot.Loop = false;
+				backend.post_event_with("zz_smoke_hum_loop", {}, oneShot);
+				for (int i = 0; i < 100; i++)
+				{
+					backend.update();
+					backend.render(4800);
+					backend.set_playing_volume(forced, 0.25f);
+					std::this_thread::sleep_for(std::chrono::milliseconds(5));
+				}
+				const bool forcedPlays = forced.valid() && backend.playing_count() == 1;
+				backend.stop_playing(forced);
+				check(forcedPlays && backend.playing_count() == 0, "mini_options: Loop=true keeps a one-shot playing, Loop=false lets a _loop clip end (nothing else is left)");
 
 				backend.post_event("zz_smoke_hum_loop", {});
 				backend.stop_all();

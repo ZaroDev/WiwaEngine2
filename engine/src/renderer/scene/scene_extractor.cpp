@@ -9,6 +9,7 @@
 #include <core/engine.h>
 #include <scene/decal_lifetime.h>
 #include <scene/particle_runtime.h>
+#include <scene/skin_space.h>
 
 namespace wiwa
 {
@@ -244,7 +245,8 @@ namespace wiwa
 
 			instancesSeen++;
 
-			// a skinned mesh stands where its Animator does: the joints of the pose place the vertices, not the node
+			// a skinned mesh stands where its Animator does: the joints of the pose place the vertices, not the node (the model's import scale applies, the nodes between
+				// them do not)
 			glm::mat4 matrix = world.Matrix;
 			float padding = 0.0f;
 			std::span<const glm::vec4> palette{};
@@ -255,7 +257,7 @@ namespace wiwa
 				{
 					if (const WorldTransform* animatorWorld = registry.try_get<WorldTransform>(animatorEntity))
 					{
-						matrix = animatorWorld->Matrix;
+						matrix = animatorWorld->Matrix * model_scale_matrix(registry.get<Animator>(animatorEntity));
 					}
 					padding = registry.get<Animator>(animatorEntity).BoundsPadding;
 					if (palettes)

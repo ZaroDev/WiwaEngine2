@@ -1088,7 +1088,6 @@ namespace wiwa
 			// the real modules: a path from the catalog resolves, an unknown one is an error, and a scene load can be followed
 			AssetManager* assets = Engine::get().get_module<AssetManager>();
 			SceneModule* scenes = Engine::get().get_module<SceneModule>();
-			(void)pipeline;
 			if (assets != nullptr && scenes != nullptr)
 			{
 				Harness h;
@@ -1138,6 +1137,80 @@ namespace wiwa
 				{
 					WI_SCRIPT_LOG(Warning, "SKIPPED: load_scene_from_script: no scene in the catalog");
 				}
+
+				// instantiate_prefab: the root exists at once, the prefab's entities come once it has loaded, destroying the root takes them away
+				// a model written for the test and imported: 4 nodes (Body > Wheel, Wheel, Door), so the instance has a root and 4 entities under it
+				const std::filesystem::path smokeFolder = pipeline.get_database().get_assets_root() / "_script_prefab_smoke";
+				std::error_code removeError;
+				std::filesystem::remove_all(smokeFolder, removeError);
+				std::filesystem::create_directories(smokeFolder, removeError);
+				{
+					std::ofstream out(smokeFolder / "car.gltf", std::ios::binary | std::ios::trunc);
+					out << R"({"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+"nodes":[{"name":"Body","children":[1,2,3]},{"name":"Wheel"},{"name":"Wheel"},{"name":"Door","mesh":0}],
+"meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],
+"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},{"bufferView":1,"componentType":5123,"count":3,"type":"SCALAR"}],
+"bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":6}],
+"buffers":[{"byteLength":44,"uri":"data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAABAAIAAAA="}]})";
+				}
+				pipeline.scan_async()->wait();
+				std::string prefabPath;
+				const size_t prefabNodes = 4;
+				for (const AssetCatalog::Entry& entry : assets->catalog_entries())
+				{
+					if (entry.Path.ends_with("_script_prefab_smoke/car.gltf"))
+					{
+						prefabPath = entry.Path;
+					}
+				}
+
+				if (!prefabPath.empty())
+				{
+					Harness spawn;
+					spawn.Instances.context().Assets = assets;
+					spawn.Instances.context().Scenes = scenes;
+					PrefabSpawner ownSpawner(*assets); // the test's own queue: the engine's SceneModule::update runs on another thread and would expand it under the test's feet
+					spawn.Instances.context().Prefabs = &ownSpawner;
+					spawn.Runtime.sandbox()["prefab_path"] = prefabPath;
+					sol::object root;
+					spawn.Runtime.sandbox().set_function("keep", [&root](sol::object object) { root = object; });
+					const AssetRef spawner = spawn.add_script("spawner", R"(return Script:extend{ on_init = function(self)
+						local e = instantiate_prefab(prefab_path)
+						keep(e)
+						record(tostring(e.prefab_ready))
+						e:get("Transform").position = vec3(1, 2, 3)
+						record(tostring(pcall(instantiate_prefab, 'assets/definitely/not/here.glb')))
+					end })");
+					spawn.spawn("e", { spawner });
+					spawn.Instances.start(spawn.TheScene);
+					const size_t before = spawn.TheScene->registry().view<Id>().size();
+					spawn.Instances.update(0.016f);
+					check(spawn.Events.size() == 2 && spawn.Events[0] == "false" && spawn.Events[1] == "false", "instantiate_prefab: not ready at once, an unknown path is an error");
+					const size_t withRoot = spawn.TheScene->registry().view<Id>().size();
+					check(withRoot == before + 1, "instantiate_prefab: the root exists at once and nothing else");
+
+					for (int i = 0; i < 200 && ownSpawner.pending_count() > 0; i++)
+					{
+						std::this_thread::sleep_for(std::chrono::milliseconds(20));
+						ownSpawner.update();
+					}
+					check(ownSpawner.pending_count() == 0, "instantiate_prefab: the instance is expanded once the prefab has loaded");
+					const entt::entity rootEntity = spawn.TheScene->find(root.as<EntityHandle&>().Guid);
+					check(rootEntity != entt::null && spawn.TheScene->registry().view<Id>().size() >= withRoot + prefabNodes, "instantiate_prefab: the prefab's entities exist");
+					check(rootEntity != entt::null && spawn.TheScene->registry().get<Hierarchy>(rootEntity).FirstChild != entt::null, "instantiate_prefab: they are children of the root");
+					check(rootEntity != entt::null && spawn.TheScene->registry().get<Transform>(rootEntity).Position == glm::vec3(1, 2, 3), "instantiate_prefab: the root keeps the position the script gave it");
+					if (rootEntity != entt::null)
+					{
+						spawn.TheScene->destroy(rootEntity);
+					}
+					check(spawn.TheScene->registry().view<Id>().size() == before, "instantiate_prefab: destroying the root destroys what the prefab made");
+				}
+				else
+				{
+					check(false, "instantiate_prefab: the test model is in the catalog");
+				}
+				std::filesystem::remove_all(smokeFolder, removeError);
+				pipeline.scan_async()->wait();
 			}
 		}
 

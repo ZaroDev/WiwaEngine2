@@ -577,7 +577,7 @@ namespace wiwa
 			plain.Nodes = { make_node("A", -1), make_node("B", 0) };
 			assign_stable_ids(plain.Nodes);
 			std::vector<std::byte> old = serialize(plain);
-			old.resize(old.size() - 2 * sizeof(u64) - sizeof(u32)); // the empty component list of each node, and the count of nested instances after them
+			old.resize(old.size() - 2 * sizeof(u64) - sizeof(u32) - sizeof(float)); // the empty component list of each node, the count of nested instances and the import scale after them
 			std::optional<PrefabData> loadedOld = deserialize<PrefabData>(old);
 			check(loadedOld && loadedOld->Nodes.size() == 2 && loadedOld->Nodes[0].Components.empty(), "node_components: a prefab without the component section still loads");
 

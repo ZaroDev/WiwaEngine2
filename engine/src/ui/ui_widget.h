@@ -87,6 +87,7 @@ namespace wiwa
 		AssetRef Texture{};
 		bool Slice9 = false;
 		glm::vec4 SliceBorders{ 0.0f }; // left, top, right, bottom in texels
+		glm::vec4 UvRect{ 0.0f, 0.0f, 1.0f, 1.0f }; // the part of the texture that is shown: u0, v0, u1, v1 (0..1, v down, like the texture's rows). A sprite sheet cell; with Slice9 the borders are cut from this part
 
 		// ViewImage: the Name of the ViewHost whose picture this shows
 		std::string ViewName{};

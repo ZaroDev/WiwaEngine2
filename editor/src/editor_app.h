@@ -35,7 +35,19 @@ public:
 		}
 
 		// Command-line runs (smokes, --pack) keep the plain window; an interactive start follows the "Start maximized" setting.
-		const bool interactive = std::none_of(m_Args.begin(), m_Args.end(), [](const std::string& arg) { return arg.rfind("--", 0) == 0; });
+		// --project <dir> only says where to work (main already entered it): it does not make the run a command-line one.
+		bool interactive = true;
+		for (size_t i = 0; i < m_Args.size(); i++)
+		{
+			if (m_Args[i] == "--project")
+			{
+				i++; // its value
+			}
+			else if (m_Args[i].rfind("--project=", 0) != 0 && m_Args[i].rfind("--", 0) == 0)
+			{
+				interactive = false;
+			}
+		}
 		set_start_maximized(interactive && wiwa::GizmoSettings::load().StartMaximized);
 	}
 

@@ -38,6 +38,11 @@ namespace wiwa
 
 		// An invalid emitter plays the event globally (not positioned). An invalid PlayingId means the event was not started.
 		virtual PlayingId post_event(std::string_view event, EmitterHandle emitter) = 0;
+		// The same with what a script can ask for: looping (unset: what the backend's own rule says, MiniAudio loops a name ending in _loop) and a gain
+		// (1 = as authored). A backend whose events carry these in authored data (Wwise) ignores the options.
+		virtual PlayingId post_event_with(std::string_view event, EmitterHandle emitter, const PostOptions& options) { (void)options; return post_event(event, emitter); }
+		// Changes the gain of a sound that plays (1 = as authored). Backends without a per-sound gain ignore it.
+		virtual void set_playing_volume(PlayingId playing, float volume) { (void)playing; (void)volume; }
 		virtual void stop_playing(PlayingId playing) = 0;
 		virtual void stop_emitter(EmitterHandle emitter) = 0;
 		virtual void stop_all() = 0;

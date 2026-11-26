@@ -49,3 +49,12 @@ Traps:
 ## Navigation settings
 
 `nav.wsettings` (editor working directory, JSON `areaCost`: area name to cost, each at least 1) is the project's walking costs. It is edited in the Navigation panel (`NavSection`, saved at once, applied to `NavModule`), packed with the game, and read by `NavModule::init` there. See [navigation.md](navigation.md).
+
+
+## Projects outside `editor/` (`--project`)
+
+Every relative path of the engine (`assets/`, `library/`, `engine/`, `project.wproject`, the `*.wsettings` files, `--scene`, `--pack`) is read from the working directory, which the editor's debugdir sets to `editor/`. `--project <dir>` (or `--project=<dir>`; any executable, the last one wins) makes `<dir>` the working directory before the engine exists (`wiwa_main`, `core/project_dir.*`), creating the folder when it is missing. A project is therefore any folder holding `assets/` (and the files above); relative paths on the command line are read from it, not from where the program was started.
+
+The editor also needs the engine's own assets (`editor/engine`: shaders, fonts, Lua stubs) as `engine/` in that folder (the source root name `engine` is part of their guids). When the project has none, a **directory junction** to them is created (no administrator rights; a symbolic link on other platforms), found from `WIWA_ENGINE_ASSETS` or by walking up from the executable (`bin/<config>/<project>` -> `<repo>/editor/engine`). A game started with `--project` reads its pack and settings from the folder; it needs no `engine/`. If the assets are not found the program still starts and prints a warning (stderr: the log is not up yet). `--project` alone does not make an editor run a command-line run (the window stays interactive).
+
+`--project-dir-smoke` checks the parsing, the lookup and the link without changing the smoke process's own working directory.

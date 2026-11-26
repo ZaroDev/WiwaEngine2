@@ -67,6 +67,7 @@ namespace wiwa
 
 		m_Assets = Engine::get().get_module<AssetManager>();
 		m_Jobs = CreateScope<JobSystem>(2);
+		m_Prefabs = CreateScope<PrefabSpawner>(*m_Assets);
 		m_Active = CreateRef<Scene>();
 
 		const std::vector<std::string>& arguments = Engine::get().get_arguments();
@@ -92,6 +93,7 @@ namespace wiwa
 
 	void SceneModule::shutdown()
 	{
+		m_Prefabs.reset(); // before the asset manager goes: it holds prefab handles
 		std::vector<Ref<LoadOp>> running;
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex);
@@ -403,6 +405,10 @@ namespace wiwa
 	{
 		adopt_pending();
 		update_commit();
+		if (m_Prefabs != nullptr)
+		{
+			m_Prefabs->update();
+		}
 
 		// a scene that was replaced is taken down a part at a time
 		if (!m_Retired.empty())

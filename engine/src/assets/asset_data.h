@@ -498,6 +498,7 @@ namespace wiwa
 		std::vector<AssetRef> Animations{};
 		glm::vec3 BoundsMin{ 0.0f };
 		glm::vec3 BoundsMax{ 0.0f };
+		float ImportScale = 1.0f; // the model importer's scale option; it is already in the root nodes and the bounds, a skinned mesh needs it by itself (Animator::ModelScale)
 	};
 
 	// A Lua script as the runtime loads it: the source text, and the catalog path it came from (for error messages).

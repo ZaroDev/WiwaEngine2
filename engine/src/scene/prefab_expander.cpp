@@ -74,11 +74,17 @@ namespace wiwa
 			component.Fields.push_back(FieldRecord{ name, value });
 		}
 
-		// a model with animations plays them: its root gets an Animator, unless it already has one
+		// a model with animations plays them: its root gets an Animator, unless it already has one. ModelScale is the model's, never the scene's: it
+		// comes from the prefab every time (a scene saved by the editor holds the whole Animator, and would keep the scale of the day it was saved)
 		void add_animator(EntityRecord& entity, const PrefabData& prefab)
 		{
-			if (prefab.Animations.empty() || find_component(entity, "Animator") != nullptr)
+			if (prefab.Animations.empty())
 			{
+				return;
+			}
+			if (ComponentRecord* existing = find_component(entity, "Animator"))
+			{
+				set_field(*existing, "ModelScale", FieldValue(prefab.ImportScale));
 				return;
 			}
 
@@ -97,6 +103,10 @@ namespace wiwa
 					FieldRecord{ "Skeleton", FieldValue(skeleton) },
 					FieldRecord{ "Clips", FieldValue(prefab.Animations) },
 					FieldRecord{ "Clip", FieldValue(prefab.Animations.front()) } } });
+				if (prefab.ImportScale != 1.0f)
+				{
+					set_field(entity.Components.back(), "ModelScale", FieldValue(prefab.ImportScale));
+				}
 			}
 		}
 

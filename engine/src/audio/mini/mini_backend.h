@@ -35,6 +35,9 @@ namespace wiwa
 		// An event is the file name of an AudioClip without its extension, in any letter case; a name ending in _loop loops. A clip that has not
 		// finished loading starts a few frames later; the id is valid at once.
 		virtual PlayingId post_event(std::string_view event, EmitterHandle emitter) override;
+		// Options: loop (default: the name ends in _loop) and volume, which multiplies the emitter's.
+		virtual PlayingId post_event_with(std::string_view event, EmitterHandle emitter, const PostOptions& options) override;
+		virtual void set_playing_volume(PlayingId playing, float volume) override;
 		virtual void stop_playing(PlayingId playing) override;
 		virtual void stop_emitter(EmitterHandle emitter) override;
 		virtual void stop_all() override;

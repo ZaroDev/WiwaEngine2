@@ -86,6 +86,7 @@ namespace wiwa
 			UI_FIELD_META(Texture, FieldMeta::asset(AssetType::Texture));
 			UI_FIELD(Slice9);
 			UI_FIELD(SliceBorders);
+			UI_FIELD(UvRect);
 			UI_FIELD(ViewName);
 
 			UI_FIELD_META(Video, FieldMeta::asset(AssetType::Video));
@@ -139,7 +140,7 @@ namespace wiwa
 			static const std::vector<std::string_view> names = {
 				"Color", "BackgroundColor", "ClipChildren",
 				"Text", "Font", "FontSize", "Align", "Wrap", "Outline", "OutlineColor", "Shadow",
-				"Texture", "Slice9", "SliceBorders", "ViewName",
+				"Texture", "Slice9", "SliceBorders", "UvRect", "ViewName",
 				"Video", "Fit", "Loop", "AutoPlay", "Volume", "LetterboxColor",
 				"Value", "MinValue", "MaxValue", "Step", "Direction",
 				"Spacing", "Padding", "ChildAlign", "ForceExpand",
@@ -150,12 +151,12 @@ namespace wiwa
 		const std::vector<KindFields>& kind_fields()
 		{
 			static const std::vector<KindFields> table = {
-				{ WidgetKind::Panel, { "Color", "Texture", "ClipChildren" } },
+				{ WidgetKind::Panel, { "Color", "Texture", "UvRect", "ClipChildren" } },
 				{ WidgetKind::HStack, { "Color", "Spacing", "Padding", "ChildAlign", "ForceExpand", "ClipChildren" } },
 				{ WidgetKind::VStack, { "Color", "Spacing", "Padding", "ChildAlign", "ForceExpand", "ClipChildren" } },
 				{ WidgetKind::Text, { "Color", "Text", "Font", "FontSize", "Align", "Wrap", "Outline", "OutlineColor", "Shadow" } },
-				{ WidgetKind::Image, { "Color", "Texture", "Slice9", "SliceBorders" } },
-				{ WidgetKind::Button, { "Color", "HoverColor", "PressedColor", "DisabledColor", "Texture", "ClipChildren" } },
+				{ WidgetKind::Image, { "Color", "Texture", "UvRect", "Slice9", "SliceBorders" } },
+				{ WidgetKind::Button, { "Color", "HoverColor", "PressedColor", "DisabledColor", "Texture", "UvRect", "ClipChildren" } },
 				{ WidgetKind::Slider, { "Color", "BackgroundColor", "Value", "MinValue", "MaxValue", "Step", "Direction" } },
 				{ WidgetKind::Toggle, { "Color", "BackgroundColor", "Value" } },
 				{ WidgetKind::Bar, { "Color", "BackgroundColor", "Value", "Direction" } },

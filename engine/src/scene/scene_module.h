@@ -9,6 +9,7 @@
 #include <core/job_progress.h>
 #include <core/module.h>
 
+#include "prefab_spawner.h"
 #include "scene.h"
 #include "scene_loader.h"
 
@@ -65,6 +66,9 @@ namespace wiwa
 		// load land in or replace it.
 		void cancel_loads();
 
+		// Instances of prefabs put into the running scene (Lua `instantiate_prefab`); null before init().
+		PrefabSpawner* prefabs() { return m_Prefabs.get(); }
+
 		// The load that `--scene <path>` started when the module did; null if there was no such argument.
 		Ref<JobProgress> get_startup_load() const { return m_StartupLoad; }
 
@@ -85,6 +89,7 @@ namespace wiwa
 
 		AssetManager* m_Assets = nullptr;
 		Scope<JobSystem> m_Jobs{};
+		Scope<PrefabSpawner> m_Prefabs{};
 		Ref<JobProgress> m_StartupLoad{};
 
 		mutable std::mutex m_Mutex{};

@@ -22,6 +22,8 @@ Rect resolution is anchors (fractions of the parent) plus pixel offsets at a ref
 
 ## Rendering
 
+**Image region.** `UvRect` (u0, v0, u1, v1, default 0 0 1 1; Panel, Image and Button) is the part of the texture a widget shows: the draw list uses it as the quad's UVs, so a sprite sheet cell is one widget (and a Button can swap cells by changing `uv_rect` from Lua on hover or press). With `Slice9` the `SliceBorders` (texels) are cut from that part, and the nine quads stay inside it. Checked by `--ui-smoke` (`draw_uv_rect: ...`).
+
 A `Video` widget makes a `UiBatch` whose `ViewTexture` is the texture of its stream (`view_video_texture_id`, the picture the video module uploaded) and bars in `LetterboxColor`, through `UiLayoutInput::Video`. `UiRenderPass` (render thread) draws the draw list into the LDR image after FXAA (so post never touches the UI) with SDF text from `ui.hlsl`; it also draws the UI editor's canvas into its own texture (`set_ui_preview`). Font atlases are uploaded by `GpuResourceCache`. No depth-tested/3D canvases, no MSDF.
 
 ## Input

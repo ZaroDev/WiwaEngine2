@@ -1,4 +1,0 @@
-Intro.mp4 is generated, not downloaded: colour bars, a moving white square, a 440 Hz tone and then a 660 Hz tone, encoded with Media Foundation (H.264 and AAC).
-It has no third party content and is CC0 1.0 (public domain).
-
-Regenerate it with:  cd editor && ..\bin\Release-windows-x86_64\wiwa_tests\wiwa_tests.exe --write-demo-video

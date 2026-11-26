@@ -3,6 +3,7 @@
 
 #include <core/engine.h>
 #include <scene/scene_module.h>
+#include <scene/skin_space.h>
 
 #include "animation_log.h"
 
@@ -374,7 +375,9 @@ namespace wiwa
 			const glm::mat4 animatorWorld = registry.get<WorldTransform>(owner).Matrix;
 			const glm::mat4 parentWorld = hierarchy.Parent != entt::null ? registry.get<WorldTransform>(hierarchy.Parent).Matrix : glm::mat4(1.0f);
 			const glm::mat4 offset = glm::translate(glm::mat4(1.0f), socket.OffsetPosition) * glm::mat4_cast(socket.OffsetRotation) * glm::scale(glm::mat4(1.0f), socket.OffsetScale);
-			const glm::mat4 local = glm::inverse(parentWorld) * animatorWorld * instance.model()[static_cast<size_t>(joint)] * offset;
+			const Animator* ownerAnimator = registry.try_get<Animator>(owner);
+			const glm::mat4 modelScale = ownerAnimator != nullptr ? model_scale_matrix(*ownerAnimator) : glm::mat4(1.0f);
+			const glm::mat4 local = glm::inverse(parentWorld) * animatorWorld * modelScale * instance.model()[static_cast<size_t>(joint)] * offset;
 			decompose_matrix(local, transform.Position, transform.Rotation, transform.Scale);
 		}
 		scene.update_world_transforms();
@@ -454,6 +457,8 @@ namespace wiwa
 			return glm::mat4(1.0f);
 		}
 		const WorldTransform* world = m_Scene->registry().try_get<WorldTransform>(animator);
-		return (world != nullptr ? world->Matrix : glm::mat4(1.0f)) * instance->model()[static_cast<size_t>(index)];
+		const Animator* component = m_Scene->registry().try_get<Animator>(animator);
+		const glm::mat4 modelScale = component != nullptr ? model_scale_matrix(*component) : glm::mat4(1.0f);
+		return (world != nullptr ? world->Matrix * modelScale : glm::mat4(1.0f)) * instance->model()[static_cast<size_t>(index)];
 	}
 }

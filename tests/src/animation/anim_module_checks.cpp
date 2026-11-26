@@ -3,6 +3,7 @@
 #include "anim_fixture.h"
 
 #include <animation/animation_module.h>
+#include <assets/wasset_io.h>
 #include <renderer/scene/scene_extractor.h>
 #include <scene/prefab_expander.h>
 #include <scene/scene_clone.h>
@@ -42,6 +43,33 @@ namespace wiwa
 			};
 			check(expanded.Entities.size() == 3 && has(expanded.Entities[0], "Animator"), "the root of a model with animations gets an Animator");
 			check(has(expanded.Entities[1], "SkinBinding") && !has(expanded.Entities[2], "SkinBinding"), "a skinned node gets a SkinBinding and a rigid one does not");
+
+			auto model_scale = [](const EntityRecord& record) -> float
+			{
+				for (const ComponentRecord& component : record.Components)
+				{
+					for (const FieldRecord& field : component.Fields)
+					{
+						if (component.Name == "Animator" && field.Name == "ModelScale")
+						{
+							return std::get<float>(field.Value);
+						}
+					}
+				}
+				return 1.0f;
+			};
+			check(model_scale(expanded.Entities[0]) == 1.0f, "a model imported at scale 1 leaves the Animator's ModelScale alone");
+			PrefabData scaled = prefab;
+			scaled.ImportScale = 0.25f;
+			check(near_equal(model_scale(expand_prefab(root, scaled).Entities[0]), 0.25f), "the import scale of the prefab becomes the Animator's ModelScale");
+			EntityRecord saved = root;
+			saved.Components.push_back(ComponentRecord{ "Animator", { FieldRecord{ "Speed", FieldValue(2.0f) }, FieldRecord{ "ModelScale", FieldValue(7.0f) } } });
+			check(near_equal(model_scale(expand_prefab(saved, scaled).Entities[0]), 0.25f), "the Animator of a scene saved at another import scale takes the prefab's scale");
+			const std::vector<std::byte> bytes = serialize(scaled);
+			const std::optional<PrefabData> cooked = deserialize<PrefabData>(bytes);
+			check(cooked && near_equal(cooked->ImportScale, 0.25f), "the cooked prefab keeps the import scale");
+			const std::optional<PrefabData> older = deserialize<PrefabData>(std::span<const std::byte>(bytes.data(), bytes.size() - sizeof(float)));
+			check(older && older->ImportScale == 1.0f, "a prefab cooked before the import scale existed loads with scale 1");
 
 			PrefabData rigid = prefab;
 			rigid.Animations.clear();
@@ -380,6 +408,54 @@ namespace wiwa
 			check(cleared != nullptr && cleared->empty(), "a stopped animator clears the palette");
 		}
 
+		// The model's import scale (Animator::ModelScale, set by the prefab expander from the prefab) scales what stands in the Animator's frame:
+		// a skinned mesh, a socket, joint_world. The scale of the nodes between them and the Animator is not applied (the unit scale of a
+		// model sits on its root node and is already in the skeleton's poses).
+		void import_scale(AnimCheck& check)
+		{
+			Fixture fixture;
+			AnimationModule module;
+			module.set_sources(fixture.Sources);
+			Ref<Scene> scene = CreateRef<Scene>();
+			const entt::entity hero = fixture.make_character(*scene);
+			scene->registry().get<Transform>(hero).Position = glm::vec3(0.0f, 0.0f, 10.0f);
+			scene->registry().get<Animator>(hero).ModelScale = 0.5f;
+			const entt::entity model = scene->create("model", hero);
+			scene->registry().get<Transform>(model).Scale = glm::vec3(0.01f);
+			scene->registry().get<Transform>(model).Position = glm::vec3(3.0f, 0.0f, 0.0f);
+			const entt::entity body = scene->create("body", model);
+			scene->registry().emplace<MeshRenderer>(body, MeshRenderer{ make_ref(40), {} });
+			scene->registry().emplace<SkinBinding>(body, SkinBinding{ fixture.SkeletonRef });
+			const entt::entity prop = scene->create("prop", model);
+			scene->registry().emplace<AnimationSocket>(prop, AnimationSocket{ "hand", glm::vec3(0.0f, 1.0f, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f) });
+			scene->update_world_transforms();
+
+			module.tick(scene, 0.1f, true);
+			module.instance_for(hero)->play({ "Run", {} });
+			module.tick(scene, 0.5f, true);
+
+			SceneExtractor extractor;
+			const SceneDelta delta = extractor.extract(scene, 1.0f, {});
+			const EntityGuid guid = scene->registry().get<Id>(body).Guid;
+			const RenderInstance* drawn = nullptr;
+			for (const auto& [id, instance] : delta.InstanceUpserts)
+			{
+				if (id == guid)
+				{
+					drawn = &instance;
+				}
+			}
+			check(drawn != nullptr && near_equal(glm::length(glm::vec3(drawn->World[0])), 0.5f) && near_equal(glm::length(glm::vec3(drawn->World[1])), 0.5f),
+				"a skinned mesh is drawn at the Animator's model scale, whatever the nodes between them scale");
+			check(drawn != nullptr && near_equal(drawn->World[3].x, 0.0f) && near_equal(drawn->World[3].z, 10.0f), "and still at the animator's place, not the nodes'");
+
+			// the hip is at x = 5, the hand 1 further along, the offset lifts it by 1 (all scaled by 0.5); the hero stands at z = 10
+			const glm::vec3 world = glm::vec3(scene->registry().get<WorldTransform>(prop).Matrix[3]);
+			check(near_equal(world.x, 3.0f) && near_equal(world.y, 0.5f) && near_equal(world.z, 10.0f), "a socket follows its joint at the same scale as the skinned mesh");
+			const glm::vec3 joint = glm::vec3(module.joint_world(hero, "hand")[3]);
+			check(near_equal(joint.x, 3.0f) && near_equal(joint.z, 10.0f), "joint_world is the joint in the world, scaled like the mesh");
+		}
+
 		void sockets(AnimCheck& check)
 		{
 			Fixture fixture;
@@ -419,5 +495,6 @@ namespace wiwa
 		layers(check);
 		sockets(check);
 		extraction(check);
+		import_scale(check);
 	}
 }
