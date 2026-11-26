@@ -12,6 +12,7 @@
 
 #include "physics_material_jolt.h"
 #include "tire_model.h"
+#include "vehicle_assists.h"
 
 namespace wiwa
 {
@@ -24,8 +25,18 @@ namespace wiwa
 		std::vector<TireModel> Tires{};                        // per wheel
 		std::vector<float> BaseBrake{};                        // MaxBrakeTorque per wheel, from the settings and the bias
 		std::vector<float> Grip{};                             // per wheel, written by the combine function
+		std::vector<float> PeakSlip{};                         // per wheel: the slip ratio of its tire's peak
+		std::vector<bool> Driven{};                            // per wheel: on a driven axle
+		glm::vec3 FrontAxle{ 0.0f };                           // body space: the middle of axle 0's wheels (downforce goes there)
+		glm::vec3 RearAxle{ 0.0f };                            // and of the other axles' wheels
+		float Wheelbase = 0.0f;
+		float MaxSteer = 0.0f;                                 // radians
 		JPH::BodyID Body{};
 		VehicleInput Applied{};
+		u32 AssistsActive = 0;
+		AssistState Assist{};
+		bool Reverse = false;    // automatic gearbox: driving backwards (brake pedal drives, throttle brakes)
+		float ReverseHold = 0.0f; // how long brake has been held at a standstill
 	};
 
 	namespace
@@ -168,7 +179,32 @@ namespace wiwa
 				built->Tires.push_back(w.Axle == 0 ? s.FrontTire : s.RearTire);
 				built->BaseBrake.push_back(brake);
 				built->Grip.push_back(0.0f);
+				built->PeakSlip.push_back(magic_formula_peak_x(built->Tires.back().Longitudinal));
+				bool driven = false;
+				for (const VehicleDifferentialData& diff : s.Differentials)
+				{
+					driven = driven || diff.Axle == w.Axle;
+				}
+				built->Driven.push_back(driven);
+				built->MaxSteer = std::max(built->MaxSteer, wheel->mMaxSteerAngle);
 			}
+			glm::vec3 front{ 0.0f };
+			glm::vec3 rear{ 0.0f };
+			int frontCount = 0;
+			int rearCount = 0;
+			float minZ = 0.0f;
+			float maxZ = 0.0f;
+			for (size_t i = 0; i < desc.Wheels.size(); i++)
+			{
+				const glm::vec3 p = desc.Wheels[i].Position;
+				(desc.Wheels[i].Axle == 0 ? front : rear) += p;
+				(desc.Wheels[i].Axle == 0 ? frontCount : rearCount)++;
+				minZ = i == 0 ? p.z : std::min(minZ, p.z);
+				maxZ = i == 0 ? p.z : std::max(maxZ, p.z);
+			}
+			built->FrontAxle = frontCount > 0 ? front / static_cast<float>(frontCount) : glm::vec3(0.0f);
+			built->RearAxle = rearCount > 0 ? rear / static_cast<float>(rearCount) : built->FrontAxle;
+			built->Wheelbase = maxZ - minZ;
 
 			for (size_t axle = 0; axle < s.AntiRollStiffness.size(); axle++)
 			{
@@ -390,10 +426,98 @@ namespace wiwa
 				continue;
 			}
 			BuiltVehicle& v = *entry.Built;
-			const VehicleInput in = entry.Input;
-			v.Applied = in;
-			v.Controller->SetDriverInput(std::clamp(in.Throttle, 0.0f, 1.0f), std::clamp(in.Steer, -1.0f, 1.0f), std::clamp(in.Brake, 0.0f, 1.0f),
-				std::clamp(in.Handbrake, 0.0f, 1.0f));
+			const VehicleSettingsData& s = entry.Desc.Settings;
+			const auto strength = [&](VehicleAssist assist, float asset)
+			{
+				const float value = entry.Assists[static_cast<size_t>(assist)];
+				return value >= 0.0f ? value : asset;
+			};
+			const bool automatic = strength(VehicleAssist::AutoGearbox, s.AutomaticGearbox ? 1.0f : 0.0f) >= 0.5f;
+			JPH::VehicleTransmission& transmission = v.Controller->GetTransmission();
+			transmission.mMode = automatic ? JPH::ETransmissionMode::Auto : JPH::ETransmissionMode::Manual;
+
+			const JPH::Quat rotation = bodies.GetRotation(v.Body);
+			const JPH::Vec3 velocity = bodies.GetLinearVelocity(v.Body);
+			const float speed = velocity.Dot(rotation * kForward);
+			VehicleInput in = entry.Input;
+
+			// automatic reverse: brake held at a standstill backs up; throttle at a standstill goes forward again (the pedals swap while backing)
+			if (!automatic)
+			{
+				v.Reverse = false;
+				v.ReverseHold = 0.0f;
+			}
+			else if (!v.Reverse)
+			{
+				// the handbrake keeps a parked car from backing up (holding the brake on a hill with it on does not reverse)
+				const bool holding = std::abs(speed) < 0.5f && in.Brake > 0.1f && in.Throttle < 0.05f && in.Handbrake < 0.1f;
+				v.ReverseHold = holding ? v.ReverseHold + dt : 0.0f;
+				v.Reverse = v.ReverseHold >= 0.3f;
+			}
+			else if (in.Throttle > 0.1f && std::abs(speed) < 0.5f)
+			{
+				v.Reverse = false;
+				v.ReverseHold = 0.0f;
+			}
+			if (v.Reverse)
+			{
+				std::swap(in.Throttle, in.Brake);
+			}
+
+			AssistInput assistIn;
+			assistIn.Driver = in;
+			assistIn.Speed = v.Reverse ? -speed : speed; // the assists see the direction the driver asks for as forward
+			assistIn.YawRate = -bodies.GetAngularVelocity(v.Body).Dot(rotation * kUp); // + turning right: about -up
+			assistIn.Wheelbase = v.Wheelbase;
+			assistIn.MaxSteerAngle = v.MaxSteer;
+			assistIn.Dt = dt;
+			for (size_t i = 0; i < entry.Desc.Wheels.size(); i++)
+			{
+				const JPH::Wheel& w = *v.Constraint->GetWheel(static_cast<JPH::uint>(i));
+				AssistWheelState wheel;
+				wheel.SlipRatio = wheel_slip(*v.Constraint, w).Ratio * (v.Reverse ? -1.0f : 1.0f);
+				wheel.PeakSlip = v.PeakSlip[i];
+				wheel.Driven = v.Driven[i];
+				wheel.Brakes = entry.Desc.Wheels[i].Brakes;
+				wheel.InContact = w.HasContact();
+				wheel.Axle = entry.Desc.Wheels[i].Axle;
+				wheel.Side = entry.Desc.Wheels[i].Side;
+				assistIn.Wheels.push_back(wheel);
+			}
+			AssistStrengths strengths;
+			strengths.TractionControl = strength(VehicleAssist::TractionControl, s.TractionControl);
+			strengths.Abs = strength(VehicleAssist::Abs, s.Abs);
+			strengths.Stability = strength(VehicleAssist::Stability, s.Stability);
+			strengths.SteeringHelp = strength(VehicleAssist::SteeringHelp, s.SteeringHelp);
+			const AssistOutput out = run_assists(assistIn, strengths, s, v.Assist);
+
+			// per-wheel brakes: each wheel's own brake torque, with a full brake input when any wheel brakes
+			float anyBrake = 0.0f;
+			for (size_t i = 0; i < v.Wheels.size(); i++)
+			{
+				v.Wheels[i]->mMaxBrakeTorque = v.BaseBrake[i] * out.WheelBrake[i];
+				anyBrake = std::max(anyBrake, out.WheelBrake[i]);
+			}
+			v.Controller->SetDriverInput(v.Reverse ? -out.Throttle : out.Throttle, out.Steer, anyBrake > 0.0f ? 1.0f : 0.0f, out.Handbrake);
+			v.Applied = VehicleInput{ out.Throttle, anyBrake, out.Steer, out.Handbrake };
+			v.AssistsActive = out.Active;
+
+			// aero: drag at the centre of mass, downforce split between the axles
+			constexpr float kAirDensity = 1.225f;
+			const float speedSq = velocity.LengthSq();
+			if (speedSq > 1e-4f)
+			{
+				bodies.AddForce(v.Body, -0.5f * kAirDensity * s.DragArea * std::sqrt(speedSq) * velocity);
+				const float downforce = 0.5f * kAirDensity * s.DownforceArea * speed * speed;
+				if (downforce > 0.0f)
+				{
+					const JPH::RMat44 transform = bodies.GetWorldTransform(v.Body);
+					const JPH::Vec3 down = -(rotation * kUp);
+					bodies.AddForce(v.Body, down * downforce * s.DownforceFront, transform * to_jolt(v.FrontAxle));
+					bodies.AddForce(v.Body, down * downforce * (1.0f - s.DownforceFront), transform * to_jolt(v.RearAxle));
+				}
+			}
+
 			const bool driving = in.Throttle != 0.0f || in.Brake != 0.0f || in.Steer != 0.0f || in.Handbrake != 0.0f;
 			if (driving && !bodies.IsActive(v.Body))
 			{
@@ -421,6 +545,7 @@ namespace wiwa
 			pose.Gear = v.Controller->GetTransmission().GetCurrentGear();
 			pose.Clutch = v.Controller->GetTransmission().GetClutchFriction();
 			pose.Applied = v.Applied;
+			pose.AssistsActive = v.AssistsActive;
 			const JPH::VehicleConstraint& constraint = *v.Constraint;
 			for (size_t i = 0; i < entry.Desc.Wheels.size(); i++)
 			{

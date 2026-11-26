@@ -16,6 +16,7 @@
 #include <assets/wasset_io.h>
 #include <physics/physics_material_asset.h>
 #include <physics/tire_model.h>
+#include <physics/vehicle_assists.h>
 #include <physics/vehicle_settings.h>
 
 namespace wiwa
@@ -533,6 +534,215 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// ---- assists: the pure functions, then on a world ----
+
+		AssistInput assist_input(float speed, VehicleInput driver)
+		{
+			AssistInput in;
+			in.Driver = driver;
+			in.Speed = speed;
+			in.Wheelbase = 2.6f;
+			in.MaxSteerAngle = glm::radians(35.0f);
+			in.Dt = 1.0f / 120.0f;
+			for (const auto& [axle, side] : { std::pair{ 0, WheelSide::Left }, std::pair{ 0, WheelSide::Right }, std::pair{ 1, WheelSide::Left }, std::pair{ 1, WheelSide::Right } })
+			{
+				AssistWheelState wheel;
+				wheel.Axle = axle;
+				wheel.Side = side;
+				wheel.Driven = axle == 1;
+				wheel.Brakes = true;
+				wheel.InContact = true;
+				wheel.PeakSlip = 0.085f;
+				in.Wheels.push_back(wheel);
+			}
+			return in;
+		}
+
+		AssistStrengths assists(float tc, float abs, float stability, float steering)
+		{
+			AssistStrengths s;
+			s.TractionControl = tc;
+			s.Abs = abs;
+			s.Stability = stability;
+			s.SteeringHelp = steering;
+			return s;
+		}
+
+		void check_assist_functions(Check& check)
+		{
+			const VehicleSettingsData settings = default_vehicle_settings();
+
+			// steering: capped by speed (0.3 of the lock at 30 m/s) and rate-limited; no help: the driver's input at once
+			AssistState state;
+			AssistOutput out;
+			for (int i = 0; i < 120; i++)
+			{
+				out = run_assists(assist_input(30.0f, VehicleInput{ 0.0f, 0.0f, 1.0f, 0.0f }), assists(1, 1, 0, 1), settings, state);
+			}
+			check(std::abs(out.Steer - 0.3f) < 0.02f, "assist_steer_limit: full steer at 30 m/s is held to 0.3 of the lock, got " + std::to_string(out.Steer));
+			AssistState first;
+			const AssistOutput one = run_assists(assist_input(30.0f, VehicleInput{ 0.0f, 0.0f, 1.0f, 0.0f }), assists(1, 1, 0, 1), settings, first);
+			check(one.Steer < 0.1f, "assist_steer_rate: the steer does not jump in one step");
+			AssistState raw;
+			check(run_assists(assist_input(30.0f, VehicleInput{ 0.0f, 0.0f, 1.0f, 0.0f }), assists(1, 1, 0, 0), settings, raw).Steer == 1.0f, "assist_steer_off: without steering help the input goes through");
+
+			// ABS: a braked wheel sliding (slip -0.3) gets its brake released
+			AssistInput locked = assist_input(20.0f, VehicleInput{ 0.0f, 1.0f, 0.0f, 0.0f });
+			locked.Wheels[0].SlipRatio = -0.3f;
+			AssistState s1;
+			const AssistOutput abs = run_assists(locked, assists(1, 1, 0, 1), settings, s1);
+			check(abs.WheelBrake.size() == 4 && abs.WheelBrake[0] < 0.2f && abs.WheelBrake[1] == 1.0f && (abs.Active & AssistAbs) != 0, "assist_abs: the sliding wheel's brake is released, the others kept");
+			AssistState s2;
+			check(run_assists(locked, assists(1, 0, 0, 1), settings, s2).WheelBrake[0] == 1.0f, "assist_abs_off: without ABS the brake stays");
+
+			// TC: a driven wheel spinning (slip 0.3) cuts the throttle
+			AssistInput spinning = assist_input(5.0f, VehicleInput{ 1.0f, 0.0f, 0.0f, 0.0f });
+			spinning.Wheels[2].SlipRatio = 0.3f;
+			AssistState s3;
+			const AssistOutput tc = run_assists(spinning, assists(1, 1, 0, 1), settings, s3);
+			check(tc.Throttle < 0.2f && (tc.Active & AssistTc) != 0, "assist_tc: a spinning driven wheel cuts the throttle, got " + std::to_string(tc.Throttle));
+			AssistState s4;
+			check(run_assists(spinning, assists(0, 1, 0, 1), settings, s4).Throttle == 1.0f, "assist_tc_off: without TC the throttle stays");
+
+			// stability: yawing right (1 rad/s) with the wheel straight is oversteer: the outer (left) front wheel brakes
+			AssistInput yawing = assist_input(20.0f, VehicleInput{ 0.5f, 0.0f, 0.0f, 0.0f });
+			yawing.YawRate = 1.0f;
+			AssistState s5;
+			const AssistOutput esc = run_assists(yawing, assists(1, 1, 1, 0), settings, s5);
+			check(esc.WheelBrake.size() == 4 && esc.WheelBrake[0] > 0.0f && esc.WheelBrake[1] == 0.0f && esc.WheelBrake[2] == 0.0f && (esc.Active & AssistStability) != 0,
+				"assist_stability: oversteer to the right brakes the left front wheel");
+			yawing.YawRate = 0.0f;
+			AssistState s6;
+			const AssistOutput calm = run_assists(yawing, assists(1, 1, 1, 0), settings, s6);
+			check(calm.WheelBrake[0] == 0.0f && calm.WheelBrake[1] == 0.0f && calm.Active == 0, "assist_stability: no brake when the yaw matches the steer");
+		}
+
+		// Speed of the front wheels' rolling relative to the car's (1: rolling freely, 0: locked), averaged over the first 0.5 s of full braking
+		// from about 25 m/s.
+		float braking_roll(bool absOn)
+		{
+			SyncWorld world;
+			world.start(kHz);
+			make_vehicle_floor(world);
+			const BodyKey car = make_test_car(world, glm::vec3(0.0f, 0.66f, 0.0f));
+			world.send(SetVehicleAssist{ car, VehicleAssist::Abs, absOn ? 1.0f : 0.0f });
+			world.step(kHz / 2);
+			drive(world, car, throttle(1.0f), 20 * kHz, [](const VehiclePose& v, const BodyPose&) { return v.Speed >= 25.0f; });
+			float sum = 0.0f;
+			u32 count = 0;
+			drive(world, car, VehicleInput{ 0.0f, 1.0f, 0.0f, 0.0f }, kHz / 2, [&](const VehiclePose& v, const BodyPose&)
+			{
+				if (v.Speed > 1.0f && v.Wheels.size() == 4)
+				{
+					sum += 0.5f * (v.Wheels[0].AngularVelocity + v.Wheels[1].AngularVelocity) * 0.33f / v.Speed;
+					count++;
+				}
+				return false;
+			});
+			return count > 0 ? sum / static_cast<float>(count) : -1.0f;
+		}
+
+		// The largest driven-wheel slip ratio above 4 m/s in 4 s of full throttle from rest with a 1500 Nm engine on a 0.5 grip floor.
+		float launch_slip(bool tcOn)
+		{
+			SyncWorld world;
+			world.start(kHz);
+			PhysicsMaterialData slippery = default_physics_material();
+			slippery.TireGrip = 0.5f;
+			make_vehicle_floor(world, slippery);
+			VehicleSettingsData strong = default_vehicle_settings();
+			strong.TorqueCurve = { { 1000.0f, 1200.0f }, { 4000.0f, 1500.0f }, { 7000.0f, 1300.0f } };
+			const BodyKey car = make_test_car(world, glm::vec3(0.0f, 0.66f, 0.0f), test_car_desc(strong));
+			world.send(SetVehicleAssist{ car, VehicleAssist::TractionControl, tcOn ? 1.0f : 0.0f });
+			world.send(SetVehicleAssist{ car, VehicleAssist::Stability, 0.0f });
+			world.step(kHz / 2);
+			// Jolt holds the engine at its idle rpm with the clutch closed, so below about 3.2 m/s (idle in first gear) the wheels turn faster
+			// than the car whatever the throttle: the slip is measured above that
+			float worst = 0.0f;
+			drive(world, car, throttle(1.0f), 4 * kHz, [&](const VehiclePose& v, const BodyPose&)
+			{
+				for (size_t i = 2; i < v.Wheels.size() && v.Speed > 4.0f; i++)
+				{
+					worst = std::max(worst, v.Wheels[i].SlipRatio);
+				}
+				return false;
+			});
+			return worst;
+		}
+
+		// Speed lost coasting 3 s from about 20 m/s with that drag area.
+		float coast_loss(float dragArea)
+		{
+			SyncWorld world;
+			world.start(kHz);
+			make_vehicle_floor(world);
+			VehicleSettingsData s = tame_settings();
+			s.DragArea = dragArea;
+			s.DownforceArea = 0.0f;
+			const BodyKey car = make_test_car(world, glm::vec3(0.0f, 0.66f, 0.0f), test_car_desc(s));
+			world.step(kHz / 2);
+			const PhysicsStepSnapshot fast = drive(world, car, throttle(1.0f), 20 * kHz, [](const VehiclePose& v, const BodyPose&) { return v.Speed >= 20.0f; });
+			const PhysicsStepSnapshot coasted = drive_for(world, car, throttle(0.0f), 3 * kHz);
+			const VehiclePose* a = find_vehicle(fast, car);
+			const VehiclePose* b = find_vehicle(coasted, car);
+			return a && b ? a->Speed - b->Speed : -1.0f;
+		}
+
+		void check_vehicle_assists(Check& check)
+		{
+			const float withAbs = braking_roll(true);
+			const float withoutAbs = braking_roll(false);
+			check(withAbs > 0.5f, "vehicle_abs_keeps_rolling: with ABS the front wheels keep rolling under full brake, " + std::to_string(withAbs));
+			check(withoutAbs >= 0.0f && withoutAbs < 0.1f, "vehicle_abs_keeps_rolling: without ABS they lock, " + std::to_string(withoutAbs));
+
+			const float tcSlip = launch_slip(true);
+			const float rawSlip = launch_slip(false);
+			check(tcSlip < 0.35f, "vehicle_tc_limits_slip: traction control holds the driven slip, worst " + std::to_string(tcSlip));
+			check(rawSlip > 0.5f, "vehicle_tc_limits_slip: without it the wheels spin, worst " + std::to_string(rawSlip));
+
+			const float dragLoss = coast_loss(0.7f);
+			const float noDragLoss = coast_loss(0.0f);
+			check(dragLoss > noDragLoss + 0.2f, "vehicle_drag: air drag slows a coasting car more, " + std::to_string(dragLoss) + " vs " + std::to_string(noDragLoss) + " m/s");
+		}
+
+		void check_vehicle_reverse_and_manual(Check& check)
+		{
+			SyncWorld world;
+			check(world.start(kHz), "vehicle_reverse: the world starts");
+			make_vehicle_floor(world);
+			const BodyKey car = make_test_car(world, glm::vec3(0.0f, 0.66f, 0.0f));
+			world.step(kHz / 2);
+			const PhysicsStepSnapshot reversing = drive_for(world, car, VehicleInput{ 0.0f, 1.0f, 0.0f, 0.0f }, kHz * 3 / 2);
+			const VehiclePose* back = find_vehicle(reversing, car);
+			const BodyPose* backBody = find_pose(&reversing, car);
+			check(back != nullptr && back->Gear < 0, "vehicle_reverse: holding brake at a standstill engages reverse, gear " + std::to_string(back ? back->Gear : 99));
+			check(backBody != nullptr && backBody->Position.z > 0.2f, "vehicle_reverse: and the car backs up (+z), z " + std::to_string(backBody ? backBody->Position.z : 0.0f));
+			bool forward = false;
+			drive(world, car, throttle(1.0f), 3 * kHz, [&](const VehiclePose& v, const BodyPose&) { forward = v.Gear > 0 && v.Speed > 0.5f; return forward; });
+			check(forward, "vehicle_reverse: throttle goes back to a forward gear and drives forward");
+
+			SyncWorld manualWorld;
+			manualWorld.start(kHz);
+			make_vehicle_floor(manualWorld);
+			VehicleSettingsData manual = tame_settings();
+			manual.AutomaticGearbox = false;
+			const BodyKey stick = make_test_car(manualWorld, glm::vec3(0.0f, 0.66f, 0.0f), test_car_desc(manual));
+			manualWorld.step(kHz / 2);
+			manualWorld.send(ShiftGear{ stick, 1 });
+			manualWorld.send(ShiftGear{ stick, 1 });
+			const VehiclePose* second = nullptr;
+			const PhysicsStepSnapshot shifted = manualWorld.step();
+			second = find_vehicle(shifted, stick);
+			check(second != nullptr && second->Gear == 2, "vehicle_manual_shift: two shifts up from neutral are second gear, got " + std::to_string(second ? second->Gear : 99));
+			manualWorld.send(SetVehicleAssist{ stick, VehicleAssist::AutoGearbox, 1.0f });
+			const PhysicsStepSnapshot automatic = drive(manualWorld, stick, throttle(1.0f), 2 * kHz, [](const VehiclePose& v, const BodyPose&) { return v.Gear == 1; });
+			const VehiclePose* firstGear = find_vehicle(automatic, stick);
+			check(firstGear != nullptr && firstGear->Gear == 1, "vehicle_auto_gearbox_override: the assist override makes a manual car automatic (it shifts down to first)");
+		}
+	}
+
 	void run_vehicle_checks(Check& check, AssetPipelineModule& pipeline)
 	{
 		check_tire_model(check);
@@ -548,5 +758,8 @@ namespace wiwa
 		check_vehicle_debug_draw(check);
 		check_vehicle_holds_on_slope(check);
 		check_vehicle_no_chatter(check);
+		check_assist_functions(check);
+		check_vehicle_assists(check);
+		check_vehicle_reverse_and_manual(check);
 	}
 }
