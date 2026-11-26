@@ -30,6 +30,8 @@ namespace wiwa
 		check(!project_argument({ "--project" }).has_value(), "--project without a value: ignored");
 		check(!project_argument({ "--project=" }).has_value(), "--project= without a value: ignored");
 		check(!project_argument({ "--project-dir-smoke" }).has_value(), "a flag that only starts with --project is not it");
+		const std::u8string cafe = u8"D:/My Games/Caf\u00e9";
+		check(project_argument({ "--project", std::string(cafe.begin(), cafe.end()) }) == std::filesystem::path(cafe), "a UTF-8 argument is read as UTF-8");
 
 		// ---- the directory link
 		std::error_code error;

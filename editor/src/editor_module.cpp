@@ -784,7 +784,7 @@ void EditorModule::update(float deltaTime)
 		std::string error;
 		std::error_code cwd;
 		m_StarterScene = wiwa::build_starter_scene(std::filesystem::current_path(cwd), scanFinished, *wiwa::Engine::get().get_module<wiwa::AssetManager>(),
-			*m_SceneEditor, [pipeline](const std::filesystem::path& file) { pipeline->get_database().reimport(file); }, error);
+			*wiwa::Engine::get().get_module<wiwa::SceneModule>(), *m_SceneEditor, [pipeline](const std::filesystem::path& file) { pipeline->get_database().reimport(file); }, error);
 		if (m_StarterScene == wiwa::StarterSceneStep::NotYet && scanFinished)
 		{
 			const auto now = std::chrono::steady_clock::now();

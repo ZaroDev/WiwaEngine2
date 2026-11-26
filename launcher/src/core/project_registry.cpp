@@ -152,12 +152,18 @@ namespace wiwa
 			}
 			RecentProject project;
 			project.Path = normalized(from_utf8(entry["path"].get<std::string>()));
-			project.Name = entry.value("name", std::string{});
+			if (entry.contains("name") && entry["name"].is_string())
+			{
+				project.Name = entry["name"].get<std::string>();
+			}
 			if (project.Name.empty())
 			{
 				project.Name = utf8(project.Path.filename());
 			}
-			project.Added = from_iso(entry.value("added", std::string{})).value_or(Clock::time_point{});
+			if (entry.contains("added") && entry["added"].is_string())
+			{
+				project.Added = from_iso(entry["added"].get<std::string>()).value_or(Clock::time_point{});
+			}
 			if (entry.contains("lastOpened") && entry["lastOpened"].is_string())
 			{
 				project.LastOpened = from_iso(entry["lastOpened"].get<std::string>());

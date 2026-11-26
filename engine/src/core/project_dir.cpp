@@ -32,7 +32,7 @@ namespace wiwa
 			}
 			if (!value.empty())
 			{
-				result = std::filesystem::path(value);
+				result = std::filesystem::path(std::u8string(value.begin(), value.end())); // arguments are UTF-8 (wiwa_main)
 			}
 		}
 		return result;

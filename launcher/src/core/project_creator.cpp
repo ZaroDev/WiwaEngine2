@@ -45,6 +45,13 @@ namespace wiwa
 			return static_cast<bool>(out);
 		}
 
+		// A path for a message: UTF-8, never the system code page (path::string() throws on a character outside it).
+		std::string text(const std::filesystem::path& path)
+		{
+			const std::u8string utf8 = path.u8string();
+			return std::string(utf8.begin(), utf8.end());
+		}
+
 		std::string upper(std::string text)
 		{
 			std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
@@ -143,18 +150,18 @@ namespace wiwa
 		{
 			if (!std::filesystem::is_directory(dir, ec))
 			{
-				error = dir.string() + " is a file";
+				error = text(dir) + " is a file";
 				return false;
 			}
 			if (!std::filesystem::is_empty(dir, ec) || ec)
 			{
-				error = dir.string() + " is not empty: a new project needs an empty or new folder";
+				error = text(dir) + " is not empty: a new project needs an empty or new folder";
 				return false;
 			}
 		}
 		if (!std::filesystem::create_directories(dir, ec) && ec)
 		{
-			error = "Could not create " + dir.string() + ": " + ec.message();
+			error = "Could not create " + text(dir) + ": " + ec.message();
 			return false;
 		}
 		if (!templateDir.empty())
@@ -162,7 +169,7 @@ namespace wiwa
 			std::filesystem::copy(templateDir, dir, std::filesystem::copy_options::recursive, ec);
 			if (ec)
 			{
-				error = "Could not copy the template " + templateDir.string() + ": " + ec.message();
+				error = "Could not copy the template " + text(templateDir) + ": " + ec.message();
 				return false;
 			}
 		}
@@ -171,12 +178,12 @@ namespace wiwa
 		settings.Name = name;
 		if (!save_project_settings(dir / PROJECT_SETTINGS_FILE, settings))
 		{
-			error = "Could not write " + (dir / PROJECT_SETTINGS_FILE).string();
+			error = "Could not write " + text(dir / PROJECT_SETTINGS_FILE);
 			return false;
 		}
 		if (!write_file(dir / ".gitignore", GITIGNORE) || !write_file(dir / ".gitattributes", GITATTRIBUTES) || !write_file(dir / NEW_PROJECT_MARKER, ""))
 		{
-			error = "Could not write the project's files in " + dir.string();
+			error = "Could not write the project's files in " + text(dir);
 			return false;
 		}
 		return true;

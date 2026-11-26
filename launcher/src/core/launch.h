@@ -6,7 +6,7 @@
 namespace wiwa
 {
 	// Another executable of the engine's build: <folder>/../<project>/<project>.exe (bin/<config>/<project>/), then <folder>/<project>.exe (copied next
-	// to this one). Empty when neither exists. The launcher finds the editor with it, and the editor the launcher.
+	// to this one), then <project>.exe in any folder next to this one (the repository copies, launcher/ and editor/). Empty when none exists. The launcher finds the editor with it, and the editor the launcher.
 	std::filesystem::path find_sibling_executable(const std::filesystem::path& executableFolder, const std::string& project);
 
 	// "<editor>" --project "<dir>": both quoted, so paths with spaces reach the editor in one piece.

@@ -4,6 +4,7 @@
 
 #ifdef WI_PLATFORM_WINDOWS
 #include <windows.h>
+#include <shellapi.h>
 #endif
 
 #define USE_WIN_MAIN WI_SHIPPING && WI_PLATFORM_WINDOWS
@@ -28,10 +29,27 @@ int wiwa_main(int argc, char** argv)
 	// --project <dir>: work in that folder (before anything reads a relative path).
 	{
 		std::vector<std::string> arguments;
+#ifdef WI_PLATFORM_WINDOWS
+		// argv of main() is in the system code page: a project folder outside it (a user name or game name with accents or Japanese) would not survive. The wide
+		// command line has it whole.
+		int count = 0;
+		if (LPWSTR* wide = CommandLineToArgvW(GetCommandLineW(), &count))
+		{
+			for (int i = 1; i < count; i++)
+			{
+				const int size = WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, nullptr, 0, nullptr, nullptr);
+				std::string text(static_cast<size_t>(std::max(size - 1, 0)), '\0');
+				WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, text.data(), size, nullptr, nullptr);
+				arguments.push_back(std::move(text));
+			}
+			LocalFree(wide);
+		}
+#else
 		for (int i = 1; i < argc; i++)
 		{
 			arguments.emplace_back(argv[i]);
 		}
+#endif
 		if (const std::optional<std::filesystem::path> project = wiwa::project_argument(arguments))
 		{
 			const std::filesystem::path executable = executable_path(argv[0]);

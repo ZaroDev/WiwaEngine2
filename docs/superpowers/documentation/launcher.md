@@ -47,19 +47,20 @@ The launcher cannot write the scene: a scene names assets by guid, and `shapes.g
 1. **No marker:** `NotNeeded`.
 2. **First scan still running:** `NotYet`.
 3. **Shapes model not in the catalog yet:** `NotYet`. `find_asset` re-reads the catalog at most every 250 ms.
-4. **Otherwise:** a new scene with Plane (scale 10, 1, 10), Directional light and Camera (0, 4, 8, looking down at the origin) from `entity_templates`. It is saved as `assets/scenes/main.wscene` and imported at once.
-5. **Once the scene has a guid:** `build_settings.json` gets it as the default and only scene, the marker is deleted, and the step returns `Done`.
+4. **Otherwise:** a new scene with Plane (scale 10, 1, 10), Directional light and Camera (0, 4, 8, looking down at the origin) from `entity_templates`, built in a `SceneEditor` of the step's own, so it never replaces what the user is editing (a cold first scan can take minutes). It is saved as `assets/scenes/main.wscene` and imported at once.
+5. **Once the scene has a guid:** `build_settings.json` gets it as the default and only scene, the marker is deleted, and the step returns `Done`. The editor opens it only while it still holds an untouched untitled scene.
 
 A step that still says `NotYet` 15 s after the scan (`STARTER_SCENE_WAIT_SECONDS`) or fails is logged once and keeps the marker, so the next start tries again. A start that saved the scene but failed before the build settings only finishes the build settings next time.
 
 ## Launching
 
-- **Finding the editor:** `find_sibling_executable` tries `<launcher folder>/../wiwa_editor/wiwa_editor.exe` (the build output, `bin/<cfg>/`), then `wiwa_editor.exe` next to the launcher.
+- **Finding the editor:** `find_sibling_executable` tries `<launcher folder>/../wiwa_editor/wiwa_editor.exe` (the build output, `bin/<cfg>/`), then `wiwa_editor.exe` next to the launcher, then `wiwa_editor.exe` in any folder next to the launcher's (the repository copies: `launcher/wiwa_launcher.exe` finds `editor/wiwa_editor.exe`, and the other way round).
 - **Starting it:** `CreateProcessW` with `"<editor>" --project "<dir>"`, working directory `<dir>`. The launcher closes once the editor has started, and stays open with the error otherwise.
 - **File > Switch Project...** in the editor (not while playing) finds `wiwa_launcher` the same way and starts it, then quits the editor. With unsaved changes it first asks: Save and switch (only for a scene that has a path), Switch without saving, or Cancel.
 
 ## Traps
 
+- Paths stay UTF-8 end to end: messages use `u8string()` (`path::string()` converts to the system code page and throws on a character outside it), and `wiwa_main` reads the arguments from the wide command line on Windows, so `--project` survives any folder name.
 - The build has no `/utf-8` flag: non-ASCII string literals in sources must be `\u` escapes, or they are read in the system code page.
 - `AssetCatalog::find` compares paths case-insensitively (ASCII). The catalog stores the source root as its folder is named (`assets/...`), while code looks up `Assets/...`. Before this, the Hierarchy's 3D shape templates never appeared.
 - The launcher is not a scene feature, so it is not in `demo.wscene` (the one exception to that CLAUDE.md rule, decided in the design).

@@ -2,6 +2,7 @@
 
 #include <assets/asset_manager.h>
 #include <scene/scene_editor.h>
+#include <scene/scene_module.h>
 
 #include <filesystem>
 #include <functional>
@@ -26,8 +27,9 @@ namespace wiwa
 	// The time the editor keeps calling a step that says NotYet after the first scan finished; then it gives up (Failed, the marker stays).
 	inline constexpr float STARTER_SCENE_WAIT_SECONDS = 15.0f;
 
-	// One step of it; the editor calls it every frame until it stops returning NotYet. `import` imports a file the step wrote (the editor passes the
-	// database's reimport). Every path is under `projectDir`. Main thread.
-	StarterSceneStep build_starter_scene(const std::filesystem::path& projectDir, bool scanFinished, AssetManager& assets, SceneEditor& editor,
-		const std::function<void(const std::filesystem::path&)>& import, std::string& error);
+	// One step of it; the editor calls it every frame until it stops returning NotYet. The scene is built in a SceneEditor of its own, so the document
+	// open in `editor` is never replaced: it is opened there only while the editor still holds an untouched untitled scene. `import` imports a file
+	// the step wrote (the editor passes the database's reimport). Every path is under `projectDir`. Main thread.
+	StarterSceneStep build_starter_scene(const std::filesystem::path& projectDir, bool scanFinished, AssetManager& assets, SceneModule& scenes,
+		SceneEditor& editor, const std::function<void(const std::filesystem::path&)>& import, std::string& error);
 }

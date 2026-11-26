@@ -22,6 +22,16 @@ namespace wiwa
 				return candidate.lexically_normal();
 			}
 		}
+		// the copies the builds make in the repository (launcher/wiwa_launcher.exe, editor/wiwa_editor.exe): any folder next to this one
+		const std::filesystem::path parent = executableFolder.parent_path();
+		for (auto it = std::filesystem::directory_iterator(parent, error); !error && it != std::filesystem::directory_iterator(); it.increment(error))
+		{
+			const std::filesystem::path candidate = it->path() / exe;
+			if (it->is_directory(error) && std::filesystem::is_regular_file(candidate, error))
+			{
+				return candidate.lexically_normal();
+			}
+		}
 		return {};
 	}
 
@@ -41,7 +51,8 @@ namespace wiwa
 		const std::wstring folder = workingDir.wstring();
 		if (!CreateProcessW(exe.c_str(), line.data(), nullptr, nullptr, FALSE, 0, nullptr, folder.empty() ? nullptr : folder.c_str(), &startup, &process))
 		{
-			error = "Could not start " + exe.string() + " (Windows error " + std::to_string(GetLastError()) + ")";
+			const std::u8string name = exe.u8string();
+			error = "Could not start " + std::string(name.begin(), name.end()) + " (Windows error " + std::to_string(GetLastError()) + ")";
 			return false;
 		}
 		CloseHandle(process.hThread);

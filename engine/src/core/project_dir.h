@@ -10,7 +10,7 @@ namespace wiwa
 	// A file the launcher puts in a project it creates: the editor builds the starter scene on the first open, then deletes it (launcher.md).
 	constexpr const char* NEW_PROJECT_MARKER = ".wiwa_new_project";
 
-	// The project directory the program was told to work in: `--project <dir>` or `--project=<dir>`. The last one wins. Nothing when absent or empty.
+	// The project directory the program was told to work in: `--project <dir>` or `--project=<dir>`, arguments in UTF-8. The last one wins. Nothing when absent or empty.
 	std::optional<std::filesystem::path> project_argument(const std::vector<std::string>& arguments);
 
 	// Where the engine's own assets (shaders, fonts, Lua stubs: the editor/engine folder of the engine repository) are, looked for from the executable

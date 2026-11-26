@@ -102,7 +102,7 @@ namespace wiwa
 		if (editor && assets)
 		{
 			const auto noImport = [](const std::filesystem::path&) {};
-			check(build_starter_scene(project, false, *assets, editor->scene_editor(), noImport, why) == StarterSceneStep::NotYet, "before the scan: not yet");
+			check(build_starter_scene(project, false, *assets, *Engine::get().get_module<SceneModule>(), editor->scene_editor(), noImport, why) == StarterSceneStep::NotYet, "before the scan: not yet");
 			check(!std::filesystem::exists(project / STARTER_SCENE, error), "before the scan: no scene written");
 			check(std::filesystem::exists(project / NEW_PROJECT_MARKER, error), "before the scan: the marker stays");
 		}
@@ -134,7 +134,7 @@ namespace wiwa
 		if (editor && assets)
 		{
 			const auto noImport = [](const std::filesystem::path&) {};
-			check(build_starter_scene(project, true, *assets, editor->scene_editor(), noImport, why) == StarterSceneStep::NotNeeded, "a second time: not needed");
+			check(build_starter_scene(project, true, *assets, *Engine::get().get_module<SceneModule>(), editor->scene_editor(), noImport, why) == StarterSceneStep::NotNeeded, "a second time: not needed");
 		}
 
 		if (check.Failures == 0)
@@ -148,6 +148,15 @@ namespace wiwa
 	void starter_scene_child_frame(EditorModule& editor)
 	{
 		static const auto start = std::chrono::steady_clock::now();
+		// the user starts working in the untitled scene before the first scan is done: the starter scene must not replace it
+		static bool working = false;
+		SceneEditor& scene = editor.scene_editor();
+		if (!working)
+		{
+			working = true;
+			const entt::entity entity = scene.create_entity(entt::null);
+			scene.rename_entity(entity, "User work");
+		}
 		const StarterSceneStep step = editor.starter_scene_step();
 		const bool late = std::chrono::steady_clock::now() - start > std::chrono::seconds(CHILD_TIMEOUT_SECONDS - 30);
 		if (step == StarterSceneStep::NotYet && !late)
@@ -158,7 +167,16 @@ namespace wiwa
 		{
 			WI_LOG(Error, "Tests", "Starter scene child: the step ended as {0}", late ? "a timeout" : step == StarterSceneStep::Failed ? "Failed" : "NotNeeded");
 		}
-		Engine::get().set_exit_code(step == StarterSceneStep::Done ? 0 : 1);
+		bool kept = false;
+		for (const auto [entity, name] : scene.scene().registry().view<Name>().each())
+		{
+			kept = kept || name.Value == "User work";
+		}
+		if (!kept || !scene.path().empty())
+		{
+			WI_LOG(Error, "Tests", "Starter scene child: the scene the user was working on was replaced");
+		}
+		Engine::get().set_exit_code(step == StarterSceneStep::Done && kept && scene.path().empty() ? 0 : 1);
 		Engine::get().request_quit();
 	}
 }

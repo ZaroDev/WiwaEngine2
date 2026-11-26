@@ -142,6 +142,16 @@ namespace wiwa
 			check(foreign.load(warning) && warning.empty(), "unknown keys are ignored: " + warning);
 			check(foreign.projects().size() == 1 && foreign.index_of(withProject).has_value(), "the entry with unknown keys is read");
 
+			// a known key with the wrong type: that entry falls back, the launcher does not throw
+			const std::string mistyped = R"({"projects":[{"path":")" + withProject.generic_string() + R"(","name":null,"added":0,"lastOpened":5}]})";
+			check(write_text(file, mistyped), "wrote a list with mistyped keys");
+			ProjectRegistry typed(file);
+			warning.clear();
+			bool threw = false;
+			try { typed.load(warning); } catch (...) { threw = true; }
+			check(!threw, "mistyped keys do not throw");
+			check(typed.projects().size() == 1 && !typed.projects()[0].Name.empty(), "a mistyped entry is still listed, with a name");
+
 			ProjectRegistry missing(root / "nowhere" / "projects.json");
 			warning.clear();
 			check(missing.load(warning) && warning.empty() && missing.projects().empty(), "a missing list is an empty list");
@@ -215,6 +225,16 @@ namespace wiwa
 			std::string kept((std::istreambuf_iterator<char>(keep)), std::istreambuf_iterator<char>());
 			check(kept == "mine", "keep.txt is unchanged");
 
+			// ---- an error about a folder whose name is outside the system code page: a message in UTF-8, not an exception
+			const std::filesystem::path japanese = root / "Projects" / std::filesystem::path(u8"\u30b2\u30fc\u30e0");
+			check(write_text(japanese / "keep.txt", "mine"), "wrote a non-empty folder with a Japanese name");
+			bool threw = false;
+			why.clear();
+			try { threw = create_project(japanese, "Game", templ, why); } catch (...) { threw = true; }
+			check(!threw, "refusing a folder with a Japanese name does not throw");
+			const std::u8string name = u8"\u30b2\u30fc\u30e0";
+			check(why.find(std::string(name.begin(), name.end())) != std::string::npos, "the refusal names the folder in UTF-8: " + why);
+
 			// ---- the real template, found from this executable
 			const std::filesystem::path minimal = find_template(executable_folder(), "minimal");
 			check(std::filesystem::is_regular_file(minimal / "assets" / "models" / "shapes" / "shapes.glb", error), "found launcher/templates/minimal with its shapes.glb: " + minimal.string());
@@ -236,6 +256,12 @@ namespace wiwa
 			check(write_text(bin / "wiwa_editor" / "wiwa_editor.exe", ""), "wrote a stand-in editor in its build folder");
 			check(find_sibling_executable(launcher, "wiwa_editor") == launcher / ".." / "wiwa_editor" / "wiwa_editor.exe"
 				|| find_sibling_executable(launcher, "wiwa_editor") == bin / "wiwa_editor" / "wiwa_editor.exe", "the build folder wins over the copy");
+
+			// the copies the builds make in the repository: launcher/wiwa_launcher.exe and editor/wiwa_editor.exe find each other
+			const std::filesystem::path repo = root / "repo";
+			check(write_text(repo / "launcher" / "wiwa_launcher.exe", "") && write_text(repo / "editor" / "wiwa_editor.exe", ""), "wrote the repository copies");
+			check(find_sibling_executable(repo / "launcher", "wiwa_editor") == (repo / "editor" / "wiwa_editor.exe").lexically_normal(), "the launcher's repository copy finds the editor's");
+			check(find_sibling_executable(repo / "editor", "wiwa_launcher") == (repo / "launcher" / "wiwa_launcher.exe").lexically_normal(), "the editor's repository copy finds the launcher's");
 
 			const std::filesystem::path exe = LR"(C:\Engine\wiwa_editor.exe)";
 			const std::filesystem::path project = std::filesystem::path(u8R"(D:\My Games\Caf)" u8"\u00e9");
