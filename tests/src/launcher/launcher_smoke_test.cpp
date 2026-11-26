@@ -1,6 +1,7 @@
 #include <editor_common.h>
 #include "launcher_smoke_test.h"
 
+#include <core/project_creator.h>
 #include <core/project_registry.h>
 #include <core/project_settings.h>
 
@@ -8,6 +9,8 @@
 
 #include <algorithm>
 #include <cctype>
+
+#include <windows.h>
 
 namespace wiwa
 {
@@ -143,6 +146,81 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		std::filesystem::path executable_folder()
+		{
+			wchar_t buffer[4096];
+			const DWORD length = GetModuleFileNameW(nullptr, buffer, static_cast<DWORD>(std::size(buffer)));
+			return length > 0 && length < std::size(buffer) ? std::filesystem::path(buffer).parent_path() : std::filesystem::path{};
+		}
+
+		size_t count_entries(const std::filesystem::path& dir)
+		{
+			std::error_code error;
+			size_t count = 0;
+			for (auto it = std::filesystem::recursive_directory_iterator(dir, error); !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error))
+			{
+				count++;
+			}
+			return count;
+		}
+
+		void creator_checks(Check& check, const std::filesystem::path& root)
+		{
+			std::error_code error;
+			std::string why;
+
+			// ---- names
+			for (const char* bad : { "", "  ", "a/b", "a\\b", "what?", "CON", "com1", "game.", "game " })
+			{
+				check(!valid_project_name(bad, why) && !why.empty(), std::string("refused name '") + bad + "'");
+			}
+			check(valid_project_name("My Game", why), "accepted 'My Game': " + why);
+			const std::u8string cafe = u8"Café";
+			check(valid_project_name(std::string(cafe.begin(), cafe.end()), why), "accepted a non-ASCII name: " + why);
+
+			// ---- a stand-in template
+			const std::filesystem::path templ = root / "Template";
+			check(write_text(templ / "assets" / "models" / "shapes" / "shapes.glb", "glb"), "wrote the stand-in template");
+
+			// ---- into a new folder
+			const std::filesystem::path fresh = root / "Projects" / "Fresh Game";
+			check(create_project(fresh, "Fresh Game", templ, why), "created a project in a new folder: " + why);
+			std::string loadError;
+			const std::optional<ProjectSettings> settings = load_project_settings(fresh / PROJECT_SETTINGS_FILE, loadError);
+			check(settings && settings->Name == "Fresh Game", "project.wproject reads back with the name");
+			check(std::filesystem::is_regular_file(fresh / "assets" / "models" / "shapes" / "shapes.glb", error), "the template was copied");
+			check(std::filesystem::is_regular_file(fresh / ".gitignore", error), ".gitignore written");
+			check(std::filesystem::is_regular_file(fresh / ".gitattributes", error), ".gitattributes written");
+			check(std::filesystem::is_regular_file(fresh / NEW_PROJECT_MARKER, error), "the new-project marker written");
+			check(is_project_folder(fresh), "the new folder is a project");
+			ProjectRegistry registry(root / "created.json");
+			std::string message;
+			check(registry.add(fresh, message) == AddResult::Added, "the new project can be listed");
+
+			// ---- into an existing empty folder
+			const std::filesystem::path emptyDir = make_dir(root / "Projects" / "Empty Existing");
+			check(create_project(emptyDir, "Empty Existing", templ, why), "created a project in an existing empty folder: " + why);
+
+			// ---- never into a folder with something in it
+			const std::filesystem::path busy = root / "Projects" / "Busy";
+			check(write_text(busy / "keep.txt", "mine"), "wrote keep.txt");
+			why.clear();
+			check(!create_project(busy, "Busy", templ, why) && !why.empty(), "a non-empty folder is refused: " + why);
+			check(count_entries(busy) == 1, "nothing was added to the non-empty folder");
+			std::ifstream keep(busy / "keep.txt");
+			std::string kept((std::istreambuf_iterator<char>(keep)), std::istreambuf_iterator<char>());
+			check(kept == "mine", "keep.txt is unchanged");
+
+			// ---- the real template, found from this executable
+			const std::filesystem::path minimal = find_template(executable_folder(), "minimal");
+			check(std::filesystem::is_regular_file(minimal / "assets" / "models" / "shapes" / "shapes.glb", error), "found launcher/templates/minimal with its shapes.glb: " + minimal.string());
+			check(find_template(root / "nowhere", "minimal").empty() || std::getenv("WIWA_LAUNCHER_TEMPLATES"), "no template where there is none");
+			check(!default_projects_folder().empty() && default_projects_folder().filename() == "Wiwa Projects", "the default folder is Documents\\Wiwa Projects");
+		}
+	}
+
 	bool run_launcher_smoke_test(AssetPipelineModule&)
 	{
 		Check check;
@@ -153,6 +231,7 @@ namespace wiwa
 		std::filesystem::create_directories(root, error);
 
 		registry_checks(check, root);
+		creator_checks(check, root);
 
 		std::filesystem::remove_all(root, error);
 		if (check.Failures == 0)
