@@ -16,6 +16,7 @@ namespace wiwa
 		float Density = 1000.0f;
 		CombineMode FrictionCombine = CombineMode::Average;
 		CombineMode RestitutionCombine = CombineMode::Average;
+		float TireGrip = 1.0f; // how much grip a vehicle tire has on it (vehicles.md); 1: the tire model as tuned
 
 		bool operator==(const PhysicsMaterialData&) const = default;
 	};
@@ -24,7 +25,7 @@ namespace wiwa
 	PhysicsMaterialData default_physics_material();
 
 	// Version of the cooked payload (a u32 first in the blob).
-	constexpr u32 PHYSICS_MATERIAL_VERSION = 1;
+	constexpr u32 PHYSICS_MATERIAL_VERSION = 2; // 2 added TireGrip (a version 1 payload loads with 1)
 
 	// Whether the values are usable: finite, at least 0, combine modes in range. The importer refuses a file that is not, and the
 	// loader refuses a payload that is not.

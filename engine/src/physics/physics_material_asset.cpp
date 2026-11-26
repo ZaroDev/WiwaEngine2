@@ -16,7 +16,7 @@ namespace wiwa
 	bool physics_material_valid(const PhysicsMaterialData& data)
 	{
 		const auto ok = [](float v) { return std::isfinite(v) && v >= 0.0f; };
-		return ok(data.Friction) && ok(data.Restitution) && ok(data.Density)
+		return ok(data.Friction) && ok(data.Restitution) && ok(data.Density) && ok(data.TireGrip)
 			&& static_cast<u32>(data.FrictionCombine) <= static_cast<u32>(CombineMode::Multiply)
 			&& static_cast<u32>(data.RestitutionCombine) <= static_cast<u32>(CombineMode::Multiply);
 	}
@@ -43,7 +43,7 @@ namespace wiwa
 	{
 		u32 version = PHYSICS_MATERIAL_VERSION;
 		ar.value(version);
-		if (ar.reading() && ar.ok() && version != PHYSICS_MATERIAL_VERSION)
+		if (ar.reading() && ar.ok() && (version < 1 || version > PHYSICS_MATERIAL_VERSION))
 		{
 			ar.fail();
 			return;
@@ -54,6 +54,10 @@ namespace wiwa
 		ar.value(v.Density);
 		ar.value(v.FrictionCombine);
 		ar.value(v.RestitutionCombine);
+		if (!ar.reading() || version >= 2)
+		{
+			ar.value(v.TireGrip);
+		}
 
 		if (ar.reading() && ar.ok() && !physics_material_valid(v))
 		{

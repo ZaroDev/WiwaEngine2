@@ -3,6 +3,9 @@
 
 #include <cmath>
 
+#include <asset_pipeline/physics_material_file.h>
+#include <assets/wasset_io.h>
+#include <physics/physics_material_asset.h>
 #include <physics/tire_model.h>
 
 namespace wiwa
@@ -41,10 +44,39 @@ namespace wiwa
 			const TireLimits above = tire_force_limits(t, load, 0.0f, peak * 1.001f, 1.0f);
 			check(std::abs(below.Lateral - above.Lateral) < load * 0.01f, "tire_limits_continuous: no jump at the peak");
 		}
+
+		// TireGrip on physics materials: the JSON key, the payload round trip, and a version 1 payload (no TireGrip) loading with 1.
+		void check_physmat_tire_grip(Check& check)
+		{
+			PhysicsMaterialData parsed;
+			std::string parseError;
+			check(physics_material_from_text("{ \"tireGrip\": 0.6 }", parsed, parseError) && parsed.TireGrip == 0.6f, "physmat_tire_grip_json: \"tireGrip\" is read");
+			check(physics_material_from_text("{}", parsed, parseError) && parsed.TireGrip == 1.0f, "physmat_tire_grip_json: a missing \"tireGrip\" is 1");
+			check(!physics_material_from_text("{ \"tireGrip\": -1 }", parsed, parseError), "physmat_tire_grip_json: a negative \"tireGrip\" is refused");
+			check(physics_material_to_json(parsed).contains("tireGrip"), "physmat_tire_grip_json: written back");
+			PhysicsMaterialData grippy = default_physics_material();
+			grippy.TireGrip = 0.6f;
+			const std::optional<PhysicsMaterialData> back = deserialize<PhysicsMaterialData>(serialize(grippy));
+			check(back && back->TireGrip == 0.6f, "physmat_tire_grip_roundtrip: the payload keeps TireGrip");
+			BinaryArchive v1 = BinaryArchive::writer();
+			u32 version1 = 1;
+			float friction = 0.7f, restitution = 0.2f, density = 900.0f;
+			CombineMode combine = CombineMode::Max;
+			v1.value(version1);
+			v1.value(friction);
+			v1.value(restitution);
+			v1.value(density);
+			v1.value(combine);
+			v1.value(combine);
+			const std::vector<std::byte> v1Bytes = v1.take();
+			const std::optional<PhysicsMaterialData> old = deserialize<PhysicsMaterialData>(v1Bytes);
+			check(old && old->Friction == 0.7f && old->Density == 900.0f && old->TireGrip == 1.0f, "physmat_v1_payload: a version 1 payload loads with TireGrip 1");
+		}
 	}
 
 	void run_vehicle_checks(Check& check)
 	{
 		check_tire_model(check);
+		check_physmat_tire_grip(check);
 	}
 }

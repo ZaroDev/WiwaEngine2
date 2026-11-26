@@ -7,7 +7,7 @@
 #include <physics/physics_material_asset.h>
 
 // The source format of a physics material (.wphysmat): JSON with "friction", "restitution", "density" (numbers, at least 0) and
-// "frictionCombine", "restitutionCombine" ("Average", "Min", "Max" or "Multiply"). A key that is missing takes the default.
+// "frictionCombine", "restitutionCombine" ("Average", "Min", "Max" or "Multiply"), "tireGrip" (number, at least 0: the grip of a vehicle tire on it). A key that is missing takes the default.
 namespace wiwa
 {
 	const char* combine_mode_name(CombineMode mode);

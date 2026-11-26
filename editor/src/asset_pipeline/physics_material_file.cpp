@@ -79,7 +79,7 @@ namespace wiwa
 		PhysicsMaterialData data = default_physics_material();
 		if (!read_number(root, "friction", data.Friction, error) || !read_number(root, "restitution", data.Restitution, error) ||
 			!read_number(root, "density", data.Density, error) || !read_mode(root, "frictionCombine", data.FrictionCombine, error) ||
-			!read_mode(root, "restitutionCombine", data.RestitutionCombine, error))
+			!read_mode(root, "restitutionCombine", data.RestitutionCombine, error) || !read_number(root, "tireGrip", data.TireGrip, error))
 		{
 			return false;
 		}
@@ -95,6 +95,7 @@ namespace wiwa
 		root["density"] = data.Density;
 		root["frictionCombine"] = combine_mode_name(data.FrictionCombine);
 		root["restitutionCombine"] = combine_mode_name(data.RestitutionCombine);
+		root["tireGrip"] = data.TireGrip;
 		return root;
 	}
 }

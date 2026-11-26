@@ -16,7 +16,7 @@ namespace wiwa
 		{
 		public:
 			virtual const char* name() const override { return "PhysicsMaterialImporter"; }
-			virtual u32 version() const override { return 1; }
+			virtual u32 version() const override { return 2; } // 2: tireGrip
 			virtual std::vector<std::string> extensions() const override { return { ".wphysmat" }; }
 
 			virtual bool import(ImportContext& ctx) override
