@@ -11,6 +11,7 @@
 #include <physics/cooked_shape.h>
 #include <input/action_types.h>
 #include <physics/physics_material_asset.h>
+#include <physics/vehicle_settings.h>
 #include <nav/nav_mesh_asset.h>
 #include <ui/ui_widget.h>
 #include "asset_data.h"
@@ -147,6 +148,7 @@ namespace wiwa
 	void archive(BinaryArchive& ar, UiPanelData& v);
 	// A version, then the values; refuses an unknown version and values physics_material_valid refuses (physics_material_asset.cpp).
 	void archive(BinaryArchive& ar, PhysicsMaterialData& v);
+	void archive(BinaryArchive& ar, VehicleSettingsData& v);
 	// A version, the shape kind, then the Jolt binary state of the shape (physics/cooked_shape.cpp).
 	void archive(BinaryArchive& ar, CookedShapeData& v);
 	// A version, then the JSON text (input/input_map_io.h is the one description of the format); refuses another version, trailing bytes and text input_map_from_text refuses.
@@ -193,6 +195,7 @@ namespace wiwa
 	template<> constexpr AssetType asset_type_of<NavMeshData>() { return AssetType::NavMesh; }
 	template<> constexpr AssetType asset_type_of<BehaviorTreeData>() { return AssetType::BehaviorTree; }
 	template<> constexpr AssetType asset_type_of<VideoData>() { return AssetType::Video; }
+	template<> constexpr AssetType asset_type_of<VehicleSettingsData>() { return AssetType::Vehicle; }
 
 	template<typename T>
 	std::vector<std::byte> serialize(const T& data)

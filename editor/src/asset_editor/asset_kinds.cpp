@@ -37,6 +37,7 @@ namespace wiwa
 			{ ".wbt",      AssetType::BehaviorTree,    ICON_FK_TREE,            E::BehaviorTree, false, false, false },
 			{ ".wnav",     AssetType::NavMesh,         ICON_FK_MAP,             E::None,         false, false, false },
 			{ ".wphysmat", AssetType::PhysicsMaterial, ICON_FK_HUBZILLA,        E::None,         false, false, false },
+			{ ".wvehicle", AssetType::Vehicle,         ICON_FK_CAR,             E::None,         false, false, false },
 		};
 	}
 

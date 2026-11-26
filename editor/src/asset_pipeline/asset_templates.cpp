@@ -11,6 +11,7 @@
 #include "../scene/scene_json.h"
 #include "material_file.h"
 #include "physics_material_file.h"
+#include "vehicle_file.h"
 #include <assets/native_anim_files.h>
 #include <assets/particle_effect.h>
 #include <input/input_map_io.h>
@@ -235,6 +236,7 @@ namespace wiwa
 		case CreateKind::HlslInclude: return "HLSL include";
 		case CreateKind::UiPanel: return "UI panel";
 		case CreateKind::PhysicsMaterial: return "Physics Material";
+		case CreateKind::Vehicle: return "Vehicle";
 		case CreateKind::InputMap: return "Input Map";
 		case CreateKind::AnimationGraph: return "Animation graph";
 		case CreateKind::ParticleEffect: return "Particle effect";
@@ -256,6 +258,7 @@ namespace wiwa
 		case CreateKind::HlslInclude: return "NewInclude";
 		case CreateKind::UiPanel: return "NewPanel";
 		case CreateKind::PhysicsMaterial: return "New physics material";
+		case CreateKind::Vehicle: return "New vehicle";
 		case CreateKind::InputMap: return "New input map";
 		case CreateKind::AnimationGraph: return "New animation graph";
 		case CreateKind::ParticleEffect: return "New particle effect";
@@ -277,6 +280,7 @@ namespace wiwa
 		case CreateKind::HlslInclude: return ".hlsli";
 		case CreateKind::UiPanel: return ".wuipanel";
 		case CreateKind::PhysicsMaterial: return ".wphysmat";
+		case CreateKind::Vehicle: return ".wvehicle";
 		case CreateKind::InputMap: return ".winput";
 		case CreateKind::AnimationGraph: return ".wgraph";
 		case CreateKind::ParticleEffect: return ".wfx";
@@ -395,6 +399,9 @@ namespace wiwa
 			break;
 		case CreateKind::BehaviorTree:
 			written = write_text(path, write_bt_file(default_behavior_tree()));
+			break;
+		case CreateKind::Vehicle:
+			written = write_text(path, vehicle_to_json(default_vehicle_settings()).dump(2));
 			break;
 		}
 

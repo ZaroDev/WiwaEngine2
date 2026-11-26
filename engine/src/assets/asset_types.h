@@ -31,7 +31,8 @@ namespace wiwa
 	X(AudioClip, AudioClipData) \
 	X(NavMesh, NavMeshData) \
 	X(BehaviorTree, BehaviorTreeData) \
-	X(Video, VideoData)
+	X(Video, VideoData) \
+	X(Vehicle, VehicleSettingsData)
 
 	enum class AssetType : u32
 	{

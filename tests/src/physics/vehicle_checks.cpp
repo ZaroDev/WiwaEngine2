@@ -1,12 +1,21 @@
 #include <editor_common.h>
 #include "vehicle_checks.h"
 
+#include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <thread>
 
+#include <asset_pipeline/asset_database.h>
 #include <asset_pipeline/physics_material_file.h>
+#include <asset_pipeline/vehicle_file.h>
+#include <assets/asset_manager.h>
+#include <core/engine.h>
 #include <assets/wasset_io.h>
 #include <physics/physics_material_asset.h>
 #include <physics/tire_model.h>
+#include <physics/vehicle_settings.h>
 
 namespace wiwa
 {
@@ -99,12 +108,71 @@ namespace wiwa
 			check(low > 0.95f, "body_com_offset: a tall box with its mass low rights itself, up.y " + std::to_string(low));
 			check(centred < 0.3f, "body_com_offset: the same box with its mass centred falls over, up.y " + std::to_string(centred));
 		}
+
+		// The .wvehicle format: JSON round trip, defaults for missing keys, refusals naming the key, the binary payload, and a file
+		// imported through the pipeline loading through the AssetManager.
+		void check_vehicle_asset(Check& check, AssetPipelineModule& pipeline)
+		{
+			const VehicleSettingsData defaults = default_vehicle_settings();
+			check(vehicle_settings_valid(defaults), "vehicle_defaults_valid: the default settings are valid");
+			VehicleSettingsData parsed;
+			std::string error;
+			check(vehicle_from_text(vehicle_to_json(defaults).dump(2), parsed, error) && parsed == defaults, "vehicle_json_roundtrip: the default settings survive JSON, " + error);
+			VehicleSettingsData tuned = defaults;
+			tuned.RearTire.Lateral.D = 1.3f;
+			tuned.Gears = { 3.0f, 2.0f };
+			tuned.AutomaticGearbox = false;
+			tuned.SteerLimit = { { 0.0f, 1.0f }, { 20.0f, 0.5f } };
+			check(vehicle_from_text(vehicle_to_json(tuned).dump(), parsed, error) && parsed == tuned, "vehicle_json_roundtrip: changed values survive JSON, " + error);
+			check(vehicle_from_text("{ \"version\": 1 }", parsed, error) && parsed == defaults, "vehicle_json_defaults: missing keys take the defaults, " + error);
+			for (const auto& [name, text] : std::vector<std::pair<std::string, std::string>>{
+				{ "unsorted_curve", "{ \"version\": 1, \"engine\": { \"torqueCurve\": [[5000, 300], [1000, 200]] } }" },
+				{ "zero_gear", "{ \"version\": 1, \"transmission\": { \"gears\": [3.0, 0.0] } }" },
+				{ "assist_range", "{ \"version\": 1, \"assists\": { \"abs\": 2 } }" },
+				{ "wrong_type", "{ \"version\": 1, \"aero\": { \"dragArea\": \"big\" } }" },
+				{ "not_json", "{ \"version\": " } })
+			{
+				error.clear();
+				check(!vehicle_from_text(text, parsed, error) && !error.empty(), "vehicle_json_rejects: " + name + " is refused with a reason");
+			}
+			const std::optional<VehicleSettingsData> back = deserialize<VehicleSettingsData>(serialize(tuned));
+			check(back && *back == tuned, "vehicle_payload_roundtrip: the binary payload keeps every value");
+			std::vector<std::byte> wrongVersion = serialize(tuned);
+			wrongVersion[0] = std::byte{ 99 };
+			check(!deserialize<VehicleSettingsData>(wrongVersion).has_value(), "vehicle_payload_version: an unknown version is refused");
+
+			AssetDatabase& database = pipeline.get_database();
+			const std::filesystem::path dir = database.get_assets_root() / "zz_vehicle_smoke";
+			std::error_code fsError;
+			std::filesystem::remove_all(dir, fsError);
+			std::filesystem::create_directories(dir, fsError);
+			{
+				std::ofstream out(dir / "car.wvehicle", std::ios::binary);
+				out << vehicle_to_json(tuned).dump(2);
+			}
+			const std::optional<AssetRef> ref = database.ensure_imported(dir / "car.wvehicle");
+			check(ref.has_value(), "vehicle_cook_load: the .wvehicle imports");
+			AssetManager* assets = Engine::get().get_module<AssetManager>();
+			if (ref && assets != nullptr)
+			{
+				const Handle<VehicleSettingsData> handle = assets->load<VehicleSettingsData>(*ref);
+				const auto giveUp = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+				while (std::chrono::steady_clock::now() < giveUp && handle.state() == LoadState::Loading)
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				}
+				check(handle.state() == LoadState::Ready && handle.get() != nullptr && *handle.get() == tuned, "vehicle_cook_load: the cooked vehicle loads with the values of the file");
+			}
+			std::filesystem::remove_all(dir, fsError);
+			database.scan();
+		}
 	}
 
-	void run_vehicle_checks(Check& check)
+	void run_vehicle_checks(Check& check, AssetPipelineModule& pipeline)
 	{
 		check_tire_model(check);
 		check_physmat_tire_grip(check);
 		check_body_com_offset(check);
+		check_vehicle_asset(check, pipeline);
 	}
 }

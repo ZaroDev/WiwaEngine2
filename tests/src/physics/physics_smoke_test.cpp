@@ -2280,7 +2280,7 @@ namespace wiwa
 		check_character_repeatable(check);
 		check_character_debug_draw(check);
 		check_character_stats(check);
-		run_vehicle_checks(check);
+		run_vehicle_checks(check, pipeline);
 
 		if (check.Failures == 0)
 		{

@@ -101,6 +101,7 @@ namespace wiwa
 			case AssetType::NavMesh: { auto h = manager.load<NavMeshData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::BehaviorTree: { auto h = manager.load<BehaviorTreeData>(ref); return [h]() { return h.state(); }; }
 			case AssetType::Video: { auto h = manager.load<VideoData>(ref); return [h]() { return h.state(); }; }
+			case AssetType::Vehicle: { auto h = manager.load<VehicleSettingsData>(ref); return [h]() { return h.state(); }; }
 			default: return []() { return LoadState::Failed; };
 			}
 		}
@@ -831,8 +832,9 @@ namespace wiwa
 
 		// 6b. video assets (.mp4): the bytes are cooked as they are, a file that is not a video is refused, a panel that names a video depends on it
 		{
-			check(static_cast<u32>(AssetType::Video) == static_cast<u32>(AssetType::BehaviorTree) + 1 && static_cast<u32>(AssetType::Last) == static_cast<u32>(AssetType::Video) + 1,
-				"video_asset_type_appended: Video follows the last older type, so no number in an existing file changes");
+			check(static_cast<u32>(AssetType::Video) == static_cast<u32>(AssetType::BehaviorTree) + 1 && static_cast<u32>(AssetType::Vehicle) == static_cast<u32>(AssetType::Video) + 1
+				&& static_cast<u32>(AssetType::Last) == static_cast<u32>(AssetType::Vehicle) + 1,
+				"asset_types_appended: Video and then Vehicle follow the last older type, so no number in an existing file changes");
 
 			VideoData payload;
 			payload.Name = "clip";

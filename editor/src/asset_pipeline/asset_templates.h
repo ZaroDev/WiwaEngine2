@@ -21,6 +21,7 @@ namespace wiwa
 		AnimationGraph,  // .wgraph
 		ParticleEffect,  // .wfx
 		BehaviorTree,    // .wbt
+		Vehicle,         // .wvehicle
 	};
 
 	// What the Create menu calls it, the name it starts with, and the extension the file gets ("" for a folder).
