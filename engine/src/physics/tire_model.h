@@ -42,6 +42,14 @@ namespace wiwa
 		float Lateral = 0.0f;
 	};
 
+	// The slip of each curve's peak (magic_formula_peak_x): a search, so found once per tire and passed to the per-step functions.
+	struct TirePeaks
+	{
+		float Longitudinal = 0.1f;
+		float Lateral = 0.2f;
+	};
+	TirePeaks tire_peaks(const TireModel& tire);
+
 	float magic_formula(const TireCurve& curve, float x);
 	// The x > 0 of the curve's first maximum.
 	float magic_formula_peak_x(const TireCurve& curve);
@@ -50,9 +58,11 @@ namespace wiwa
 	// The forces at a slip ratio and a slip angle (radians), combined through the normalised slip vector (a friction ellipse). grip is the
 	// surface's factor (PhysicsMaterial TireGrip). A load of 0 or less, or no slip, gives zeros.
 	TireForces tire_forces(const TireModel& tire, float load, float slipRatio, float slipAngle, float grip);
+	TireForces tire_forces(const TireModel& tire, const TirePeaks& peaks, float load, float slipRatio, float slipAngle, float grip);
 	// The available force: below the peak the whole ellipse (what the other direction's use leaves of it), past the peak the curve's
 	// falloff. Continuous at the peak; full grip at zero slip.
 	TireLimits tire_force_limits(const TireModel& tire, float load, float slipRatio, float slipAngle, float grip);
+	TireLimits tire_force_limits(const TireModel& tire, const TirePeaks& peaks, float load, float slipRatio, float slipAngle, float grip);
 	// Finite values, B, C, D > 0, NominalLoad > 0, LoadSensitivity in [0, 1), PneumaticTrail >= 0.
 	bool tire_model_valid(const TireModel& tire);
 }

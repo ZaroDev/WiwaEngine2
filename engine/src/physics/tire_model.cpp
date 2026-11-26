@@ -23,17 +23,19 @@ namespace wiwa
 			float Rho = 0.0f;
 		};
 
-		NormalisedSlip normalise(const TireModel& tire, float slipRatio, float slipAngle)
+		NormalisedSlip normalise(const TirePeaks& peaks, float slipRatio, float slipAngle)
 		{
 			NormalisedSlip n;
-			n.PeakLong = magic_formula_peak_x(tire.Longitudinal);
-			n.PeakLat = magic_formula_peak_x(tire.Lateral);
+			n.PeakLong = peaks.Longitudinal;
+			n.PeakLat = peaks.Lateral;
 			n.Sx = slipRatio / n.PeakLong;
 			n.Sa = slipAngle / n.PeakLat;
 			n.Rho = std::hypot(n.Sx, n.Sa);
 			return n;
 		}
 	}
+
+	TirePeaks tire_peaks(const TireModel& tire) { return TirePeaks{ magic_formula_peak_x(tire.Longitudinal), magic_formula_peak_x(tire.Lateral) }; }
 
 	float magic_formula(const TireCurve& c, float x)
 	{
@@ -84,12 +86,17 @@ namespace wiwa
 
 	TireForces tire_forces(const TireModel& tire, float load, float slipRatio, float slipAngle, float grip)
 	{
+		return tire_forces(tire, tire_peaks(tire), load, slipRatio, slipAngle, grip);
+	}
+
+	TireForces tire_forces(const TireModel& tire, const TirePeaks& peaks, float load, float slipRatio, float slipAngle, float grip)
+	{
 		TireForces out;
 		if (!(load > 0.0f))
 		{
 			return out;
 		}
-		const NormalisedSlip n = normalise(tire, slipRatio, slipAngle);
+		const NormalisedSlip n = normalise(peaks, slipRatio, slipAngle);
 		if (!(n.Rho > 1e-6f))
 		{
 			return out;
@@ -103,6 +110,11 @@ namespace wiwa
 
 	TireLimits tire_force_limits(const TireModel& tire, float load, float slipRatio, float slipAngle, float grip)
 	{
+		return tire_force_limits(tire, tire_peaks(tire), load, slipRatio, slipAngle, grip);
+	}
+
+	TireLimits tire_force_limits(const TireModel& tire, const TirePeaks& peaks, float load, float slipRatio, float slipAngle, float grip)
+	{
 		TireLimits out;
 		if (!(load > 0.0f))
 		{
@@ -111,7 +123,7 @@ namespace wiwa
 		const float base = load * grip * tire_load_scale(tire, load);
 		const float peakLong = base * tire.Longitudinal.D;
 		const float peakLat = base * tire.Lateral.D;
-		const NormalisedSlip n = normalise(tire, slipRatio, slipAngle);
+		const NormalisedSlip n = normalise(peaks, slipRatio, slipAngle);
 		if (!(n.Rho > 1.0f))
 		{
 			const float sa = std::min(std::abs(n.Sa), 1.0f);

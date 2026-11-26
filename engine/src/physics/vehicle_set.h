@@ -16,10 +16,6 @@ namespace wiwa
 {
 	struct BuiltVehicle;
 
-	// How long the suspension of a wheel is when the car rests under that gravity (m/s2): the authored wheel centre is this far below the
-	// attachment point.
-	float wheel_rest_length(const WheelDesc& wheel, float gravity);
-
 	// The vehicles of one physics world (vehicles.md), next to its body, joint and character tables. Physics thread only. A vehicle is named
 	// by the entity of its body and is one JPH::VehicleConstraint with a WheeledVehicleController; grip comes from our tire model
 	// (tire_model.h) through the controller's tire impulse callback and the constraint's own friction combine function (the world's combine
@@ -57,10 +53,15 @@ namespace wiwa
 		struct Entry
 		{
 			VehicleDesc Desc{};
-			VehicleInput Input{};
-			std::array<float, static_cast<size_t>(VehicleAssist::Count)> Assists{ -1.0f, -1.0f, -1.0f, -1.0f, -1.0f };
 			bool Unbuildable = false; // logged once; waits for another CreateVehicle
 			std::unique_ptr<BuiltVehicle> Built{};
+		};
+		// What the driver and the scripts set for a body: kept apart from the vehicle, so an input sent before the vehicle is made (its asset
+		// still loading) or across a remake (disabled and enabled again) still counts. Forgotten only with the world (clear).
+		struct Controls
+		{
+			VehicleInput Input{};
+			std::array<float, static_cast<size_t>(VehicleAssist::Count)> Assists{ -1.0f, -1.0f, -1.0f, -1.0f, -1.0f };
 		};
 
 		void make(BodyKey key, Entry& entry);
@@ -70,7 +71,7 @@ namespace wiwa
 		BodyLookup m_BodyOf;
 		KeyLookup m_KeyOf;
 		std::map<BodyKey, Entry> m_Vehicles{}; // ordered: the same commands step the vehicles in the same order
+		std::map<BodyKey, Controls> m_Controls{};
 		float m_LastDt = 1.0f / 60.0f;
-		float m_Gravity = 9.81f;
 	};
 }

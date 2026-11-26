@@ -139,6 +139,7 @@ namespace wiwa
 		constexpr int kSamples = 48;
 		for (const auto& [tire, color] : { std::pair{ &data.FrontTire, FRONT_COLOR }, std::pair{ &data.RearTire, REAR_COLOR } })
 		{
+			const TirePeaks peaks = tire_peaks(*tire);
 			for (const float scale : { 0.5f, 1.0f, 1.5f })
 			{
 				const float load = tire->NominalLoad * scale;
@@ -146,7 +147,7 @@ namespace wiwa
 				for (int i = 0; i <= kSamples; i++)
 				{
 					const float t = static_cast<float>(i) / kSamples;
-					const TireForces f = lateral ? tire_forces(*tire, load, 0.0f, glm::radians(15.0f) * t, 1.0f) : tire_forces(*tire, load, 0.5f * t, 0.0f, 1.0f);
+					const TireForces f = lateral ? tire_forces(*tire, peaks, load, 0.0f, glm::radians(15.0f) * t, 1.0f) : tire_forces(*tire, peaks, load, 0.5f * t, 0.0f, 1.0f);
 					const float value = std::abs(lateral ? f.Lateral : f.Longitudinal);
 					const ImVec2 p(origin.x + t * size.x, origin.y + size.y - std::min(value / std::max(top, 1.0f), 1.0f) * (size.y - 24.0f));
 					if (i > 0)
@@ -297,7 +298,7 @@ namespace wiwa
 			float_field("Shift up rpm", &VehicleSettingsData::ShiftUpRpm, 10.0f, 0.0f, 30000.0f, "%.0f");
 			float_field("Shift down rpm", &VehicleSettingsData::ShiftDownRpm, 10.0f, 0.0f, 30000.0f, "%.0f");
 			float_field("Shift time (s)", &VehicleSettingsData::ShiftTime, 0.01f, 0.0f, 3.0f);
-			float_field("Clutch strength", &VehicleSettingsData::ClutchStrength, 0.1f, 0.0f, 100.0f);
+			float_field("Clutch strength", &VehicleSettingsData::ClutchStrength, 0.1f, 0.1f, 100.0f);
 		}
 		if (ImGui::CollapsingHeader("Differentials"))
 		{
@@ -314,7 +315,7 @@ namespace wiwa
 				ImGui::DragFloat("Ratio", &next.Differentials[i].Ratio, 0.01f, 0.1f, 20.0f, "%.2f");
 				after_widget(next);
 				next = m_Model->data();
-				ImGui::DragFloat("Limited slip", &next.Differentials[i].LimitedSlipRatio, 0.01f, 1.0f, 100.0f, "%.2f");
+				ImGui::DragFloat("Limited slip", &next.Differentials[i].LimitedSlipRatio, 0.01f, 1.01f, 100.0f, "%.2f");
 				after_widget(next);
 				next = m_Model->data();
 				ImGui::DragFloat("Torque share", &next.Differentials[i].EngineTorqueRatio, 0.01f, 0.0f, 1.0f, "%.2f");

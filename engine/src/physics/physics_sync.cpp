@@ -357,7 +357,8 @@ namespace wiwa
 			}
 		};
 
-		std::unordered_map<BodyKey, std::pair<VehicleDesc, std::unordered_map<EntityGuid, WheelAuthored>>> wanted;
+		reload_vehicle_settings();
+		std::unordered_map<BodyKey, VehicleDesc> wanted;
 		for (const entt::entity entity : registry.view<Vehicle>())
 		{
 			const Vehicle& vehicle = registry.get<Vehicle>(entity);
@@ -407,29 +408,18 @@ namespace wiwa
 			const glm::mat4& bodyWorld = registry.get<WorldTransform>(entity).Matrix;
 			const Pose bodyPose = decompose(bodyWorld);
 			const glm::mat4 toBody = glm::inverse(glm::translate(glm::mat4(1.0f), bodyPose.Position) * glm::mat4_cast(bodyPose.Rotation));
-			const auto tracked = m_Vehicles.find(key);
 			VehicleDesc desc;
 			desc.Settings = *settings;
-			std::unordered_map<EntityGuid, WheelAuthored> authored;
 			for (const entt::entity wheelEntity : wheels)
 			{
 				const EntityGuid guid = registry.get<Id>(wheelEntity).Guid;
-				WheelAuthored place;
-				bool known = false;
-				if (tracked != m_Vehicles.end())
-				{
-					if (const auto cached = tracked->second.Wheels.find(guid); cached != tracked->second.Wheels.end())
-					{
-						place = cached->second;
-						known = true;
-					}
-				}
-				if (!known)
+				auto cached = m_WheelPlaces.find(guid);
+				if (cached == m_WheelPlaces.end())
 				{
 					const Pose wheelPose = decompose(toBody * registry.get<WorldTransform>(wheelEntity).Matrix);
-					place = WheelAuthored{ wheelPose.Position, wheelPose.Rotation };
+					cached = m_WheelPlaces.emplace(guid, WheelAuthored{ wheelPose.Position, wheelPose.Rotation }).first;
 				}
-				authored.emplace(guid, place);
+				const WheelAuthored place = cached->second;
 
 				const VehicleWheel& component = registry.get<VehicleWheel>(wheelEntity);
 				WheelDesc wheel;
@@ -455,7 +445,7 @@ namespace wiwa
 				warn(key, "a Vehicle has no VehicleWheel below it; it is not made");
 				continue;
 			}
-			wanted.emplace(key, std::make_pair(std::move(desc), std::move(authored)));
+			wanted.emplace(key, std::move(desc));
 		}
 
 		// VehicleWheels with no Vehicle above them
@@ -487,11 +477,10 @@ namespace wiwa
 		for (auto& [key, entry] : wanted)
 		{
 			TrackedVehicle& tracked = m_Vehicles[key];
-			tracked.Wheels = std::move(entry.second);
-			if (!(tracked.Desc == entry.first))
+			if (!(tracked.Desc == entry))
 			{
-				thread.push(CreateVehicle{ key, entry.first }, m_Generation);
-				tracked.Desc = std::move(entry.first);
+				thread.push(CreateVehicle{ key, entry }, m_Generation);
+				tracked.Desc = std::move(entry);
 				m_VehiclesSent++;
 			}
 		}
@@ -512,15 +501,35 @@ namespace wiwa
 			{
 				return std::nullopt;
 			}
+			if (m_ReloadListener == 0)
+			{
+				std::shared_ptr<ReloadQueue> queue = m_Reloads;
+				m_ReloadAssets = assets;
+				m_ReloadListener = assets->add_reload_listener([queue](AssetGuid guid)
+				{
+					std::lock_guard<std::mutex> lock(queue->Mutex);
+					queue->Guids.push_back(guid);
+				});
+			}
 			it = m_VehicleSettings.emplace(key, VehicleSettingsEntry{ assets->load<VehicleSettingsData>(ref) }).first;
 		}
 		VehicleSettingsEntry& entry = it->second;
 		switch (entry.Settings.state())
 		{
 		case LoadState::Ready:
-			if (const VehicleSettingsData* data = entry.Settings.get(); data != nullptr && vehicle_settings_valid(*data))
+			if (const VehicleSettingsData* data = entry.Settings.get(); data != nullptr)
 			{
-				return *data;
+				std::string why;
+				if (vehicle_settings_valid(*data, &why))
+				{
+					return *data;
+				}
+				if (!entry.Warned)
+				{
+					entry.Warned = true;
+					WI_PHYSICS_LOG(Warning, "Vehicle settings {0} are not valid ({1}): the vehicle is not made", ref.Guid.to_string(), why);
+				}
+				return std::nullopt;
 			}
 			[[fallthrough]];
 		case LoadState::Failed:
@@ -531,7 +540,41 @@ namespace wiwa
 			}
 			return std::nullopt;
 		default:
-			return std::nullopt; // still loading
+			return entry.Last; // still loading: what it was before a reimport, if anything
+		}
+	}
+
+	void PhysicsSync::reload_vehicle_settings()
+	{
+		std::vector<AssetGuid> guids;
+		{
+			std::lock_guard<std::mutex> lock(m_Reloads->Mutex);
+			guids.swap(m_Reloads->Guids);
+		}
+		for (const AssetGuid guid : guids)
+		{
+			const auto it = m_VehicleSettings.find(guid);
+			if (it == m_VehicleSettings.end() || m_ReloadAssets == nullptr)
+			{
+				continue;
+			}
+			VehicleSettingsEntry& entry = it->second;
+			if (entry.Settings.state() == LoadState::Ready && entry.Settings.get() != nullptr)
+			{
+				entry.Last = *entry.Settings.get();
+			}
+			entry.Settings = m_ReloadAssets->load<VehicleSettingsData>(AssetRef{ guid, 0 }); // the manager forgot the old copy: this loads the new cook
+			entry.Warned = false;
+		}
+	}
+
+	// The listener goes with the world (clear, which PhysicsModule calls when it stops, also at shutdown while the AssetManager is there); a
+	// sync that was never cleared (a check's) removes it here.
+	PhysicsSync::~PhysicsSync()
+	{
+		if (m_ReloadListener != 0 && m_ReloadAssets != nullptr)
+		{
+			m_ReloadAssets->remove_reload_listener(m_ReloadListener);
 		}
 	}
 
@@ -841,9 +884,9 @@ namespace wiwa
 			for (size_t i = 0; i < vehicle.Wheels.size(); i++)
 			{
 				const WheelPose& wheel = vehicle.Wheels[i];
-				const auto place = tracked->second.Wheels.find(wheel.Entity);
+				const auto place = m_WheelPlaces.find(wheel.Entity);
 				const entt::entity entity = scene.find(wheel.Entity);
-				if (place == tracked->second.Wheels.end() || entity == entt::null || !registry.valid(entity))
+				if (place == m_WheelPlaces.end() || entity == entt::null || !registry.valid(entity))
 				{
 					continue;
 				}
@@ -975,7 +1018,18 @@ namespace wiwa
 		m_Characters.clear();
 		m_WarnedCharacters.clear();
 		m_Vehicles.clear();
+		m_WheelPlaces.clear();
 		m_VehicleSettings.clear();
+		if (m_ReloadListener != 0 && m_ReloadAssets != nullptr)
+		{
+			m_ReloadAssets->remove_reload_listener(m_ReloadListener);
+		}
+		m_ReloadListener = 0;
+		m_ReloadAssets = nullptr;
+		{
+			std::lock_guard<std::mutex> lock(m_Reloads->Mutex);
+			m_Reloads->Guids.clear();
+		}
 		m_WarnedVehicles.clear();
 		m_VehiclesSent = 0;
 	}

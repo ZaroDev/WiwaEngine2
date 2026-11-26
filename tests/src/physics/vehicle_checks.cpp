@@ -833,6 +833,34 @@ namespace wiwa
 			check(glm::length(nestedWorld - nestedAuthored) < 0.3f, "vehicle_sync_wheel_transforms: a nested wheel follows too, off by " + std::to_string(glm::length(nestedWorld - nestedAuthored)) + " m");
 			check(sync.vehicles_sent() == sentAfterBuild, "vehicle_sync_no_rebuild: the physics moving the wheels does not make the vehicle again (sent " + std::to_string(sync.vehicles_sent() - sentAfterBuild) + " more)");
 
+			// review fix 2: a Vehicle disabled while its front wheels are steered and enabled again keeps the wheels' authored places (a wheel
+			// does not stay turned), and the input sent once before keeps driving it
+			thread.push(SetVehicleInput{ key, VehicleInput{ 0.3f, 0.0f, 1.0f, 0.0f } }, thread.generation());
+			run_for(thread, sync, scene, 0.6);
+			scene.registry().get<Vehicle>(car.Body).Enabled = false;
+			run_for(thread, sync, scene, 0.2);
+			thread.push(SetVehicleInput{ key, VehicleInput{ 0.5f, 0.0f, 0.0f, 0.0f } }, thread.generation());
+			run_for(thread, sync, scene, 0.2);
+			scene.registry().get<Vehicle>(car.Body).Enabled = true;
+			const Ref<const PhysicsStepSnapshot> again = run_for(thread, sync, scene, 1.5);
+			const glm::vec3 axle = scene.registry().get<Transform>(car.Wheels[0]).Rotation * glm::vec3(1.0f, 0.0f, 0.0f);
+			check(std::abs(axle.z) < 0.05f, "vehicle_sync_reenable_places: a re-enabled vehicle's front wheel is straight again with no steer (axle z " + std::to_string(axle.z) + ")");
+			const VehiclePose* againPose = find_vehicle(again.get(), key);
+			check(againPose != nullptr && againPose->Speed > 1.0f, "vehicle_sync_reenable_input: the input sent while it was disabled drives it once it is back, speed " + std::to_string(againPose ? againPose->Speed : -1.0f));
+
+			// review fix 1: the .wvehicle changed and reimported under the same guid while playing: the car is made again with the new values
+			const u32 sentBeforeReimport = sync.vehicles_sent();
+			{
+				VehicleSettingsData changed = tame_settings();
+				changed.MaxBrakeTorque = 3100.0f;
+				std::ofstream out(dir / "tame.wvehicle", std::ios::binary | std::ios::trunc);
+				out << vehicle_to_json(changed).dump(2);
+			}
+			database.ensure_imported(dir / "tame.wvehicle");
+			run_for(thread, sync, scene, 0.5);
+			check(sync.vehicles_sent() > sentBeforeReimport, "vehicle_sync_reimport: a .wvehicle reimported while playing makes the vehicle again (sent " + std::to_string(sync.vehicles_sent() - sentBeforeReimport) + ")");
+			thread.push(SetVehicleInput{ key, VehicleInput{} }, thread.generation());
+
 			// a front wheel removed: made again with three; the component removed: no vehicle and the wheels are left alone
 			scene.destroy(car.Wheels[0]);
 			const Ref<const PhysicsStepSnapshot> three = run_for(thread, sync, scene, 0.3);
@@ -869,6 +897,129 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// ---- the final review's findings ----
+
+		void check_review_fixes(Check& check)
+		{
+			// fix 2: an input sent before the vehicle exists (its asset still loading) is kept and drives it once made
+			{
+				SyncWorld world;
+				world.start(kHz);
+				make_vehicle_floor(world);
+				const BodyKey car = EntityGuid::generate();
+				world.send(SetVehicleInput{ car, throttle(0.6f) });
+				world.step(10);
+				BodyDesc body = box_body(MotionType::Dynamic, glm::vec3(0.0f, 0.66f, 0.0f), glm::vec3(0.9f, 0.25f, 2.1f));
+				body.MassOverride = 1200.0f;
+				body.CenterOfMassOffset = glm::vec3(0.0f, -0.3f, 0.0f);
+				world.send(CreateBody{ car, body });
+				world.send(CreateVehicle{ car, test_car_desc() });
+				const PhysicsStepSnapshot later = world.step(2 * kHz);
+				const VehiclePose* pose = find_vehicle(later, car);
+				check(pose != nullptr && pose->Speed > 1.0f, "vehicle_input_before_made: an input sent before the vehicle exists drives it once made, speed " + std::to_string(pose ? pose->Speed : -1.0f));
+			}
+
+			// fix 3: a car whose weight sits towards the rear and with soft springs still rests with every wheel at its rest length
+			{
+				SyncWorld world;
+				world.start(kHz);
+				make_vehicle_floor(world);
+				VehicleDesc desc = test_car_desc();
+				for (WheelDesc& wheel : desc.Wheels)
+				{
+					wheel.SuspensionFrequency = 1.2f;
+				}
+				const BodyKey car = EntityGuid::generate();
+				BodyDesc body = box_body(MotionType::Dynamic, glm::vec3(0.0f, 0.66f, 0.0f), glm::vec3(0.9f, 0.25f, 2.1f));
+				body.MassOverride = 1200.0f;
+				body.CenterOfMassOffset = glm::vec3(0.0f, -0.3f, 0.45f);
+				world.send(CreateBody{ car, body });
+				world.send(CreateVehicle{ car, desc });
+				const PhysicsStepSnapshot rested = world.step(3 * kHz);
+				const VehiclePose* pose = find_vehicle(rested, car);
+				const BodyPose* bodyPose = find_pose(&rested, car);
+				float worst = 1.0f;
+				if (pose != nullptr && pose->Wheels.size() == 4)
+				{
+					worst = 0.0f;
+					for (const WheelPose& wheel : pose->Wheels)
+					{
+						worst = std::max(worst, std::abs(wheel.SuspensionLength - wheel.RestLength));
+					}
+				}
+				check(worst < 0.02f, "vehicle_settles_uneven: a rear-heavy, soft-sprung car rests at its rest lengths, worst wheel off by " + std::to_string(worst) + " m");
+				check(bodyPose != nullptr && std::abs(bodyPose->Position.y - kRideHeight) < 0.02f && std::abs(forward_of(*bodyPose).y) < 0.01f,
+					"vehicle_settles_uneven: the body sits level at its ride height, y " + std::to_string(bodyPose ? bodyPose->Position.y : 0.0f));
+			}
+
+			// fix 4: settings Jolt asserts on are refused by the validator, and a wheel steering past 90 degrees is not made
+			{
+				const auto refused = [](auto change)
+				{
+					VehicleSettingsData s = default_vehicle_settings();
+					change(s);
+					return !vehicle_settings_valid(s);
+				};
+				check(refused([](VehicleSettingsData& s) { s.Differentials[0].LimitedSlipRatio = 1.0f; }), "vehicle_valid_jolt: a limited slip ratio of 1 is refused (Jolt wants more than 1)");
+				check(refused([](VehicleSettingsData& s) { s.ClutchStrength = 0.0f; }), "vehicle_valid_jolt: a clutch strength of 0 is refused");
+				check(refused([](VehicleSettingsData& s) { s.ShiftDownRpm = 0.0f; }), "vehicle_valid_jolt: a shift down rpm of 0 is refused");
+				check(refused([](VehicleSettingsData& s) { s.ShiftUpRpm = s.ShiftDownRpm; }), "vehicle_valid_jolt: shift up at or below shift down is refused");
+				check(refused([](VehicleSettingsData& s) { s.ShiftUpRpm = s.MaxRpm; }), "vehicle_valid_jolt: an automatic gearbox shifting up at max rpm or above is refused");
+				check(refused([](VehicleSettingsData& s) { s.Differentials[0].EngineTorqueRatio = 0.0f; }), "vehicle_valid_jolt: differentials that share no torque are refused");
+				SyncWorld world;
+				world.start(kHz);
+				make_vehicle_floor(world);
+				VehicleDesc desc = test_car_desc();
+				desc.Wheels[0].MaxSteerAngle = 95.0f;
+				make_test_car(world, glm::vec3(0.0f, 0.66f, 0.0f), desc);
+				check(world.step(2).VehicleCount == 0, "vehicle_valid_jolt: a wheel steering past 90 degrees is not made");
+			}
+
+			// fix 5: the tire callback uses peaks found once per tire; with them a call is much cheaper and gives the same limits
+			{
+				const TireModel tire;
+				const TirePeaks peaks = tire_peaks(tire);
+				const TireLimits a = tire_force_limits(tire, 4000.0f, 0.05f, 0.08f, 1.0f);
+				const TireLimits b = tire_force_limits(tire, peaks, 4000.0f, 0.05f, 0.08f, 1.0f);
+				check(std::abs(a.Longitudinal - b.Longitudinal) < 1e-3f && std::abs(a.Lateral - b.Lateral) < 1e-3f, "tire_peaks_same: cached peaks give the same limits");
+				const auto time = [&](bool cached)
+				{
+					const auto start = std::chrono::steady_clock::now();
+					float sink = 0.0f;
+					for (int i = 0; i < 20000; i++)
+					{
+						const float slip = 0.001f * static_cast<float>(i % 200);
+						sink += cached ? tire_force_limits(tire, peaks, 4000.0f, slip, slip, 1.0f).Lateral : tire_force_limits(tire, 4000.0f, slip, slip, 1.0f).Lateral;
+					}
+					return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count() + (sink == -1.0f ? 1.0 : 0.0);
+				};
+				const double slow = time(false);
+				const double fast = time(true);
+				check(fast * 5.0 < slow, "tire_peaks_fast: with cached peaks a call is at least 5x cheaper (" + std::to_string(slow) + " s vs " + std::to_string(fast) + " s for 20000)");
+			}
+
+			// fix 6: a manual car in first gear with no input does not creep at the engine's idle (the clutch opens)
+			{
+				SyncWorld world;
+				world.start(kHz);
+				make_vehicle_floor(world);
+				VehicleSettingsData manual = tame_settings();
+				manual.AutomaticGearbox = false;
+				const BodyKey car = make_test_car(world, glm::vec3(0.0f, 0.66f, 0.0f), test_car_desc(manual));
+				world.step(kHz / 2);
+				world.send(ShiftGear{ car, 1 });
+				const PhysicsStepSnapshot idle = world.step(3 * kHz);
+				const VehiclePose* pose = find_vehicle(idle, car);
+				check(pose != nullptr && pose->Gear == 1 && std::abs(pose->Speed) < 0.5f, "vehicle_manual_no_creep: in first gear with no input the car stays put, speed " + std::to_string(pose ? pose->Speed : -1.0f));
+				const PhysicsStepSnapshot driven = drive_for(world, car, throttle(0.5f), 2 * kHz);
+				const VehiclePose* moving = find_vehicle(driven, car);
+				check(moving != nullptr && moving->Speed > 2.0f, "vehicle_manual_no_creep: and drives off with throttle, speed " + std::to_string(moving ? moving->Speed : -1.0f));
+			}
+		}
+	}
+
 	void run_vehicle_checks(Check& check, AssetPipelineModule& pipeline)
 	{
 		check_tire_model(check);
@@ -888,5 +1039,6 @@ namespace wiwa
 		check_vehicle_assists(check);
 		check_vehicle_reverse_and_manual(check);
 		check_vehicle_sync(check, pipeline);
+		check_review_fixes(check);
 	}
 }

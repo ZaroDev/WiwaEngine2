@@ -70,16 +70,35 @@ namespace wiwa
 				return fail(why, "a reverse gear ratio is not above 0");
 			}
 		}
-		if (!non_negative(d.ShiftUpRpm) || !non_negative(d.ShiftDownRpm) || !non_negative(d.ShiftTime) || !non_negative(d.ClutchStrength))
+		// what Jolt asserts on (VehicleTransmission, VehicleDifferential): a clutch that grips, shift rpms above 0 and in order, and an
+		// automatic gearbox that can shift up before the engine's top
+		if (!positive(d.ShiftUpRpm) || !positive(d.ShiftDownRpm) || !non_negative(d.ShiftTime) || !positive(d.ClutchStrength))
 		{
-			return fail(why, "a transmission value is negative or not finite");
+			return fail(why, "shift rpms and the clutch strength must be above 0, the shift time at least 0");
+		}
+		if (!(d.ShiftUpRpm > d.ShiftDownRpm))
+		{
+			return fail(why, "shiftUpRpm must be above shiftDownRpm");
+		}
+		if (d.AutomaticGearbox && !(d.ShiftUpRpm < d.MaxRpm))
+		{
+			return fail(why, "an automatic gearbox needs shiftUpRpm below maxRpm");
 		}
 		for (const VehicleDifferentialData& diff : d.Differentials)
 		{
-			if (diff.Axle < 0 || !positive(diff.Ratio) || !finite(diff.LimitedSlipRatio) || diff.LimitedSlipRatio < 1.0f || !non_negative(diff.EngineTorqueRatio))
+			if (diff.Axle < 0 || !positive(diff.Ratio) || !finite(diff.LimitedSlipRatio) || !(diff.LimitedSlipRatio > 1.0f) || !non_negative(diff.EngineTorqueRatio))
 			{
-				return fail(why, "a differential has a negative axle, a ratio not above 0, or a limited slip ratio below 1");
+				return fail(why, "a differential has a negative axle, a ratio not above 0, or a limited slip ratio not above 1");
 			}
+		}
+		float torqueShares = 0.0f;
+		for (const VehicleDifferentialData& diff : d.Differentials)
+		{
+			torqueShares += diff.EngineTorqueRatio;
+		}
+		if (!d.Differentials.empty() && !(torqueShares > 0.0f))
+		{
+			return fail(why, "the differentials share no engine torque");
 		}
 		for (const float stiffness : d.AntiRollStiffness)
 		{

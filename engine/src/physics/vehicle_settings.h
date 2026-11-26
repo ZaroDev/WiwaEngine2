@@ -22,7 +22,7 @@ namespace wiwa
 	{
 		i32 Axle = 1;
 		float Ratio = 3.42f;            // the final drive of this axle
-		float LimitedSlipRatio = 1.4f;  // the most one wheel may turn faster than the other (at least 1)
+		float LimitedSlipRatio = 1.4f;  // the most one wheel may turn faster than the other (above 1)
 		float EngineTorqueRatio = 1.0f; // the share of the engine torque this axle gets (the shares are normalised)
 		bool operator==(const VehicleDifferentialData&) const = default;
 	};
@@ -82,7 +82,8 @@ namespace wiwa
 
 	VehicleSettingsData default_vehicle_settings();
 	// Finite values; at least one torque point, sorted by rpm, torques >= 0; MinRpm < MaxRpm; at least one forward gear, every ratio > 0;
-	// differential axles >= 0 with positive ratios and limited slip ratios >= 1; assists, DownforceFront and BrakeBiasFront in [0, 1];
+	// shift rpms and clutch strength above 0, ShiftUpRpm above ShiftDownRpm (and below MaxRpm for an automatic gearbox); differential axles
+	// >= 0 with positive ratios, limited slip ratios above 1 and some engine torque shared; assists, DownforceFront and BrakeBiasFront in [0, 1];
 	// both tires valid; the steer limit sorted by speed with fractions in [0, 1]. why (when given) says what is wrong.
 	bool vehicle_settings_valid(const VehicleSettingsData& data, std::string* why = nullptr);
 	// The steer fraction allowed at a speed (linear between the points, the end values outside; 1 without points).

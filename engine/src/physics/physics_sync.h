@@ -1,8 +1,11 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <set>
 #include <unordered_map>
+#include <vector>
 
 #include <assets/handle.h>
 
@@ -19,9 +22,16 @@ namespace wiwa
 	// Bodies: an entity with a RigidBody and a Collider (on itself or on a descendant that has no RigidBody of its own) is one body;
 	// its colliders make one shape, a compound when there is more than one or the collider is not on the body's entity. A Collider with
 	// no RigidBody on itself or above is a static body of its own. A RigidBody without any collider makes no body.
+	class AssetManager;
+
 	class PhysicsSync
 	{
 	public:
+		PhysicsSync() = default;
+		~PhysicsSync();
+		PhysicsSync(const PhysicsSync&) = delete;
+		PhysicsSync& operator=(const PhysicsSync&) = delete;
+
 		// Sends a CreateBody for every body of the scene to a world that was just started (forgets what an earlier world had). The
 		// commands carry the world's generation, so a world started later drops them.
 		void build(Scene& scene, PhysicsThread& thread);
@@ -119,14 +129,27 @@ namespace wiwa
 		struct TrackedVehicle
 		{
 			VehicleDesc Desc{};
-			std::unordered_map<EntityGuid, WheelAuthored> Wheels{};
 		};
 		struct VehicleSettingsEntry
 		{
 			Handle<VehicleSettingsData> Settings{};
+			std::optional<VehicleSettingsData> Last{}; // what it was before a reimport, served while the new cook loads
 			bool Warned = false;
 		};
+		// Assets reimported (the AssetManager's reload listener, on a worker thread): their settings are loaded again by the next push.
+		struct ReloadQueue
+		{
+			std::mutex Mutex{};
+			std::vector<AssetGuid> Guids{};
+		};
+		void reload_vehicle_settings();
 		std::unordered_map<BodyKey, TrackedVehicle> m_Vehicles{};
+		// Every wheel's place on its body, by the wheel's entity, for as long as this world lives: a vehicle disabled and enabled again (or
+		// remade) keeps its wheels where they were authored, not where the physics had last turned them.
+		std::unordered_map<EntityGuid, WheelAuthored> m_WheelPlaces{};
+		std::shared_ptr<ReloadQueue> m_Reloads = std::make_shared<ReloadQueue>();
+		AssetManager* m_ReloadAssets = nullptr;
+		u32 m_ReloadListener = 0;
 		std::unordered_map<AssetGuid, VehicleSettingsEntry> m_VehicleSettings{};
 		std::set<EntityGuid> m_WarnedVehicles{};
 		u32 m_VehiclesSent = 0;

@@ -25,7 +25,8 @@ namespace wiwa
 		std::vector<TireModel> Tires{};                        // per wheel
 		std::vector<float> BaseBrake{};                        // MaxBrakeTorque per wheel, from the settings and the bias
 		std::vector<float> Grip{};                             // per wheel, written by the combine function
-		std::vector<float> PeakSlip{};                         // per wheel: the slip ratio of its tire's peak
+		std::vector<TirePeaks> Peaks{};                        // per wheel: its tire's peaks, found once (the callback runs every solver iteration)
+		std::vector<float> RestLengths{};                      // per wheel: the suspension length at rest (the authored wheel centre)
 		std::vector<bool> Driven{};                            // per wheel: on a driven axle
 		glm::vec3 FrontAxle{ 0.0f };                           // body space: the middle of axle 0's wheels (downforce goes there)
 		glm::vec3 RearAxle{ 0.0f };                            // and of the other axles' wheels
@@ -75,13 +76,63 @@ namespace wiwa
 			return slip;
 		}
 
-		// The spring sags g / w^2 under its share of the weight (a FrequencyAndDamping spring). Preloaded (Jolt wants it >= 0) so that a soft
-		// spring still rests in the middle of the travel; a stiff one rests above it.
-		float wheel_preload(const WheelDesc& w, float gravity)
+		// A wheel's spring under its static load: Jolt's FrequencyAndDamping stiffness is the body's effective mass at the force point times
+		// w^2 (VehicleConstraint.cpp), so the spring sags load / (m_eff w^2). Preloaded (Jolt wants it >= 0) so that a soft spring still rests
+		// in the middle of the travel; a stiff one rests above it. The authored wheel centre is the rest length below the attachment point.
+		struct WheelRest
 		{
-			const float omega = 2.0f * kPi * w.SuspensionFrequency;
-			const float sag = gravity / (omega * omega);
-			return std::max(0.0f, sag - 0.5f * (w.SuspensionMaxLength - w.SuspensionMinLength));
+			float Preload = 0.0f;
+			float Length = 0.0f;
+		};
+
+		WheelRest wheel_rest(const WheelDesc& w, float sag)
+		{
+			WheelRest rest;
+			rest.Preload = std::max(0.0f, sag - 0.5f * (w.SuspensionMaxLength - w.SuspensionMinLength));
+			rest.Length = std::clamp(w.SuspensionMaxLength + rest.Preload - sag, w.SuspensionMinLength, w.SuspensionMaxLength);
+			return rest;
+		}
+
+		// Each wheel's rest from the body's mass, inertia and centre of mass: the weight is shared between the front axle (0) and the others by
+		// the lever of the centre of mass along z, evenly between the wheels of a group.
+		std::vector<WheelRest> wheel_rests(const JPH::Body& body, const VehicleDesc& desc, float gravity)
+		{
+			const JPH::MotionProperties* motion = body.GetMotionProperties();
+			const float inverseMass = motion->GetInverseMass();
+			const float weight = inverseMass > 0.0f ? gravity / inverseMass : 0.0f;
+			const float comZ = body.GetShape()->GetCenterOfMass().GetZ();
+			float frontZ = 0.0f;
+			float rearZ = 0.0f;
+			int front = 0;
+			int rear = 0;
+			for (const WheelDesc& w : desc.Wheels)
+			{
+				(w.Axle == 0 ? frontZ : rearZ) += w.Position.z;
+				(w.Axle == 0 ? front : rear)++;
+			}
+			float frontShare = front > 0 && rear == 0 ? 1.0f : 0.0f;
+			if (front > 0 && rear > 0)
+			{
+				frontZ /= static_cast<float>(front);
+				rearZ /= static_cast<float>(rear);
+				frontShare = std::abs(rearZ - frontZ) > 1e-4f ? std::clamp((rearZ - comZ) / (rearZ - frontZ), 0.0f, 1.0f) : 0.5f;
+			}
+			std::vector<WheelRest> rests;
+			for (const WheelDesc& w : desc.Wheels)
+			{
+				const float load = w.Axle == 0 ? weight * frontShare / static_cast<float>(std::max(front, 1)) : weight * (1.0f - frontShare) / static_cast<float>(std::max(rear, 1));
+				const float omega = 2.0f * kPi * w.SuspensionFrequency;
+				WheelRest rest = wheel_rest(w, 0.0f);
+				for (int pass = 0; pass < 2; pass++) // the force point depends on the rest length a little: once more with the first answer
+				{
+					const JPH::Vec3 forcePoint = to_jolt(w.Position) + kUp * (rest.Length - 0.5f * (w.SuspensionMinLength + w.SuspensionMaxLength));
+					const JPH::Vec3 arm = forcePoint.Cross(-kUp);
+					const float effectiveMass = 1.0f / (inverseMass + arm.Dot(motion->GetLocalSpaceInverseInertia().Multiply3x3(arm)));
+					rest = wheel_rest(w, load / (effectiveMass * omega * omega));
+				}
+				rests.push_back(rest);
+			}
+			return rests;
 		}
 
 		// Why a description cannot be made (empty: it can).
@@ -100,10 +151,10 @@ namespace wiwa
 			{
 				const bool ok = finite3(w.Position) && w.Radius > 0.0f && w.Width > 0.0f && w.SuspensionMinLength >= 0.0f
 					&& w.SuspensionMaxLength > w.SuspensionMinLength && w.SuspensionFrequency > 0.0f && w.SuspensionDamping >= 0.0f
-					&& std::isfinite(w.MaxSteerAngle) && w.Inertia > 0.0f && w.Axle >= 0 && std::isfinite(w.Radius + w.Width + w.SuspensionMaxLength + w.SuspensionFrequency + w.SuspensionDamping + w.Inertia);
+					&& std::isfinite(w.MaxSteerAngle) && w.MaxSteerAngle >= 0.0f && w.MaxSteerAngle < 90.0f && w.Inertia > 0.0f && w.Axle >= 0 && std::isfinite(w.Radius + w.Width + w.SuspensionMaxLength + w.SuspensionFrequency + w.SuspensionDamping + w.Inertia);
 				if (!ok)
 				{
-					return "a wheel has a size, suspension or inertia that is not allowed (radius, width, frequency and inertia above 0, max length above min length)";
+					return "a wheel has a size, suspension, steer angle or inertia that is not allowed (radius, width, frequency and inertia above 0, max length above min length, steer angle 0 to 90 degrees)";
 				}
 			}
 			for (const VehicleDifferentialData& diff : desc.Settings.Differentials)
@@ -145,19 +196,22 @@ namespace wiwa
 			settings.mUp = kUp;
 			settings.mForward = kForward;
 
-			for (const WheelDesc& w : desc.Wheels)
+			const std::vector<WheelRest> rests = wheel_rests(body, desc, gravity);
+			for (size_t index = 0; index < desc.Wheels.size(); index++)
 			{
+				const WheelDesc& w = desc.Wheels[index];
 				JPH::Ref<JPH::WheelSettingsWV> wheel = new JPH::WheelSettingsWV;
 				// The attachment point sits the rest length above the authored wheel centre, so the car settles with its wheels where they
 				// were placed (the authored position is the ride height)
-				wheel->mPosition = to_jolt(w.Position) + kUp * wheel_rest_length(w, gravity);
+				wheel->mPosition = to_jolt(w.Position) + kUp * rests[index].Length;
+				built->RestLengths.push_back(rests[index].Length);
 				wheel->mSuspensionDirection = -kUp;
 				wheel->mSteeringAxis = kUp;
 				wheel->mWheelUp = kUp;
 				wheel->mWheelForward = kForward;
 				wheel->mSuspensionMinLength = w.SuspensionMinLength;
 				wheel->mSuspensionMaxLength = w.SuspensionMaxLength;
-				wheel->mSuspensionPreloadLength = wheel_preload(w, gravity);
+				wheel->mSuspensionPreloadLength = rests[index].Preload;
 				wheel->mSuspensionSpring = JPH::SpringSettings(JPH::ESpringMode::FrequencyAndDamping, w.SuspensionFrequency, w.SuspensionDamping);
 				wheel->mRadius = w.Radius;
 				wheel->mWidth = w.Width;
@@ -179,7 +233,7 @@ namespace wiwa
 				built->Tires.push_back(w.Axle == 0 ? s.FrontTire : s.RearTire);
 				built->BaseBrake.push_back(brake);
 				built->Grip.push_back(0.0f);
-				built->PeakSlip.push_back(magic_formula_peak_x(built->Tires.back().Longitudinal));
+				built->Peaks.push_back(tire_peaks(built->Tires.back()));
 				bool driven = false;
 				for (const VehicleDifferentialData& diff : s.Differentials)
 				{
@@ -292,7 +346,7 @@ namespace wiwa
 				const JPH::Wheel* w = self->Constraint->GetWheel(wheel);
 				const WheelSlip slip = wheel_slip(*self->Constraint, *w);
 				const float load = dt > 0.0f ? std::max(suspensionImpulse, 0.0f) / dt : 0.0f;
-				const TireLimits limits = tire_force_limits(self->Tires[wheel], load, slip.Ratio, slip.Angle, longitudinalFriction);
+				const TireLimits limits = tire_force_limits(self->Tires[wheel], self->Peaks[wheel], load, slip.Ratio, slip.Angle, longitudinalFriction);
 				outLongitudinal = limits.Longitudinal * dt;
 				outLateral = limits.Lateral * dt;
 			});
@@ -300,12 +354,6 @@ namespace wiwa
 		}
 	}
 
-	float wheel_rest_length(const WheelDesc& w, float gravity)
-	{
-		const float omega = 2.0f * kPi * w.SuspensionFrequency;
-		const float sag = gravity / (omega * omega);
-		return std::clamp(w.SuspensionMaxLength + wheel_preload(w, gravity) - sag, w.SuspensionMinLength, w.SuspensionMaxLength);
-	}
 
 	VehicleSet::VehicleSet(JPH::PhysicsSystem& system, BodyLookup body_of, KeyLookup key_of) : m_System(system), m_BodyOf(std::move(body_of)), m_KeyOf(std::move(key_of)) {}
 
@@ -339,11 +387,7 @@ namespace wiwa
 
 	void VehicleSet::set_input(BodyKey body, const VehicleInput& input)
 	{
-		const auto it = m_Vehicles.find(body);
-		if (it != m_Vehicles.end())
-		{
-			it->second.Input = input;
-		}
+		m_Controls[body].Input = input;
 	}
 
 	void VehicleSet::shift(BodyKey body, i32 direction)
@@ -360,15 +404,14 @@ namespace wiwa
 		}
 		const VehicleSettingsData& s = it->second.Desc.Settings;
 		const int gear = std::clamp(transmission.GetCurrentGear() + (direction > 0 ? 1 : -1), -static_cast<int>(s.ReverseGears.size()), static_cast<int>(s.Gears.size()));
-		transmission.Set(gear, 1.0f);
+		transmission.Set(gear, transmission.GetClutchFriction()); // the auto-clutch (step) decides how much it bites
 	}
 
 	void VehicleSet::set_assist(BodyKey body, VehicleAssist assist, float strength)
 	{
-		const auto it = m_Vehicles.find(body);
-		if (it != m_Vehicles.end() && assist < VehicleAssist::Count)
+		if (assist < VehicleAssist::Count)
 		{
-			it->second.Assists[static_cast<size_t>(assist)] = std::isfinite(strength) && strength >= 0.0f ? std::min(strength, 1.0f) : -1.0f;
+			m_Controls[body].Assists[static_cast<size_t>(assist)] = std::isfinite(strength) && strength >= 0.0f ? std::min(strength, 1.0f) : -1.0f;
 		}
 	}
 
@@ -397,8 +440,7 @@ namespace wiwa
 		{
 			return; // waits: a body whose shape has not arrived yet is not dynamic for now
 		}
-		m_Gravity = std::max(m_System.GetGravity().Length(), 0.01f);
-		entry.Built = build(lock.GetBody(), entry.Desc, m_Gravity);
+		entry.Built = build(lock.GetBody(), entry.Desc, std::max(m_System.GetGravity().Length(), 0.01f));
 		m_System.AddConstraint(entry.Built->Constraint);
 		m_System.AddStepListener(entry.Built->Constraint);
 	}
@@ -427,9 +469,10 @@ namespace wiwa
 			}
 			BuiltVehicle& v = *entry.Built;
 			const VehicleSettingsData& s = entry.Desc.Settings;
+			const Controls& controls = m_Controls[key];
 			const auto strength = [&](VehicleAssist assist, float asset)
 			{
-				const float value = entry.Assists[static_cast<size_t>(assist)];
+				const float value = controls.Assists[static_cast<size_t>(assist)];
 				return value >= 0.0f ? value : asset;
 			};
 			const bool automatic = strength(VehicleAssist::AutoGearbox, s.AutomaticGearbox ? 1.0f : 0.0f) >= 0.5f;
@@ -439,7 +482,7 @@ namespace wiwa
 			const JPH::Quat rotation = bodies.GetRotation(v.Body);
 			const JPH::Vec3 velocity = bodies.GetLinearVelocity(v.Body);
 			const float speed = velocity.Dot(rotation * kForward);
-			VehicleInput in = entry.Input;
+			VehicleInput in = controls.Input;
 
 			// automatic reverse: brake held at a standstill backs up; throttle at a standstill goes forward again (the pedals swap while backing)
 			if (!automatic)
@@ -476,7 +519,7 @@ namespace wiwa
 				const JPH::Wheel& w = *v.Constraint->GetWheel(static_cast<JPH::uint>(i));
 				AssistWheelState wheel;
 				wheel.SlipRatio = wheel_slip(*v.Constraint, w).Ratio * (v.Reverse ? -1.0f : 1.0f);
-				wheel.PeakSlip = v.PeakSlip[i];
+				wheel.PeakSlip = v.Peaks[i].Longitudinal;
 				wheel.Driven = v.Driven[i];
 				wheel.Brakes = entry.Desc.Wheels[i].Brakes;
 				wheel.InContact = w.HasContact();
@@ -498,6 +541,34 @@ namespace wiwa
 				v.Wheels[i]->mMaxBrakeTorque = v.BaseBrake[i] * out.WheelBrake[i];
 				anyBrake = std::max(anyBrake, out.WheelBrake[i]);
 			}
+			// manual gearbox: Jolt never moves the clutch itself (it keeps it closed, so the engine's idle would push the car). Auto-clutch: it
+			// bites with throttle or once the wheels turn the engine above idle, and opens again below that
+			if (!automatic)
+			{
+				const int gear = transmission.GetCurrentGear();
+				float target = 0.0f;
+				if (gear != 0)
+				{
+					const float ratio = gear > 0 ? s.Gears[static_cast<size_t>(std::min<int>(gear, static_cast<int>(s.Gears.size())) - 1)]
+						: (s.ReverseGears.empty() ? 1.0f : s.ReverseGears[static_cast<size_t>(std::min<int>(-gear, static_cast<int>(s.ReverseGears.size())) - 1)]);
+					const float final = s.Differentials.empty() ? 1.0f : s.Differentials[0].Ratio;
+					float wheelSpeed = 0.0f;
+					int driven = 0;
+					for (size_t i = 0; i < v.Driven.size(); i++)
+					{
+						if (v.Driven[i])
+						{
+							wheelSpeed += std::abs(v.Constraint->GetWheel(static_cast<JPH::uint>(i))->GetAngularVelocity());
+							driven++;
+						}
+					}
+					const float rpmFromWheels = driven > 0 ? wheelSpeed / static_cast<float>(driven) * ratio * final * 60.0f / (2.0f * kPi) : 0.0f;
+					target = out.Throttle > 0.02f || rpmFromWheels > 1.15f * s.MinRpm ? 1.0f : 0.0f;
+				}
+				const float clutch = transmission.GetClutchFriction();
+				transmission.Set(gear, clutch + std::clamp(target - clutch, -4.0f * dt, 4.0f * dt));
+			}
+
 			v.Controller->SetDriverInput(v.Reverse ? -out.Throttle : out.Throttle, out.Steer, anyBrake > 0.0f ? 1.0f : 0.0f, out.Handbrake);
 			v.Applied = VehicleInput{ out.Throttle, anyBrake, out.Steer, out.Handbrake };
 			v.AssistsActive = out.Active;
@@ -556,7 +627,7 @@ namespace wiwa
 				float spin = w.GetRotationAngle();
 				wheel.SpinAngle = spin > kPi ? spin - 2.0f * kPi : spin;
 				wheel.SuspensionLength = w.GetSuspensionLength();
-				wheel.RestLength = wheel_rest_length(entry.Desc.Wheels[i], m_Gravity);
+				wheel.RestLength = v.RestLengths[i];
 				wheel.InContact = w.HasContact();
 				wheel.AngularVelocity = w.GetAngularVelocity();
 				if (wheel.InContact)
@@ -567,7 +638,7 @@ namespace wiwa
 					wheel.SlipRatio = slip.Ratio;
 					wheel.SlipAngle = slip.Angle;
 					wheel.Load = std::max(w.GetSuspensionLambda(), 0.0f) / m_LastDt;
-					wheel.AligningTorque = tire_forces(v.Tires[i], wheel.Load, slip.Ratio, slip.Angle, wheel.Grip).AligningTorque;
+					wheel.AligningTorque = tire_forces(v.Tires[i], v.Peaks[i], wheel.Load, slip.Ratio, slip.Angle, wheel.Grip).AligningTorque;
 				}
 				pose.Wheels.push_back(wheel);
 			}
@@ -583,6 +654,7 @@ namespace wiwa
 			unmake(entry);
 		}
 		m_Vehicles.clear();
+		m_Controls.clear();
 	}
 
 	u32 VehicleSet::made_count() const
