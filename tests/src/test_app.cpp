@@ -10,6 +10,7 @@
 #include "audio/audio_smoke_test.h"
 #include "input/input_smoke_test.h"
 #include "core/project_dir_smoke_test.h"
+#include "launcher/launcher_smoke_test.h"
 #include "nav/nav_smoke_test.h"
 #include "physics/physics_smoke_test.h"
 #include "scene/scene_smoke_test.h"
@@ -86,6 +87,7 @@ protected:
 			{ "--physics-smoke", &wiwa::run_physics_smoke_test },
 			{ "--input-smoke", &wiwa::run_input_smoke_test },
 			{ "--project-dir-smoke", &wiwa::run_project_dir_smoke_test },
+			{ "--launcher-smoke", &wiwa::run_launcher_smoke_test },
 			{ "--audio-smoke", &wiwa::run_audio_smoke_test },
 			{ "--nav-smoke", &wiwa::run_nav_smoke_test },
 			{ "--ai-smoke", &wiwa::run_ai_smoke_test },
@@ -116,7 +118,7 @@ private:
 
 	bool has_headless_smoke() const
 	{
-		for (const char* flag : { "--asset-smoke", "--scene-smoke", "--script-smoke", "--ui-smoke", "--physics-smoke", "--input-smoke", "--project-dir-smoke", "--audio-smoke", "--nav-smoke", "--ai-smoke", "--anim-smoke", "--video-smoke", "--video-mf-smoke", "--write-demo-video" })
+		for (const char* flag : { "--asset-smoke", "--scene-smoke", "--script-smoke", "--ui-smoke", "--physics-smoke", "--input-smoke", "--project-dir-smoke", "--launcher-smoke", "--audio-smoke", "--nav-smoke", "--ai-smoke", "--anim-smoke", "--video-smoke", "--video-mf-smoke", "--write-demo-video" })
 		{
 			if (has_argument(flag))
 			{

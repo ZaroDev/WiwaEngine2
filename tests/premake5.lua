@@ -14,6 +14,9 @@ project "wiwa_tests"
 		"src/**.cpp",
 		"%{wks.location}/editor/src/**.h",
 		"%{wks.location}/editor/src/**.cpp",
+		-- the launcher's ImGui-free parts (its window and entry point stay in the launcher)
+		"%{wks.location}/launcher/src/core/**.h",
+		"%{wks.location}/launcher/src/core/**.cpp",
 		"%{wks.location}/editor/vendor/ImGuizmo/ImGuizmo.h",
 		"%{wks.location}/editor/vendor/ImGuizmo/ImGuizmo.cpp",
 		"%{wks.location}/editor/vendor/ImGuizmo/ImCurveEdit.h",
@@ -32,6 +35,7 @@ project "wiwa_tests"
 	{
 		"src",
 		"%{wks.location}/editor/src",
+		"%{wks.location}/launcher/src",
 		"%{wks.location}/editor/vendor/ImGuizmo",
 		"%{IncludeDirs.ImGui}",
 		"%{IncludeDirs.nvrhi}",
