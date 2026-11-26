@@ -824,6 +824,28 @@ namespace wiwa
 		const char* const INPUT_OVERRIDES_FILE = "input_overrides.json";
 
 		const glm::vec2 HUD_CANVAS{ 1920.0f, 1080.0f };
+
+		// Where a widget of a panel is drawn: it is given a colour of its own in every state (it may be hovered, or focused by the UI navigation) while a
+		// draw list is built, and its first quad is found. Nothing when it is not drawn.
+		std::optional<UiRect> locate_widget(UiModule& ui, Scene& play, UiPanelInstance& instance, UiId id)
+		{
+			const glm::vec4 PROBE_COLOR{ 0.01f, 0.99f, 0.02f, 1.0f };
+			UiWidget* widget = instance.data().find(id);
+			if (widget == nullptr)
+			{
+				return std::nullopt;
+			}
+			const UiWidget saved = *widget;
+			widget->Color = widget->HoverColor = widget->PressedColor = widget->DisabledColor = PROBE_COLOR;
+			play.update_world_transforms();
+			UiDrawList list;
+			ui.build_draw_list(play, HUD_CANVAS, list);
+			widget->Color = saved.Color;
+			widget->HoverColor = saved.HoverColor;
+			widget->PressedColor = saved.PressedColor;
+			widget->DisabledColor = saved.DisabledColor;
+			return find_quad(list, PROBE_COLOR);
+		}
 	}
 
 	void DemoSmoke::restore_ui()
@@ -1627,10 +1649,9 @@ namespace wiwa
 	}
 
 	// Each button of the Controls panel of a feature scene's HUD, clicked once through scripted input (the path a mouse takes), 20 frames apart. The
-	// buttons share a colour: the one to click is given a colour of its own while the draw list that finds it is built.
+	// buttons share a colour: locate_widget finds the one to click.
 	DemoSmoke::UiResult DemoSmoke::run_controls_step(Scene& play, std::string& failure)
 	{
-		const glm::vec4 PROBE_COLOR{ 0.01f, 0.99f, 0.02f, 1.0f };
 		UiModule* ui = Engine::get().get_module<UiModule>();
 		const entt::entity hud = find_named(play, "Hud");
 		UiPanelInstance* instance = ui != nullptr && hud != entt::null ? ui->instance_for(play, play.registry().get<Id>(hud).Guid) : nullptr;
@@ -1671,21 +1692,10 @@ namespace wiwa
 		{
 			return UiResult::Passed;
 		}
-		// every colour of the button, so that it is found whatever state it is in (hovered, or focused by the UI navigation)
-		UiWidget* widget = instance->data().find(m_Controls[m_ControlIndex]);
-		const UiWidget saved = *widget;
-		widget->Color = widget->HoverColor = widget->PressedColor = widget->DisabledColor = PROBE_COLOR;
-		play.update_world_transforms();
-		UiDrawList list;
-		ui->build_draw_list(play, HUD_CANVAS, list);
-		widget->Color = saved.Color;
-		widget->HoverColor = saved.HoverColor;
-		widget->PressedColor = saved.PressedColor;
-		widget->DisabledColor = saved.DisabledColor;
-		const std::optional<UiRect> quad = find_quad(list, PROBE_COLOR);
+		const std::optional<UiRect> quad = locate_widget(*ui, play, *instance, m_Controls[m_ControlIndex]);
 		if (!quad)
 		{
-			failure = "the HUD's control Controls/" + widget->Name + " is not drawn (" + std::to_string(list.Vertices.size() / 4) + " quads)";
+			failure = "the HUD's control Controls/" + instance->data().find(m_Controls[m_ControlIndex])->Name + " is not drawn";
 			return UiResult::Failed;
 		}
 		ui->scripted_input().move_to((quad->Min + quad->Max) * 0.5f);
@@ -1700,7 +1710,6 @@ namespace wiwa
 	// scene, which replaces the hub as the scene that plays (editor.md, play mode).
 	DemoSmoke::UiResult DemoSmoke::run_hub_step(std::string& failure)
 	{
-		const glm::vec4 MENU_BUTTON_COLOR{ 0.12f, 0.28f, 0.4f, 0.92f }; // the menu's buttons (MENU_BUTTON in scripts/gen_demo_scene.py), while the pointer is not on them
 		UiModule* ui = Engine::get().get_module<UiModule>();
 		Scene& play = *m_Play.play_scene();
 		m_HubFrames++;
@@ -1734,20 +1743,15 @@ namespace wiwa
 		{
 			const entt::entity hud = find_named(play, "Hud");
 			UiPanelInstance* instance = hud != entt::null ? ui->instance_for(play, play.registry().get<Id>(hud).Guid) : nullptr;
-			std::optional<UiRect> button{};
-			if (instance != nullptr && instance->ready())
-			{
-				play.update_world_transforms();
-				UiDrawList list;
-				ui->build_draw_list(play, HUD_CANVAS, list);
-				button = find_quad(list, MENU_BUTTON_COLOR);
-			}
+			// the first button of the menu: the lighting scene (Menu/<first word of its title>, scripts/gen_demo_scene.py)
+			const std::optional<UiId> lighting = instance != nullptr && instance->ready() ? instance->find("Menu/Lighting") : std::nullopt;
+			const std::optional<UiRect> button = lighting ? locate_widget(*ui, play, *instance, *lighting) : std::nullopt;
 			// a few frames more once it is drawn: hub_menu.lua finds its buttons in the update after the panel is ready
 			if (!button || m_HubFrames < 30)
 			{
 				if (m_HubFrames > 900)
 				{
-					failure = std::string("the hub's menu was not drawn: ") + (instance == nullptr ? "no panel instance (an entity Hud with a UICanvas)" : !instance->ready() ? "the panel is not loaded" : "no menu button");
+					failure = std::string("the hub's menu was not drawn: ") + (instance == nullptr ? "no panel instance (an entity Hud with a UICanvas)" : !instance->ready() ? "the panel is not loaded" : !lighting ? "no Menu/Lighting button" : "Menu/Lighting is not drawn");
 					return UiResult::Failed;
 				}
 				return UiResult::Running;

@@ -3081,6 +3081,10 @@ def main():
 	settings = json.loads(build_settings.read_text(encoding="utf-8")) if build_settings.exists() else {}
 	settings["defaultScene"] = SCENE_GUID
 	settings["scenes"] = scene_guids
+	# what no scene refers to but the game needs: the assets the scripts load by path (load_asset), and the sky, which a scene names in its settings
+	# (collect_references follows the settings' scripts, not their environment)
+	extra = [guid("asset:" + rel) for rel in ("vfx/footstep_dust.wfx", "vfx/impact_sparks.wfx", "materials/decal_footprint.wmat", "materials/decal_scorch.wmat")] + [g["env"]]
+	settings["alwaysInclude"] = list(dict.fromkeys(settings.get("alwaysInclude", []) + extra))
 	build_settings.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 	write_nav_settings()
