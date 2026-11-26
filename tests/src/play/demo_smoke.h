@@ -174,6 +174,13 @@ namespace wiwa
 			float PatrolLowX = 1e9f, PatrolHighX = -1e9f; // the character that walks its lane on its own
 			float PatrolLowY = 1e9f, PatrolHighY = -1e9f;
 			float PlatformLow = 1e9f, PlatformHigh = -1e9f; // x of the platform that slides
+			glm::vec3 CarStart{ 0.0f };              // the autopilot car (station 9): where it started and which way it faced
+			glm::vec3 CarStartForward{ 0.0f, 0.0f, -1.0f };
+			bool CarSeen = false;
+			float CarFarthest = 0.0f;                // the farthest it got from the start
+			float CarTurn = 0.0f;                    // the largest angle (degrees) between its heading and the first one
+			bool CarFast = false;                    // it drove faster than 3 m/s
+			bool CarStopped = false;                 // and afterwards came to a stop (below 0.5 m/s)
 		};
 		PhysicsWatch m_Watch{};
 

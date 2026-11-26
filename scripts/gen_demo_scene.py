@@ -1331,6 +1331,60 @@ return NoiseMaker
 """
 
 
+SCRIPTS["drive.lua"] = """-- A Vehicle driven with the Driving actions (the arrow keys or the pad's triggers and left stick, Left Shift or B for the handbrake, E/Q or
+-- the bumpers to shift a manual gearbox), or (autopilot) round a loop of its own: away, a turn, a stop, a rest. Holding the brake at a
+-- standstill backs up (an automatic gearbox); the autopilot holds the handbrake while it stops, so it never backs up.
+local Drive = Script:extend{
+  properties = {
+    autopilot = { type = "bool", default = false },
+  },
+}
+
+function Drive:on_init()
+  self.pushed = false
+  self.t = 0
+end
+
+function Drive:on_update(dt)
+  if self.autopilot then
+    return
+  end
+  if not self.pushed then
+    self.pushed = pcall(input.push_map, "Driving")
+    if not self.pushed then
+      return
+    end
+  end
+  if input.action("Driving", "ShiftUp"):pressed() then
+    vehicle.shift_up(self.entity)
+  end
+  if input.action("Driving", "ShiftDown"):pressed() then
+    vehicle.shift_down(self.entity)
+  end
+  vehicle.set_input(self.entity, input.action("Driving", "Throttle"):value(), input.action("Driving", "Brake"):value(),
+    input.action("Driving", "Steer"):value(), input.action("Driving", "Handbrake"):value())
+end
+
+function Drive:on_physics_update(dt)
+  if not self.autopilot then
+    return
+  end
+  self.t = (self.t + dt) % 9
+  if self.t < 2.5 then
+    vehicle.set_input(self.entity, 0.6, 0, 0)
+  elseif self.t < 4 then
+    vehicle.set_input(self.entity, 0.4, 0, 0.7)
+  elseif self.t < 7 then
+    vehicle.set_input(self.entity, 0, 1, 0, 1)
+  else
+    vehicle.set_input(self.entity, 0, 0, 0)
+  end
+end
+
+return Drive
+"""
+
+
 def build_scripts():
 	ids = {}
 	for rel, text in SCRIPTS.items():
@@ -1842,6 +1896,74 @@ def patch_scene_with_vfx(g):
 	write_json("scenes/demo.wscene", scene)
 
 
+# ------------------------------------------------------------------------------------------------------------- vehicles
+
+def write_vehicle_assets():
+	"""The demo car's tuning (a 400 Nm rear-wheel-drive road car with the assists on) and the two surfaces of its track."""
+	write_json("vehicles/demo_car.wvehicle", {"version": 1,
+		"engine": {"torqueCurve": [[1000, 250], [4500, 400], [7000, 300]], "minRpm": 1000, "maxRpm": 7000, "inertia": 0.2, "damping": 0.2},
+		"transmission": {"automatic": True, "gears": [3.2, 2.1, 1.5, 1.15, 0.9, 0.75], "reverseGears": [3.0], "shiftUpRpm": 6200, "shiftDownRpm": 2500, "shiftTime": 0.25},
+		"differentials": [{"axle": 1, "ratio": 3.42, "limitedSlipRatio": 1.4, "engineTorqueRatio": 1.0}],
+		"antiRoll": [8000, 5000],
+		"aero": {"dragArea": 0.7, "downforceArea": 0.3, "downforceFront": 0.45},
+		"brakes": {"maxTorque": 2500, "handbrakeTorque": 4000, "biasFront": 0.6},
+		"assists": {"tractionControl": 1, "abs": 1, "stability": 1, "steeringHelp": 1}})
+	g = {"car": write_meta("vehicles/demo_car.wvehicle", "VehicleImporter", 1)}
+	write_json("physics/asphalt.wphysmat", {"friction": 0.8, "tireGrip": 1.0})
+	g["asphalt"] = write_meta("physics/asphalt.wphysmat", "PhysicsMaterialImporter", 2)
+	write_json("physics/grass.wphysmat", {"friction": 0.6, "tireGrip": 0.55})
+	g["grass"] = write_meta("physics/grass.wphysmat", "PhysicsMaterialImporter", 2)
+	return g
+
+
+def add_vehicles(s, g):
+	"""Station 9: a track of asphalt with a patch of grass (less tire grip), a car to drive (the Driving actions) and one that drives a loop on its
+	own (tests/src/play/demo_smoke.cpp watches it). Wheels are child entities with a VehicleWheel; their meshes are their children."""
+	def mesh(shape, material, static=False):
+		renderer = {"Mesh": ref(g["shapes"], MESH[shape]), "Materials": [ref(g["mat"][material])]}
+		if static:
+			renderer["Static"] = True
+		return {"MeshRenderer": renderer}
+
+	s.add("Driving demo")
+	s.add("Track", "Driving demo", pos=(0, 0.05, 42), scale=(56, 0.1, 30), MeshRenderer=mesh("cube", "plain", static=True)["MeshRenderer"],
+		Collider=dict(BOX, Material=ref(g["asphalt"])))
+	s.add("Grass patch", "Driving demo", pos=(-12, 0.11, 42), scale=(12, 0.02, 12), MeshRenderer=mesh("cube", "toon_teal", static=True)["MeshRenderer"],
+		Collider=dict(BOX, Material=ref(g["grass"])))
+	ride = 0.1 + 0.63  # the track's top plus the car's ride height (wheel centres 0.3 below the body, radius 0.33)
+	for name, x, z, autopilot in (("Demo car", 6, 34, False), ("Autopilot car", 14, 46, True)):
+		s.add(name, "Driving demo", pos=(x, ride, z),
+			Collider={"Shape": "Box", "Size": [0.9, 0.25, 2.1], "Offset": [0, 0, 0]},
+			RigidBody={"Motion": "Dynamic", "MassOverride": 1200, "CenterOfMassOffset": [0, -0.3, 0]},
+			Vehicle={"Settings": ref(g["car"]), "Enabled": True},
+			**{"script:" + g["scripts"]["drive"]: {"autopilot": autopilot}})
+		s.add(name + " body", name, scale=(1.8, 0.5, 4.2), **mesh("cube", "carpaint"))
+		s.add(name + " cabin", name, pos=(0, 0.45, 0.3), scale=(1.5, 0.4, 2.0), **mesh("cube", "glass"))
+		for wheel, wx, wz, axle in (("FL", -0.8, -1.3, 0), ("FR", 0.8, -1.3, 0), ("RL", -0.8, 1.3, 1), ("RR", 0.8, 1.3, 1)):
+			wheel_name = "%s wheel %s" % (name, wheel)
+			s.add(wheel_name, name, pos=(wx, -0.3, wz), VehicleWheel={"Radius": 0.33, "Width": 0.22, "Steers": axle == 0, "Handbrake": axle == 1,
+				"Axle": axle, "Side": "Left" if wx < 0 else "Right"})
+			s.add(wheel_name + " tire", wheel_name, rot=qaxis((0, 0, 1), 90), scale=(0.66, 0.22, 0.66), **mesh("cylinder", "steel"))
+
+
+def patch_scene_with_vehicles(g):
+	"""--vehicles-only: adds the driving station to the scene that is already written (no downloads), runs its physics at 120 Hz and writes the input
+	map with the Driving actions."""
+	path = ASSETS / "scenes/demo.wscene"
+	scene = json.loads(path.read_text(encoding="utf-8"))
+	fresh = Scene()
+	add_vehicles(fresh, g)
+	ours = set(e["id"] for e in fresh.entities)
+	scene["entities"] = [e for e in scene["entities"] if e["id"] not in ours] + fresh.entities
+	scene.setdefault("settings", {})["physics"] = vehicle_physics_settings()
+	write_json("scenes/demo.wscene", scene)
+
+
+def vehicle_physics_settings():
+	"""Cars want a finer step than the default 60 Hz (vehicles.md)."""
+	return {"fixedRateHz": 120}
+
+
 # ------------------------------------------------------------------------------------------------------- UI and input
 
 FONT = None
@@ -1916,8 +2038,16 @@ def build_input():
 		{"name": "NavLeft", "type": "Button", "bindings": [{"control": "Key.Left"}, {"control": "Pad.DPadLeft"}, {"control": "Pad.LeftX", "invert": True}]},
 		{"name": "NavRight", "type": "Button", "bindings": [{"control": "Key.Right"}, {"control": "Pad.DPadRight"}, {"control": "Pad.LeftX"}]},
 		button("Submit", "Key.Enter", "Pad.A"), button("Cancel", "Key.Escape", "Pad.B")]}
+	def axis(name, *bindings):
+		return {"name": name, "type": "Axis1D", "bindings": list(bindings)}
+	driving = {"name": "Driving", "consume": False, "actions": [
+		axis("Throttle", {"control": "Key.Up"}, {"control": "Pad.RightTrigger"}),
+		axis("Brake", {"control": "Key.Down"}, {"control": "Pad.LeftTrigger"}),
+		axis("Steer", {"negative": "Key.Left", "positive": "Key.Right"}, {"control": "Pad.LeftX", "deadzone": 0.15}),
+		axis("Handbrake", {"control": "Key.LeftShift"}, {"control": "Pad.B"}),
+		button("ShiftUp", "Key.E", "Pad.RightBumper"), button("ShiftDown", "Key.Q", "Pad.LeftBumper")]}
 	rel = "input/demo.winput"
-	write_json(rel, {"version": 1, "maps": [gameplay, nav]})
+	write_json(rel, {"version": 1, "maps": [gameplay, nav, driving]})
 	return write_meta(rel, "InputMapImporter", 1)
 
 
@@ -2128,6 +2258,9 @@ def build_scene(g):
 	add_navigation(s, g)
 	add_ai(s, g)
 
+	# --- station 9: vehicles ---------------------------------------------------------------------------------
+	add_vehicles(s, g)
+
 	# --- station labels (world-anchored text in the HUD) -----------------------------------------------------
 	labels = []
 	for text, position in (("1  Lighting and post", (0, 6.5, 0)), ("2  Materials and shaders", (0, 4.5, -16)), ("3  Models and animation", (0, 3.6, 9)),
@@ -2145,7 +2278,8 @@ def scene_settings(g):
 		"bloom": {"enabled": True, "threshold": 1, "knee": 0.5, "intensity": 0.07},
 		"tonemap": {"operator": "aces", "contrast": 1.06, "saturation": 1.12, "temperature": 0.05, "vignette": 0.25},
 		"ao": {"enabled": True, "radius": 1.2, "power": 1.6},
-		"motionBlur": {"enabled": True}}
+		"motionBlur": {"enabled": True},
+		"physics": vehicle_physics_settings()}
 
 
 HEAD_NODE = node_id("Street lamp/Head")  # the lamp head, in the street lamp prefab
@@ -2194,6 +2328,19 @@ def build_lamp(g):
 
 
 def main():
+	if "--vehicles-only" in sys.argv:
+		# adds only the driving station (its car tuning, the track's surfaces, drive.lua and the Driving input actions) to the scene that is already
+		# written, without downloading anything
+		g = {"shapes": guid("asset:models/shapes/shapes.glb"), "mat": {name: guid("asset:materials/%s.wmat" % name) for name in ("plain", "toon_teal", "carpaint", "glass", "steel")}}
+		g.update(write_vehicle_assets())
+		write("scripts/drive.lua", SCRIPTS["drive.lua"])
+		g["scripts"] = {"drive": write_meta("scripts/drive.lua", "ScriptImporter", 1)}
+		input_map = build_input()
+		(ROOT / "editor" / "input.wsettings").write_text(json.dumps({"defaultMap": input_map}, indent=2) + "\n", encoding="utf-8", newline="\n")
+		patch_scene_with_vehicles(g)
+		print("added the driving station to the demo scene")
+		return
+
 	if "--ai-only" in sys.argv:
 		# adds only the behaviour tree demo (the guard's tree and the two scripts it uses, the guard, the thief and the noise maker) to the scene that is
 		# already written, without downloading anything and without touching the .meta files of anything else
@@ -2266,7 +2413,8 @@ def main():
 	import_audio()
 
 	write_json("physics/bouncy.wphysmat", {"friction": 0.4, "restitution": 0.75, "restitutionCombine": "Max"})
-	g["bouncy"] = write_meta("physics/bouncy.wphysmat", "PhysicsMaterialImporter", 1)
+	g["bouncy"] = write_meta("physics/bouncy.wphysmat", "PhysicsMaterialImporter", 2)
+	g.update(write_vehicle_assets())
 
 	input_map = build_input()
 	g["lamp"] = build_lamp(g)

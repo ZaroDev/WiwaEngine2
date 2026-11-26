@@ -10,6 +10,7 @@
 #include <audio/audio_module.h>
 #include <audio/null_backend.h>
 #include <core/engine.h>
+#include <physics/physics_module.h>
 #include <input/input_module.h>
 #include <ai/ai_module.h>
 #include <nav/nav_module.h>
@@ -658,6 +659,12 @@ namespace wiwa
 			if (!(watch.PlatformHigh - watch.PlatformLow > 2.0f))
 			{
 				failure = "the platform did not slide (x " + std::to_string(watch.PlatformLow) + " to " + std::to_string(watch.PlatformHigh) + ")";
+				return true;
+			}
+			if (!(watch.CarFarthest > 5.0f && watch.CarTurn > 10.0f && watch.CarFast && watch.CarStopped))
+			{
+				failure = "the autopilot car did not drive, turn and stop (farthest " + std::to_string(watch.CarFarthest) + " m, turned " + std::to_string(watch.CarTurn) +
+					" degrees, faster than 3 m/s " + (watch.CarFast ? "yes" : "no") + ", stopped " + (watch.CarStopped ? "yes" : "no") + ")";
 				return true;
 			}
 			m_Phase = Phase::HotCreate;
@@ -1385,12 +1392,18 @@ namespace wiwa
 		const Transform* weak = transform_of("Weak box");
 		const Transform* patrol = transform_of("Patrol");
 		const Transform* platform = transform_of("Sliding platform");
+		const entt::entity carEntity = find_named(play, "Autopilot car");
 		const Transform* links[5];
 		bool linksFound = true;
 		for (int i = 0; i < 5; i++)
 		{
 			links[i] = transform_of("Bridge link " + std::to_string(i));
 			linksFound = linksFound && links[i] != nullptr;
+		}
+		if (carEntity == entt::null)
+		{
+			failure = "the autopilot car of the driving station is missing in the running scene";
+			return false;
 		}
 		if (door == nullptr || cart == nullptr || bob == nullptr || weak == nullptr || !linksFound || patrol == nullptr || platform == nullptr)
 		{
@@ -1413,6 +1426,25 @@ namespace wiwa
 		watch.PatrolHighY = std::max(watch.PatrolHighY, patrol->Position.y);
 		watch.PlatformLow = std::min(watch.PlatformLow, platform->Position.x);
 		watch.PlatformHigh = std::max(watch.PlatformHigh, platform->Position.x);
+
+		const Transform& car = play.registry().get<Transform>(carEntity);
+		const glm::vec3 heading = car.Rotation * glm::vec3(0.0f, 0.0f, -1.0f);
+		if (!watch.CarSeen)
+		{
+			watch.CarStart = car.Position;
+			watch.CarStartForward = heading;
+			watch.CarSeen = true;
+		}
+		watch.CarFarthest = std::max(watch.CarFarthest, glm::length(car.Position - watch.CarStart));
+		watch.CarTurn = std::max(watch.CarTurn, glm::degrees(std::acos(std::clamp(glm::dot(glm::normalize(heading), glm::normalize(watch.CarStartForward)), -1.0f, 1.0f))));
+		if (PhysicsModule* physics = Engine::get().get_module<PhysicsModule>())
+		{
+			if (const std::optional<VehiclePose> pose = physics->newest_vehicle(play.registry().get<Id>(carEntity).Guid))
+			{
+				watch.CarFast = watch.CarFast || pose->Speed > 3.0f;
+				watch.CarStopped = watch.CarStopped || (watch.CarFast && std::abs(pose->Speed) < 0.5f);
+			}
+		}
 		for (int i = 0; i < 5; i++)
 		{
 			watch.BridgeLow = std::min(watch.BridgeLow, links[i]->Position.y);
