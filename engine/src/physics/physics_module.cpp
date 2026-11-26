@@ -48,6 +48,7 @@ namespace wiwa
 			stats.ActiveBodies = m_Latest->ActiveBodies;
 			stats.Joints = m_Latest->JointCount;
 			stats.Characters = m_Latest->CharacterCount;
+			stats.Vehicles = m_Latest->VehicleCount;
 			stats.StepMs = m_Latest->StepMs;
 		}
 		return stats;
@@ -295,6 +296,37 @@ namespace wiwa
 
 	void PhysicsModule::set_character_velocity(BodyKey key, glm::vec3 velocity) { submit(SetCharacterVelocity{ key, velocity }); }
 	void PhysicsModule::character_jump(BodyKey key, float speed) { submit(CharacterJump{ key, speed }); }
+
+	void PhysicsModule::set_vehicle_input(BodyKey body, const VehicleInput& input)
+	{
+		const auto it = m_VehicleInputs.find(body);
+		if (it != m_VehicleInputs.end() && it->second.Input == input && it->second.Generation == m_Sync.generation())
+		{
+			return;
+		}
+		m_VehicleInputs[body] = SentVehicleInput{ input, m_Sync.generation() };
+		submit(SetVehicleInput{ body, input });
+	}
+
+	void PhysicsModule::shift_gear(BodyKey body, i32 direction) { submit(ShiftGear{ body, direction }); }
+	void PhysicsModule::set_vehicle_assist(BodyKey body, VehicleAssist assist, float strength) { submit(SetVehicleAssist{ body, assist, strength }); }
+
+	std::optional<VehiclePose> PhysicsModule::newest_vehicle(BodyKey body) const
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		if (m_Latest == nullptr || m_Latest->World != m_Sync.generation())
+		{
+			return std::nullopt;
+		}
+		for (const VehiclePose& pose : m_Latest->Vehicles)
+		{
+			if (pose.Body == body)
+			{
+				return pose;
+			}
+		}
+		return std::nullopt;
+	}
 
 	std::optional<CharacterPose> PhysicsModule::newest_character(BodyKey key) const
 	{

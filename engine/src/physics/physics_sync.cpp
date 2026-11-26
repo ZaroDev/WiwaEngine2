@@ -141,13 +141,19 @@ namespace wiwa
 		// The bodies the scene asks for now, by key. Needs current WorldTransforms.
 		using ShapeResolver = std::function<std::shared_ptr<const CookedShapeData>(AssetRef mesh, CookedShapeKind kind, EntityGuid collider)>;
 
-		std::unordered_map<BodyKey, Collected> collect(const Scene& scene, const std::function<PhysicsMaterialData(AssetRef)>& resolve_material, const ShapeResolver& resolve_shape)
+		std::unordered_map<BodyKey, Collected> collect(const Scene& scene, const std::function<PhysicsMaterialData(AssetRef)>& resolve_material, const ShapeResolver& resolve_shape,
+			const std::function<void(entt::entity)>& wheel_collider)
 		{
 			const entt::registry& registry = scene.registry();
 
 			std::unordered_map<entt::entity, std::vector<entt::entity>> byOwner;
 			for (const entt::entity entity : registry.view<Collider>())
 			{
+				if (registry.all_of<VehicleWheel>(entity))
+				{
+					wheel_collider(entity); // a wheel's collider would hold the car up off its suspension: left out
+					continue;
+				}
 				byOwner[owner_of(registry, entity)].push_back(entity);
 			}
 
@@ -262,7 +268,15 @@ namespace wiwa
 	{
 		const entt::registry& registry = scene.registry();
 		std::unordered_map<BodyKey, Collected> wanted = collect(scene, [this](AssetRef ref) { return resolve_material(ref); },
-			[this](AssetRef mesh, CookedShapeKind kind, EntityGuid collider) { return resolve_shape(mesh, kind, collider); });
+			[this](AssetRef mesh, CookedShapeKind kind, EntityGuid collider) { return resolve_shape(mesh, kind, collider); },
+			[&](entt::entity entity)
+			{
+				const EntityGuid guid = registry.get<Id>(entity).Guid;
+				if (m_WarnedColliders.insert(guid).second)
+				{
+					WI_PHYSICS_LOG(Warning, "Collider {0} is on a VehicleWheel: it is left out of the body (the wheel is the suspension's)", guid.to_string());
+				}
+			});
 
 		// gone: the entity was destroyed, or lost its collider, or its colliders now belong to another body
 		for (auto it = m_Bodies.begin(); it != m_Bodies.end();)
@@ -329,6 +343,196 @@ namespace wiwa
 
 		push_joints(scene, thread);
 		push_characters(scene, thread);
+		push_vehicles(scene, thread);
+	}
+
+	void PhysicsSync::push_vehicles(const Scene& scene, PhysicsThread& thread)
+	{
+		const entt::registry& registry = scene.registry();
+		const auto warn = [&](EntityGuid entity, const std::string& text)
+		{
+			if (m_WarnedVehicles.insert(entity).second)
+			{
+				WI_PHYSICS_LOG(Warning, "Entity {0}: {1}", entity.to_string(), text);
+			}
+		};
+
+		std::unordered_map<BodyKey, std::pair<VehicleDesc, std::unordered_map<EntityGuid, WheelAuthored>>> wanted;
+		for (const entt::entity entity : registry.view<Vehicle>())
+		{
+			const Vehicle& vehicle = registry.get<Vehicle>(entity);
+			const BodyKey key = registry.get<Id>(entity).Guid;
+			if (!vehicle.Enabled)
+			{
+				continue;
+			}
+			const auto body = m_Bodies.find(key);
+			if (body == m_Bodies.end() || body->second.Desc.Motion != MotionType::Dynamic)
+			{
+				warn(key, "a Vehicle needs a dynamic RigidBody and a Collider on its entity; it is not made");
+				continue;
+			}
+			const std::optional<VehicleSettingsData> settings = resolve_vehicle(vehicle.Settings);
+			if (!settings)
+			{
+				continue; // loading, or failed (warned)
+			}
+
+			// the wheels: VehicleWheels below the body, not below another body
+			std::vector<entt::entity> wheels;
+			std::vector<entt::entity> open;
+			for (entt::entity child = registry.get<Hierarchy>(entity).FirstChild; child != entt::null; child = registry.get<Hierarchy>(child).NextSibling)
+			{
+				open.push_back(child);
+			}
+			while (!open.empty())
+			{
+				const entt::entity e = open.back();
+				open.pop_back();
+				if (registry.all_of<RigidBody>(e))
+				{
+					continue;
+				}
+				if (registry.all_of<VehicleWheel>(e))
+				{
+					wheels.push_back(e);
+				}
+				for (entt::entity child = registry.get<Hierarchy>(e).FirstChild; child != entt::null; child = registry.get<Hierarchy>(child).NextSibling)
+				{
+					open.push_back(child);
+				}
+			}
+			std::sort(wheels.begin(), wheels.end(), [&](entt::entity a, entt::entity b) { return registry.get<Id>(a).Guid < registry.get<Id>(b).Guid; });
+
+			const glm::mat4& bodyWorld = registry.get<WorldTransform>(entity).Matrix;
+			const Pose bodyPose = decompose(bodyWorld);
+			const glm::mat4 toBody = glm::inverse(glm::translate(glm::mat4(1.0f), bodyPose.Position) * glm::mat4_cast(bodyPose.Rotation));
+			const auto tracked = m_Vehicles.find(key);
+			VehicleDesc desc;
+			desc.Settings = *settings;
+			std::unordered_map<EntityGuid, WheelAuthored> authored;
+			for (const entt::entity wheelEntity : wheels)
+			{
+				const EntityGuid guid = registry.get<Id>(wheelEntity).Guid;
+				WheelAuthored place;
+				bool known = false;
+				if (tracked != m_Vehicles.end())
+				{
+					if (const auto cached = tracked->second.Wheels.find(guid); cached != tracked->second.Wheels.end())
+					{
+						place = cached->second;
+						known = true;
+					}
+				}
+				if (!known)
+				{
+					const Pose wheelPose = decompose(toBody * registry.get<WorldTransform>(wheelEntity).Matrix);
+					place = WheelAuthored{ wheelPose.Position, wheelPose.Rotation };
+				}
+				authored.emplace(guid, place);
+
+				const VehicleWheel& component = registry.get<VehicleWheel>(wheelEntity);
+				WheelDesc wheel;
+				wheel.Entity = guid;
+				wheel.Position = place.Position;
+				wheel.Radius = component.Radius;
+				wheel.Width = component.Width;
+				wheel.SuspensionMinLength = component.SuspensionMinLength;
+				wheel.SuspensionMaxLength = component.SuspensionMaxLength;
+				wheel.SuspensionFrequency = component.SuspensionFrequency;
+				wheel.SuspensionDamping = component.SuspensionDamping;
+				wheel.Steers = component.Steers;
+				wheel.Brakes = component.Brakes;
+				wheel.Handbrake = component.Handbrake;
+				wheel.MaxSteerAngle = component.MaxSteerAngle;
+				wheel.Axle = component.Axle;
+				wheel.Side = component.Side;
+				wheel.Inertia = component.Inertia;
+				desc.Wheels.push_back(wheel);
+			}
+			if (desc.Wheels.empty())
+			{
+				warn(key, "a Vehicle has no VehicleWheel below it; it is not made");
+				continue;
+			}
+			wanted.emplace(key, std::make_pair(std::move(desc), std::move(authored)));
+		}
+
+		// VehicleWheels with no Vehicle above them
+		for (const entt::entity entity : registry.view<VehicleWheel>())
+		{
+			bool found = false;
+			for (entt::entity e = registry.get<Hierarchy>(entity).Parent; e != entt::null && !found; e = registry.get<Hierarchy>(e).Parent)
+			{
+				found = registry.all_of<Vehicle>(e);
+			}
+			if (!found)
+			{
+				warn(registry.get<Id>(entity).Guid, "a VehicleWheel has no Vehicle above it; it does nothing");
+			}
+		}
+
+		for (auto it = m_Vehicles.begin(); it != m_Vehicles.end();)
+		{
+			if (!wanted.contains(it->first))
+			{
+				thread.push(DestroyVehicle{ it->first }, m_Generation);
+				it = m_Vehicles.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+		for (auto& [key, entry] : wanted)
+		{
+			TrackedVehicle& tracked = m_Vehicles[key];
+			tracked.Wheels = std::move(entry.second);
+			if (!(tracked.Desc == entry.first))
+			{
+				thread.push(CreateVehicle{ key, entry.first }, m_Generation);
+				tracked.Desc = std::move(entry.first);
+				m_VehiclesSent++;
+			}
+		}
+	}
+
+	std::optional<VehicleSettingsData> PhysicsSync::resolve_vehicle(AssetRef ref)
+	{
+		if (!ref.valid())
+		{
+			return default_vehicle_settings();
+		}
+		const AssetGuid key = ref.resolved();
+		auto it = m_VehicleSettings.find(key);
+		if (it == m_VehicleSettings.end())
+		{
+			AssetManager* assets = Engine::get().get_module<AssetManager>();
+			if (assets == nullptr)
+			{
+				return std::nullopt;
+			}
+			it = m_VehicleSettings.emplace(key, VehicleSettingsEntry{ assets->load<VehicleSettingsData>(ref) }).first;
+		}
+		VehicleSettingsEntry& entry = it->second;
+		switch (entry.Settings.state())
+		{
+		case LoadState::Ready:
+			if (const VehicleSettingsData* data = entry.Settings.get(); data != nullptr && vehicle_settings_valid(*data))
+			{
+				return *data;
+			}
+			[[fallthrough]];
+		case LoadState::Failed:
+			if (!entry.Warned)
+			{
+				entry.Warned = true;
+				WI_PHYSICS_LOG(Warning, "Vehicle settings {0} are missing or could not be loaded: the vehicle is not made", ref.Guid.to_string());
+			}
+			return std::nullopt;
+		default:
+			return std::nullopt; // still loading
+		}
 	}
 
 	void PhysicsSync::push_joints(const Scene& scene, PhysicsThread& thread)
@@ -517,6 +721,7 @@ namespace wiwa
 		}
 
 		entt::registry& registry = scene.registry();
+		std::unordered_map<BodyKey, std::pair<glm::vec3, glm::quat>> bodyNow; // the vehicles' bodies as just written, for their wheels
 		for (const BodyPose& pose : latest.Poses)
 		{
 			const auto tracked = m_Bodies.find(pose.Key);
@@ -541,6 +746,11 @@ namespace wiwa
 				}
 			}
 
+			if (m_Vehicles.contains(pose.Key))
+			{
+				bodyNow.emplace(pose.Key, std::make_pair(position, glm::normalize(rotation)));
+			}
+
 			// world to local, through the parent; the local scale stays
 			Transform& transform = registry.get<Transform>(entity);
 			const entt::entity parent = registry.get<Hierarchy>(entity).Parent;
@@ -556,6 +766,8 @@ namespace wiwa
 				transform.Rotation = glm::normalize(glm::inverse(decompose(parentWorld).Rotation) * rotation);
 			}
 		}
+
+		apply_wheels(scene, prev, latest, alpha, interpolate, bodyNow);
 
 		// characters: only their position is written; the entity keeps its rotation and scale
 		std::unordered_map<BodyKey, const CharacterPose*> previousCharacters;
@@ -590,6 +802,81 @@ namespace wiwa
 			const entt::entity parent = registry.get<Hierarchy>(entity).Parent;
 			transform.Position = parent == entt::null ? position : glm::vec3(glm::inverse(registry.get<WorldTransform>(parent).Matrix) * glm::vec4(position, 1.0f));
 			tracked->second.Expected = position;
+		}
+	}
+
+	void PhysicsSync::apply_wheels(Scene& scene, const PhysicsStepSnapshot& prev, const PhysicsStepSnapshot& latest, float alpha, bool interpolate,
+		const std::unordered_map<BodyKey, std::pair<glm::vec3, glm::quat>>& bodyNow)
+	{
+		entt::registry& registry = scene.registry();
+		for (const VehiclePose& vehicle : latest.Vehicles)
+		{
+			const auto tracked = m_Vehicles.find(vehicle.Body);
+			const auto now = bodyNow.find(vehicle.Body);
+			const entt::entity bodyEntity = scene.find(vehicle.Body);
+			if (tracked == m_Vehicles.end() || now == bodyNow.end() || bodyEntity == entt::null || !registry.valid(bodyEntity))
+			{
+				continue;
+			}
+			const VehiclePose* before = nullptr;
+			if (interpolate)
+			{
+				for (const VehiclePose& old : prev.Vehicles)
+				{
+					if (old.Body == vehicle.Body && old.Wheels.size() == vehicle.Wheels.size())
+					{
+						before = &old;
+					}
+				}
+			}
+
+			// the body now (the pose apply_poses just wrote, with the entity's scale) and as the WorldTransforms still have it (last frame):
+			// a parent between the body and a wheel moves with the body, so it is where it was relative to the body
+			const glm::mat4& bodyWorldBefore = registry.get<WorldTransform>(bodyEntity).Matrix;
+			const Pose bodyBefore = decompose(bodyWorldBefore);
+			const glm::mat4 bodyNowNoScale = glm::translate(glm::mat4(1.0f), now->second.first) * glm::mat4_cast(now->second.second);
+			const glm::mat4 bodyWorldNow = bodyNowNoScale * glm::scale(glm::mat4(1.0f), bodyBefore.Scale);
+			const glm::mat4 sinceBefore = bodyWorldNow * glm::inverse(bodyWorldBefore);
+
+			for (size_t i = 0; i < vehicle.Wheels.size(); i++)
+			{
+				const WheelPose& wheel = vehicle.Wheels[i];
+				const auto place = tracked->second.Wheels.find(wheel.Entity);
+				const entt::entity entity = scene.find(wheel.Entity);
+				if (place == tracked->second.Wheels.end() || entity == entt::null || !registry.valid(entity))
+				{
+					continue;
+				}
+				float suspension = wheel.SuspensionLength;
+				float steer = wheel.SteerAngle;
+				float spin = wheel.SpinAngle;
+				if (before != nullptr)
+				{
+					const WheelPose& old = before->Wheels[i];
+					suspension = glm::mix(old.SuspensionLength, wheel.SuspensionLength, alpha);
+					steer = glm::mix(old.SteerAngle, wheel.SteerAngle, alpha);
+					float delta = wheel.SpinAngle - old.SpinAngle;
+					delta -= 6.28318531f * std::round(delta / 6.28318531f);
+					spin = old.SpinAngle + delta * alpha;
+				}
+
+				// body space: up the suspension from where it was authored, spin about the body's x (rolling forward turns the top forward,
+				// to -z: a negative turn about +x), then steer about the body's y
+				const glm::vec3 position = place->second.Position + glm::vec3(0.0f, wheel.RestLength - suspension, 0.0f);
+				const glm::quat rotation = glm::angleAxis(steer, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::angleAxis(-spin, glm::vec3(1.0f, 0.0f, 0.0f)) * place->second.Rotation;
+				const glm::vec3 worldPosition = glm::vec3(bodyNowNoScale * glm::vec4(position, 1.0f));
+				const glm::quat worldRotation = glm::normalize(now->second.second * rotation);
+
+				Transform& transform = registry.get<Transform>(entity);
+				const entt::entity parent = registry.get<Hierarchy>(entity).Parent;
+				if (parent == entt::null)
+				{
+					continue;
+				}
+				const glm::mat4 parentNow = sinceBefore * registry.get<WorldTransform>(parent).Matrix;
+				transform.Position = glm::vec3(glm::inverse(parentNow) * glm::vec4(worldPosition, 1.0f));
+				transform.Rotation = glm::normalize(glm::inverse(decompose(parentNow).Rotation) * worldRotation);
+			}
 		}
 	}
 
@@ -687,5 +974,9 @@ namespace wiwa
 		m_WarnedJoints.clear();
 		m_Characters.clear();
 		m_WarnedCharacters.clear();
+		m_Vehicles.clear();
+		m_VehicleSettings.clear();
+		m_WarnedVehicles.clear();
+		m_VehiclesSent = 0;
 	}
 }

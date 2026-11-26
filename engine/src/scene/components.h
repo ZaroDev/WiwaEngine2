@@ -242,6 +242,34 @@ namespace wiwa
 		float GravityFactor = 1.0f;
 		i32 Layer = 0;                // an index into the project's physics layers
 	};
+
+	// A car (vehicles.md): on an entity with a dynamic RigidBody and its Collider (the chassis), with VehicleWheel components on descendants
+	// (no other RigidBody in between). Settings is the tuning (.wvehicle); not set: the defaults. Forward is the entity's -z, up +y.
+	struct Vehicle
+	{
+		AssetRef Settings{};
+		bool Enabled = true;
+	};
+
+	// One wheel of the Vehicle above it. The entity's position when Play starts is the wheel centre at ride height; the physics then turns it
+	// (spin about the body's x, steer about its y) and moves it along the suspension. A Collider on a wheel is left out of the body. Axle 0 is
+	// the front (it uses the front tire; drive, anti-roll bars and brake bias refer to axles); Left is the body's -x side. Angles are degrees.
+	struct VehicleWheel
+	{
+		float Radius = 0.33f;
+		float Width = 0.22f;
+		float SuspensionMinLength = 0.05f;
+		float SuspensionMaxLength = 0.30f;
+		float SuspensionFrequency = 1.5f; // Hz
+		float SuspensionDamping = 0.5f;   // ratio
+		bool Steers = false;
+		bool Brakes = true;
+		bool Handbrake = false;
+		float MaxSteerAngle = 35.0f;
+		i32 Axle = 0;
+		WheelSide Side = WheelSide::Left;
+		float Inertia = 0.9f;             // kg m2
+	};
 	// Plays the clips of a model on its skeleton (animation.md). Put on the root of the model: the prefab expander adds it. The runtime
 	// state (the pose, the nodes being blended) is not a component: the AnimationModule keeps it per Animator.
 	struct Animator

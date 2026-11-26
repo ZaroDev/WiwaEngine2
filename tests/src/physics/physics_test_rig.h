@@ -8,6 +8,8 @@
 #include <physics/jolt_runtime.h>
 #include <physics/physics_thread.h>
 #include <physics/physics_world.h>
+#include <physics/physics_sync.h>
+#include <scene/scene.h>
 #include <physics/physics_snapshot.h>
 #include <physics/physics_commands.h>
 
@@ -128,4 +130,78 @@ namespace wiwa::physics_test
 			return snapshot;
 		}
 	};
+
+	// ---- scenes driven through PhysicsSync the way PhysicsModule drives the play scene ----
+
+	inline BodyKey key_of(const Scene& scene, entt::entity entity) { return scene.registry().get<Id>(entity).Guid; }
+
+
+	inline entt::entity add_entity(Scene& scene, const std::string& name, glm::vec3 position, entt::entity parent = entt::null)
+	{
+		const entt::entity entity = scene.create(name, parent);
+		scene.registry().get<Transform>(entity).Position = position;
+		return entity;
+	}
+
+	inline Collider& add_box_collider(Scene& scene, entt::entity entity, glm::vec3 halfExtents)
+	{
+		Collider collider;
+		collider.Shape = ColliderShape::Box;
+		collider.Size = halfExtents;
+		return scene.registry().emplace_or_replace<Collider>(entity, collider);
+	}
+
+	inline RigidBody& add_body(Scene& scene, entt::entity entity, MotionType motion)
+	{
+		RigidBody body;
+		body.Motion = motion;
+		return scene.registry().emplace_or_replace<RigidBody>(entity, body);
+	}
+
+	// A ground: a static box whose top is at y = 0.5 (centre at 0, half height 0.5), no RigidBody.
+	inline entt::entity add_ground(Scene& scene, glm::vec3 position = glm::vec3(0.0f))
+	{
+		const entt::entity ground = add_entity(scene, "Ground", position);
+		add_box_collider(scene, ground, glm::vec3(20.0f, 0.5f, 20.0f));
+		return ground;
+	}
+
+	// Starts a world for the scene and sends its bodies.
+	inline bool start_scene(PhysicsThread& thread, PhysicsSync& sync, Scene& scene)
+	{
+		scene.update_world_transforms();
+		if (!thread.start(scene.settings().Physics))
+		{
+			return false;
+		}
+		sync.build(scene, thread);
+		return true;
+	}
+
+	// What PhysicsModule does every frame, for simulated seconds of physics time (real time: the thread runs on its own clock).
+	inline Ref<const PhysicsStepSnapshot> run_for(PhysicsThread& thread, PhysicsSync& sync, Scene& scene, double seconds)
+	{
+		const Ref<const PhysicsStepSnapshot> first = thread.latest();
+		const double until = (first ? first->Time : 0.0) + seconds;
+		const std::chrono::steady_clock::time_point giveUp = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(seconds * 3.0 + 2.0));
+		Ref<const PhysicsStepSnapshot> latest = first;
+		while (std::chrono::steady_clock::now() < giveUp)
+		{
+			scene.update_world_transforms();
+			sync.push_changes(scene, thread);
+			latest = thread.latest();
+			const Ref<const PhysicsStepSnapshot> previous = thread.previous();
+			if (latest != nullptr)
+			{
+				sync.apply_poses(scene, previous ? *previous : *latest, *latest, 1.0f);
+				scene.update_world_transforms();
+				if (latest->Time >= until)
+				{
+					break;
+				}
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(8));
+		}
+		return latest;
+	}
 }

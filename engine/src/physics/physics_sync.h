@@ -56,12 +56,23 @@ namespace wiwa
 		bool has_character(BodyKey key) const { return m_Characters.contains(key); }
 		size_t body_count() const { return m_Bodies.size(); }
 		bool has_body(BodyKey key) const { return m_Bodies.contains(key); }
+		// How many CreateVehicle commands were sent (a vehicle made or made again).
+		u32 vehicles_sent() const { return m_VehiclesSent; }
+
+		// What a Vehicle's Settings reference means: the defaults when it is not set; nullopt while it loads, and nullopt with one warning per
+		// world when it failed or does not exist (the vehicle is not made).
+		std::optional<VehicleSettingsData> resolve_vehicle(AssetRef ref);
 
 	private:
 		// Sends the joints of the scene's Joint components (on entities that have a body, after the bodies were sent).
 		void push_joints(const Scene& scene, PhysicsThread& thread);
 		// Sends the characters of the scene's CharacterController components, and teleports the ones whose entity was moved from outside.
 		void push_characters(const Scene& scene, PhysicsThread& thread);
+		// Sends the vehicles of the scene's Vehicle components (on entities whose dynamic body was sent) and their VehicleWheels.
+		void push_vehicles(const Scene& scene, PhysicsThread& thread);
+		// Writes the wheel entities of the vehicles in the step, through their parents. bodyNow: the bodies' poses apply_poses just wrote.
+		void apply_wheels(Scene& scene, const PhysicsStepSnapshot& prev, const PhysicsStepSnapshot& latest, float alpha, bool interpolate,
+			const std::unordered_map<BodyKey, std::pair<glm::vec3, glm::quat>>& bodyNow);
 
 		struct Tracked
 		{
@@ -98,6 +109,27 @@ namespace wiwa
 		};
 		std::unordered_map<BodyKey, TrackedCharacter> m_Characters{};
 		std::set<EntityGuid> m_WarnedCharacters{};
+		// The vehicles sent, by body. A wheel's place on the body is taken once, when the vehicle first sees it, and kept: the physics moves
+		// the wheel entities afterwards, which must not read as an edit (the vehicle would be made again every frame).
+		struct WheelAuthored
+		{
+			glm::vec3 Position{ 0.0f };                         // body space
+			glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+		};
+		struct TrackedVehicle
+		{
+			VehicleDesc Desc{};
+			std::unordered_map<EntityGuid, WheelAuthored> Wheels{};
+		};
+		struct VehicleSettingsEntry
+		{
+			Handle<VehicleSettingsData> Settings{};
+			bool Warned = false;
+		};
+		std::unordered_map<BodyKey, TrackedVehicle> m_Vehicles{};
+		std::unordered_map<AssetGuid, VehicleSettingsEntry> m_VehicleSettings{};
+		std::set<EntityGuid> m_WarnedVehicles{};
+		u32 m_VehiclesSent = 0;
 		u64 m_Generation = 0;
 	};
 }

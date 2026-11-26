@@ -743,6 +743,132 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		// ---- vehicles made from a scene through PhysicsSync ----
+
+		struct SceneCar
+		{
+			entt::entity Body{ entt::null };
+			std::vector<entt::entity> Wheels{}; // FL, FR, RL (nested under an empty "Suspension"), RR
+		};
+
+		// A car on the ground of add_ground (top at y = 0.5), wheels at ride height 0.3 below the body; the rear-left wheel sits under an
+		// empty child, so wheels may be nested.
+		SceneCar add_scene_car(Scene& scene, AssetRef settings, bool wheelColliders = false)
+		{
+			SceneCar car;
+			car.Body = add_entity(scene, "Car", glm::vec3(0.0f, 0.5f + kRideHeight, 0.0f));
+			RigidBody& body = add_body(scene, car.Body, MotionType::Dynamic);
+			body.MassOverride = 1200.0f;
+			body.CenterOfMassOffset = glm::vec3(0.0f, -0.3f, 0.0f);
+			add_box_collider(scene, car.Body, glm::vec3(0.9f, 0.25f, 2.1f));
+			scene.registry().emplace<Vehicle>(car.Body, Vehicle{ settings, true });
+			const entt::entity suspension = add_entity(scene, "Suspension", glm::vec3(0.0f), car.Body);
+			for (const auto& [name, x, z, axle] : { std::tuple{ "FL", -0.8f, -1.3f, 0 }, std::tuple{ "FR", 0.8f, -1.3f, 0 }, std::tuple{ "RL", -0.8f, 1.3f, 1 }, std::tuple{ "RR", 0.8f, 1.3f, 1 } })
+			{
+				const entt::entity parent = std::string(name) == "RL" ? suspension : car.Body;
+				const entt::entity wheel = add_entity(scene, name, glm::vec3(x, -0.3f, z), parent);
+				VehicleWheel component;
+				component.Axle = axle;
+				component.Side = x < 0.0f ? WheelSide::Left : WheelSide::Right;
+				component.Steers = axle == 0;
+				component.Handbrake = axle == 1;
+				scene.registry().emplace<VehicleWheel>(wheel, component);
+				if (wheelColliders)
+				{
+					add_box_collider(scene, wheel, glm::vec3(0.33f)).Shape = ColliderShape::Sphere;
+				}
+				car.Wheels.push_back(wheel);
+			}
+			return car;
+		}
+
+		const VehiclePose* find_vehicle(const PhysicsStepSnapshot* snapshot, BodyKey key) { return snapshot ? find_vehicle(*snapshot, key) : nullptr; }
+
+		void check_vehicle_sync(Check& check, AssetPipelineModule& pipeline)
+		{
+			AssetDatabase& database = pipeline.get_database();
+			const std::filesystem::path dir = database.get_assets_root() / "zz_vehicle_sync_smoke";
+			std::error_code fsError;
+			std::filesystem::remove_all(dir, fsError);
+			std::filesystem::create_directories(dir, fsError);
+			{
+				std::ofstream out(dir / "tame.wvehicle", std::ios::binary);
+				out << vehicle_to_json(tame_settings()).dump(2);
+			}
+			const std::optional<AssetRef> tame = database.ensure_imported(dir / "tame.wvehicle");
+			check(tame.has_value(), "vehicle_sync: the test vehicle imports");
+
+			Scene scene;
+			{ SceneSettings rate = scene.settings(); rate.Physics.FixedRateHz = kHz; scene.set_settings(rate); }
+			add_ground(scene);
+			const SceneCar car = add_scene_car(scene, AssetRef{ AssetGuid::generate(), 0 }); // an asset that does not exist
+			const BodyKey key = key_of(scene, car.Body);
+			PhysicsThread thread;
+			PhysicsSync sync;
+			check(start_scene(thread, sync, scene), "vehicle_sync: the world starts");
+			const Ref<const PhysicsStepSnapshot> missing = run_for(thread, sync, scene, 0.3);
+			check(missing != nullptr && missing->VehicleCount == 0, "vehicle_sync_waits_for_asset: settings that do not load make no vehicle");
+
+			scene.registry().get<Vehicle>(car.Body).Settings = tame.value_or(AssetRef{});
+			const Ref<const PhysicsStepSnapshot> built = run_for(thread, sync, scene, 1.0);
+			const VehiclePose* pose = find_vehicle(built.get(), key);
+			check(built != nullptr && built->VehicleCount == 1 && pose != nullptr && pose->Wheels.size() == 4, "vehicle_sync_builds: the components make one vehicle with four wheels (one nested)");
+			const u32 sentAfterBuild = sync.vehicles_sent();
+
+			// authored wheel transforms, then drive: the wheels turn and stay on the car
+			const glm::quat authoredRotation = scene.registry().get<Transform>(car.Wheels[3]).Rotation;
+			const glm::vec3 authoredLocal = scene.registry().get<Transform>(car.Wheels[3]).Position;
+			thread.push(SetVehicleInput{ key, VehicleInput{ 1.0f, 0.0f, 0.0f, 0.0f } }, thread.generation());
+			run_for(thread, sync, scene, 1.0);
+			const glm::quat drivenRotation = scene.registry().get<Transform>(car.Wheels[3]).Rotation;
+			check(std::abs(glm::dot(authoredRotation, drivenRotation)) < 0.9999f, "vehicle_sync_wheel_transforms: a driven wheel's Transform turns");
+			const glm::mat4& bodyWorld = scene.registry().get<WorldTransform>(car.Body).Matrix;
+			const glm::vec3 wheelWorld = glm::vec3(scene.registry().get<WorldTransform>(car.Wheels[3]).Matrix[3]);
+			const glm::vec3 authoredWorld = glm::vec3(bodyWorld * glm::vec4(authoredLocal, 1.0f));
+			check(glm::length(wheelWorld - authoredWorld) < 0.3f, "vehicle_sync_wheel_transforms: the wheel stays where it was authored on the moving car, off by " + std::to_string(glm::length(wheelWorld - authoredWorld)) + " m");
+			const glm::vec3 nestedWorld = glm::vec3(scene.registry().get<WorldTransform>(car.Wheels[2]).Matrix[3]);
+			const glm::vec3 nestedAuthored = glm::vec3(bodyWorld * glm::vec4(-0.8f, -0.3f, 1.3f, 1.0f));
+			check(glm::length(nestedWorld - nestedAuthored) < 0.3f, "vehicle_sync_wheel_transforms: a nested wheel follows too, off by " + std::to_string(glm::length(nestedWorld - nestedAuthored)) + " m");
+			check(sync.vehicles_sent() == sentAfterBuild, "vehicle_sync_no_rebuild: the physics moving the wheels does not make the vehicle again (sent " + std::to_string(sync.vehicles_sent() - sentAfterBuild) + " more)");
+
+			// a front wheel removed: made again with three; the component removed: no vehicle and the wheels are left alone
+			scene.destroy(car.Wheels[0]);
+			const Ref<const PhysicsStepSnapshot> three = run_for(thread, sync, scene, 0.3);
+			const VehiclePose* threePose = find_vehicle(three.get(), key);
+			check(threePose != nullptr && threePose->Wheels.size() == 3, "vehicle_sync_remove: removing a wheel makes the vehicle again without it");
+			scene.registry().remove<Vehicle>(car.Body);
+			const Ref<const PhysicsStepSnapshot> none = run_for(thread, sync, scene, 0.3);
+			check(none != nullptr && none->VehicleCount == 0, "vehicle_sync_remove: removing the Vehicle removes the vehicle");
+			const glm::quat leftAlone = scene.registry().get<Transform>(car.Wheels[3]).Rotation;
+			run_for(thread, sync, scene, 0.3);
+			check(scene.registry().get<Transform>(car.Wheels[3]).Rotation == leftAlone, "vehicle_sync_remove: the wheels are no longer written");
+			thread.stop();
+
+			// colliders on the wheels are left out of the body (they would hold the car up): it still rests on its suspension
+			Scene withColliders;
+			{ SceneSettings rate = withColliders.settings(); rate.Physics.FixedRateHz = kHz; withColliders.set_settings(rate); }
+			add_ground(withColliders);
+			const SceneCar collided = add_scene_car(withColliders, tame.value_or(AssetRef{}), true);
+			PhysicsThread second;
+			PhysicsSync secondSync;
+			check(start_scene(second, secondSync, withColliders), "vehicle_wheel_collider: the world starts");
+			const Ref<const PhysicsStepSnapshot> rested = run_for(second, secondSync, withColliders, 2.0);
+			const VehiclePose* restedPose = find_vehicle(rested.get(), key_of(withColliders, collided.Body));
+			bool onSprings = restedPose != nullptr && restedPose->Wheels.size() == 4;
+			for (const WheelPose& wheel : restedPose ? restedPose->Wheels : std::vector<WheelPose>{})
+			{
+				onSprings = onSprings && wheel.InContact && std::abs(wheel.SuspensionLength - wheel.RestLength) < 0.03f;
+			}
+			check(onSprings, "vehicle_wheel_collider: a Collider on a wheel is not part of the body; the car rests on its suspension");
+			second.stop();
+
+			std::filesystem::remove_all(dir, fsError);
+			database.scan();
+		}
+	}
+
 	void run_vehicle_checks(Check& check, AssetPipelineModule& pipeline)
 	{
 		check_tire_model(check);
@@ -761,5 +887,6 @@ namespace wiwa
 		check_assist_functions(check);
 		check_vehicle_assists(check);
 		check_vehicle_reverse_and_manual(check);
+		check_vehicle_sync(check, pipeline);
 	}
 }

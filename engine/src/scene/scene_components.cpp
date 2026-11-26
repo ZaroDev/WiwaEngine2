@@ -131,6 +131,25 @@ namespace wiwa
 			WI_FIELD(GravityFactor),
 			WI_FIELD_META(Layer, FieldMeta::range(0.0f, 31.0f))));
 
+		registry.register_component(WI_COMPONENT(Vehicle,
+			WI_FIELD_META(Settings, FieldMeta::asset(AssetType::Vehicle)),
+			WI_FIELD(Enabled)));
+
+		registry.register_component(WI_COMPONENT(VehicleWheel,
+			WI_FIELD(Radius),
+			WI_FIELD(Width),
+			WI_FIELD(SuspensionMinLength),
+			WI_FIELD(SuspensionMaxLength),
+			WI_FIELD(SuspensionFrequency),
+			WI_FIELD_META(SuspensionDamping, FieldMeta::range(0.0f, 2.0f)),
+			WI_FIELD(Steers),
+			WI_FIELD(Brakes),
+			WI_FIELD(Handbrake),
+			WI_FIELD_META(MaxSteerAngle, FieldMeta::range(0.0f, 80.0f)),
+			WI_FIELD_META(Axle, FieldMeta::range(0.0f, 7.0f)),
+			WI_FIELD_META(Side, FieldMeta::enumeration({ "Left", "Right" })),
+			WI_FIELD(Inertia)));
+
 		registry.register_component(WI_COMPONENT(Animator,
 			WI_FIELD_META(Skeleton, FieldMeta::asset(AssetType::Skeleton)),
 			WI_FIELD_META(Clips, FieldMeta::asset(AssetType::AnimationClip)),
