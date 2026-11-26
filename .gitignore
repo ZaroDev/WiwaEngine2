@@ -95,6 +95,7 @@ editor/.luarc.json
 # game run artifacts and the VS 2026 solution format
 game/wiwa.log
 game/wiwa_game.exe
+launcher/wiwa_launcher.exe
 *.slnx
 
 # demo hall generator download cache (scripts/gen_demo_scene.py)

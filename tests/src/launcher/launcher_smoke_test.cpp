@@ -1,6 +1,7 @@
 #include <editor_common.h>
 #include "launcher_smoke_test.h"
 
+#include <core/launch.h>
 #include <core/project_creator.h>
 #include <core/project_registry.h>
 #include <core/project_settings.h>
@@ -106,7 +107,7 @@ namespace wiwa
 			check(!registry.index_of(withAssets).has_value() && registry.index_of(moved).has_value(), "relocate changes the path");
 
 			// ---- round trip, with a non-ASCII folder
-			const std::filesystem::path accented = make_dir(root / std::filesystem::path(u8"Café Game"));
+			const std::filesystem::path accented = make_dir(root / std::filesystem::path(u8"Caf\u00e9 Game"));
 			make_dir(accented / "assets");
 			pause();
 			check(registry.add(accented, message) == AddResult::Added, "a non-ASCII folder is added");
@@ -177,7 +178,7 @@ namespace wiwa
 				check(!valid_project_name(bad, why) && !why.empty(), std::string("refused name '") + bad + "'");
 			}
 			check(valid_project_name("My Game", why), "accepted 'My Game': " + why);
-			const std::u8string cafe = u8"Café";
+			const std::u8string cafe = u8"Caf\u00e9";
 			check(valid_project_name(std::string(cafe.begin(), cafe.end()), why), "accepted a non-ASCII name: " + why);
 
 			// ---- a stand-in template
@@ -221,6 +222,27 @@ namespace wiwa
 		}
 	}
 
+	namespace
+	{
+		void launch_checks(Check& check, const std::filesystem::path& root)
+		{
+			const std::filesystem::path bin = root / "bin" / "Release-windows-x86_64";
+			const std::filesystem::path launcher = bin / "wiwa_launcher";
+			check(write_text(launcher / "wiwa_launcher.exe", ""), "wrote a stand-in launcher");
+			check(find_sibling_executable(launcher, "wiwa_editor").empty(), "no editor anywhere: nothing found");
+			check(write_text(launcher / "wiwa_editor.exe", ""), "wrote a stand-in editor next to the launcher");
+			check(find_sibling_executable(launcher, "wiwa_editor") == launcher / "wiwa_editor.exe", "the editor next to the launcher is found");
+			check(write_text(bin / "wiwa_editor" / "wiwa_editor.exe", ""), "wrote a stand-in editor in its build folder");
+			check(find_sibling_executable(launcher, "wiwa_editor") == launcher / ".." / "wiwa_editor" / "wiwa_editor.exe"
+				|| find_sibling_executable(launcher, "wiwa_editor") == bin / "wiwa_editor" / "wiwa_editor.exe", "the build folder wins over the copy");
+
+			const std::filesystem::path exe = LR"(C:\Engine\wiwa_editor.exe)";
+			const std::filesystem::path project = std::filesystem::path(u8R"(D:\My Games\Caf)" u8"\u00e9");
+			const std::wstring expected = LR"("C:\Engine\wiwa_editor.exe" --project "D:\My Games\Caf)" L"\u00e9" LR"(")";
+			check(editor_command_line(exe, project) == expected, "the editor's command line quotes both paths");
+		}
+	}
+
 	bool run_launcher_smoke_test(AssetPipelineModule&)
 	{
 		Check check;
@@ -232,6 +254,7 @@ namespace wiwa
 
 		registry_checks(check, root);
 		creator_checks(check, root);
+		launch_checks(check, root);
 
 		std::filesystem::remove_all(root, error);
 		if (check.Failures == 0)

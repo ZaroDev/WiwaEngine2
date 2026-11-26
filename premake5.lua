@@ -117,4 +117,5 @@ group ""
 
 include "editor/premake5.lua"
 include "game/premake5.lua"
+include "launcher/premake5.lua"
 include "tests/premake5.lua"
