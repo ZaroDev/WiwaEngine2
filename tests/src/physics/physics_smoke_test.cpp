@@ -22,19 +22,15 @@
 #include <scene/scene.h>
 
 #include <test_kit.h>
+#include "physics_test_rig.h"
+#include "vehicle_checks.h"
 
 namespace wiwa
 {
 	namespace
 	{
+		using namespace physics_test;
 		using Clock = std::chrono::steady_clock;
-
-		struct CheckLog
-		{
-			static constexpr const char* Area = "Physics";
-			static constexpr const char* Prefix = "Smoke test";
-		};
-		using Check = BasicCheck<CheckLog>;
 
 		void check_module_registered(Check& check)
 		{
@@ -145,21 +141,6 @@ namespace wiwa
 
 		BodyKey key_of(const Scene& scene, entt::entity entity) { return scene.registry().get<Id>(entity).Guid; }
 
-		const BodyPose* find_pose(const PhysicsStepSnapshot* snapshot, BodyKey key)
-		{
-			if (snapshot == nullptr)
-			{
-				return nullptr;
-			}
-			for (const BodyPose& pose : snapshot->Poses)
-			{
-				if (pose.Key == key)
-				{
-					return &pose;
-				}
-			}
-			return nullptr;
-		}
 
 		entt::entity add_entity(Scene& scene, const std::string& name, glm::vec3 position, entt::entity parent = entt::null)
 		{
@@ -230,7 +211,6 @@ namespace wiwa
 			return latest;
 		}
 
-		std::string fmt_vec(glm::vec3 v) { return "(" + std::to_string(v.x) + ", " + std::to_string(v.y) + ", " + std::to_string(v.z) + ")"; }
 
 		// Check 1: a dynamic box (half extent 0.5) dropped from 5 m onto a static box ground (top at 0.5) rests with its centre at 1.0.
 		// Then: a kinematic body follows its entity, and destroying an entity removes its body.
@@ -1358,52 +1338,7 @@ namespace wiwa
 	{
 		// ---- joints: bodies and joints made by commands, so that a joint can be set up without a scene ----
 
-		BodyDesc box_body(MotionType motion, glm::vec3 position, glm::vec3 halfExtents = glm::vec3(0.5f))
-		{
-			BodyDesc desc;
-			desc.Motion = motion;
-			desc.Position = position;
-			desc.Shape.Kind = ShapeKind::Box;
-			desc.Shape.Size = halfExtents;
-			return desc;
-		}
 
-		// A world with commands pushed straight to it; every published step can be walked through with take_steps().
-		struct CommandWorld
-		{
-			PhysicsThread Thread;
-			u64 Generation = 0;
-
-			bool start(glm::vec3 gravity = glm::vec3(0.0f, -9.81f, 0.0f))
-			{
-				PhysicsSettings settings;
-				settings.Gravity = gravity;
-				if (!Thread.start(settings))
-				{
-					return false;
-				}
-				Generation = Thread.generation();
-				return true;
-			}
-
-			void send(PhysicsCommand command) { Thread.push(std::move(command), Generation); }
-
-			// Every step published until `steps` more have completed, oldest first.
-			std::vector<Ref<const PhysicsStepSnapshot>> run_steps(u32 steps)
-			{
-				std::vector<Ref<const PhysicsStepSnapshot>> seen;
-				const Clock::time_point giveUp = Clock::now() + std::chrono::seconds(20);
-				while (seen.size() < steps && Clock::now() < giveUp)
-				{
-					for (Ref<const PhysicsStepSnapshot>& step : Thread.take_steps())
-					{
-						seen.push_back(std::move(step));
-					}
-					std::this_thread::sleep_for(std::chrono::milliseconds(2));
-				}
-				return seen;
-			}
-		};
 
 		glm::vec3 world_point(const BodyPose& pose, glm::vec3 local) { return pose.Position + pose.Rotation * local; }
 
@@ -1954,12 +1889,6 @@ namespace wiwa
 			return desc;
 		}
 
-		BodyKey make_floor(CommandWorld& world)
-		{
-			const BodyKey floor = EntityGuid::generate();
-			world.send(CreateBody{ floor, box_body(MotionType::Static, glm::vec3(0.0f, -0.5f, 0.0f), glm::vec3(40.0f, 0.5f, 10.0f)) });
-			return floor;
-		}
 
 		// A character dropped on a floor stands on it, and walks where it is told to.
 		void check_character_stand_walk(Check& check)
@@ -2351,6 +2280,7 @@ namespace wiwa
 		check_character_repeatable(check);
 		check_character_debug_draw(check);
 		check_character_stats(check);
+		run_vehicle_checks(check);
 
 		if (check.Failures == 0)
 		{
